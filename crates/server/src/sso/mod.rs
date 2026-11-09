@@ -474,6 +474,25 @@ pub fn browser_cookie(value: &str, cross_site_post: bool, secure: bool) -> Strin
     format!("{BROWSER_COOKIE}={value}; Path=/api/auth; HttpOnly; SameSite={same_site}; Max-Age=600{}", if secure { "; Secure" } else { "" })
 }
 
+/// Cookie carrying a pending two-factor challenge from an SSO login or password reset to the
+/// login page's code step (keeps the token out of URLs).
+pub const MFA_COOKIE: &str = "wc_mfa";
+
+/// After a successful sign-in: `(Set-Cookie, redirect)` for a session — or, when the person
+/// has two-factor authentication on, for a challenge completed on `/login?mfa=1`.
+pub async fn session_or_challenge(state: &AppState, user: Uuid, headers: &axum::http::HeaderMap, next: &str) -> Result<(String, String), SignInError> {
+    if crate::routes::security::required(state, user).await.map_err(|e| anyhow::anyhow!("{e}"))? {
+        let token = crate::routes::security::challenge(state, user, Some(next)).await.map_err(|e| anyhow::anyhow!("{e}"))?;
+        return Ok((mfa_cookie(state, &token, 600), format!("/login?mfa=1&next={}", urlencode(next))));
+    }
+    let cookie = crate::auth::create_session(state, user, headers).await.map_err(|e| anyhow::anyhow!("{e}"))?;
+    Ok((cookie, next.to_string()))
+}
+
+pub fn mfa_cookie(state: &AppState, token: &str, max_age: i64) -> String {
+    format!("{MFA_COOKIE}={token}; Path=/api/auth; HttpOnly; SameSite=Lax; Max-Age={max_age}{}", if state.config.secure_cookies { "; Secure" } else { "" })
+}
+
 /// Stores short-lived login state (shared by all replicas); returns the opaque state key.
 /// With `browser`, completing the login requires the matching [`BROWSER_COOKIE`].
 pub async fn put_state(state: &AppState, data: &Value, browser: Option<&str>) -> anyhow::Result<String> {
@@ -505,8 +524,22 @@ pub async fn take_state(state: &AppState, key: &str, headers: &axum::http::Heade
     Ok(data)
 }
 
+/// Same-site paths only: no `//` or `/\` prefix, and no whitespace, control characters or
+/// backslashes anywhere (browsers strip tabs, turning `/\t/evil.com` into `//evil.com`).
 pub fn safe_next(next: Option<String>) -> String {
-    next.filter(|n| n.starts_with('/') && !n.starts_with("//") && !n.starts_with("/\\")).unwrap_or_else(|| "/".into())
+    next.filter(|n| n.starts_with('/') && !n.starts_with("//") && !n.chars().any(|c| c.is_whitespace() || c.is_control() || c == '\\'))
+        .unwrap_or_else(|| "/".into())
+}
+
+#[cfg(test)]
+mod next_tests {
+    #[test]
+    fn redirects_stay_on_site() {
+        for bad in ["//evil.com", "/\\evil.com", "/\t/evil.com", "/\n/evil.com", "https://evil.com", "/ok\\..\\x"] {
+            assert_eq!(super::safe_next(Some(bad.into())), "/", "{bad:?}");
+        }
+        assert_eq!(super::safe_next(Some("/pages/1?x=1#y".into())), "/pages/1?x=1#y");
+    }
 }
 
 pub fn urlencode(s: &str) -> String {

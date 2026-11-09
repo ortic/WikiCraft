@@ -9,7 +9,6 @@ use serde_json::{Value, json};
 
 use super::{External, GithubConfig, Provider, SignInError};
 use crate::app::AppState;
-use crate::auth::create_session;
 
 #[derive(Serialize, Deserialize)]
 struct Pending {
@@ -113,8 +112,7 @@ pub async fn callback(
             groups: vec![],
         };
         let uid = super::sign_in(state, provider, ext).await?;
-        let cookie = create_session(state, uid, headers).await.map_err(|e| anyhow::anyhow!("{e}"))?;
-        Ok((cookie, pending.next))
+        super::session_or_challenge(state, uid, headers, &pending.next).await
     }
     .await;
     match res {

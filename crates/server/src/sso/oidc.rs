@@ -19,7 +19,6 @@ use serde_json::{Value, json};
 
 use super::{External, OidcConfig, Provider, SignInError};
 use crate::app::AppState;
-use crate::auth::create_session;
 
 static METADATA: LazyLock<DashMap<String, CoreProviderMetadata>> = LazyLock::new(DashMap::new);
 
@@ -178,8 +177,7 @@ async fn complete(state: &AppState, provider: &Provider, c: &OidcConfig, headers
         groups,
     };
     let user = super::sign_in(state, provider, ext).await?;
-    let cookie = create_session(state, user, headers).await.map_err(|e| anyhow::anyhow!("{e}"))?;
-    Ok((cookie, pending.next))
+    super::session_or_challenge(state, user, headers, &pending.next).await
 }
 
 // ---- routes -------------------------------------------------------------------------------

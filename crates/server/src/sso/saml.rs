@@ -21,7 +21,6 @@ use serde::{Deserialize, Serialize};
 
 use super::{External, Provider, SamlConfig, SignInError};
 use crate::app::AppState;
-use crate::auth::create_session;
 
 /// IdP metadata fetched from `idpMetadataUrl`, refreshed daily (IdPs rotate certificates).
 static METADATA: LazyLock<DashMap<String, (Instant, EntityDescriptor)>> = LazyLock::new(DashMap::new);
@@ -158,8 +157,7 @@ async fn complete(state: &AppState, provider: &Provider, c: &SamlConfig, headers
         .map_err(|e| SignInError::Denied(format!("invalid SAML response: {e}")))?;
     let ext = identity(c, &assertion).ok_or_else(|| SignInError::Denied("the SAML assertion has no subject".into()))?;
     let user = super::sign_in(state, provider, ext).await?;
-    let cookie = create_session(state, user, headers).await.map_err(|e| anyhow::anyhow!("{e}"))?;
-    Ok((cookie, pending.next))
+    super::session_or_challenge(state, user, headers, &pending.next).await
 }
 
 const EMAIL: &[&str] =

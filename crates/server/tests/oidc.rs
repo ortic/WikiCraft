@@ -60,3 +60,40 @@ async fn sso_login_provisions_and_links_accounts() {
     let r = browser3.get(app.url("/auth/oidc/login")).send().await.unwrap();
     assert!(r.url().as_str().contains("deactivated"), "{}", r.url());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn sso_login_asks_for_the_second_factor_when_enabled() {
+    if reqwest::get(format!("{ISSUER}/.well-known/openid-configuration")).await.is_err() {
+        eprintln!("skipping: mock OIDC provider not running");
+        return;
+    }
+    let app = common::spawn_with(|c| {
+        c.oidc_issuer = Some(ISSUER.into());
+        c.oidc_client_id = Some("wikicraft".into());
+        c.oidc_client_secret = Some("secret".into());
+    })
+    .await;
+    app.setup().await;
+    // first SSO login creates the account; enrol a second factor
+    let first = reqwest::Client::builder().cookie_store(true).build().unwrap();
+    first.get(app.url("/auth/oidc/login")).send().await.unwrap();
+    let csrf = |c: &reqwest::Client, path: &str, body: serde_json::Value| c.post(app.url(path)).header("x-wikicraft", "1").json(&body).send();
+    let setup: serde_json::Value = csrf(&first, "/me/mfa/setup", json!({})).await.unwrap().json().await.unwrap();
+    let secret = setup["secret"].as_str().unwrap().to_string();
+    let now = wikicraft::mfa::code_at(&wikicraft::mfa::base32_decode(&secret).unwrap(), wikicraft::mfa::current_step());
+    assert_eq!(csrf(&first, "/me/mfa/enable", json!({"code": now})).await.unwrap().status(), 200);
+
+    // the next SSO login lands on the code step without a session
+    let b = reqwest::Client::builder().cookie_store(true).build().unwrap();
+    let r = b.get(app.url("/auth/oidc/login?next=/spaces")).send().await.unwrap();
+    assert!(r.url().as_str().contains("/login?mfa=1"), "{}", r.url());
+    let (_, me) = app.get(&b, "/me").await;
+    assert!(me["user"].is_null());
+    let next = wikicraft::mfa::code_at(&wikicraft::mfa::base32_decode(&secret).unwrap(), wikicraft::mfa::current_step() + 1);
+    let r = csrf(&b, "/auth/mfa", json!({"code": next})).await.unwrap();
+    assert_eq!(r.status(), 200);
+    let body: serde_json::Value = r.json().await.unwrap();
+    assert_eq!(body["next"], "/spaces");
+    let (_, me) = app.get(&b, "/me").await;
+    assert_eq!(me["user"]["email"], "sso.user@acme.test");
+}

@@ -121,8 +121,15 @@ pub async fn reset(State(state): State<AppState>, headers: HeaderMap, Json(req):
     if let Some(e) = &email {
         crate::auth::clear_login_failures(&state, e).await;
     }
+    // API tokens an intruder may have created go too (account recovery)
+    sqlx::query("DELETE FROM api_tokens WHERE user_id = $1").bind(id).execute(&state.db).await?;
     let ws: Uuid = sqlx::query_scalar("SELECT workspace_id FROM users WHERE id = $1").bind(id).fetch_one(&state.db).await?;
     audit::log(&state, ws, Some(id), "auth.password_reset", Some("user"), Some(id), json!({})).await;
+    // with two-factor on, mailbox access alone must not sign in
+    if crate::routes::security::required(&state, id).await? {
+        let token = crate::routes::security::challenge(&state, id, Some("/")).await?;
+        return Ok(([(header::SET_COOKIE, crate::sso::mfa_cookie(&state, &token, 600))], Json(json!({ "ok": true, "mfaRequired": true }))).into_response());
+    }
     let cookie = create_session(&state, id, &headers).await?;
     Ok(([(header::SET_COOKIE, cookie)], Json(json!({ "ok": true }))).into_response())
 }

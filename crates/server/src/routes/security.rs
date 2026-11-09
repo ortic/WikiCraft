@@ -72,6 +72,11 @@ pub async fn status(State(state): State<AppState>, CurrentUser(user): CurrentUse
 
 /// `POST /api/me/mfa/setup` — a new pending secret (not active until confirmed with a code).
 pub async fn setup(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Value>> {
+    // replacing an active factor needs the password (disable) first: a stolen session alone
+    // must not swap in another authenticator
+    if required(&state, user.id).await? {
+        return Err(ApiError::bad("two-factor authentication is already on; turn it off first"));
+    }
     let secret = mfa::new_secret();
     sqlx::query("UPDATE users SET totp_pending = $2 WHERE id = $1").bind(user.id).bind(&secret).execute(&state.db).await?;
     let account = user.email.clone().unwrap_or_else(|| user.name.clone());
@@ -115,7 +120,7 @@ pub async fn disable(State(state): State<AppState>, CurrentUser(user): CurrentUs
     let hash: Option<String> = sqlx::query_scalar("SELECT password_hash FROM users WHERE id = $1").bind(user.id).fetch_one(&state.db).await?;
     let ok = match (hash, &req.password, &req.code) {
         (Some(h), Some(pw), _) => verify_password(pw.clone(), h).await,
-        (_, _, Some(code)) => mfa::verify(&state, user.id, code).await.map_err(ApiError::Internal)?,
+        (_, _, Some(code)) => mfa::verify(&state, user.id, code).await.map_err(mfa_err)?,
         _ => false,
     };
     if !ok {
@@ -128,12 +133,16 @@ pub async fn disable(State(state): State<AppState>, CurrentUser(user): CurrentUs
 
 /// `POST /api/me/mfa/recovery-codes {code}` — replaces the recovery codes.
 pub async fn new_recovery_codes(State(state): State<AppState>, CurrentUser(user): CurrentUser, Json(req): Json<CodeRequest>) -> ApiResult<Json<Value>> {
-    if !mfa::verify(&state, user.id, &req.code).await.map_err(ApiError::Internal)? {
+    if !mfa::verify(&state, user.id, &req.code).await.map_err(mfa_err)? {
         return Err(ApiError::bad("that code doesn't match"));
     }
     let (codes, hashes) = mfa::recovery_codes();
     sqlx::query("UPDATE users SET recovery_codes = $2 WHERE id = $1").bind(user.id).bind(&hashes).execute(&state.db).await?;
     Ok(Json(json!({ "recoveryCodes": codes })))
+}
+
+fn mfa_err(e: anyhow::Error) -> ApiError {
+    if e.is::<mfa::TooManyAttempts>() { ApiError::bad(e.to_string()) } else { ApiError::Internal(e) }
 }
 
 async fn clear(state: &AppState, user: Uuid) -> ApiResult<()> {
@@ -154,6 +163,7 @@ pub async fn admin_reset(State(state): State<AppState>, CurrentUser(admin): Curr
     }
     clear(&state, id).await?;
     sqlx::query("DELETE FROM sessions WHERE user_id = $1").bind(id).execute(&state.db).await?;
+    sqlx::query("DELETE FROM api_tokens WHERE user_id = $1").bind(id).execute(&state.db).await?;
     audit::log(&state, admin.workspace_id, Some(admin.id), "auth.mfa_reset", Some("user"), Some(id), json!({})).await;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -164,44 +174,60 @@ pub async fn required(state: &AppState, user: Uuid) -> ApiResult<bool> {
 }
 
 /// Starts the second step: a short-lived token naming the user who passed the password check.
-pub async fn challenge(state: &AppState, user: Uuid) -> ApiResult<String> {
-    crate::sso::put_state(state, &json!({"mfaUser": user, "attempts": 0}), None).await.map_err(ApiError::Internal)
+pub async fn challenge(state: &AppState, user: Uuid, next: Option<&str>) -> ApiResult<String> {
+    crate::sso::put_state(state, &json!({"mfaUser": user, "attempts": 0, "next": next}), None).await.map_err(ApiError::Internal)
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct MfaLogin {
-    mfa_token: String,
+    /// from the password login response; SSO logins and resets use the `wc_mfa` cookie instead
+    mfa_token: Option<String>,
     code: String,
 }
 
-/// `POST /api/auth/mfa {mfaToken, code}` — completes a password login (5 tries per token).
+/// `POST /api/auth/mfa {mfaToken, code}` — completes a password login (5 tries per challenge,
+/// counted atomically; plus the per-user limit in `mfa::verify`).
 pub async fn login(State(state): State<AppState>, headers: HeaderMap, Json(req): Json<MfaLogin>) -> ApiResult<Response> {
-    let key = hex::encode(token_hash(&req.mfa_token));
-    let data: Option<Value> =
-        sqlx::query_scalar("SELECT data FROM auth_states WHERE state = $1 AND expires_at > now()").bind(&key).fetch_optional(&state.db).await?;
+    let token = req.mfa_token.clone().filter(|t| !t.is_empty()).or_else(|| crate::auth::cookie_value(&headers, crate::sso::MFA_COOKIE).map(String::from));
+    let token = token.ok_or_else(|| ApiError::bad("the sign-in expired, please log in again"))?;
+    let key = hex::encode(token_hash(&token));
+    let data: Option<Value> = sqlx::query_scalar(
+        "UPDATE auth_states SET data = jsonb_set(data, '{attempts}', to_jsonb(COALESCE((data->>'attempts')::int, 0) + 1))
+         WHERE state = $1 AND expires_at > now() AND data ? 'mfaUser' RETURNING data",
+    )
+    .bind(&key)
+    .fetch_optional(&state.db)
+    .await?;
     let data = data.ok_or_else(|| ApiError::bad("the sign-in expired, please log in again"))?;
     let user: Uuid = data.get("mfaUser").and_then(Value::as_str).and_then(|s| s.parse().ok()).ok_or_else(|| ApiError::bad("invalid sign-in"))?;
-    if mfa::verify(&state, user, &req.code).await.map_err(ApiError::Internal)? {
-        sqlx::query("DELETE FROM auth_states WHERE state = $1").bind(&key).execute(&state.db).await?;
-        let ws: Uuid = sqlx::query_scalar("SELECT workspace_id FROM users WHERE id = $1 AND status = 'active'")
-            .bind(user)
-            .fetch_optional(&state.db)
-            .await?
-            .ok_or(ApiError::Forbidden)?;
-        let cookie = create_session(&state, user, &headers).await?;
-        audit::log(&state, ws, Some(user), "auth.login", None, None, json!({"mfa": true})).await;
-        return Ok(([(header::SET_COOKIE, cookie)], Json(json!({ "ok": true }))).into_response());
-    }
-    let attempts = data.get("attempts").and_then(Value::as_i64).unwrap_or(0) + 1;
-    if attempts >= 5 {
+    let attempts = data.get("attempts").and_then(Value::as_i64).unwrap_or(1);
+    if attempts > 5 {
         sqlx::query("DELETE FROM auth_states WHERE state = $1").bind(&key).execute(&state.db).await?;
         return Err(ApiError::bad("too many wrong codes, please log in again"));
     }
-    sqlx::query("UPDATE auth_states SET data = jsonb_set(data, '{attempts}', to_jsonb($2::int)) WHERE state = $1")
-        .bind(&key)
-        .bind(attempts as i32)
-        .execute(&state.db)
-        .await?;
-    Err(ApiError::bad("that code doesn't match"))
+    let ok = match mfa::verify(&state, user, &req.code).await {
+        Ok(ok) => ok,
+        Err(e) if e.is::<mfa::TooManyAttempts>() => return Err(ApiError::bad(e.to_string())),
+        Err(e) => return Err(ApiError::Internal(e)),
+    };
+    if !ok {
+        if attempts >= 5 {
+            sqlx::query("DELETE FROM auth_states WHERE state = $1").bind(&key).execute(&state.db).await?;
+            return Err(ApiError::bad("too many wrong codes, please log in again"));
+        }
+        return Err(ApiError::bad("that code doesn't match"));
+    }
+    sqlx::query("DELETE FROM auth_states WHERE state = $1").bind(&key).execute(&state.db).await?;
+    let ws: Uuid = sqlx::query_scalar("SELECT workspace_id FROM users WHERE id = $1 AND status = 'active'")
+        .bind(user)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or(ApiError::Forbidden)?;
+    let next = data.get("next").and_then(Value::as_str).map(String::from);
+    let cookie = create_session(&state, user, &headers).await?;
+    audit::log(&state, ws, Some(user), "auth.login", None, None, json!({"mfa": true})).await;
+    let mut resp = ([(header::SET_COOKIE, cookie)], Json(json!({ "ok": true, "next": next }))).into_response();
+    resp.headers_mut().append(header::SET_COOKIE, crate::sso::mfa_cookie(&state, "", 0).parse().expect("cookie"));
+    Ok(resp)
 }

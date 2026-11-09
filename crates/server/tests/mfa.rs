@@ -121,3 +121,76 @@ async fn idle_sessions_expire() {
     sqlx::query("UPDATE sessions SET last_seen_at = now() - interval '31 minutes'").execute(&app.state.db).await.unwrap();
     assert_eq!(app.get(&owner, "/recent").await.0, 401, "idle session signed out");
 }
+
+async fn enrol(app: &common::TestApp, c: &reqwest::Client) -> String {
+    let (_, setup) = app.post(c, "/me/mfa/setup", json!({})).await;
+    let secret = setup["secret"].as_str().unwrap().to_string();
+    let (st, _) = app.post(c, "/me/mfa/enable", json!({"code": code(&secret)})).await;
+    assert_eq!(st, 200);
+    secret
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn codes_cant_be_brute_forced_across_new_logins() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (mo, _) = app.user(&owner, "mo@acme.test", "member").await;
+    let secret = enrol(&app, &mo).await;
+    // a correct password gives a fresh challenge each time, but wrong codes add up per person
+    for _ in 0..10 {
+        let c = client();
+        let (_, b) = app.post(&c, "/auth/login", json!({"email": "mo@acme.test", "password": "password123"})).await;
+        let (st, _) = app.post(&c, "/auth/mfa", json!({"mfaToken": b["mfaToken"], "code": "000001"})).await;
+        assert_eq!(st, 400);
+    }
+    let c = client();
+    let (_, b) = app.post(&c, "/auth/login", json!({"email": "mo@acme.test", "password": "password123"})).await;
+    let next = mfa::code_at(&mfa::base32_decode(&secret).unwrap(), mfa::current_step() + 1);
+    let (st, body) = app.post(&c, "/auth/mfa", json!({"mfaToken": b["mfaToken"], "code": next})).await;
+    assert_eq!(st, 400, "locked even with the right code");
+    assert!(body["message"].as_str().unwrap().contains("too many"), "{body}");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn password_reset_still_needs_the_second_factor() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (rae, rae_id) = app.user(&owner, "rae@acme.test", "member").await;
+    let secret = enrol(&app, &rae).await;
+    // an API token the "intruder" made is revoked by the reset
+    let (_, tok) = app.post(&rae, "/me/tokens", json!({"name": "intruder"})).await;
+    let token = tok["token"].as_str().unwrap().to_string();
+    let reset = "reset-token-for-test-0123456789abcdef";
+    let hash = {
+        use sha2::Digest;
+        hex::encode(sha2::Sha256::digest(reset.as_bytes()))
+    };
+    sqlx::query("INSERT INTO user_tokens (token_hash, user_id, purpose, expires_at) VALUES ($1, $2::uuid, 'password_reset', now() + interval '1 hour')")
+        .bind(&hash)
+        .bind(&rae_id)
+        .execute(&app.state.db)
+        .await
+        .unwrap();
+    let c = client();
+    let (st, body) = app.post(&c, "/auth/reset", json!({"token": reset, "password": "brand-new-pass"})).await;
+    assert_eq!(st, 200);
+    assert_eq!(body["mfaRequired"], true);
+    assert!(app.get(&c, "/me").await.1["user"].is_null(), "no session from mailbox access alone");
+    let r = reqwest::Client::new().get(app.url("/recent")).bearer_auth(&token).send().await.unwrap();
+    assert_eq!(r.status(), 401, "API tokens revoked");
+    // the challenge travels in a cookie; the code completes the sign-in
+    let next = mfa::code_at(&mfa::base32_decode(&secret).unwrap(), mfa::current_step() + 1);
+    let (st, body) = app.post(&c, "/auth/mfa", json!({"code": next})).await;
+    assert_eq!(st, 200, "{body}");
+    assert_eq!(app.get(&c, "/me").await.1["user"]["id"], rae_id.as_str());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn an_active_factor_cant_be_replaced_with_just_a_session() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (eve, _) = app.user(&owner, "eve@acme.test", "member").await;
+    enrol(&app, &eve).await;
+    let (st, body) = app.post(&eve, "/me/mfa/setup", json!({})).await;
+    assert_eq!(st, 400, "{body}");
+}

@@ -70,6 +70,12 @@ function ProviderIcon({ p }: { p: Provider }) {
   return <KeyRound size={15} />
 }
 
+/** Only same-site paths: no scheme-relative `//`, no whitespace/control characters or
+ * backslashes (browsers drop tabs, so `/\t/evil` would become `//evil`). */
+export function safeNext(n: string | null | undefined): string {
+  return n && /^\/(?![\/\\])[^\s\\\u0000-\u001f\u007f]*$/.test(n) ? n : '/'
+}
+
 export function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
@@ -77,7 +83,8 @@ export function Login() {
   const info = useQuery({ queryKey: ['auth-providers'], queryFn: () => api.get<{ passwordLogin: boolean; passwordReset: boolean; providers: Provider[] }>('/auth/providers') })
   const next = new URLSearchParams(location.search).get('next') ?? '/'
   const [busy, setBusy] = useState(false)
-  const [mfaToken, setMfaToken] = useState<string | null>(null)
+  // `?mfa=1`: an SSO login or password reset left a challenge cookie for the code step
+  const [mfaToken, setMfaToken] = useState<string | null>(() => (new URLSearchParams(location.search).get('mfa') ? '' : null))
   const [code, setCode] = useState('')
   const redirects = (info.data?.providers ?? []).filter((p) => p.loginUrl)
   const directory = (info.data?.providers ?? []).filter((p) => p.type === 'ldap')
@@ -88,8 +95,10 @@ export function Login() {
     setBusy(true)
     setError(null)
     try {
-      if (mfaToken) {
-        await api.post('/auth/mfa', { mfaToken, code })
+      if (mfaToken !== null) {
+        const r = await api.post<{ next?: string | null }>('/auth/mfa', { mfaToken: mfaToken || undefined, code })
+        location.href = safeNext(r.next ?? next)
+        return
       } else {
         const r = await api.post<{ ok?: boolean; mfaRequired?: boolean; mfaToken?: string }>('/auth/login', { email, password })
         if (r.mfaRequired && r.mfaToken) {
@@ -98,14 +107,14 @@ export function Login() {
           return
         }
       }
-      location.href = next.startsWith('/') && !next.startsWith('//') ? next : '/'
+      location.href = safeNext(next)
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
       setBusy(false)
     }
   }
   const wide = { width: '100%', justifyContent: 'center', height: 38 } as const
-  if (mfaToken)
+  if (mfaToken !== null)
     return (
       <div className="auth">
         <form className="auth-card" onSubmit={submit}>
@@ -231,8 +240,8 @@ export function ResetPassword() {
     setBusy(true)
     setError(null)
     try {
-      await api.post('/auth/reset', { token: tokenParam(), password })
-      location.href = '/'
+      const r = await api.post<{ mfaRequired?: boolean }>('/auth/reset', { token: tokenParam(), password })
+      location.href = r.mfaRequired ? '/login?mfa=1' : '/'
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong')
       setBusy(false)

@@ -113,7 +113,28 @@ pub fn recovery_codes() -> (Vec<String>, Vec<String>) {
 }
 
 /// Checks a TOTP code (once per step) or consumes a recovery code. `true` = second factor ok.
+/// Wrong codes count against a per-user limit (10 per 15 minutes) that a correct password
+/// doesn't reset, so codes can't be brute-forced by starting new logins.
 pub async fn verify(state: &AppState, user: Uuid, input: &str) -> anyhow::Result<bool> {
+    let key = format!("mfa:{user}");
+    if !crate::auth::login_allowed(state, &key).await {
+        anyhow::bail!(TooManyAttempts);
+    }
+    let ok = check(state, user, input).await?;
+    if ok {
+        crate::auth::clear_login_failures(state, &key).await;
+    } else {
+        crate::auth::record_login_failure(state, &key).await;
+    }
+    Ok(ok)
+}
+
+/// Error for a locked second factor.
+#[derive(Debug, thiserror::Error)]
+#[error("too many wrong codes; try again in 15 minutes")]
+pub struct TooManyAttempts;
+
+async fn check(state: &AppState, user: Uuid, input: &str) -> anyhow::Result<bool> {
     let row: Option<(Option<String>,)> =
         sqlx::query_as("SELECT totp_secret FROM users WHERE id = $1 AND totp_enabled_at IS NOT NULL").bind(user).fetch_optional(&state.db).await?;
     let Some((Some(secret),)) = row else { return Ok(false) };
