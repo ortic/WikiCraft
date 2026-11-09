@@ -911,6 +911,11 @@ impl Conv<'_> {
                 v.push(placeholder_macro(&name, el, vec![]));
                 v
             }
+            // queries rendered live by the editor from the preserved parameters
+            "contentbylabel" | "recently-updated" | "detailssummary" | "content-report-table" | "tasks-report-macro" | "attachments" => {
+                self.stats.macro_seen(&name, Support::Native);
+                vec![placeholder_macro(&name, el, vec![])]
+            }
             _ => {
                 self.stats.macro_seen(&name, Support::Placeholder);
                 let content = rich.map(|r| self.blocks(&r.children)).unwrap_or_default();

@@ -8,6 +8,7 @@ pub mod imports;
 pub mod legacy;
 pub mod notifications;
 pub mod pages;
+pub mod reports;
 pub mod search;
 pub mod spaces;
 pub mod tasks;
@@ -94,6 +95,9 @@ pub fn router(state: AppState) -> Router {
         .route("/recent", get(search::recent))
         .route("/favorites", get(search::favorites))
         .route("/labels/{name}", get(search::by_label))
+        .route("/reports/pages", get(reports::pages_report))
+        .route("/reports/properties", get(reports::properties_report))
+        .route("/reports/tasks", get(reports::tasks_report))
         .route("/resolve", get(search::resolve))
         // imports & jobs
         .route("/imports/confluence", post(imports::upload_confluence).layer(DefaultBodyLimit::max(max_upload)))

@@ -8,6 +8,7 @@ import { Link } from 'react-router-dom'
 import { FileText, Paperclip, ListTree, Hash, Puzzle, Link2, Download } from 'lucide-react'
 import { api, type Page, type PmNode } from '../api'
 import { Emoticon as EmoticonIcon, LineIcon } from '../icons'
+import { LIVE_MACROS, LiveMacro } from './MacroView'
 
 const CALLOUT_TYPES = ['info', 'note', 'success', 'warning', 'error']
 
@@ -472,8 +473,16 @@ export const DecisionItem = Node.create({
   },
 })
 
-function MacroView({ node }: ReactNodeViewProps) {
+function MacroView({ node, extension }: ReactNodeViewProps) {
   const params = (node.attrs.params as Record<string, string> | null) ?? {}
+  const name = node.attrs.name as string
+  if (LIVE_MACROS.has(name)) {
+    return (
+      <NodeViewWrapper className="block-card live-macro" contentEditable={false} data-macro={name}>
+        <LiveMacro name={name} params={params} pageId={extension.options.pageId as string} />
+      </NodeViewWrapper>
+    )
+  }
   const entries = Object.entries(params).filter(([, v]) => v)
   return (
     <NodeViewWrapper className="macro-box">
@@ -496,10 +505,13 @@ function MacroView({ node }: ReactNodeViewProps) {
   )
 }
 
-export const Macro = Node.create({
+export const Macro = Node.create<{ pageId: string }>({
   name: 'macro',
   group: 'block',
   content: 'block*',
+  addOptions() {
+    return { pageId: '' }
+  },
   addAttributes() {
     return { name: { default: 'macro' }, params: { default: null }, bodyText: { default: null } }
   },

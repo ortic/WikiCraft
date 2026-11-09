@@ -158,7 +158,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
         Column,
         DecisionList,
         DecisionItem,
-        Macro,
+        Macro.configure({ pageId }),
         CommentMark,
         SlashCommand.configure({ items: slashItems((e) => pickFiles('image/*').then((f) => upload(e, f, true)), (e) => pickFiles('*/*').then((f) => upload(e, f, false))) }),
       ],

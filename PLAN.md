@@ -327,18 +327,18 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** `status` → status lozenge
 - [~] **P1** `children` (child pages list: depth, sort, reverse, style, first N) → dynamic children block (sort/style params ignored)
 - [~] **P1** `pagetree` / `pagetreesearch` → dynamic tree block (rendered as child list; no search)
-- [ ] **P1** `attachments` (list + upload) → attachments block
+- [~] **P1** `attachments` (list + upload) → attachments block (live list; no upload in the block)
 - [~] **P1** `include` (include page) → transclusion block (plain-text excerpt preview)
 - [~] **P1** `excerpt` / `excerpt-include` → synced block / named excerpt (excerpt inlined; include shows page start)
-- [~] **P1** `details` + `detailssummary` (page properties + report) → page properties block + "properties report" query table (details kept as table; no report)
-- [ ] **P1** `contentbylabel` (incl. CQL parameter) → label query block
-- [ ] **P1** `recently-updated` → recent changes block
+- [x] **P1** `details` + `detailssummary` (page properties + report) → page properties block + "properties report" query table
+- [x] **P1** `contentbylabel` (incl. CQL parameter) → label query block
+- [x] **P1** `recently-updated` → recent changes block
 - [x] **P1** `widget` / `iframe` / `multimedia` → embed block (with allowlist)
 - [ ] **P1** `livesearch` → search box block
-- [ ] **P1** `tasks-report-macro` → task report block (by space, assignee, label, status, due)
+- [~] **P1** `tasks-report-macro` → task report block (by space, assignee, label, status, due) (no assignee filter)
 - [ ] **P1** `decisionreport` → decisions report block
 - [ ] **P1** `create-from-template` → "create from template" button block
-- [ ] **P1** `content-report-table` / blueprint index pages → query table block
+- [x] **P1** `content-report-table` / blueprint index pages → query table block
 - [~] **P1** `jira` / `jiraissues` / Jira chart → issue tracker embed (Jira, GitHub, GitLab, Linear) (issue key kept as text; no live embed)
 - [~] **P1** `unmigrated-wiki-markup` → convert wiki markup; keep the original as a fallback (converted; original not kept)
 - [x] **P1** `section` / `column` (legacy layouts) → layout block
@@ -404,7 +404,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 ### 4.9 Structured content: labels, properties, databases
 - [~] **P1** Labels/tags on pages, blog posts and attachments; label autocomplete; label pages (all content with label X) `C X O B` (pages only; no autocomplete)
 - [ ] **P1** Page properties (typed key/value: text, number, date, user, select, URL, page link) shown in a properties panel `C X N`
-- [ ] **P1** Properties report: query table across pages (filter by space, label, property) `C`
+- [~] **P1** Properties report: query table across pages (filter by space, label, property) `C` (space + label filters; no property filters)
 - [ ] **P2** **Databases** `C D N X`
   - [ ] Field types: text, rich text, number, currency, date, checkbox, select, multi-select, user, page link, URL, email, attachment, formula, rollup, relation, created/updated by/at
   - [ ] Views: table, board/kanban (incl. swimlanes), list/cards, calendar, timeline/gantt, gallery
