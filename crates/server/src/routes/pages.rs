@@ -332,10 +332,10 @@ pub async fn update(State(state): State<AppState>, CurrentUser(user): CurrentUse
             return Err(ApiError::bad("icon must be a symbol name like \"rocket\" or \"rocket:violet\""));
         }
     }
-    if let Some(c) = req.cover.as_deref().filter(|c| !c.is_empty()) {
-        if !valid_cover(c) {
-            return Err(ApiError::bad("cover must be a gradient preset, an attachment or an https image URL"));
-        }
+    if let Some(c) = req.cover.as_deref().filter(|c| !c.is_empty())
+        && !valid_cover(c)
+    {
+        return Err(ApiError::bad("cover must be a gradient preset, an attachment or an https image URL"));
     }
     sqlx::query(
         "UPDATE pages SET title = COALESCE($2, title), icon = CASE WHEN $3::text IS NULL THEN icon WHEN $3 = '' THEN NULL ELSE $3 END,
@@ -947,7 +947,7 @@ pub struct ExportQuery {
     format: Option<String>,
 }
 
-/// Exports a page as Markdown or standalone HTML.
+/// Exports a page as Markdown, standalone HTML, Word (`docx`) or JSON.
 pub async fn export(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path(id): Path<Uuid>, Query(q): Query<ExportQuery>) -> ApiResult<Response> {
     let p = Principal::load(&state, user).await?;
     require_page(&state, &p, id, Need::View).await?;
@@ -957,6 +957,12 @@ pub async fn export(State(state): State<AppState>, MaybeUser(user): MaybeUser, P
         None => Node::from_json(&content)?,
     };
     let safe_name: String = title.chars().map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect();
+    if q.format.as_deref() == Some("docx") {
+        let body = export_docx(&state, &p, id, title, doc).await?;
+        let mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
+        return Ok(([(header::CONTENT_TYPE, mime.to_string()), (header::CONTENT_DISPOSITION, format!("attachment; filename=\"{safe_name}.docx\""))], body)
+            .into_response());
+    }
     let (body, mime, ext) = match q.format.as_deref().unwrap_or("md") {
         "html" => {
             let inner = html::render(&doc, &html::HtmlOptions { heading_ids: true });
@@ -970,4 +976,47 @@ pub async fn export(State(state): State<AppState>, MaybeUser(user): MaybeUser, P
         _ => (format!("# {title}\n\n{}", markdown::pm_to_markdown(&doc)), "text/markdown; charset=utf-8", "md"),
     };
     Ok(([(header::CONTENT_TYPE, mime.to_string()), (header::CONTENT_DISPOSITION, format!("attachment; filename=\"{safe_name}.{ext}\""))], body).into_response())
+}
+
+async fn export_docx(state: &AppState, p: &Principal, id: Uuid, title: String, doc: Node) -> ApiResult<Vec<u8>> {
+    let (space, updated_at, updated_by): (String, chrono::DateTime<chrono::Utc>, Option<String>) = sqlx::query_as(
+        "SELECT s.name, p.updated_at, u.name FROM pages p JOIN spaces s ON s.id = p.space_id LEFT JOIN users u ON u.id = p.updated_by WHERE p.id = $1",
+    )
+    .bind(id)
+    .fetch_one(&state.db)
+    .await?;
+    let base = state.config.base_url.trim_end_matches('/').to_string();
+    // children macro: the child pages the reader can see
+    let mut children = Vec::new();
+    let mut has_children_macro = false;
+    doc.walk(&mut |n| has_children_macro |= n.kind == wikicraft_doc_model::nodes::CHILD_PAGES);
+    if has_children_macro {
+        let rows: Vec<(Uuid, String)> =
+            sqlx::query_as("SELECT id, title FROM pages WHERE parent_id = $1 AND deleted_at IS NULL ORDER BY position, lower(title) LIMIT 200")
+                .bind(id)
+                .fetch_all(&state.db)
+                .await?;
+        for (cid, ctitle) in rows {
+            if require_page(state, p, cid, Need::View).await.is_ok() {
+                children.push((ctitle, format!("{base}/pages/{cid}")));
+            }
+        }
+    }
+    let images = crate::docx::load_images(state, p, &doc).await;
+    let by = updated_by.map(|n| format!(" by {n}")).unwrap_or_default();
+    let subtitle = format!("{space} \u{00B7} Last updated {}{by}", updated_at.format("%-d %b %Y"));
+    let bytes = tokio::task::spawn_blocking(move || {
+        crate::docx::render(&crate::docx::DocxInput {
+            title: &title,
+            subtitle: Some(subtitle),
+            doc: &doc,
+            images: &images,
+            base_url: &base,
+            children: &children,
+        })
+    })
+    .await
+    .map_err(|e| ApiError::Internal(e.into()))?
+    .map_err(ApiError::Internal)?;
+    Ok(bytes)
 }

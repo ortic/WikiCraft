@@ -12,6 +12,12 @@ fn markup(group: &str, name: &str) -> Option<&'static str> {
     ICONS.get(group)?.get(name)?.as_str()
 }
 
+/// The raw inner markup of an icon (24x24 viewBox; line icons use `currentColor`), for
+/// renderers that build their own `<svg>` (e.g. rasterising for Word exports).
+pub fn inner_markup(group: &str, name: &str) -> Option<&'static str> {
+    markup(group, name)
+}
+
 /// A line icon (`callout`, `symbols` or `ui` group) as an inline `<svg>` using `currentColor`.
 pub fn line_svg(group: &str, name: &str, class: &str, size: &str) -> Option<String> {
     markup(group, name).map(|inner| {

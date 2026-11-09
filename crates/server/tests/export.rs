@@ -210,3 +210,140 @@ async fn export_and_restore_a_space() {
     .await;
     assert_eq!(app.get(&owner, "/spaces/DOC3").await.0, 404, "cleaned up");
 }
+
+fn tiny_png(w: u32, h: u32) -> Vec<u8> {
+    let img = image::RgbImage::from_fn(w, h, |x, y| image::Rgb([(x * 40) as u8, (y * 60) as u8, 200]));
+    let mut out = std::io::Cursor::new(Vec::new());
+    img.write_to(&mut out, image::ImageFormat::Png).unwrap();
+    out.into_inner()
+}
+
+async fn upload(app: &TestApp, c: &reqwest::Client, page: &str, name: &str, bytes: Vec<u8>) -> String {
+    let form = reqwest::multipart::Form::new().part("file", reqwest::multipart::Part::bytes(bytes).file_name(name.to_string()));
+    let rows: Value = c.post(app.url(&format!("/pages/{page}/attachments"))).multipart(form).send().await.unwrap().json().await.unwrap();
+    rows[0]["id"].as_str().unwrap().to_string()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn word_export_of_a_page() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, _) = app.user(&owner, "mo@acme.test", "member").await;
+    let (_, sp) = app.post(&owner, "/spaces", json!({"key": "WRD", "name": "Word"})).await;
+    let home = sp["homePageId"].as_str().unwrap().to_string();
+    let (_, pg) = app.post(&owner, "/pages", json!({"spaceKey": "WRD", "parentId": home, "title": "Quarterly report"})).await;
+    let pg = pg["id"].as_str().unwrap().to_string();
+    let (_, child) = app.post(&owner, "/pages", json!({"spaceKey": "WRD", "parentId": pg, "title": "Appendix A"})).await;
+    let child = child["id"].as_str().unwrap().to_string();
+    // an image on a page the member can't see
+    let (_, secret) = app.post(&owner, "/pages", json!({"spaceKey": "WRD", "parentId": home, "title": "Secret"})).await;
+    let secret = secret["id"].as_str().unwrap().to_string();
+    let hidden = upload(&app, &owner, &secret, "hidden.png", tiny_png(5, 5)).await;
+    let (_, me) = app.get(&owner, "/me").await;
+    let owner_id = me["user"]["id"].as_str().unwrap().to_string();
+    app.put(&owner, &format!("/pages/{secret}/restrictions"), json!({"restrictions": [{"kind": "view", "subjectType": "user", "subjectId": owner_id}]})).await;
+    let chart = upload(&app, &owner, &pg, "chart.png", tiny_png(40, 30)).await;
+    let svg = upload(
+        &app,
+        &owner,
+        &pg,
+        "logo.svg",
+        b"<svg xmlns=\"http://www.w3.org/2000/svg\" width=\"20\" height=\"10\"><rect width=\"20\" height=\"10\" fill=\"#f00\"/></svg>".to_vec(),
+    )
+    .await;
+
+    let t = |s: &str| json!({"type": "text", "text": s});
+    let p = |c: Value| json!({"type": "paragraph", "content": c});
+    let doc = json!({"type": "doc", "content": [
+        {"type": "toc"},
+        {"type": "heading", "attrs": {"level": 1}, "content": [t("Summary")]},
+        p(json!([t("Revenue grew "), {"type": "text", "text": "12%", "marks": [{"type": "bold"}]}, t(" — see "),
+            {"type": "text", "text": "the dashboard", "marks": [{"type": "link", "attrs": {"href": "https://example.com/dash"}}]}, t(" and "),
+            {"type": "text", "text": "details", "marks": [{"type": "link", "attrs": {"href": "#details"}}]},
+            t(". "), {"type": "status", "attrs": {"text": "On track", "color": "green"}}, t(" "), {"type": "emoticon", "attrs": {"name": "tick"}},
+            {"type": "mention", "attrs": {"id": owner_id, "label": "Olivia"}}])),
+        {"type": "orderedList", "attrs": {"start": 3}, "content": [
+            {"type": "listItem", "content": [p(json!([t("Third")])), {"type": "bulletList", "content": [{"type": "listItem", "content": [p(json!([t("Nested bullet")]))]}]}]},
+            {"type": "listItem", "content": [p(json!([t("Fourth")]))]}]},
+        {"type": "taskList", "content": [
+            {"type": "taskItem", "attrs": {"checked": true}, "content": [p(json!([t("Close the books")]))]},
+            {"type": "taskItem", "attrs": {"checked": false}, "content": [p(json!([t("Board deck")]))]}]},
+        {"type": "callout", "attrs": {"type": "warning"}, "content": [p(json!([t("Numbers are preliminary.")]))]},
+        {"type": "codeBlock", "attrs": {"language": "sql"}, "content": [t("SELECT 1;\nSELECT 2;")]},
+        {"type": "table", "content": [
+            {"type": "tableRow", "content": [
+                {"type": "tableHeader", "content": [p(json!([t("Region")]))]},
+                {"type": "tableHeader", "attrs": {"colspan": 2}, "content": [p(json!([t("Q1 / Q2")]))]}]},
+            {"type": "tableRow", "content": [
+                {"type": "tableCell", "attrs": {"rowspan": 2}, "content": [p(json!([t("EMEA")]))]},
+                {"type": "tableCell", "content": [p(json!([t("10")]))]},
+                {"type": "tableCell", "attrs": {"background": "#fef3c7"}, "content": [p(json!([t("11")]))]}]},
+            {"type": "tableRow", "content": [
+                {"type": "tableCell", "content": [p(json!([t("20")]))]},
+                {"type": "tableCell", "content": [p(json!([t("21")]))]}]}]},
+        {"type": "heading", "attrs": {"level": 2}, "content": [t("Details")]},
+        p(json!([{"type": "image", "attrs": {"src": format!("/api/attachments/{chart}/content"), "alt": "chart", "caption": "Figure 1: revenue", "align": "center"}}])),
+        p(json!([{"type": "image", "attrs": {"src": format!("/api/attachments/{svg}/content"), "alt": "logo"}}])),
+        p(json!([{"type": "image", "attrs": {"src": format!("/api/attachments/{hidden}/content"), "alt": "secret diagram"}}])),
+        p(json!([{"type": "image", "attrs": {"src": "https://example.com/remote.png", "alt": "remote"}}])),
+        {"type": "blockquote", "content": [p(json!([t("Quoted wisdom")]))]},
+        {"type": "childPages"},
+        {"type": "horizontalRule"}
+    ]});
+    let (st, _) = app.put(&owner, &format!("/pages/{pg}/content"), json!({"content": doc})).await;
+    assert_eq!(st, 200);
+
+    let r = member.get(app.url(&format!("/pages/{pg}/export?format=docx"))).send().await.unwrap();
+    assert_eq!(r.status(), 200);
+    assert_eq!(r.headers()["content-type"], "application/vnd.openxmlformats-officedocument.wordprocessingml.document");
+    assert!(r.headers()["content-disposition"].to_str().unwrap().contains("Quarterly_report.docx"));
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(r.bytes().await.unwrap().to_vec())).unwrap();
+    let files = names(&z);
+    let xml = entry(&mut z, "word/document.xml");
+    for needle in [
+        "Quarterly report",
+        "Last updated",
+        "Revenue grew",
+        "Nested bullet",
+        "Close the books",
+        "Numbers are preliminary.",
+        "SELECT 2;",
+        "EMEA",
+        "Figure 1: revenue",
+        "Quoted wisdom",
+        "@Olivia",
+        "ON TRACK",
+        "Appendix A",
+    ] {
+        assert!(xml.contains(needle), "{needle} missing");
+    }
+    assert!(xml.contains("w:vMerge") && xml.contains("w:gridSpan"), "merged cells");
+    assert!(xml.contains("w:anchor=\"h1\"") && xml.contains("w:name=\"h1\""), "internal link to the bookmarked heading");
+    assert!(xml.contains("w:numId"), "lists are numbered");
+    assert!(xml.contains("Heading1") && xml.contains("Heading2"));
+    assert!(xml.contains("[Image: secret diagram]") && xml.contains("[Image: remote]"), "unviewable / remote images become links");
+    let rels = entry(&mut z, "word/_rels/document.xml.rels");
+    assert!(rels.contains("https://example.com/dash") && rels.contains(&format!("/pages/{child}")), "{rels}");
+    let numbering = entry(&mut z, "word/numbering.xml");
+    assert!(numbering.contains("w:startOverride w:val=\"3\""), "ordered list starts at 3");
+    // bullets use our bullet list, not docx-rs's built-in decimal list (num 1)
+    assert!(xml.contains("<w:numId w:val=\"2\"") && !xml.contains("<w:numId w:val=\"1\""), "bullet list id");
+    assert!(numbering.contains("<w:num w:numId=\"2\"><w:abstractNumId w:val=\"10\""), "{numbering}");
+    // chart + logo + icons (checkboxes, emoticon, callout) are embedded; the hidden image is not
+    let media: Vec<&String> = files.iter().filter(|f| f.starts_with("word/media/") && !f.ends_with('/')).collect();
+    assert!(media.len() >= 6, "{files:?}");
+    let hidden_png = tiny_png(5, 5);
+    for m in &media {
+        let mut b = Vec::new();
+        z.by_name(m).unwrap().read_to_end(&mut b).unwrap();
+        assert!(b.starts_with(b"\x89PNG"), "{m} is not a PNG");
+        assert_ne!(b, hidden_png, "restricted attachment leaked into the export");
+    }
+
+    // owners see the hidden image embedded; anonymous visitors get nothing
+    let r = owner.get(app.url(&format!("/pages/{pg}/export?format=docx"))).send().await.unwrap();
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(r.bytes().await.unwrap().to_vec())).unwrap();
+    assert!(!entry(&mut z, "word/document.xml").contains("[Image: secret diagram]"));
+    let anon = common::client();
+    assert_ne!(anon.get(app.url(&format!("/pages/{pg}/export?format=docx"))).send().await.unwrap().status(), 200);
+}

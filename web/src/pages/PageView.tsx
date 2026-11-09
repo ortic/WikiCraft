@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate } from 'lucide-react'
+import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate, FileText } from 'lucide-react'
 import { api, formatDate, type Page, type Space } from '../api'
 import { PageDecor } from '../components/PageDecor'
 import { ErrorBox, Spinner, useMe, useToast } from '../ui'
@@ -189,6 +189,9 @@ export default function PageView() {
                     <LayoutTemplate size={15} /> Save as template
                   </div>
                 )}
+                <a className="menu-item" href={`/api/pages/${p.id}/export?format=docx`} style={{ color: 'inherit', textDecoration: 'none' }}>
+                  <FileText size={15} /> Export as Word
+                </a>
                 <a className="menu-item" href={`/api/pages/${p.id}/export?format=md`} style={{ color: 'inherit', textDecoration: 'none' }}>
                   <Download size={15} /> Export as Markdown
                 </a>

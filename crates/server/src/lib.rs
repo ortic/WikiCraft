@@ -8,6 +8,7 @@ pub mod blobs;
 pub mod cluster;
 pub mod collab;
 pub mod config;
+pub mod docx;
 pub mod error;
 pub mod export;
 pub mod extract;

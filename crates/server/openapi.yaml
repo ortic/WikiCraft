@@ -2202,7 +2202,7 @@ paths:
     get:
       tags:
       - Import & export
-      summary: Export one page
+      summary: Export one page (Markdown, HTML, Word or JSON)
       operationId: get_pages_id_export
       parameters:
       - name: id
@@ -2212,7 +2212,7 @@ paths:
       - name: format
         in: query
         required: false
-        description: md | html | json
+        description: md | html | docx | json
         schema: *id001
       responses:
         '200':
