@@ -66,6 +66,11 @@ pub struct Config {
     #[arg(long, env = "WIKICRAFT_OIDC_AUTO_CREATE", default_value_t = true, action = clap::ArgAction::Set)]
     pub oidc_auto_create: bool,
 
+    /// Multi-replica mode: `none` (single instance) or `postgres` (relay live editing between
+    /// replicas via LISTEN/NOTIFY).
+    #[arg(long, env = "WIKICRAFT_CLUSTER", default_value = "none")]
+    pub cluster: String,
+
     /// Search backend: `tantivy` (embedded, single node) or `postgres` (shared by all replicas).
     #[arg(long, env = "WIKICRAFT_SEARCH", default_value = "tantivy")]
     pub search: String,

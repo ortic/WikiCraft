@@ -61,3 +61,63 @@ async fn postgres_search_backend() {
     })
     .await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn live_editing_across_two_replicas() {
+    use common::peer::Peer;
+    let cfg = |c: &mut wikicraft::config::Config| {
+        c.cluster = "postgres".into();
+        c.search = "postgres".into();
+    };
+    let app1 = common::spawn_with(cfg).await;
+    let db_url = app1.state.config.database_url.clone();
+    let app2 = common::spawn_with(move |c| {
+        cfg(c);
+        c.database_url = db_url;
+    })
+    .await;
+    assert_ne!(app1.state.node_id, app2.state.node_id);
+    let owner = app1.setup().await;
+    let (_, sp) = app1.post(&owner, "/spaces", json!({"key": "HA", "name": "HA"})).await;
+    let page = sp["homePageId"].as_str().unwrap().to_string();
+    let (_, t) = app1.post(&owner, "/me/tokens", json!({"name": "ws"})).await;
+    let token = t["token"].as_str().unwrap().to_string();
+
+    // same page, different replicas (as behind a load balancer)
+    let mut a = Peer::connect(&app1.base, &page, &token).await;
+    let mut b = Peer::connect(&app2.base, &page, &token).await;
+    assert_eq!(a.text(), b.text(), "both replicas load the same seeded document");
+
+    a.append_paragraph("typed on replica one").await;
+    b.wait_for_text("typed on replica one").await;
+    b.append_paragraph("typed on replica two").await;
+    a.wait_for_text("typed on replica two").await;
+    // REST edits on one replica reach editors on the other
+    let token2 = token.clone();
+    let r = reqwest::Client::new()
+        .put(app2.url(&format!("/pages/{page}/content")))
+        .bearer_auth(&token2)
+        .json(&json!({"markdown": "rewritten via replica two API"}))
+        .send()
+        .await
+        .unwrap();
+    assert_eq!(r.status(), 200);
+    a.wait_for_text("rewritten via replica two API").await;
+
+    // both replicas persist; stored state contains everything (merge-on-persist)
+    a.append_paragraph("final words from one").await;
+    b.wait_for_text("final words from one").await;
+    drop(a);
+    drop(b);
+    let content = app1
+        .eventually(|| async {
+            let c: serde_json::Value = sqlx::query_scalar("SELECT content FROM pages WHERE id = $1::uuid").bind(&page).fetch_one(&app1.state.db).await.unwrap();
+            let s = c.to_string();
+            (s.contains("rewritten via replica two API") && s.contains("final words from one")).then_some(s)
+        })
+        .await;
+    assert!(!content.contains("typed on replica one"), "the REST rewrite replaced earlier content");
+    // a third client on replica two sees the final state
+    let c = Peer::connect(&app2.base, &page, &token).await;
+    assert!(c.text().contains("final words from one"));
+}

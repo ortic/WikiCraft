@@ -107,6 +107,7 @@ async fn main() -> anyhow::Result<()> {
             .execute(&state.db)
             .await?;
             tokio::spawn(wikicraft::collab::persist_loop(state.clone()));
+            wikicraft::cluster::spawn(&state);
             let app = wikicraft::routes::router(state.clone());
             let listener = tokio::net::TcpListener::bind(bind).await?;
             tracing::info!("WikiCraft listening on http://{bind}");

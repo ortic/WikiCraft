@@ -2,6 +2,8 @@
 
 #![allow(dead_code)]
 
+pub mod peer;
+
 use std::time::Duration;
 
 use reqwest::header::{HeaderMap, HeaderValue};
@@ -49,11 +51,13 @@ pub async fn spawn_with(tweak: impl FnOnce(&mut Config)) -> TestApp {
         disable_password_login: false,
         log_format: "text".into(),
         search: "tantivy".into(),
+        cluster: "none".into(),
         metrics_token: None,
     };
     tweak(&mut config);
     let state = AppState::new(config).await.unwrap();
     tokio::spawn(wikicraft::collab::persist_loop(state.clone()));
+    wikicraft::cluster::spawn(&state);
     let app = wikicraft::routes::router(state.clone());
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     TestApp { base: format!("http://{addr}"), state, _data: data }

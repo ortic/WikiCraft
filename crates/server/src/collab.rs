@@ -117,10 +117,12 @@ pub struct Room {
     /// set when the page was trashed / the room evicted: connections close, nothing is persisted
     closed: AtomicBool,
     closing: tokio::sync::Notify,
+    /// cluster relay (other replicas), when clustering is enabled
+    relay: Option<mpsc::UnboundedSender<crate::cluster::Outgoing>>,
 }
 
 impl Room {
-    fn new(page_id: Uuid, doc: yrs::Doc) -> Self {
+    fn new(page_id: Uuid, doc: yrs::Doc, relay: Option<mpsc::UnboundedSender<crate::cluster::Outgoing>>) -> Self {
         let (tx, _) = broadcast::channel(1024);
         Self {
             page_id,
@@ -135,6 +137,7 @@ impl Room {
             next_conn: AtomicU64::new(1),
             closed: AtomicBool::new(false),
             closing: tokio::sync::Notify::new(),
+            relay,
         }
     }
 
@@ -148,10 +151,6 @@ impl Room {
         self.with_doc(ydoc::doc_to_pm)
     }
 
-    fn state(&self) -> Vec<u8> {
-        self.with_doc(ydoc::encode_state)
-    }
-
     /// Replaces the document content (REST edits, version restore) and broadcasts the change.
     pub fn replace_content(&self, pm: &Node, editor: Option<Uuid>) {
         let update = self.with_doc(|doc| {
@@ -159,9 +158,52 @@ impl Room {
             ydoc::write_pm(doc, pm);
             doc.transact().encode_state_as_update_v1(&before)
         });
+        self.publish(crate::cluster::KIND_DOC, &update);
         let msg = Message::Sync(SyncMessage::Update(update)).encode_v1();
         let _ = self.tx.send((0, Arc::new(msg)));
         self.mark_edited(editor);
+    }
+
+    fn publish(&self, kind: i16, payload: &[u8]) {
+        if let Some(r) = &self.relay {
+            let _ = r.send(crate::cluster::Outgoing { page: self.page_id, kind, payload: payload.to_vec() });
+        }
+    }
+
+    /// Applies a document update from another replica and fans it out to local clients.
+    pub fn apply_remote_update(&self, update: &[u8]) {
+        let changed = match Update::decode_v1(update) {
+            Ok(u) => self.with_doc(|d| {
+                let before = d.transact().state_vector();
+                let ok = d.transact_mut().apply_update(u).is_ok();
+                ok && d.transact().state_vector() != before
+            }),
+            Err(_) => false,
+        };
+        if changed {
+            let msg = Message::Sync(SyncMessage::Update(update.to_vec())).encode_v1();
+            let _ = self.tx.send((0, Arc::new(msg)));
+        }
+    }
+
+    /// Applies presence from another replica and fans it out to local clients.
+    pub fn apply_remote_awareness(&self, payload: &[u8]) {
+        let Ok(update) = AwarenessUpdate::decode_v1(payload) else { return };
+        let accepted = self.presence.lock().expect("presence lock").apply(crate::cluster::REMOTE_CONN, update);
+        if !accepted.clients.is_empty() {
+            let _ = self.tx.send((0, Arc::new(Message::Awareness(accepted).encode_v1())));
+        }
+    }
+
+    /// Merges a stored Yjs state into the room; returns the diff for local clients, if any.
+    fn merge_stored(&self, stored: &[u8]) -> Option<Vec<u8>> {
+        let u = Update::decode_v1(stored).ok()?;
+        self.with_doc(|d| {
+            let before = d.transact().state_vector();
+            d.transact_mut().apply_update(u).ok()?;
+            let changed = d.transact().state_vector() != before;
+            changed.then(|| d.transact().encode_state_as_update_v1(&before))
+        })
     }
 
     fn mark_edited(&self, editor: Option<Uuid>) {
@@ -194,25 +236,34 @@ impl Rooms {
             sqlx::query_as("SELECT ydoc, content FROM pages WHERE id = $1 AND deleted_at IS NULL").bind(page_id).fetch_optional(&state.db).await?;
         let Some((ystate, content)) = row else { return Err(ApiError::NotFound("page")) };
         let doc = ydoc::new_doc();
-        let mut seeded = false;
         match ystate {
             Some(bytes) if !bytes.is_empty() => {
                 ydoc::apply_update(&doc, &bytes).map_err(|e| ApiError::Internal(anyhow::anyhow!("corrupt ydoc for {page_id}: {e}")))?
             }
             _ => {
-                // first collaborative open: seed Yjs from the stored ProseMirror JSON (server-side,
-                // so two clients opening concurrently can't both seed and duplicate content)
+                // first collaborative open: seed Yjs from the stored ProseMirror JSON on the server,
+                // and claim it in the database — if another replica (or task) seeded first, use
+                // theirs, otherwise both seeds would merge into duplicated content
                 let pm = Node::from_json(&content).unwrap_or_else(|_| Node::empty_doc());
                 ydoc::write_pm(&doc, &pm);
-                seeded = true;
+                let claimed = sqlx::query("UPDATE pages SET ydoc = $1 WHERE id = $2 AND ydoc IS NULL")
+                    .bind(ydoc::encode_state(&doc))
+                    .bind(page_id)
+                    .execute(&state.db)
+                    .await?;
+                if claimed.rows_affected() == 0 {
+                    let theirs: Option<Vec<u8>> = sqlx::query_scalar("SELECT ydoc FROM pages WHERE id = $1").bind(page_id).fetch_one(&state.db).await?;
+                    let fresh = ydoc::new_doc();
+                    if let Some(b) = theirs {
+                        ydoc::apply_update(&fresh, &b).map_err(|e| ApiError::Internal(anyhow::anyhow!("corrupt ydoc for {page_id}: {e}")))?;
+                    }
+                    let room = Arc::new(Room::new(page_id, fresh, state.relay.as_ref().map(|r| r.tx.clone())));
+                    return Ok(self.map.entry(page_id).or_insert(room).clone());
+                }
             }
         }
-        let room = Arc::new(Room::new(page_id, doc));
+        let room = Arc::new(Room::new(page_id, doc, state.relay.as_ref().map(|r| r.tx.clone())));
         let room = self.map.entry(page_id).or_insert(room).clone();
-        if seeded {
-            let st = room.state();
-            sqlx::query("UPDATE pages SET ydoc = $1 WHERE id = $2 AND ydoc IS NULL").bind(st).bind(page_id).execute(&state.db).await?;
-        }
         Ok(room)
     }
 
@@ -247,21 +298,39 @@ pub async fn persist_with(state: &AppState, room: &Room, auto_version: bool) -> 
     if !room.dirty.swap(false, Ordering::SeqCst) || room.closed.load(Ordering::SeqCst) {
         return Ok(());
     }
-    let (bytes, pm) = room.with_doc(|d| (ydoc::encode_state(d), ydoc::doc_to_pm(d)));
-    let plain = text::plain_text(&pm);
     let editor = *room.last_editor.lock().expect("lock");
-    let res = sqlx::query("UPDATE pages SET ydoc = $1, content = $2, text_content = $3, updated_at = now(), updated_by = COALESCE($4, updated_by) WHERE id = $5 AND deleted_at IS NULL")
-        .bind(bytes)
-        .bind(pm.to_json())
-        .bind(plain)
-        .bind(editor)
-        .bind(room.page_id)
-        .execute(&state.db)
-        .await;
-    if let Err(e) = res {
-        room.dirty.store(true, Ordering::SeqCst); // retry next tick
-        return Err(e.into());
+    let res: anyhow::Result<Node> = async {
+        let mut tx = state.db.begin().await?;
+        if state.relay.is_some() {
+            // other replicas persist the same page: merge their stored state first (row lock
+            // serializes writers), so nobody overwrites anybody and missed relays heal here
+            let stored: Option<Option<Vec<u8>>> = sqlx::query_scalar("SELECT ydoc FROM pages WHERE id = $1 FOR UPDATE").bind(room.page_id).fetch_optional(&mut *tx).await?;
+            if let Some(Some(stored)) = stored
+                && let Some(diff) = room.merge_stored(&stored)
+            {
+                let _ = room.tx.send((0, Arc::new(Message::Sync(SyncMessage::Update(diff)).encode_v1())));
+            }
+        }
+        let (bytes, pm) = room.with_doc(|d| (ydoc::encode_state(d), ydoc::doc_to_pm(d)));
+        sqlx::query("UPDATE pages SET ydoc = $1, content = $2, text_content = $3, updated_at = now(), updated_by = COALESCE($4, updated_by) WHERE id = $5 AND deleted_at IS NULL")
+            .bind(bytes)
+            .bind(pm.to_json())
+            .bind(text::plain_text(&pm))
+            .bind(editor)
+            .bind(room.page_id)
+            .execute(&mut *tx)
+            .await?;
+        tx.commit().await?;
+        Ok(pm)
     }
+    .await;
+    let pm = match res {
+        Ok(pm) => pm,
+        Err(e) => {
+            room.dirty.store(true, Ordering::SeqCst); // retry next tick
+            return Err(e);
+        }
+    };
     state.search.enqueue(room.page_id);
     if let Ok(mut conn) = state.db.acquire().await
         && let Err(e) = crate::routes::tasks::index_page(&mut conn, room.page_id, &pm).await
@@ -434,6 +503,7 @@ async fn handle_socket(state: AppState, socket: WebSocket, room: Arc<Room>, user
                 };
                 if changed {
                     room.mark_edited(user_id);
+                    room.publish(crate::cluster::KIND_DOC, &update);
                     let msg = Message::Sync(SyncMessage::Update(update)).encode_v1();
                     let _ = room.tx.send((conn_id, Arc::new(msg)));
                 }
@@ -441,6 +511,7 @@ async fn handle_socket(state: AppState, socket: WebSocket, room: Arc<Room>, user
             Message::Awareness(update) => {
                 let accepted = room.presence.lock().expect("presence lock").apply(conn_id, update);
                 if !accepted.clients.is_empty() {
+                    room.publish(crate::cluster::KIND_AWARENESS, &accepted.encode_v1());
                     let raw = Message::Awareness(accepted).encode_v1();
                     let _ = room.tx.send((conn_id, Arc::new(raw)));
                 }
@@ -456,6 +527,7 @@ async fn handle_socket(state: AppState, socket: WebSocket, room: Arc<Room>, user
     // cleanup: remove this connection's presence and tell the others
     let removal = room.presence.lock().expect("presence lock").remove(conn_id);
     if !removal.clients.is_empty() {
+        room.publish(crate::cluster::KIND_AWARENESS, &removal.encode_v1());
         let _ = room.tx.send((conn_id, Arc::new(Message::Awareness(removal).encode_v1())));
     }
     forwarder.abort();
