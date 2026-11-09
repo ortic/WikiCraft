@@ -3115,7 +3115,7 @@ paths:
     post:
       tags:
       - Import & export
-      summary: Import Markdown / Notion / Obsidian (.md or .zip)
+      summary: Import Word, Markdown, Notion or Obsidian (.docx, .md or a .zip of them)
       operationId: post_imports_markdown
       requestBody:
         required: true

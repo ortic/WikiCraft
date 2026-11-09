@@ -237,9 +237,26 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
     } else {
         files.push((filename.to_string(), Bytes::from(tokio::fs::read(path).await.map_err(|e| ApiError::Internal(e.into()))?)));
     }
+    // Word documents are converted up front; their images become files next to them
+    let is_docx = |n: &str| n.to_lowercase().ends_with(".docx");
+    let mut word: HashMap<String, (Option<String>, Node)> = HashMap::new();
+    let docx_files: Vec<(String, Bytes)> = files.iter().filter(|(n, _)| is_docx(n)).cloned().collect();
+    for (name, data) in docx_files {
+        let file = name.rsplit('/').next().unwrap_or(&name).to_string();
+        let prefix = format!("{file}.media/");
+        let converted = tokio::task::spawn_blocking(move || crate::docx_import::convert(&data, &prefix))
+            .await
+            .map_err(|e| ApiError::Internal(e.into()))?
+            .map_err(|e| ApiError::bad(format!("{name}: {e}")))?;
+        for (img, bytes) in converted.media {
+            files.push((format!("{name}.media/{img}"), Bytes::from(bytes)));
+        }
+        word.insert(name, (converted.title, converted.doc));
+    }
     files.sort_by(|a, b| a.0.cmp(&b.0));
     let is_md = |n: &str| n.to_lowercase().ends_with(".md") || n.to_lowercase().ends_with(".markdown");
-    let assets: HashMap<String, Bytes> = files.iter().filter(|(n, _)| !is_md(n)).cloned().collect();
+    let is_page = |n: &str| is_md(n) || is_docx(n);
+    let assets: HashMap<String, Bytes> = files.iter().filter(|(n, _)| !is_page(n)).cloned().collect();
     // every directory that holds files ("A.md" next to "A/" is that folder's page)
     let dirs: std::collections::HashSet<String> = files
         .iter()
@@ -297,11 +314,15 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
         folders.insert(dir.to_string(), id);
         Ok(Some(id))
     }
-    for (name, data) in files.iter().filter(|(n, _)| is_md(n)) {
+    for (name, data) in files.iter().filter(|(n, _)| is_page(n)) {
         let (dir, file) = name.rsplit_once('/').unwrap_or(("", name.as_str()));
         let stem = file.rsplit_once('.').map(|(s, _)| s).unwrap_or(file);
-        let src = String::from_utf8_lossy(data);
-        let imported = markdown::markdown_to_pm(&src);
+        let from_word = word.remove(name.as_str());
+        let is_word = from_word.is_some();
+        let imported = match from_word {
+            Some((title, doc)) => markdown::MarkdownImport { doc, title, front_matter: None },
+            None => markdown::markdown_to_pm(&String::from_utf8_lossy(data)),
+        };
         let own_dir = if dir.is_empty() { stem.to_string() } else { format!("{dir}/{stem}") };
         // README/index inside a folder, or "Page.md" next to "Page/" (Notion, Obsidian, Docusaurus)
         let folder_dir: Option<String> = if matches!(stem.to_lowercase().as_str(), "index" | "readme") && !dir.is_empty() {
@@ -316,7 +337,7 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
             fm_title.or_else(|| imported.title.clone()).unwrap_or_else(|| clean_name(stem).replace(['-', '_'], " ")).chars().take(255).collect();
         let mut doc = imported.doc;
         // drop the H1 used as the title
-        if doc.content.first().is_some_and(|n| n.kind == nodes::HEADING && n.attr_i64("level") == Some(1)) && imported.title.is_some() {
+        if !is_word && doc.content.first().is_some_and(|n| n.kind == nodes::HEADING && n.attr_i64("level") == Some(1)) && imported.title.is_some() {
             doc.content.remove(0);
             if doc.content.is_empty() {
                 doc.content.push(Node::paragraph(vec![]));

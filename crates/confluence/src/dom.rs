@@ -146,6 +146,12 @@ pub fn parse(body: &str) -> (Element, ParseMode) {
     }
 }
 
+/// Parses a standalone XML document (e.g. an Office Open XML part) and returns its root
+/// element. Same depth limits as [`parse`].
+pub fn parse_document(src: &str) -> Option<Element> {
+    parse_xml(src, true).ok()
+}
+
 const MAX_DEPTH: usize = 200;
 
 const VOID: &[&str] = &["br", "hr", "img", "col", "input", "meta", "link", "wbr", "area", "base", "source", "track", "param", "embed"];
