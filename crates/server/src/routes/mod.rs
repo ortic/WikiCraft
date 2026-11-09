@@ -5,6 +5,7 @@ pub mod auth;
 pub mod comments;
 pub mod exports;
 pub mod imports;
+pub mod inspect;
 pub mod legacy;
 pub mod notifications;
 pub mod pages;
@@ -108,6 +109,7 @@ pub fn router(state: AppState) -> Router {
         .route("/recent", get(search::recent))
         .route("/favorites", get(search::favorites))
         .route("/labels/{name}", get(search::by_label))
+        .route("/pages/{id}/access/{who}", get(inspect::explain))
         .route("/pages/{id}/share-links", get(share::list).post(share::create))
         .route("/share-links/{id}", delete(share::revoke))
         .route("/admin/settings", get(share::get_settings).put(share::put_settings))

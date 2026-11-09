@@ -460,7 +460,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P1** Public share links for a single page (with optional expiry, password, subtree inclusion, disable globally) `C D O` (no password)
 - [x] **P1** Guest users limited to specific spaces `C`
 - [ ] **P1** Request access flow (request → owner approves) `C`
-- [ ] **P1** "Inspect permissions": why can user X see/edit page Y? `C`
+- [x] **P1** "Inspect permissions": why can user X see/edit page Y? `C`
 - [ ] **P1** Effective permission cache with invalidation (fast tree rendering for 100k pages)
 - [ ] **P2** Custom space roles / permission schemes `C`
 - [ ] **P2** Deny rules (XWiki-style explicit deny) `X`

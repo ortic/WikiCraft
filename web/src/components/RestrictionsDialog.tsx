@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Lock, Users, X } from 'lucide-react'
 import { api, type Page } from '../api'
+import AccessCheck from './AccessCheck'
 import { Modal, useMe } from '../ui'
 
 interface Entry {
@@ -133,6 +134,7 @@ export default function RestrictionsDialog({ page, onClose }: { page: Page; onCl
         </>
       )}
       {error && <p className="error-text">{error}</p>}
+      {page.access.admin && <AccessCheck pageId={page.id} people={users.data ?? []} />}
     </Modal>
   )
 }
