@@ -1,0 +1,39 @@
+# WikiCraft + PostgreSQL. Start with:  docker compose up -d   → http://localhost:8787
+services:
+  db:
+    image: postgres:17-alpine
+    environment:
+      POSTGRES_USER: wikicraft
+      POSTGRES_PASSWORD: ${WIKICRAFT_DB_PASSWORD:-change-me}
+      POSTGRES_DB: wikicraft
+    volumes:
+      - db:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wikicraft"]
+      interval: 5s
+      retries: 10
+    restart: unless-stopped
+
+  wikicraft:
+    build: .
+    image: wikicraft:latest
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      WIKICRAFT_DATABASE_URL: postgres://wikicraft:${WIKICRAFT_DB_PASSWORD:-change-me}@db:5432/wikicraft
+      WIKICRAFT_BASE_URL: ${WIKICRAFT_BASE_URL:-http://localhost:8787}
+      # behind HTTPS (reverse proxy) set this to true
+      WIKICRAFT_SECURE_COOKIES: ${WIKICRAFT_SECURE_COOKIES:-false}
+      # optional S3-compatible attachment storage (uses AWS_* env vars for credentials)
+      # WIKICRAFT_S3_BUCKET: wikicraft
+      # WIKICRAFT_S3_ENDPOINT: http://minio:9000
+    ports:
+      - "8787:8787"
+    volumes:
+      - data:/data
+    restart: unless-stopped
+
+volumes:
+  db:
+  data:

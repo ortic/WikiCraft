@@ -1,0 +1,236 @@
+use std::collections::HashMap;
+
+use axum::Json;
+use axum::extract::{Path, Query, State};
+use serde::{Deserialize, Serialize};
+use serde_json::{Value, json};
+use uuid::Uuid;
+
+use crate::app::AppState;
+use crate::auth::{CurrentUser, MaybeUser};
+use crate::authz::{Principal, Role, space_role, visible_page_ids};
+use crate::error::{ApiError, ApiResult};
+use crate::routes::spaces::{SPACE_COLUMNS, SpaceRow, workspace_of};
+
+/// Spaces visible to the principal with their roles.
+pub async fn visible_spaces(state: &AppState, p: &Principal) -> ApiResult<Vec<(SpaceRow, Role)>> {
+    let ws = workspace_of(state, p).await?;
+    let spaces = sqlx::query_as::<_, SpaceRow>(sqlx::AssertSqlSafe(format!("SELECT {SPACE_COLUMNS} FROM spaces WHERE workspace_id = $1")))
+        .bind(ws)
+        .fetch_all(&state.db)
+        .await?;
+    let mut out = Vec::new();
+    for s in spaces {
+        let r = space_role(state, p, &s.access_row()).await?;
+        if r > Role::None {
+            out.push((s, r));
+        }
+    }
+    Ok(out)
+}
+
+/// Filters page ids down to the ones the principal may view (inherited restrictions).
+pub async fn filter_visible(
+    state: &AppState,
+    p: &Principal,
+    spaces: &[(SpaceRow, Role)],
+    pages: &[(Uuid, Uuid)],
+) -> ApiResult<std::collections::HashSet<Uuid>> {
+    let mut by_space: HashMap<Uuid, Vec<Uuid>> = HashMap::new();
+    for (page, space) in pages {
+        by_space.entry(*space).or_default().push(*page);
+    }
+    let roles: HashMap<Uuid, Role> = spaces.iter().map(|(s, r)| (s.id, *r)).collect();
+    let mut out = std::collections::HashSet::new();
+    for (space, ids) in by_space {
+        let role = roles.get(&space).copied().unwrap_or(Role::None);
+        if role == Role::None {
+            continue;
+        }
+        let any_restrictions: bool =
+            sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM page_restrictions r JOIN pages p ON p.id = r.page_id WHERE p.space_id = $1 AND r.kind = 'view')")
+                .bind(space)
+                .fetch_one(&state.db)
+                .await?;
+        if !any_restrictions || role == Role::Admin {
+            out.extend(ids);
+            continue;
+        }
+        let pairs: Vec<(Uuid, Option<Uuid>)> = sqlx::query_as("SELECT id, parent_id FROM pages WHERE space_id = $1").bind(space).fetch_all(&state.db).await?;
+        let vis = visible_page_ids(state, p, space, role, &pairs).await?;
+        out.extend(ids.into_iter().filter(|i| vis.contains(i)));
+    }
+    Ok(out)
+}
+
+#[derive(Deserialize)]
+pub struct SearchQuery {
+    pub q: String,
+    pub space: Option<String>,
+    pub limit: Option<usize>,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SearchResult {
+    page_id: Uuid,
+    title: String,
+    snippet: String,
+    space_key: String,
+    space_name: String,
+    score: f32,
+}
+
+pub async fn search(State(state): State<AppState>, MaybeUser(user): MaybeUser, Query(q): Query<SearchQuery>) -> ApiResult<Json<Vec<SearchResult>>> {
+    let p = Principal::load(&state, user).await?;
+    let mut spaces = visible_spaces(&state, &p).await?;
+    if let Some(k) = &q.space {
+        spaces.retain(|(s, _)| s.key.eq_ignore_ascii_case(k));
+    }
+    let ids: Vec<Uuid> = spaces.iter().map(|(s, _)| s.id).collect();
+    let limit = q.limit.unwrap_or(20).clamp(1, 100);
+    let mut hits = state.search.search(&q.q, &ids, limit * 2).map_err(ApiError::Internal)?;
+    // the index may lag behind moves/deletes: use the database's current space and state
+    let hit_ids: Vec<Uuid> = hits.iter().map(|h| h.page_id).collect();
+    let current: std::collections::HashMap<Uuid, Uuid> =
+        sqlx::query_as::<_, (Uuid, Uuid)>("SELECT id, space_id FROM pages WHERE id = ANY($1) AND deleted_at IS NULL")
+            .bind(&hit_ids)
+            .fetch_all(&state.db)
+            .await?
+            .into_iter()
+            .collect();
+    hits.retain_mut(|h| match current.get(&h.page_id) {
+        Some(sp) => {
+            h.space_id = *sp;
+            true
+        }
+        None => false,
+    });
+    let pairs: Vec<(Uuid, Uuid)> = hits.iter().map(|h| (h.page_id, h.space_id)).collect();
+    let visible = filter_visible(&state, &p, &spaces, &pairs).await?;
+    let by_id: HashMap<Uuid, &SpaceRow> = spaces.iter().map(|(s, _)| (s.id, s)).collect();
+    let out = hits
+        .into_iter()
+        .filter(|h| visible.contains(&h.page_id))
+        .take(limit)
+        .map(|h| {
+            let s = by_id.get(&h.space_id);
+            SearchResult {
+                page_id: h.page_id,
+                title: h.title,
+                snippet: h.snippet,
+                space_key: s.map(|s| s.key.clone()).unwrap_or_default(),
+                space_name: s.map(|s| s.name.clone()).unwrap_or_default(),
+                score: h.score,
+            }
+        })
+        .collect();
+    Ok(Json(out))
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct PageListItem {
+    id: Uuid,
+    title: String,
+    space_id: Uuid,
+    space_key: String,
+    space_name: String,
+    updated_at: chrono::DateTime<chrono::Utc>,
+    updated_by_name: Option<String>,
+    at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+async fn filtered(state: &AppState, p: &Principal, rows: Vec<PageListItem>) -> ApiResult<Vec<PageListItem>> {
+    let spaces = visible_spaces(state, p).await?;
+    let pairs: Vec<(Uuid, Uuid)> = rows.iter().map(|r| (r.id, r.space_id)).collect();
+    let visible = filter_visible(state, p, &spaces, &pairs).await?;
+    Ok(rows.into_iter().filter(|r| visible.contains(&r.id)).collect())
+}
+
+const LIST_SELECT: &str = "SELECT p.id, p.title, p.space_id, s.key AS space_key, s.name AS space_name, p.updated_at, u.name AS updated_by_name";
+
+/// Recently viewed pages of the user plus recently updated pages in the workspace.
+pub async fn recent(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Value>> {
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    let viewed = sqlx::query_as::<_, PageListItem>(sqlx::AssertSqlSafe(format!(
+        "{LIST_SELECT}, rv.viewed_at AS at FROM recent_views rv JOIN pages p ON p.id = rv.page_id JOIN spaces s ON s.id = p.space_id LEFT JOIN users u ON u.id = p.updated_by
+         WHERE rv.user_id = $1 AND p.deleted_at IS NULL ORDER BY rv.viewed_at DESC LIMIT 20"
+    )))
+    .bind(user.id)
+    .fetch_all(&state.db)
+    .await?;
+    let updated = sqlx::query_as::<_, PageListItem>(sqlx::AssertSqlSafe(format!(
+        "{LIST_SELECT}, p.updated_at AS at FROM pages p JOIN spaces s ON s.id = p.space_id LEFT JOIN users u ON u.id = p.updated_by
+         WHERE p.workspace_id = $1 AND p.deleted_at IS NULL AND s.archived_at IS NULL ORDER BY p.updated_at DESC LIMIT 60"
+    )))
+    .bind(user.workspace_id)
+    .fetch_all(&state.db)
+    .await?;
+    let viewed = filtered(&state, &p, viewed).await?;
+    let mut updated = filtered(&state, &p, updated).await?;
+    updated.truncate(20);
+    Ok(Json(json!({ "viewed": viewed, "updated": updated })))
+}
+
+pub async fn favorites(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Vec<PageListItem>>> {
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    let rows = sqlx::query_as::<_, PageListItem>(sqlx::AssertSqlSafe(format!(
+        "{LIST_SELECT}, f.created_at AS at FROM favorites f JOIN pages p ON p.id = f.page_id JOIN spaces s ON s.id = p.space_id LEFT JOIN users u ON u.id = p.updated_by
+         WHERE f.user_id = $1 AND p.deleted_at IS NULL ORDER BY f.created_at DESC"
+    )))
+    .bind(user.id)
+    .fetch_all(&state.db)
+    .await?;
+    Ok(Json(filtered(&state, &p, rows).await?))
+}
+
+pub async fn by_label(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path(name): Path<String>) -> ApiResult<Json<Vec<PageListItem>>> {
+    let p = Principal::load(&state, user).await?;
+    let ws = workspace_of(&state, &p).await?;
+    let rows = sqlx::query_as::<_, PageListItem>(sqlx::AssertSqlSafe(format!(
+        "{LIST_SELECT}, NULL::timestamptz AS at FROM labels l JOIN pages p ON p.id = l.page_id JOIN spaces s ON s.id = p.space_id LEFT JOIN users u ON u.id = p.updated_by
+         WHERE l.name = $1 AND p.workspace_id = $2 AND p.deleted_at IS NULL ORDER BY lower(p.title) LIMIT 500"
+    )))
+    .bind(name.to_lowercase())
+    .bind(ws)
+    .fetch_all(&state.db)
+    .await?;
+    Ok(Json(filtered(&state, &p, rows).await?))
+}
+
+#[derive(Deserialize)]
+pub struct ResolveQuery {
+    /// space key + title (missing-page links from imports, wiki links)
+    space: Option<String>,
+    title: Option<String>,
+    /// legacy Confluence page id (old URL redirects): `confluence:<id>`
+    source: Option<String>,
+}
+
+/// Resolves a page by (space, title) or by imported source id.
+pub async fn resolve(State(state): State<AppState>, MaybeUser(user): MaybeUser, Query(q): Query<ResolveQuery>) -> ApiResult<Json<Value>> {
+    let p = Principal::load(&state, user).await?;
+    let ws = workspace_of(&state, &p).await?;
+    let id: Option<Uuid> = if let Some(src) = &q.source {
+        let (system, sid) = src.split_once(':').ok_or(ApiError::bad("source must look like confluence:<id>"))?;
+        sqlx::query_scalar("SELECT target_id FROM import_mappings WHERE workspace_id = $1 AND source = $2 AND source_type = 'page' AND source_id = $3")
+            .bind(ws)
+            .bind(system)
+            .bind(sid)
+            .fetch_optional(&state.db)
+            .await?
+    } else if let (Some(space), Some(title)) = (&q.space, &q.title) {
+        sqlx::query_scalar("SELECT p.id FROM pages p JOIN spaces s ON s.id = p.space_id WHERE s.workspace_id = $1 AND lower(s.key) = lower($2) AND lower(p.title) = lower($3) AND p.deleted_at IS NULL ORDER BY p.created_at LIMIT 1")
+            .bind(ws)
+            .bind(space)
+            .bind(title)
+            .fetch_optional(&state.db)
+            .await?
+    } else {
+        return Err(ApiError::bad("space+title or source required"));
+    };
+    let Some(id) = id else { return Ok(Json(json!({ "pageId": null }))) };
+    let (access, _) = crate::authz::page_access(&state, &p, id).await?;
+    Ok(Json(json!({ "pageId": if access.view { Some(id) } else { None } })))
+}

@@ -1,0 +1,17 @@
+//! WikiCraft server: HTTP API, real-time collaboration, search and importers.
+
+pub mod app;
+pub mod audit;
+pub mod auth;
+pub mod authz;
+pub mod blobs;
+pub mod collab;
+pub mod config;
+pub mod error;
+pub mod extract;
+pub mod importer;
+pub mod mcp;
+pub mod metrics;
+pub mod oidc;
+pub mod routes;
+pub mod search;

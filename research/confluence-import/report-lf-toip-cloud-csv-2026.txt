@@ -1,0 +1,339 @@
+
+## body: bodytypeid x owner type  (distinct=5, total=5584)
+     3184  1 / CUSTOM (confluence-content-property-storage:content-property)
+     2160  2 / PAGE
+      229  2 / COMMENT
+        8  0 / SPACEDESCRIPTION
+        3  2 / BLOGPOST
+
+## body: owner content type  (distinct=3, total=2366)
+     2160  PAGE
+      205  COMMENT
+        1  BLOGPOST
+
+## body: skipped (non-current version)  (distinct=2, total=26)
+       24  COMMENT
+        2  BLOGPOST
+
+## content: CUSTOM pluginkey  (distinct=2, total=3185)
+     3184  com.atlassian.confluence.plugins.confluence-content-property-storage:content-property
+        1  com.atlassian.confluence.extra.team-calendars:space-calendars-view-content-type
+
+## content: contenttype  (distinct=7, total=28307)
+    16833  PAGE
+     8047  ATTACHMENT
+     3185  CUSTOM
+      229  COMMENT
+        8  SPACEDESCRIPTION
+        3  BLOGPOST
+        2  FOLDER
+
+## content: contenttype x status  (distinct=10, total=28307)
+    14552  PAGE / current
+     8035  ATTACHMENT / current
+     3185  CUSTOM / current
+     2281  PAGE / draft
+      229  COMMENT / current
+       12  ATTACHMENT / deleted
+        8  SPACEDESCRIPTION / current
+        2  FOLDER / current
+        2  BLOGPOST / current
+        1  BLOGPOST / draft
+
+## content: creator id format  (distinct=3, total=28307)
+    25951  atlassian account-id (5570xx:/712020:/hex)
+     2177  empty
+      179  other
+
+## content: draft rows  (distinct=1, total=46)
+       46  live
+
+## content: historical versions (prevver set) by type  (distinct=6, total=15020)
+    14551  PAGE
+      333  CUSTOM
+      103  ATTACHMENT
+       24  COMMENT
+        7  SPACEDESCRIPTION
+        2  BLOGPOST
+
+## content: navigationtype  (distinct=3, total=28307)
+    26022  0
+     2284  1
+        1  3
+
+## content: threaded comment replies  (distinct=1, total=48)
+       48  has parentcommentid
+
+## refs: ri:attachment  (distinct=2, total=1932)
+     1912  resolved (filename exists in export)
+       20  UNRESOLVED filename
+
+## refs: ri:page  (distinct=3, total=915)
+      718  resolved by title
+      194  BROKEN (title not in export)
+        3  cross-space (unresolvable inside one space export)
+
+## refs: ri:user  (distinct=2, total=29609)
+    29455  resolved
+      154  UNRESOLVED
+
+## refs: ri:user identifier kind  (distinct=2, total=29609)
+    25591  userkey
+     4018  account-id
+
+## storage: HTML elements  (distinct=36, total=343134)
+    64499  p
+    64063  li
+    51049  td
+    38762  span
+    19564  ul
+    19403  br
+    17752  a
+    13830  strong
+    13293  tr
+     6766  col
+     6640  h1
+     4179  em
+     3813  div
+     2734  ol
+     2554  h3
+     2554  h2
+     2004  colgroup
+     1802  table
+     1802  tbody
+     1730  th
+     1359  u
+      923  code
+      732  hr
+      711  time
+      219  pre
+      156  s
+       97  h4
+       36  sup
+       28  blockquote
+       24  h6
+       22  del
+       13  h5
+       11  thead
+        8  sub
+        1  img
+        1  cite
+
+## storage: HTML named entities (need mapping)  (distinct=38, total=58071)
+    49606  nbsp
+     2111  rsquo
+     1989  mdash
+     1109  ldquo
+     1089  rdquo
+      727  ndash
+      438  bull
+      256  hellip
+      232  rarr
+      212  lsquo
+       62  middot
+       55  eacute
+       38  larr
+       38  auml
+       21  ouml
+       16  sect
+       11  lArr
+       10  zwj
+        8  dagger
+        7  aacute
+        7  oslash
+        4  ocirc
+        3  frac12
+        3  darr
+        3  sdot
+        2  uuml
+        2  oacute
+        2  iacute
+        1  Sigma
+        1  euro
+        1  icirc
+        1  rsaquo
+        1  frac14
+        1  szlig
+        1  trade
+        1  asymp
+        1  Eacute
+        1  harr
+
+## storage: ac:/ri: elements  (distinct=34, total=94685)
+    30646  ac:link
+    29609  ri:user
+     5680  ac:task
+     5680  ac:task-id
+     5680  ac:task-status
+     5660  ac:task-body
+     2543  ac:task-list
+     1932  ri:attachment
+     1503  ac:image
+     1365  ac:parameter
+      999  ac:structured-macro
+      915  ri:page
+      721  ac:plain-text-link-body
+      576  ac:link-body
+      571  ac:task-uuid
+      181  ac:rich-text-body
+      130  ri:url
+      114  ac:inline-comment-marker
+       61  ac:plain-text-body
+       27  ac:placeholder
+       26  ac:emoticon
+       21  ac:caption
+        9  ri:content-entity
+        9  ac:adf-attribute
+        5  ac:adf-node
+        4  ac:adf-content
+        4  ac:layout-cell
+        4  ac:macro
+        3  ac:layout-section
+        2  ac:adf-mark
+        2  ri:space
+        1  ac:adf-extension
+        1  ac:adf-fallback
+        1  ac:layout
+
+## storage: ac:adf-attribute keys  (distinct=2, total=9)
+        5  local-id
+        4  state
+
+## storage: ac:adf-extension node types  (distinct=1, total=1)
+        1  decision-list
+
+## storage: ac:adf-node types (all)  (distinct=2, total=5)
+        4  decision-item
+        1  decision-list
+
+## storage: bodies with inline style=  (distinct=1, total=1917)
+     1917  yes
+
+## storage: data-* attributes  (distinct=8, total=8843)
+     6511  data-highlight-colour
+     1201  data-card-appearance
+      573  data-layout
+      395  data-table-width
+      128  data-width
+       23  data-table-display-mode
+        6  data-original-height
+        6  data-original-width
+
+## storage: id/version attributes  (distinct=4, total=43143)
+    31509  local-id
+     9636  ac:local-id
+      999  ac:schema-version
+      999  ac:macro-id
+
+## storage: legacy ac:macro names  (distinct=4, total=4)
+        1  create-from-template
+        1  tasks-report-macro
+        1  decisionreport
+        1  content-report-table
+
+## storage: macro parameters (macro.param)  (distinct=76, total=1349)
+      448  view-file.name
+      423  view-file.height
+       51  children.reverse
+       50  children.sort
+       42  anchor.
+       38  code.collapse
+       31  widget.url
+       25  toc.absoluteUrl
+       19  toc.maxLevel
+       14  toc.style
+       12  status.colour
+       12  status.title
+       12  attachments.upload
+       10  code.breakoutMode
+       10  code.breakoutWidth
+       10  toc.exclude
+        8  children.allChildren
+        7  toc.minLevel
+        7  children.all
+        6  expand.title
+        5  toc.outline
+        5  toc.type
+        5  toc.printable
+        5  toc.indent
+        5  anchor._heading
+        4  children.depth
+        4  children.style
+        4  children.sortAndReverse
+        4  children.first
+        4  viewpdf.name
+        2  code.language
+        2  code.wrap
+        2  contentbylabel.showLabels
+        2  contentbylabel.showSpace
+        2  contentbylabel.sort
+        2  contentbylabel.reverse
+        2  contentbylabel.cql
+        2  toc.title
+        2  toc.name
+        2  toc.height
+        2  toc.url
+        2  info.title
+        2  create-from-template.blueprintModuleCompleteKey
+        2  create-from-template.contentBlueprintId
+        2  create-from-template.createButtonLabel
+        2  content-report-table.blueprintModuleCompleteKey
+        2  content-report-table.contentBlueprintId
+        2  content-report-table.analyticsKey
+        2  content-report-table.blankDescription
+        2  content-report-table.blankTitle
+        2  content-report-table.spaces
+        2  content-report-table.createButtonLabel
+        2  content-report-table.labels
+        1  toc.separator
+        1  contentbylabel.max
+        1  contentbylabel.spaces
+        1  contentbylabel.type
+        1  contentbylabel.labels
+        1  details.hidden
+        1  widget.width
+
+## storage: strict XML parse  (distinct=1, total=2366)
+     2366  ok
+
+## storage: structured-macro names  (distinct=19, total=999)
+      450  view-file
+      174  info
+      101  toc
+       83  children
+       58  code
+       49  anchor
+       33  widget
+       16  attachments
+       12  status
+        6  expand
+        4  viewpdf
+        3  unmigrated-wiki-markup
+        2  contentbylabel
+        2  create-from-template
+        2  content-report-table
+        1  details
+        1  pagetree
+        1  appsplus-google-calendar-macro
+        1  tasks-report-macro
+
+## tree: current PAGE/FOLDER depth  (distinct=8, total=2171)
+      868  depth 04
+      681  depth 05
+      366  depth 03
+      114  depth 02
+      113  depth 06
+       14  depth 01
+       12  depth 07
+        3  depth 00
+
+## tree: integrity  (distinct=4, total=1319)
+     1316  pages with child_position set
+        2  orphans (parent missing)
+        1  duplicate titles within space
+        0  cycles
+
+## users  (distinct=3, total=797)
+      656  export-users.csv rows
+      138  distinct creators
+        3  creators missing from export-users.csv

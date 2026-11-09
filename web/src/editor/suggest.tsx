@@ -1,0 +1,192 @@
+// Slash-command menu and @mention suggestions.
+
+import { Extension, type Editor, type Range } from '@tiptap/core'
+import { ReactRenderer } from '@tiptap/react'
+import Suggestion, { type SuggestionOptions, type SuggestionProps, type SuggestionKeyDownProps } from '@tiptap/suggestion'
+import { forwardRef, useEffect, useImperativeHandle, useState, type ReactNode } from 'react'
+import {
+  Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Quote, Code2, Minus, Table, Info, AlertTriangle, CheckCircle2, XCircle, ChevronRight,
+  Hash, ListTree, CalendarDays, Tag, Sigma, Image as ImageIcon, Link2, Columns2, Paperclip, StickyNote,
+} from 'lucide-react'
+import { api } from '../api'
+
+export interface MenuItem {
+  title: string
+  description?: string
+  icon?: ReactNode
+  group?: string
+  keywords?: string
+  command: (editor: Editor, range: Range) => void
+}
+
+interface ListHandle {
+  onKeyDown: (p: SuggestionKeyDownProps) => boolean
+}
+
+const SuggestionList = forwardRef<ListHandle, { items: MenuItem[]; command: (i: MenuItem) => void }>(function SuggestionList({ items, command }, ref) {
+  const [sel, setSel] = useState(0)
+  useEffect(() => setSel(0), [items])
+  useImperativeHandle(ref, () => ({
+    onKeyDown: ({ event }) => {
+      if (event.key === 'ArrowDown') {
+        setSel((s) => (s + 1) % Math.max(items.length, 1))
+        return true
+      }
+      if (event.key === 'ArrowUp') {
+        setSel((s) => (s - 1 + items.length) % Math.max(items.length, 1))
+        return true
+      }
+      if (event.key === 'Enter') {
+        if (items[sel]) command(items[sel])
+        return true
+      }
+      return false
+    },
+  }))
+  useEffect(() => {
+    document.querySelector('.menu .menu-item.selected')?.scrollIntoView({ block: 'nearest' })
+  }, [sel])
+  if (!items.length) return <div className="menu"><div className="menu-item faint">No results</div></div>
+  let lastGroup: string | undefined
+  return (
+    <div className="menu">
+      {items.map((it, i) => {
+        const header = it.group && it.group !== lastGroup ? <div className="menu-group">{it.group}</div> : null
+        lastGroup = it.group
+        return (
+          <div key={it.title + i}>
+            {header}
+            <div className={`menu-item ${i === sel ? 'selected' : ''}`} onMouseEnter={() => setSel(i)} onMouseDown={(e) => { e.preventDefault(); command(it) }}>
+              {it.icon && <div className="mi-icon">{it.icon}</div>}
+              <div>
+                <div>{it.title}</div>
+                {it.description && <div className="mi-desc">{it.description}</div>}
+              </div>
+            </div>
+          </div>
+        )
+      })}
+    </div>
+  )
+})
+
+/** Generic popup renderer for suggestion plugins (positions next to the caret). */
+export function popupRenderer<I>(): SuggestionOptions<I>['render'] {
+  return () => {
+    let component: ReactRenderer<ListHandle> | null = null
+    let host: HTMLDivElement | null = null
+    const place = (props: SuggestionProps<I>) => {
+      const rect = props.clientRect?.()
+      if (!rect || !host) return
+      const below = rect.bottom + 6
+      const h = Math.min(360, host.offsetHeight || 300)
+      host.style.left = `${Math.min(rect.left, window.innerWidth - 270)}px`
+      host.style.top = `${below + h > window.innerHeight ? Math.max(8, rect.top - h - 6) : below}px`
+    }
+    return {
+      onStart: (props) => {
+        component = new ReactRenderer(SuggestionList, { props, editor: props.editor })
+        host = document.createElement('div')
+        host.style.position = 'fixed'
+        host.style.zIndex = '60'
+        host.appendChild(component.element)
+        document.body.appendChild(host)
+        place(props)
+      },
+      onUpdate: (props) => {
+        component?.updateProps(props)
+        place(props)
+      },
+      onKeyDown: (props) => {
+        if (props.event.key === 'Escape') {
+          host?.remove()
+          host = null
+          return true
+        }
+        return component?.ref?.onKeyDown(props) ?? false
+      },
+      onExit: () => {
+        host?.remove()
+        component?.destroy()
+        host = null
+        component = null
+      },
+    }
+  }
+}
+
+const ic = (C: typeof Info) => <C size={16} />
+
+export function slashItems(onImage: (editor: Editor) => void, onAttachment: (editor: Editor) => void): MenuItem[] {
+  return [
+    { group: 'Basic', title: 'Heading 1', icon: ic(Heading1), keywords: 'h1 title', command: (e, r) => e.chain().focus().deleteRange(r).setNode('heading', { level: 1 }).run() },
+    { group: 'Basic', title: 'Heading 2', icon: ic(Heading2), keywords: 'h2', command: (e, r) => e.chain().focus().deleteRange(r).setNode('heading', { level: 2 }).run() },
+    { group: 'Basic', title: 'Heading 3', icon: ic(Heading3), keywords: 'h3', command: (e, r) => e.chain().focus().deleteRange(r).setNode('heading', { level: 3 }).run() },
+    { group: 'Basic', title: 'Bullet list', icon: ic(List), keywords: 'ul unordered', command: (e, r) => e.chain().focus().deleteRange(r).toggleBulletList().run() },
+    { group: 'Basic', title: 'Numbered list', icon: ic(ListOrdered), keywords: 'ol ordered', command: (e, r) => e.chain().focus().deleteRange(r).toggleOrderedList().run() },
+    { group: 'Basic', title: 'Task list', description: 'Checklist with assignees and dates', icon: ic(ListChecks), keywords: 'todo checkbox action', command: (e, r) => e.chain().focus().deleteRange(r).toggleTaskList().run() },
+    { group: 'Basic', title: 'Quote', icon: ic(Quote), keywords: 'blockquote', command: (e, r) => e.chain().focus().deleteRange(r).toggleBlockquote().run() },
+    { group: 'Basic', title: 'Code block', icon: ic(Code2), keywords: 'snippet pre', command: (e, r) => e.chain().focus().deleteRange(r).toggleCodeBlock().run() },
+    { group: 'Media', title: 'Diagram (Mermaid)', description: 'Flowcharts, sequence diagrams, Gantt…', icon: ic(Columns2), keywords: 'mermaid flowchart sequence chart', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'codeBlock', attrs: { language: 'mermaid' }, content: [{ type: 'text', text: 'flowchart LR\n  A[Idea] --> B{Review}\n  B -->|approved| C[Ship it]\n  B -->|changes| A' }] }).run() },
+    { group: 'Basic', title: 'Divider', icon: ic(Minus), keywords: 'hr rule', command: (e, r) => e.chain().focus().deleteRange(r).setHorizontalRule().run() },
+    { group: 'Basic', title: 'Table', icon: ic(Table), keywords: 'grid', command: (e, r) => e.chain().focus().deleteRange(r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+    { group: 'Panels', title: 'Info panel', icon: ic(Info), keywords: 'callout note', command: (e, r) => e.chain().focus().deleteRange(r).wrapIn('callout', { type: 'info' }).run() },
+    { group: 'Panels', title: 'Note panel', icon: ic(StickyNote), keywords: 'callout', command: (e, r) => e.chain().focus().deleteRange(r).wrapIn('callout', { type: 'note' }).run() },
+    { group: 'Panels', title: 'Success panel', icon: ic(CheckCircle2), keywords: 'callout tip', command: (e, r) => e.chain().focus().deleteRange(r).wrapIn('callout', { type: 'success' }).run() },
+    { group: 'Panels', title: 'Warning panel', icon: ic(AlertTriangle), keywords: 'callout caution', command: (e, r) => e.chain().focus().deleteRange(r).wrapIn('callout', { type: 'warning' }).run() },
+    { group: 'Panels', title: 'Error panel', icon: ic(XCircle), keywords: 'callout danger', command: (e, r) => e.chain().focus().deleteRange(r).wrapIn('callout', { type: 'error' }).run() },
+    { group: 'Panels', title: 'Expand', description: 'Collapsible section', icon: ic(ChevronRight), keywords: 'details toggle collapse', command: (e, r) => e.chain().focus().deleteRange(r).setDetails().run() },
+    { group: 'Panels', title: 'Two columns', icon: ic(Columns2), keywords: 'layout section', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'columns', content: [{ type: 'column', content: [{ type: 'paragraph' }] }, { type: 'column', content: [{ type: 'paragraph' }] }] }).run() },
+    { group: 'Media', title: 'Image', description: 'Upload an image', icon: ic(ImageIcon), keywords: 'picture photo', command: (e, r) => { e.chain().focus().deleteRange(r).run(); onImage(e) } },
+    { group: 'Media', title: 'File', description: 'Upload a file with preview', icon: ic(Paperclip), keywords: 'attachment pdf upload', command: (e, r) => { e.chain().focus().deleteRange(r).run(); onAttachment(e) } },
+    { group: 'Media', title: 'Embed', description: 'YouTube, Loom, Figma, Miro, Google Docs…', icon: ic(Link2), keywords: 'iframe video', command: (e, r) => { const url = window.prompt('URL to embed'); if (url) e.chain().focus().deleteRange(r).insertContent({ type: 'embed', attrs: { url } }).run() } },
+    { group: 'Macros', title: 'Table of contents', icon: ic(Hash), keywords: 'toc headings', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'toc' }).run() },
+    { group: 'Macros', title: 'Child pages', icon: ic(ListTree), keywords: 'children tree', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'childPages', attrs: { depth: 1 } }).run() },
+    { group: 'Macros', title: 'Status', icon: ic(Tag), keywords: 'lozenge label', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'status', attrs: { text: 'IN PROGRESS', color: 'blue' } }).run() },
+    { group: 'Macros', title: 'Date', icon: ic(CalendarDays), keywords: 'today time', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'date', attrs: { date: new Date().toISOString().slice(0, 10) } }).run() },
+    { group: 'Macros', title: 'Math', description: 'LaTeX formula', icon: ic(Sigma), keywords: 'latex katex equation', command: (e, r) => { const latex = window.prompt('LaTeX', 'E = mc^2'); if (latex) e.chain().focus().deleteRange(r).insertContent({ type: 'blockMath', attrs: { latex } }).run() } },
+  ]
+}
+
+export const SlashCommand = Extension.create<{ items: MenuItem[] }>({
+  name: 'slashCommand',
+  addOptions() {
+    return { items: [] }
+  },
+  addProseMirrorPlugins() {
+    const all = this.options.items
+    return [
+      Suggestion<MenuItem>({
+        editor: this.editor,
+        char: '/',
+        startOfLine: false,
+        allowSpaces: false,
+        items: ({ query }) => {
+          const q = query.toLowerCase()
+          return all.filter((i) => !q || i.title.toLowerCase().includes(q) || i.keywords?.includes(q)).slice(0, 30)
+        },
+        command: ({ editor, range, props }) => props.command(editor, range),
+        render: popupRenderer<MenuItem>(),
+      }),
+    ]
+  },
+})
+
+interface UserHit {
+  id: string
+  name: string
+}
+
+/** Mention suggestion config (users of the workspace). */
+export const mentionSuggestion: Omit<SuggestionOptions<MenuItem>, 'editor'> = {
+  char: '@',
+  items: async ({ query }) => {
+    const users = await api.get<UserHit[]>(`/users?q=${encodeURIComponent(query)}`).catch(() => [])
+    return users.slice(0, 8).map((u) => ({
+      title: u.name,
+      command: (editor: Editor, range: Range) => editor.chain().focus().deleteRange(range).insertContent([{ type: 'mention', attrs: { id: u.id, label: u.name } }, { type: 'text', text: ' ' }]).run(),
+    }))
+  },
+  command: ({ editor, range, props }) => props.command(editor, range),
+  render: popupRenderer<MenuItem>(),
+}

@@ -1,0 +1,316 @@
+//! Server-side HTML rendering of ProseMirror documents.
+//!
+//! Output is safe by construction: every text and attribute value is escaped, URLs are
+//! scheme-checked, colors are validated. Used for public pages, exports, e-mails and
+//! no-JS rendering.
+
+use std::fmt::Write as _;
+
+use crate::node::{Mark, Node, marks, nodes};
+use crate::text::{headings, slugify};
+
+/// Options influencing link/asset URLs in the rendered HTML.
+#[derive(Debug, Clone, Default)]
+pub struct HtmlOptions {
+    /// Add `id` attributes to headings (for anchors and TOC).
+    pub heading_ids: bool,
+}
+
+pub fn escape(s: &str) -> String {
+    let mut o = String::with_capacity(s.len() + 8);
+    for ch in s.chars() {
+        match ch {
+            '&' => o.push_str("&amp;"),
+            '<' => o.push_str("&lt;"),
+            '>' => o.push_str("&gt;"),
+            '"' => o.push_str("&quot;"),
+            '\'' => o.push_str("&#39;"),
+            c => o.push(c),
+        }
+    }
+    o
+}
+
+/// Returns the URL if it is safe to put into `href`/`src` (http(s), mailto, tel, relative, anchors).
+pub fn safe_url(url: &str) -> Option<&str> {
+    let u = url.trim();
+    let lower = u.to_ascii_lowercase();
+    let lower = lower.replace(['\t', '\n', '\r'], "");
+    if lower.starts_with("http://")
+        || lower.starts_with("https://")
+        || lower.starts_with("mailto:")
+        || lower.starts_with("tel:")
+        || lower.starts_with('/')
+        || lower.starts_with('#')
+        || lower.starts_with("./")
+        || lower.starts_with("../")
+    {
+        return Some(u);
+    }
+    // relative path without scheme
+    if !lower.contains(':') {
+        return Some(u);
+    }
+    None
+}
+
+/// Accepts `#rgb`, `#rrggbb`, `#rrggbbaa`, `rgb()/rgba()` and plain CSS color names.
+pub fn safe_color(c: &str) -> Option<&str> {
+    let c = c.trim();
+    let ok = if let Some(hex) = c.strip_prefix('#') {
+        matches!(hex.len(), 3 | 4 | 6 | 8) && hex.chars().all(|ch| ch.is_ascii_hexdigit())
+    } else if c.starts_with("rgb(") || c.starts_with("rgba(") || c.starts_with("hsl(") || c.starts_with("hsla(") {
+        c.ends_with(')') && c.chars().all(|ch| ch.is_ascii_alphanumeric() || " ,.%()/".contains(ch))
+    } else {
+        !c.is_empty() && c.len() < 32 && c.chars().all(|ch| ch.is_ascii_alphabetic())
+    };
+    ok.then_some(c)
+}
+
+pub fn render(doc: &Node, opts: &HtmlOptions) -> String {
+    let mut r = Renderer { out: String::new(), opts: opts.clone(), heading_ids: headings(doc).into_iter().map(|h| h.2).collect(), heading_idx: 0, doc };
+    r.children(&doc.content);
+    r.out
+}
+
+struct Renderer<'a> {
+    out: String,
+    opts: HtmlOptions,
+    heading_ids: Vec<String>,
+    heading_idx: usize,
+    doc: &'a Node,
+}
+
+impl Renderer<'_> {
+    fn children(&mut self, content: &[Node]) {
+        for c in content {
+            self.node(c);
+        }
+    }
+
+    fn wrap(&mut self, open: &str, n: &Node, close: &str) {
+        self.out.push_str(open);
+        self.children(&n.content);
+        self.out.push_str(close);
+    }
+
+    fn text_align(n: &Node) -> String {
+        match n.attr_str("textAlign") {
+            Some(a @ ("left" | "center" | "right" | "justify")) => format!(" style=\"text-align:{a}\""),
+            _ => String::new(),
+        }
+    }
+
+    fn node(&mut self, n: &Node) {
+        match n.kind.as_str() {
+            nodes::TEXT => self.text(n),
+            nodes::PARAGRAPH => {
+                let open = format!("<p{}>", Self::text_align(n));
+                self.wrap(&open, n, "</p>");
+            }
+            nodes::HEADING => {
+                let lvl = n.attr_i64("level").unwrap_or(1).clamp(1, 6);
+                let id = self.heading_ids.get(self.heading_idx).cloned().unwrap_or_default();
+                self.heading_idx += 1;
+                let id_attr = if self.opts.heading_ids { format!(" id=\"{}\"", escape(&id)) } else { String::new() };
+                let open = format!("<h{lvl}{id_attr}{}>", Self::text_align(n));
+                self.wrap(&open, n, &format!("</h{lvl}>"));
+            }
+            nodes::BULLET_LIST => self.wrap("<ul>", n, "</ul>"),
+            nodes::ORDERED_LIST => {
+                let start = n.attr_i64("start").unwrap_or(1);
+                let open = if start != 1 { format!("<ol start=\"{start}\">") } else { "<ol>".into() };
+                self.wrap(&open, n, "</ol>");
+            }
+            nodes::LIST_ITEM => self.wrap("<li>", n, "</li>"),
+            nodes::TASK_LIST => self.wrap("<ul class=\"task-list\" data-type=\"taskList\">", n, "</ul>"),
+            nodes::TASK_ITEM => {
+                let checked = n.attr_bool("checked").unwrap_or(false);
+                let open = format!(
+                    "<li class=\"task-item\" data-checked=\"{checked}\"><input type=\"checkbox\" disabled{}> <div>",
+                    if checked { " checked" } else { "" }
+                );
+                self.wrap(&open, n, "</div></li>");
+            }
+            nodes::CODE_BLOCK => {
+                let lang = n.attr_str("language").map(|l| format!(" class=\"language-{}\"", escape(l))).unwrap_or_default();
+                let _ = write!(self.out, "<pre><code{lang}>{}</code></pre>", escape(&crate::text::inline_text(n)));
+            }
+            nodes::BLOCKQUOTE => self.wrap("<blockquote>", n, "</blockquote>"),
+            nodes::HORIZONTAL_RULE => self.out.push_str("<hr>"),
+            nodes::HARD_BREAK => self.out.push_str("<br>"),
+            nodes::IMAGE => self.image(n),
+            nodes::TABLE => self.wrap("<table><tbody>", n, "</tbody></table>"),
+            nodes::TABLE_ROW => self.wrap("<tr>", n, "</tr>"),
+            nodes::TABLE_HEADER | nodes::TABLE_CELL => {
+                let tag = if n.kind == nodes::TABLE_HEADER { "th" } else { "td" };
+                let mut attrs = String::new();
+                for k in ["colspan", "rowspan"] {
+                    if let Some(v) = n.attr_i64(k).filter(|v| *v > 1) {
+                        let _ = write!(attrs, " {k}=\"{v}\"");
+                    }
+                }
+                if let Some(bg) = n.attr_str("background").and_then(safe_color) {
+                    let _ = write!(attrs, " style=\"background-color:{bg}\"");
+                }
+                self.wrap(&format!("<{tag}{attrs}>"), n, &format!("</{tag}>"));
+            }
+            nodes::DETAILS => {
+                let open = if n.attr_bool("open").unwrap_or(false) { "<details open>" } else { "<details>" };
+                self.wrap(open, n, "</details>");
+            }
+            nodes::DETAILS_SUMMARY => self.wrap("<summary>", n, "</summary>"),
+            nodes::DETAILS_CONTENT => self.wrap("<div class=\"details-content\">", n, "</div>"),
+            nodes::CALLOUT => {
+                let kind = n.attr_str("type").unwrap_or("info");
+                let icon = n.attr_str("emoji").map(|e| format!("<span class=\"callout-icon\">{}</span>", escape(e))).unwrap_or_default();
+                let open = format!("<div class=\"callout callout-{kind}\" data-type=\"callout\">{icon}<div class=\"callout-body\">");
+                self.wrap(&open, n, "</div></div>");
+            }
+            nodes::MENTION => {
+                let label = n.attr_str("label").or(n.attr_str("id")).unwrap_or("user");
+                let _ = write!(self.out, "<span class=\"mention\" data-id=\"{}\">@{}</span>", escape(n.attr_str("id").unwrap_or("")), escape(label));
+            }
+            nodes::STATUS => {
+                let color = n.attr_str("color").unwrap_or("grey");
+                let _ = write!(self.out, "<span class=\"status status-{color}\">{}</span>", escape(n.attr_str("text").unwrap_or("")));
+            }
+            nodes::DATE => {
+                let d = n.attr_str("date").unwrap_or("");
+                let _ = write!(self.out, "<time datetime=\"{0}\">{0}</time>", escape(d));
+            }
+            nodes::ATTACHMENT => {
+                let name = n.attr_str("name").unwrap_or("attachment");
+                let href = n.attr_str("href").and_then(safe_url).unwrap_or("#");
+                let _ = write!(self.out, "<p class=\"attachment\"><a href=\"{}\">📎 {}</a></p>", escape(href), escape(name));
+            }
+            nodes::EMBED => {
+                let url = n.attr_str("url").and_then(safe_url).unwrap_or("#");
+                let _ = write!(self.out, "<p class=\"embed\"><a href=\"{0}\" rel=\"noopener noreferrer\">{0}</a></p>", escape(url));
+            }
+            nodes::TOC => {
+                self.out.push_str("<nav class=\"toc\"><ul>");
+                for (lvl, text, id) in headings(self.doc) {
+                    let _ = write!(self.out, "<li class=\"toc-l{lvl}\"><a href=\"#{}\">{}</a></li>", escape(&id), escape(&text));
+                }
+                self.out.push_str("</ul></nav>");
+            }
+            nodes::CHILD_PAGES => self.out.push_str("<div class=\"child-pages\" data-type=\"childPages\"></div>"),
+            nodes::INCLUDE => {
+                let title = n.attr_str("title").unwrap_or("page");
+                let _ = write!(
+                    self.out,
+                    "<div class=\"include\" data-page-id=\"{}\">Included page: {}</div>",
+                    escape(n.attr_str("pageId").unwrap_or("")),
+                    escape(title)
+                );
+            }
+            nodes::ANCHOR => {
+                let name = n.attr_str("name").unwrap_or("");
+                let _ = write!(self.out, "<a id=\"{}\"></a>", escape(&slugify(name)));
+            }
+            nodes::COLUMNS => self.wrap("<div class=\"columns\">", n, "</div>"),
+            nodes::COLUMN => self.wrap("<div class=\"column\">", n, "</div>"),
+            nodes::DECISION_LIST => self.wrap("<ul class=\"decision-list\">", n, "</ul>"),
+            nodes::DECISION_ITEM => self.wrap("<li class=\"decision-item\">", n, "</li>"),
+            nodes::MATH_BLOCK => {
+                let _ = write!(self.out, "<div class=\"math\" data-latex=\"{0}\">{0}</div>", escape(n.attr_str("latex").unwrap_or("")));
+            }
+            nodes::MATH_INLINE => {
+                let _ = write!(self.out, "<span class=\"math\" data-latex=\"{0}\">{0}</span>", escape(n.attr_str("latex").unwrap_or("")));
+            }
+            nodes::MACRO => {
+                let name = n.attr_str("name").unwrap_or("macro");
+                let _ = write!(self.out, "<div class=\"macro\" data-macro=\"{0}\"><div class=\"macro-label\">Macro: {0}</div>", escape(name));
+                self.children(&n.content);
+                self.out.push_str("</div>");
+            }
+            _ => {
+                // unknown node: render children so content is not lost
+                if n.content.iter().all(|c| c.is_inline()) && !n.content.is_empty() {
+                    self.wrap("<p>", n, "</p>");
+                } else {
+                    self.children(&n.content);
+                }
+            }
+        }
+    }
+
+    fn image(&mut self, n: &Node) {
+        let src = n.attr_str("src").and_then(safe_url).unwrap_or("");
+        let alt = n.attr_str("alt").unwrap_or("");
+        let mut extra = String::new();
+        if let Some(w) = n.attr_i64("width").filter(|w| *w > 0) {
+            let _ = write!(extra, " width=\"{w}\"");
+        }
+        if let Some(t) = n.attr_str("title") {
+            let _ = write!(extra, " title=\"{}\"", escape(t));
+        }
+        let _ = write!(self.out, "<img src=\"{}\" alt=\"{}\"{extra} loading=\"lazy\">", escape(src), escape(alt));
+    }
+
+    fn text(&mut self, n: &Node) {
+        let mut s = escape(n.text.as_deref().unwrap_or(""));
+        for m in n.marks.iter().rev() {
+            s = wrap_mark(m, s);
+        }
+        self.out.push_str(&s);
+    }
+}
+
+fn wrap_mark(m: &Mark, inner: String) -> String {
+    match m.kind.as_str() {
+        marks::BOLD => format!("<strong>{inner}</strong>"),
+        marks::ITALIC => format!("<em>{inner}</em>"),
+        marks::UNDERLINE => format!("<u>{inner}</u>"),
+        marks::STRIKE => format!("<s>{inner}</s>"),
+        marks::CODE => format!("<code>{inner}</code>"),
+        marks::SUBSCRIPT => format!("<sub>{inner}</sub>"),
+        marks::SUPERSCRIPT => format!("<sup>{inner}</sup>"),
+        marks::LINK => match m.attr_str("href").and_then(safe_url) {
+            Some(href) => format!("<a href=\"{}\" rel=\"noopener noreferrer\">{inner}</a>", escape(href)),
+            None => inner,
+        },
+        marks::TEXT_STYLE => match m.attr_str("color").and_then(safe_color) {
+            Some(c) => format!("<span style=\"color:{c}\">{inner}</span>"),
+            None => inner,
+        },
+        marks::HIGHLIGHT => match m.attr_str("color").and_then(safe_color) {
+            Some(c) => format!("<mark style=\"background-color:{c}\">{inner}</mark>"),
+            None => format!("<mark>{inner}</mark>"),
+        },
+        marks::COMMENT => match m.attr_str("commentId") {
+            Some(id) => format!("<span class=\"inline-comment\" data-comment-id=\"{}\">{inner}</span>", escape(id)),
+            None => inner,
+        },
+        _ => inner,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn escapes_and_blocks_js_urls() {
+        let doc = Node::doc(vec![Node::paragraph(vec![
+            Node::text("<script>alert(1)</script>"),
+            Node::text_marked("x", vec![Mark::link("javascript:alert(1)")]),
+            Node::text_marked("y", vec![Mark::link("https://ok.example/?a=1&b=2")]),
+            Node::text_marked("c", vec![Mark::new(marks::TEXT_STYLE).attr("color", "red;background:url(x)")]),
+        ])]);
+        let html = render(&doc, &HtmlOptions::default());
+        assert!(html.contains("&lt;script&gt;"));
+        assert!(!html.contains("javascript:"));
+        assert!(html.contains("href=\"https://ok.example/?a=1&amp;b=2\""));
+        assert!(!html.contains("url(x)"));
+    }
+
+    #[test]
+    fn renders_toc_and_heading_ids() {
+        let doc = Node::doc(vec![Node::new(nodes::TOC), Node::heading(2, vec![Node::text("Intro")])]);
+        let html = render(&doc, &HtmlOptions { heading_ids: true });
+        assert!(html.contains("<a href=\"#intro\">Intro</a>"));
+        assert!(html.contains("<h2 id=\"intro\">"));
+    }
+}

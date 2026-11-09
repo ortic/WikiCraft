@@ -1,0 +1,158 @@
+import { useMemo, useState, type DragEvent } from 'react'
+import { useMatch, useNavigate } from 'react-router-dom'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { ChevronRight, ChevronDown, FileText, Folder, Plus, Lock } from 'lucide-react'
+import { api, type Space, type TreeNode } from '../api'
+import { useToast } from '../ui'
+
+interface TreeData {
+  spaceId: string
+  homePageId: string | null
+  nodes: TreeNode[]
+}
+
+type DropPos = 'before' | 'after' | 'inside'
+
+export default function SpaceTree({ space }: { space: Space }) {
+  const qc = useQueryClient()
+  const nav = useNavigate()
+  const toast = useToast()
+  const active = useMatch('/pages/:id/*')?.params.id
+  const tree = useQuery({ queryKey: ['tree', space.key], queryFn: () => api.get<TreeData>(`/spaces/${space.key}/tree`) })
+  const [open, setOpen] = useState<Record<string, boolean>>({})
+  const [drag, setDrag] = useState<string | null>(null)
+  const [drop, setDrop] = useState<{ id: string; pos: DropPos } | null>(null)
+  const canEdit = space.role === 'editor' || space.role === 'admin'
+
+  const { children, parentOf } = useMemo(() => {
+    const children = new Map<string, TreeNode[]>()
+    const parentOf = new Map<string, string | null>()
+    const ids = new Set(tree.data?.nodes.map((n) => n.id))
+    for (const n of tree.data?.nodes ?? []) {
+      const p = n.parentId && ids.has(n.parentId) ? n.parentId : ''
+      parentOf.set(n.id, p || null)
+      children.set(p, [...(children.get(p) ?? []), n])
+    }
+    for (const list of children.values()) list.sort((a, b) => a.position - b.position || a.title.localeCompare(b.title))
+    return { children, parentOf }
+  }, [tree.data])
+
+  // auto-expand ancestors of the active page
+  const expanded = useMemo(() => {
+    const e = { ...open }
+    let cur = active ? parentOf.get(active) : null
+    let guard = 0
+    while (cur && guard++ < 200) {
+      if (e[cur] === undefined) e[cur] = true
+      cur = parentOf.get(cur) ?? null
+    }
+    return e
+  }, [open, active, parentOf])
+
+  const createChild = async (parentId: string | null) => {
+    const r = await api.post<{ id: string }>('/pages', { spaceKey: space.key, parentId, title: 'Untitled' })
+    if (parentId) setOpen((o) => ({ ...o, [parentId]: true }))
+    await qc.invalidateQueries({ queryKey: ['tree', space.key] })
+    nav(`/pages/${r.id}?new=1`)
+  }
+
+  const onDrop = async (e: DragEvent, target: TreeNode) => {
+    e.preventDefault()
+    const d = drop
+    setDrop(null)
+    if (!drag || !d || drag === target.id) return
+    const body =
+      d.pos === 'inside'
+        ? { parentId: target.id }
+        : { parentId: parentOf.get(target.id) ?? null, ...(d.pos === 'before' ? { beforeId: target.id } : { afterId: target.id }) }
+    try {
+      await api.post(`/pages/${drag}/move`, body)
+      if (d.pos === 'inside') setOpen((o) => ({ ...o, [target.id]: true }))
+      await qc.invalidateQueries({ queryKey: ['tree', space.key] })
+      qc.invalidateQueries({ queryKey: ['page', drag] })
+    } catch (err) {
+      toast(err instanceof Error ? err.message : 'Move failed')
+    }
+    setDrag(null)
+  }
+
+  const renderNodes = (parent: string, depth: number): React.ReactNode =>
+    (children.get(parent) ?? []).map((n) => {
+      const kids = children.get(n.id)
+      const isOpen = !!expanded[n.id]
+      const dropCls = drop?.id === n.id ? `drop-${drop.pos}` : ''
+      return (
+        <div key={n.id}>
+          <div
+            className={`tree-row ${active === n.id ? 'active' : ''} ${dropCls}`}
+            style={{ paddingLeft: 4 + depth * 14 }}
+            onClick={() => nav(`/pages/${n.id}`)}
+            draggable={canEdit && n.id !== tree.data?.homePageId}
+            onDragStart={(e) => {
+              setDrag(n.id)
+              e.dataTransfer.effectAllowed = 'move'
+            }}
+            onDragEnd={() => {
+              setDrag(null)
+              setDrop(null)
+            }}
+            onDragOver={(e) => {
+              if (!drag || drag === n.id) return
+              e.preventDefault()
+              const r = (e.currentTarget as HTMLElement).getBoundingClientRect()
+              const y = e.clientY - r.top
+              const pos: DropPos = y < r.height * 0.28 ? 'before' : y > r.height * 0.72 ? 'after' : 'inside'
+              if (drop?.id !== n.id || drop.pos !== pos) setDrop({ id: n.id, pos })
+            }}
+            onDragLeave={() => setDrop((d) => (d?.id === n.id ? null : d))}
+            onDrop={(e) => onDrop(e, n)}
+          >
+            <span
+              className="caret"
+              onClick={(e) => {
+                e.stopPropagation()
+                setOpen((o) => ({ ...o, [n.id]: !isOpen }))
+              }}
+            >
+              {kids?.length ? isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} /> : null}
+            </span>
+            {n.icon ? <span style={{ width: 18 }}>{n.icon}</span> : n.kind === 'folder' ? <Folder size={14} style={{ flex: 'none' }} /> : <FileText size={14} style={{ flex: 'none', opacity: 0.7 }} />}
+            <span className="title" style={{ marginLeft: 6 }}>
+              {n.title || 'Untitled'}
+            </span>
+            {n.restricted && <Lock size={12} className="faint" />}
+            {canEdit && (
+              <span className="actions">
+                <button
+                  className="icon-btn"
+                  style={{ width: 22, height: 22 }}
+                  title="Add child page"
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    createChild(n.id)
+                  }}
+                >
+                  <Plus size={13} />
+                </button>
+              </span>
+            )}
+          </div>
+          {isOpen && kids && renderNodes(n.id, depth + 1)}
+        </div>
+      )
+    })
+
+  return (
+    <div style={{ marginTop: 6 }}>
+      <div className="sidebar-section" style={{ marginTop: 8 }}>
+        Pages <span className="spacer" />
+        {canEdit && (
+          <button className="icon-btn" style={{ width: 22, height: 22 }} title="New page at top level" onClick={() => createChild(null)}>
+            <Plus size={14} />
+          </button>
+        )}
+      </div>
+      {tree.isLoading ? <div style={{ padding: 8 }} className="spinner" /> : renderNodes('', 0)}
+    </div>
+  )
+}

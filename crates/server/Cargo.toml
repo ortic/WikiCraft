@@ -1,0 +1,51 @@
+[package]
+name = "wikicraft"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+anyhow = "1.0.104"
+argon2 = "0.6.0"
+axum = { version = "0.8.9", features = ["ws", "multipart", "macros"] }
+base64 = "0.23.1"
+bytes = "1.12.1"
+chrono = { version = "0.4.45", features = ["serde"] }
+clap = { version = "4.6.7", features = ["derive", "env"] }
+dashmap = "6.2.1"
+futures = "0.3.34"
+hex = "0.4.3"
+mime_guess = "2.0.5"
+object_store = { version = "0.14.2", features = ["aws"] }
+openidconnect = "4.1.0"
+pdf-extract = "0.12.1"
+quick-xml = "0.42"
+rand = "0.10.3"
+rmcp = { version = "3.9.0", features = ["server", "transport-streamable-http-server", "macros"] }
+schemars = "1"
+serde = { version = "1.0.229", features = ["derive"] }
+serde_json = "1.0.154"
+sha2 = "0.11.1"
+sqlx = { version = "0.9.0", default-features = false, features = ["runtime-tokio", "postgres", "uuid", "chrono", "json", "migrate", "macros"] }
+tantivy = "0.27.0"
+tempfile = "3.27.0"
+thiserror = "2.0.21"
+tokio = { version = "1.54.1", features = ["full"] }
+tokio-util = { version = "0.7.20", features = ["io"] }
+tower = "0.5.3"
+tower-http = { version = "0.7.1", features = ["fs", "trace", "compression-gzip", "limit", "set-header", "timeout", "request-id", "util", "catch-panic", "propagate-header"] }
+tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
+uuid = { version = "1.29.2", features = ["v7", "v4", "serde"] }
+wikicraft-confluence = { version = "0.1.0", path = "../confluence" }
+wikicraft-doc-model = { version = "0.1.0", path = "../doc-model" }
+yrs = "0.28.1"
+zip = "9.5.0"
+
+[dev-dependencies]
+base64 = "0.23.1"
+reqwest = { version = "0.13.5", default-features = false, features = ["json", "cookies", "multipart"] }
+tokio-tungstenite = "0.30.0"
+zip = "9.5.0"
+
+[lints]
+workspace = true
