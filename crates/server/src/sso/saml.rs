@@ -17,7 +17,6 @@ use samael::crypto::AllowedSignatureAlgorithm;
 use samael::metadata::{EntityDescriptor, HTTP_REDIRECT_BINDING};
 use samael::schema::Assertion;
 use samael::service_provider::{ServiceProvider, ServiceProviderBuilder};
-use samael::traits::ToXml;
 use serde::{Deserialize, Serialize};
 
 use super::{External, Provider, SamlConfig, SignInError};
@@ -119,16 +118,24 @@ pub async fn acs(State(state): State<AppState>, Path(id): Path<String>, headers:
 /// `GET /api/auth/sso/{id}/metadata` — SP metadata to register WikiCraft at the IdP.
 pub async fn metadata(State(state): State<AppState>, Path(id): Path<String>) -> Response {
     let Some(Provider::Saml(c)) = super::find(&state, &id).cloned() else { return StatusCode::NOT_FOUND.into_response() };
-    let xml = async {
-        let sp = service_provider(&state, &c, idp_metadata(&c).await?)?;
-        let md = sp.metadata().map_err(|e| anyhow::anyhow!("{e}"))?;
-        md.to_string().map_err(|e| anyhow::anyhow!("{e:?}"))
-    }
-    .await;
-    match xml {
-        Ok(xml) => ([(header::CONTENT_TYPE, "application/samlmetadata+xml")], xml).into_response(),
-        Err(e) => (StatusCode::SERVICE_UNAVAILABLE, format!("{e:#}")).into_response(),
-    }
+    ([(header::CONTENT_TYPE, "application/samlmetadata+xml")], sp_metadata(&entity_id(&state, &c), &acs_url(&state, &c))).into_response()
+}
+
+fn sp_metadata(entity_id: &str, acs: &str) -> String {
+    let esc = |s: &str| s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;");
+    format!(
+        r#"<?xml version="1.0" encoding="UTF-8"?>
+<md:EntityDescriptor xmlns:md="urn:oasis:names:tc:SAML:2.0:metadata" entityID="{}">
+  <md:SPSSODescriptor AuthnRequestsSigned="false" WantAssertionsSigned="true" protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">
+    <md:NameIDFormat>urn:oasis:names:tc:SAML:2.0:nameid-format:persistent</md:NameIDFormat>
+    <md:NameIDFormat>urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress</md:NameIDFormat>
+    <md:AssertionConsumerService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST" Location="{}" index="0" isDefault="true"/>
+  </md:SPSSODescriptor>
+</md:EntityDescriptor>
+"#,
+        esc(entity_id),
+        esc(acs)
+    )
 }
 
 async fn complete(state: &AppState, provider: &Provider, c: &SamlConfig, headers: &HeaderMap, form: AcsForm) -> Result<(String, String), SignInError> {
@@ -153,6 +160,8 @@ async fn complete(state: &AppState, provider: &Provider, c: &SamlConfig, headers
 
 const EMAIL: &[&str] = &["email", "mail", "emailaddress", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress", "urn:oid:0.9.2342.19200300.100.1.3"];
 const NAME: &[&str] = &["displayName", "name", "http://schemas.microsoft.com/identity/claims/displayname", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name", "urn:oid:2.16.840.1.113730.3.1.241", "cn"];
+const TRANSIENT: &str = "urn:oasis:names:tc:SAML:2.0:nameid-format:transient";
+const STABLE_ID: &[&str] = &["http://schemas.microsoft.com/identity/claims/objectidentifier", "objectGUID", "uid", "urn:oid:0.9.2342.19200300.100.1.1", "eduPersonPrincipalName", "urn:oid:1.3.6.1.4.1.5923.1.1.1.6"];
 const GROUPS: &[&str] = &["groups", "memberOf", "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups", "http://schemas.xmlsoap.org/claims/Group"];
 
 /// Maps a verified assertion to an external identity.
@@ -170,11 +179,17 @@ fn identity(c: &SamlConfig, a: &Assertion) -> Option<External> {
         }
         Vec::new()
     };
-    let name_id = a.subject.as_ref()?.name_id.as_ref()?.value.trim().to_string();
-    if name_id.is_empty() {
+    let name_id = a.subject.as_ref()?.name_id.as_ref()?;
+    let email = values(c.email_attribute.as_ref(), EMAIL).into_iter().next().or_else(|| name_id.value.contains('@').then(|| name_id.value.trim().to_string()));
+    // a transient NameID changes on every login: identify the user by a stable attribute instead
+    let subject = if name_id.format.as_deref() == Some(TRANSIENT) {
+        values(None, STABLE_ID).into_iter().next().or_else(|| email.clone().map(|e| e.to_lowercase()))?
+    } else {
+        name_id.value.trim().to_string()
+    };
+    if subject.is_empty() {
         return None;
     }
-    let email = values(c.email_attribute.as_ref(), EMAIL).into_iter().next().or_else(|| name_id.contains('@').then(|| name_id.clone()));
     let name = values(c.name_attribute.as_ref(), NAME).into_iter().next().or_else(|| {
         let given = values(None, &["givenName", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/givenname", "urn:oid:2.5.4.42"]);
         let sur = values(None, &["sn", "surname", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/surname", "urn:oid:2.5.4.4"]);
@@ -183,7 +198,7 @@ fn identity(c: &SamlConfig, a: &Assertion) -> Option<External> {
     });
     Some(External {
         provider_key: a.issuer.value.clone().unwrap_or_else(|| format!("saml:{}", c.common.id)),
-        subject: name_id,
+        subject,
         email,
         // the IdP vouches for the directory e-mail it asserts
         email_verified: None,
