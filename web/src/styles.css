@@ -463,3 +463,10 @@ table.list tr:hover td { background: var(--bg-soft); }
 .shortcut-row .keys { display: inline-flex; gap: 3px; flex: none; }
 kbd { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 1px 6px; border-radius: 5px; border: 1px solid var(--border); border-bottom-width: 2px; background: var(--bg-hover); }
 @media (max-width: 640px) { .shortcuts { grid-template-columns: 1fr; } }
+/* likes */
+.page-reactions { display: flex; align-items: center; gap: 10px; margin-top: 28px; }
+.like-btn { display: inline-flex; align-items: center; gap: 6px; height: 28px; padding: 0 10px; border-radius: 999px; border: 1px solid var(--border); background: var(--bg); color: var(--text-soft); cursor: pointer; font: inherit; font-size: 13px; }
+.like-btn:hover { border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); color: var(--text); }
+.like-btn.liked { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); background: color-mix(in srgb, var(--accent) 8%, transparent); }
+.c-foot { display: flex; gap: 8px; margin-top: 4px; }
+.c-foot .like-btn { height: 22px; padding: 0 8px; font-size: 12px; }

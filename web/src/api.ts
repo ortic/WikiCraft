@@ -116,6 +116,7 @@ export interface Page {
   updatedAt: string
   breadcrumbs: { id: string; title: string }[]
   labels: string[]
+  likes?: { count: number; liked: boolean; names: string[] }
   access: PageAccess
   restricted: boolean
   favorite: boolean
@@ -137,6 +138,8 @@ export interface Comment {
   resolvedByName: string | null
   createdAt: string
   updatedAt: string
+  likeCount?: number
+  liked?: boolean
 }
 
 export interface Attachment {

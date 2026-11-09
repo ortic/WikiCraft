@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, RotateCcw, Trash2, X, MessageSquare } from 'lucide-react'
+import { CheckCircle2, RotateCcw, Trash2, X, MessageSquare, ThumbsUp } from 'lucide-react'
 import { api, formatDate, type Comment, type Page, type PmNode } from '../api'
 import { Avatar, useMe } from '../ui'
 
@@ -151,6 +151,22 @@ export default function CommentsPanel({ page, focus, pending, onPendingDone, onC
         {!isReply && c.inline?.text && <div className="c-quote">{c.inline.text}</div>}
         <div className="c-body">
           <RenderDoc node={c.content} />
+        </div>
+        <div className="c-foot">
+          {me.data?.user ? (
+            <button
+              className={`like-btn${c.liked ? ' liked' : ''}`}
+              title={c.liked ? 'Unlike' : 'Like'}
+              onClick={async () => {
+                await (c.liked ? api.del(`/comments/${c.id}/like`) : api.put(`/comments/${c.id}/like`))
+                refresh()
+              }}
+            >
+              <ThumbsUp size={12} /> {c.likeCount ? c.likeCount : ''}
+            </button>
+          ) : c.likeCount ? (
+            <span className="faint small"><ThumbsUp size={12} /> {c.likeCount}</span>
+          ) : null}
         </div>
         {c.resolvedAt && !isReply && <div className="faint small">Resolved by {c.resolvedByName ?? 'someone'}</div>}
         {!isReply && (

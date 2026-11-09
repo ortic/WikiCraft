@@ -193,6 +193,8 @@ components:
           - 'null'
           format: date-time
         createdAt: *id004
+        likeCount: *id005
+        liked: *id003
     Attachment:
       type: object
       properties:
@@ -2044,6 +2046,102 @@ paths:
       - Pages
       summary: Unstar
       operationId: delete_pages_id_favorite
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '204': *id007
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /pages/{id}/like:
+    put:
+      tags:
+      - Pages
+      summary: Like a page
+      operationId: put_pages_id_like
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count: *id005
+                  liked: *id003
+                  names:
+                    type: array
+                    items: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+      - Pages
+      summary: Remove your like
+      operationId: delete_pages_id_like
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  count: *id005
+                  liked: *id003
+                  names:
+                    type: array
+                    items: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /comments/{id}/like:
+    put:
+      tags:
+      - Comments
+      summary: Like a comment
+      operationId: put_comments_id_like
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '204': *id007
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+      - Comments
+      summary: Remove your like
+      operationId: delete_comments_id_like
       parameters:
       - name: id
         in: path

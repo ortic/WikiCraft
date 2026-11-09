@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Share2, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate } from 'lucide-react'
+import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate } from 'lucide-react'
 import { api, formatDate, type Page } from '../api'
+import { SymbolTile, parseSymbol } from '../icons'
 import { ErrorBox, Spinner, useMe, useToast } from '../ui'
 import Editor, { PresenceAvatars, type Presence } from '../editor/Editor'
 import CommentsPanel from '../components/CommentsPanel'
@@ -209,7 +210,11 @@ export default function PageView() {
         </div>
 
         <div className={`page-wrap ${p.fullWidth ? 'full' : ''}`}>
-          {p.icon && <div className="page-icon">{p.icon}</div>}
+          {parseSymbol(p.icon) && (
+            <div className="page-icon">
+              <SymbolTile value={p.icon} size={44} />
+            </div>
+          )}
           <textarea
             ref={titleRef}
             className="page-title"
@@ -249,6 +254,27 @@ export default function PageView() {
             {!canEdit && <span className="badge">Read only</span>}
           </div>
           <Editor key={p.id} pageId={p.id} user={user} editable={canEdit} onPresence={onPresence} onStats={onStats} onCommentClick={onCommentClick} onRequestComment={p.access.comment ? onRequestComment : undefined} />
+
+          <div className="page-reactions">
+            {user ? (
+              <button
+                className={`like-btn${p.likes?.liked ? ' liked' : ''}`}
+                title={p.likes?.names.length ? `Liked by ${p.likes.names.join(', ')}${(p.likes.count ?? 0) > p.likes.names.length ? ' and others' : ''}` : 'Like this page'}
+                onClick={async () => {
+                  const next = await (p.likes?.liked ? api.del(`/pages/${p.id}/like`) : api.put(`/pages/${p.id}/like`))
+                  qc.setQueryData(['page', p.id], { ...p, likes: next })
+                }}
+              >
+                <ThumbsUp size={14} /> {p.likes?.liked ? 'Liked' : 'Like'}
+              </button>
+            ) : null}
+            {(p.likes?.count ?? 0) > 0 && (
+              <span className="faint small">
+                {p.likes!.names.slice(0, 3).join(', ')}
+                {p.likes!.count > 3 ? ` and ${p.likes!.count - 3} others` : ''} liked this
+              </span>
+            )}
+          </div>
 
           <div className="labels">
             <Tag size={14} className="faint" />

@@ -25,6 +25,10 @@ pub struct CommentRow {
     resolved_by_name: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
+    #[sqlx(default)]
+    like_count: i64,
+    #[sqlx(default)]
+    liked: bool,
 }
 
 const SELECT: &str = "SELECT c.id, c.page_id, c.parent_id, c.author_id, u.name AS author_name, c.content, c.inline, c.resolved_at, r.name AS resolved_by_name, c.created_at, c.updated_at
@@ -33,10 +37,26 @@ const SELECT: &str = "SELECT c.id, c.page_id, c.parent_id, c.author_id, u.name A
 pub async fn list(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path(page_id): Path<Uuid>) -> ApiResult<Json<Vec<CommentRow>>> {
     let p = Principal::load(&state, user).await?;
     require_page(&state, &p, page_id, Need::View).await?;
-    let rows = sqlx::query_as::<_, CommentRow>(sqlx::AssertSqlSafe(format!("{SELECT} WHERE c.page_id = $1 AND c.deleted_at IS NULL ORDER BY c.created_at")))
-        .bind(page_id)
-        .fetch_all(&state.db)
-        .await?;
+    let mut rows =
+        sqlx::query_as::<_, CommentRow>(sqlx::AssertSqlSafe(format!("{SELECT} WHERE c.page_id = $1 AND c.deleted_at IS NULL ORDER BY c.created_at")))
+            .bind(page_id)
+            .fetch_all(&state.db)
+            .await?;
+    // likes per comment (and whether the caller liked it)
+    let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
+    let me = p.user.as_ref().map(|u| u.id);
+    let likes: Vec<(Uuid, i64, bool)> =
+        sqlx::query_as("SELECT comment_id, count(*), COALESCE(bool_or(user_id = $2), false) FROM comment_likes WHERE comment_id = ANY($1) GROUP BY comment_id")
+            .bind(&ids)
+            .bind(me)
+            .fetch_all(&state.db)
+            .await?;
+    for r in &mut rows {
+        if let Some((_, n, mine)) = likes.iter().find(|(id, _, _)| *id == r.id) {
+            r.like_count = *n;
+            r.liked = *mine;
+        }
+    }
     Ok(Json(rows))
 }
 

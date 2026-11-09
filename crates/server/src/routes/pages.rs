@@ -303,6 +303,7 @@ pub async fn get(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path
     o.insert("views".into(), json!(views));
     o.insert("viewers".into(), json!(viewers));
     o.insert("commentCount".into(), json!(comment_count));
+    o.insert("likes".into(), crate::routes::likes::page_summary(&state, id, user.as_ref().map(|u| u.id)).await?);
     Ok(Json(v))
 }
 

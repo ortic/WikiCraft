@@ -22,7 +22,7 @@ schemas = {
     "Page": obj({"id": uuid, "spaceId": uuid, "spaceKey": txt, "spaceName": txt, "parentId": {"type": ["string", "null"], "format": "uuid"}, "kind": {"enum": ["page", "folder", "blog"]}, "title": txt, "content": S("PmNode"), "version": num, "labels": arr(txt), "restricted": boolean, "createdAt": dt, "updatedAt": dt, "updatedByName": {"type": ["string", "null"]}, "breadcrumbs": arr(obj({"id": uuid, "title": txt})), "access": S("PageAccess")}),
     "PageListItem": obj({"id": uuid, "title": txt, "spaceId": uuid, "spaceKey": txt, "spaceName": txt, "updatedAt": dt, "updatedByName": {"type": ["string", "null"]}}),
     "NewPage": obj({"spaceKey": txt, "parentId": uuid, "title": txt, "kind": {"enum": ["page", "folder", "blog"]}, "content": S("PmNode"), "markdown": {"type": "string", "description": "alternative to content"}, "templateId": txt}, ["spaceKey"]),
-    "Comment": obj({"id": uuid, "pageId": uuid, "parentId": {"type": ["string", "null"], "format": "uuid"}, "authorId": uuid, "authorName": txt, "content": S("PmNode"), "inline": {"type": ["object", "null"]}, "resolvedAt": {"type": ["string", "null"], "format": "date-time"}, "createdAt": dt}),
+    "Comment": obj({"id": uuid, "pageId": uuid, "parentId": {"type": ["string", "null"], "format": "uuid"}, "authorId": uuid, "authorName": txt, "content": S("PmNode"), "inline": {"type": ["object", "null"]}, "resolvedAt": {"type": ["string", "null"], "format": "date-time"}, "createdAt": dt, "likeCount": num, "liked": boolean}),
     "Attachment": obj({"id": uuid, "pageId": uuid, "filename": txt, "mediaType": txt, "size": num, "version": num, "createdByName": {"type": ["string", "null"]}, "createdAt": dt}),
     "SearchHit": obj({"pageId": uuid, "title": txt, "snippet": {"type": "string", "description": "HTML with <b> highlights"}, "spaceKey": txt, "spaceName": txt, "score": {"type": "number"}}),
     "Job": obj({"id": uuid, "kind": txt, "status": {"enum": ["queued", "running", "succeeded", "failed"]}, "progress": anyobj, "result": anyobj, "error": {"type": ["string", "null"]}, "createdAt": dt, "finishedAt": {"type": ["string", "null"], "format": "date-time"}}),
@@ -131,6 +131,10 @@ op("/pages/{id}/labels", "get", "Pages", "Labels", res=resp(arr(txt)))
 op("/pages/{id}/labels", "put", "Pages", "Replace labels", req=body(obj({"labels": arr(txt)})))
 op("/pages/{id}/favorite", "put", "Pages", "Star", res=NO)
 op("/pages/{id}/favorite", "delete", "Pages", "Unstar", res=NO)
+op("/pages/{id}/like", "put", "Pages", "Like a page", res=resp(obj({"count": num, "liked": boolean, "names": arr(txt)})))
+op("/pages/{id}/like", "delete", "Pages", "Remove your like", res=resp(obj({"count": num, "liked": boolean, "names": arr(txt)})))
+op("/comments/{id}/like", "put", "Comments", "Like a comment", res=NO)
+op("/comments/{id}/like", "delete", "Comments", "Remove your like", res=NO)
 op("/pages/{id}/watch", "put", "Pages", "Watch (notifications)", res=NO)
 op("/pages/{id}/watch", "delete", "Pages", "Stop watching", res=NO)
 op("/pages/{id}/export", "get", "Import & export", "Export one page", query=[q("format", "md | html | json")], public=True)

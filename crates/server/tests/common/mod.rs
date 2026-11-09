@@ -148,6 +148,12 @@ impl TestApp {
         c.delete(self.url(path)).send().await.unwrap().status().as_u16()
     }
 
+    pub async fn delete_json(&self, c: &reqwest::Client, path: &str) -> (u16, Value) {
+        let r = c.delete(self.url(path)).send().await.unwrap();
+        let s = r.status().as_u16();
+        (s, r.json().await.unwrap_or(Value::Null))
+    }
+
     /// Polls until `f` returns Some, or panics after ~10 s.
     pub async fn eventually<T, F, Fut>(&self, mut f: F) -> T
     where

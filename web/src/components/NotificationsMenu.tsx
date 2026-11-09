@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Bell, MessageSquare, AtSign, FilePen } from 'lucide-react'
+import { Bell, MessageSquare, AtSign, FilePen, ThumbsUp } from 'lucide-react'
 import { api, formatDate } from '../api'
 
 interface Notification {
@@ -24,6 +24,8 @@ function describe(n: Notification): string {
       return `${who} mentioned you in a comment on ${n.pageTitle}`
     case 'page_mention':
       return `${who} mentioned you in ${n.pageTitle}`
+    case 'like':
+      return `${who} liked ${n.pageTitle}`
     case 'page_updated':
       return `${who} updated ${n.pageTitle}${n.data.version ? ` (v${n.data.version})` : ''}`
     default:
@@ -73,7 +75,7 @@ export default function NotificationsMenu() {
           {q.data?.items.length === 0 && <div className="empty">You're all caught up.</div>}
           {q.data?.items.map((n) => (
             <div key={n.id} className="menu-item" onClick={() => openItem(n)} style={{ alignItems: 'flex-start', opacity: n.readAt ? 0.65 : 1 }}>
-              <div className="mi-icon">{n.kind === 'page_updated' ? <FilePen size={15} /> : n.kind.includes('mention') ? <AtSign size={15} /> : <MessageSquare size={15} />}</div>
+              <div className="mi-icon">{n.kind === 'page_updated' ? <FilePen size={15} /> : n.kind === 'like' ? <ThumbsUp size={15} /> : n.kind.includes('mention') ? <AtSign size={15} /> : <MessageSquare size={15} />}</div>
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: n.readAt ? 400 : 600 }}>{describe(n)}</div>
                 {n.data.excerpt && <div className="mi-desc" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.data.excerpt}</div>}
