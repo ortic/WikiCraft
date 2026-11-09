@@ -113,7 +113,7 @@ op("/spaces/{key}/export", "post", "Import & export", "Export a space (HTML site
 # pages
 op("/pages", "post", "Pages", "Create a page", req=body(S("NewPage")), res=resp(obj({"id": uuid}), "201", "Created"))
 op("/pages/{id}", "get", "Pages", "A page (content, labels, access)", res=resp(S("Page")), public=True)
-op("/pages/{id}", "patch", "Pages", "Rename, set status, full width", req=body(anyobj))
+op("/pages/{id}", "patch", "Pages", "Rename; set icon (symbol), cover (gradient:<preset> | attachment | https URL), status, full width", req=body(obj({"title": txt, "icon": txt, "cover": txt, "pageStatus": txt, "fullWidth": boolean})), res=NO)
 op("/pages/{id}", "delete", "Pages", "Move a page and its sub-pages to the trash", res=NO)
 op("/pages/{id}/content", "put", "Pages", "Replace the content (live editors get the change)", req=body(obj({"content": S("PmNode"), "markdown": txt, "message": txt})))
 op("/pages/{id}/move", "post", "Pages", "Move (parent, position, other space)", req=body(obj({"parentId": uuid, "spaceKey": txt, "position": {"type": "number"}})), res=NO)

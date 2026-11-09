@@ -1623,7 +1623,7 @@ paths:
     patch:
       tags:
       - Pages
-      summary: Rename, set status, full width
+      summary: Rename; set icon (symbol), cover (gradient:<preset> | attachment | https URL), status, full width
       operationId: patch_pages_id
       parameters:
       - name: id
@@ -1634,10 +1634,16 @@ paths:
         required: true
         content:
           application/json:
-            schema: *id006
+            schema:
+              type: object
+              properties:
+                title: *id001
+                icon: *id001
+                cover: *id001
+                pageStatus: *id001
+                fullWidth: *id003
       responses:
-        '200':
-          description: OK
+        '204': *id007
         4XX:
           description: Error
           content:

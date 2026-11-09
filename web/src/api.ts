@@ -106,6 +106,7 @@ export interface Page {
   kind: string
   title: string
   icon: string | null
+  cover?: string | null
   content: PmNode
   version: number
   status: string

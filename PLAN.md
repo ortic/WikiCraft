@@ -223,7 +223,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P1** Smart link / embed nodes in the tree (link to an external resource as a tree item) `C`
 - [ ] **P2** Whiteboards as first-class tree items (see §4.10) `C D`
 - [ ] **P2** Databases as first-class tree items (see §4.9) `C D`
-- [~] **P1** Page emoji / icon and cover image `C D O` (icon via API/import; no picker, no cover)
+- [x] **P1** Page emoji / icon and cover image `C D O` (SVG symbol icons by design)
 - [x] **P1** Page width setting (fixed / full width) `C D`
 - [x] **P1** Breadcrumbs `C D X O B`
 - [~] **P1** Permanent links (`/p/<id>`) + human URLs (`/s/<space>/<slug>`); redirects after rename/move `C X` (id permalinks + Confluence redirects; no slug URLs)

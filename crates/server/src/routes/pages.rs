@@ -203,6 +203,7 @@ pub struct PageRow {
     pub kind: String,
     pub title: String,
     pub icon: Option<String>,
+    pub cover: Option<String>,
     pub content: Value,
     pub version: i32,
     pub status: String,
@@ -217,7 +218,7 @@ pub struct PageRow {
     pub deleted_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-const PAGE_SELECT: &str = "SELECT p.id, p.space_id, s.key AS space_key, s.name AS space_name, p.parent_id, p.kind, p.title, p.icon, p.content, p.version, p.status, p.page_status, p.full_width,
+const PAGE_SELECT: &str = "SELECT p.id, p.space_id, s.key AS space_key, s.name AS space_name, p.parent_id, p.kind, p.title, p.icon, p.cover, p.content, p.version, p.status, p.page_status, p.full_width,
     p.created_by, cu.name AS created_by_name, p.created_at, p.updated_by, uu.name AS updated_by_name, p.updated_at, p.deleted_at
     FROM pages p JOIN spaces s ON s.id = p.space_id LEFT JOIN users cu ON cu.id = p.created_by LEFT JOIN users uu ON uu.id = p.updated_by";
 
@@ -312,6 +313,7 @@ pub async fn get(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path
 pub struct UpdatePage {
     title: Option<String>,
     icon: Option<String>,
+    cover: Option<String>,
     full_width: Option<bool>,
     page_status: Option<String>,
 }
@@ -323,9 +325,22 @@ pub async fn update(State(state): State<AppState>, CurrentUser(user): CurrentUse
     if title.is_some_and(|t| t.chars().count() > 255) {
         return Err(ApiError::bad("title too long"));
     }
+    // icons are symbols of our icon set ("name" or "name:color"); "" removes
+    if let Some(i) = req.icon.as_deref().filter(|i| !i.is_empty()) {
+        let ok = i.len() <= 40 && i.split(':').count() <= 2 && i.chars().all(|c| c.is_ascii_lowercase() || c == '-' || c == ':');
+        if !ok {
+            return Err(ApiError::bad("icon must be a symbol name like \"rocket\" or \"rocket:violet\""));
+        }
+    }
+    if let Some(c) = req.cover.as_deref().filter(|c| !c.is_empty()) {
+        if !valid_cover(c) {
+            return Err(ApiError::bad("cover must be a gradient preset, an attachment or an https image URL"));
+        }
+    }
     sqlx::query(
         "UPDATE pages SET title = COALESCE($2, title), icon = CASE WHEN $3::text IS NULL THEN icon WHEN $3 = '' THEN NULL ELSE $3 END,
          full_width = COALESCE($4, full_width), page_status = CASE WHEN $5::text IS NULL THEN page_status WHEN $5 = '' THEN NULL ELSE $5 END,
+         cover = CASE WHEN $7::text IS NULL THEN cover WHEN $7 = '' THEN NULL ELSE $7 END,
          updated_at = now(), updated_by = $6 WHERE id = $1",
     )
     .bind(id)
@@ -334,10 +349,24 @@ pub async fn update(State(state): State<AppState>, CurrentUser(user): CurrentUse
     .bind(req.full_width)
     .bind(req.page_status)
     .bind(user.id)
+    .bind(req.cover)
     .execute(&state.db)
     .await?;
     state.search.enqueue(id);
     Ok(StatusCode::NO_CONTENT)
+}
+
+pub const COVER_GRADIENTS: &[&str] = &["sunrise", "ocean", "forest", "dusk", "slate", "mint"];
+
+/// `gradient:<preset>`, `/api/attachments/<uuid>/content` or a plain https URL.
+pub fn valid_cover(c: &str) -> bool {
+    if let Some(g) = c.strip_prefix("gradient:") {
+        return COVER_GRADIENTS.contains(&g);
+    }
+    if let Some(rest) = c.strip_prefix("/api/attachments/") {
+        return rest.strip_suffix("/content").is_some_and(|id| id.parse::<Uuid>().is_ok());
+    }
+    c.len() <= 2000 && c.starts_with("https://") && !c.chars().any(|ch| ch.is_whitespace() || matches!(ch, '"' | '\'' | '<' | '>' | '\\' | '(' | ')'))
 }
 
 #[derive(Deserialize)]

@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate } from 'lucide-react'
 import { api, formatDate, type Page, type Space } from '../api'
-import { SymbolTile, parseSymbol } from '../icons'
+import { PageDecor } from '../components/PageDecor'
 import { ErrorBox, Spinner, useMe, useToast } from '../ui'
 import Editor, { PresenceAvatars, type Presence } from '../editor/Editor'
 import CommentsPanel from '../components/CommentsPanel'
@@ -214,11 +214,7 @@ export default function PageView() {
           {space.data?.archivedAt && (
             <div className="archived-banner">This space was archived on {formatDate(space.data.archivedAt)} and is read-only.</div>
           )}
-          {parseSymbol(p.icon) && (
-            <div className="page-icon">
-              <SymbolTile value={p.icon} size={44} />
-            </div>
-          )}
+          <PageDecor page={p} canEdit={canEdit} onChange={() => qc.invalidateQueries({ queryKey: ['page', p.id] })} />
           <textarea
             ref={titleRef}
             className="page-title"

@@ -475,3 +475,19 @@ kbd { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 1px 6p
 .danger-zone { border-color: color-mix(in srgb, var(--danger) 30%, var(--border)); }
 .mention-pop { position: absolute; left: 8px; top: 100%; margin-top: -8px; z-index: 30; min-width: 220px; }
 .mention-pop .menu-item { display: flex; align-items: center; gap: 8px; }
+/* page cover & icon */
+.page-cover { height: 190px; border-radius: 12px; margin: 0 0 6px; position: relative; }
+.cover-actions { position: absolute; right: 12px; bottom: 12px; display: none; gap: 6px; }
+.page-cover:hover .cover-actions { display: flex; }
+.page-decor { position: relative; min-height: 8px; }
+.page-decor.with-cover .page-icon-btn { margin-top: -34px; }
+.page-icon-btn { border: 0; background: none; padding: 0; cursor: pointer; display: inline-flex; border-radius: 16px; }
+.page-icon-btn:disabled { cursor: default; }
+.page-icon-btn .symbol-tile { box-shadow: 0 0 0 4px var(--bg); }
+.decor-actions { display: flex; gap: 4px; opacity: 0; transition: opacity .12s; height: 30px; }
+.page-wrap:hover .decor-actions, .decor-actions:focus-within { opacity: 1; }
+.decor-pop { position: absolute; z-index: 20; top: 100%; left: 0; padding: 12px; width: min(560px, 92vw); box-shadow: var(--shadow); }
+.gradient-grid { display: grid; grid-template-columns: repeat(6, 1fr); gap: 8px; }
+.gradient-swatch { height: 46px; border-radius: 8px; border: 0; cursor: pointer; }
+.gradient-swatch:hover { outline: 2px solid var(--accent); outline-offset: 2px; }
+.decor-backdrop { position: fixed; inset: 0; z-index: 19; }
