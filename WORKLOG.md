@@ -1,17 +1,22 @@
 # WikiCraft — Work log
 
 Autonomous build session started 2026-11-09 (user asked for ~15 h of work following `PLAN.md`).
-No git commits are made (user didn't ask). Dev Postgres: docker container `wikicraft-pg` on `127.0.0.1:55432`
+Since the user's request every change is committed and pushed to `origin/master` (github.com/ortic/WikiCraft). Dev Postgres: docker container `wikicraft-pg` on `127.0.0.1:55432`
 (user/pass/db = `wikicraft`). Port 5432 and 5173 are taken by other tools on this machine.
 
-## Status
+## Status (2026-11-09, ~22:00 UTC)
 
 | Area | State |
 |---|---|
-| `crates/doc-model` (PM JSON, Yjs ⇄ PM, Markdown, HTML, text) | OK 11 tests |
-| `crates/confluence` (XML + CSV reader, storage → PM, import plan) | OK 10 unit + 2 real-export tests |
-| `crates/server` (axum API, authz, yrs collab, tantivy, importer) | OK 3 unit + 8 integration tests |
-| `web/` frontend | not started |
+| `crates/doc-model` (PM JSON, Yjs ⇄ PM, Markdown, HTML, text, SVG icon set) | OK, 17 unit tests |
+| `crates/confluence` (XML + CSV reader, storage → PM, import plan) | OK, 12 unit + 2 real-export tests |
+| `crates/server` (API, authz, collab, search, SSO, mail, webhooks, export, MFA, …) | OK, ~20 unit + 18 integration test files |
+| `web/` frontend (React 19 + Tiptap 3) | OK, verified in Chromium via Playwright |
+| Docker image (SAML on, healthcheck), compose (single + 2-replica), Kubernetes manifests | OK |
+
+Local test services: Postgres `wikicraft-pg` :55432, mock OIDC `wc-mock-oidc` :8099, lldap `wc-lldap` :3890
+(user `dana`/`dana-secret-1`), SAML IdP `wc-saml-idp` :8180 (signature.algorithm switched to rsa-sha256),
+mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuild` (libxmlsec1).
 
 ## Log
 - Research + PLAN.md + Confluence dry-run analysis (research/confluence-import/)
@@ -30,6 +35,33 @@ No git commits are made (user didn't ask). Dev Postgres: docker container `wikic
 - integration tests (crates/server/tests): fresh DB per test; api.rs (5), collab.rs (two Yjs peers over WS), confluence_import.rs (both real exports via HTTP)
 - import perf: per-row autocommits made ToIP import take 3:44 → batched tx (25 pages) → 18.6 s, 121 MB RSS
 - CLI: `wikicraft serve|migrate|analyze-confluence <zip>|import-confluence <zip> --as-user <email>|reindex`
+
+- Evening (2026-11-09): scaled deployment (k8s, 2-replica compose verified with live co-editing), `wikicraft
+  healthcheck`; sign-in providers (multi OIDC: Microsoft/Google/GitLab/any issuer, GitHub, LDAP/AD, SAML via
+  samael+xmlsec, verified against lldap and SimpleSAMLphp), login-CSRF binding; My tasks; space export (HTML site,
+  Markdown, backup) + restore; e-mail (outbox, invitations, password reset, notification digests); own SVG icon set
+  replacing all emoji (user request); table toolbar, image resize/align/caption/alt; live Confluence report macros
+  (contentbylabel, page properties report, tasks report, recently updated, attachments); public share links;
+  webhooks; TOTP 2FA + session management; inspect permissions; `[[` page links, `:emoticon`, shortcuts dialog;
+  Notion import + import UI; OpenAPI 3.1 spec with coverage test; idle session timeout; PLAN.md audited
+  (subagent) and kept in sync.
+
+## Security review 2 (independent review agent, 2026-11-09 evening) — status
+1. [x] HIGH stored XSS: status colour unescaped in server-rendered HTML (public share pages, exports) → allow-list + CSP
+2. [x] HIGH TOTP brute force via fresh challenges / racy attempt counter → per-user limit, atomic counter
+3. [x] MED SSO logins skipped TOTP → challenge cookie + code step for OIDC/GitHub/SAML
+4. [x] MED password reset signed in without TOTP → hands over to the code step
+5. [x] MED SSO e-mail linking trusted unverified addresses (fail-open) → per-provider `trustEmail`, admins need verified e-mail
+6. [x] MED group sync took over existing groups by name; LIKE wildcard in prefix → own groups only, exact prefix
+7. [x] MED backup restore exposed restricted pages while running / after failure → closed space, cleanup on failure
+8. [x] LOW open redirect via tab/backslash in `next` → strict filter (server + client)
+9. [x] LOW TOTP re-enrolment with only a session → refused while active
+10. [x] LOW memory DoS through imports → semaphore, lower caps
+11. [x] LOW reports queried all pages before filtering → visible spaces in SQL, content only when needed
+12. [x] LOW e-mail leaks (inspect, HTML exports) → names only
+13. [x] LOW webhooks: system proxy, NAT64/6to4, DNS timeout, tx across HTTP → fixed (payloads still carry titles of
+    restricted pages; hooks are admin-configured — documented)
+14. [x] LOW API tokens survived password/MFA reset → revoked
 
 ## Security review findings (independent review agent, 2026-11-09) — status
 1. [x] HIGH copy w/ children leaks restricted descendants (pages.rs copy) → filter via visible_page_ids, copy restrictions
