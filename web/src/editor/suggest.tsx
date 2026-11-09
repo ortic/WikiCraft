@@ -3,10 +3,12 @@
 import { Extension, type Editor, type Range } from '@tiptap/core'
 import { ReactRenderer } from '@tiptap/react'
 import Suggestion, { type SuggestionOptions, type SuggestionProps, type SuggestionKeyDownProps } from '@tiptap/suggestion'
+import { PluginKey } from '@tiptap/pm/state'
+import { EMOTICONS, Emoticon } from '../icons'
 import { forwardRef, useEffect, useImperativeHandle, useState, type ReactNode } from 'react'
 import {
   Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Quote, Code2, Minus, Table, Info, AlertTriangle, CheckCircle2, XCircle, ChevronRight,
-  Hash, ListTree, CalendarDays, Tag, Sigma, Image as ImageIcon, Link2, Columns2, Paperclip, StickyNote,
+  Hash, ListTree, CalendarDays, Tag, Sigma, Image as ImageIcon, Link2, Columns2, Paperclip, StickyNote, FileText, FilePlus2,
 } from 'lucide-react'
 import { api } from '../api'
 
@@ -71,13 +73,14 @@ const SuggestionList = forwardRef<ListHandle, { items: MenuItem[]; command: (i: 
 })
 
 /** Generic popup renderer for suggestion plugins (positions next to the caret). */
-export function popupRenderer<I>(): SuggestionOptions<I>['render'] {
+export function popupRenderer<I>(hideWhenEmpty = false): SuggestionOptions<I>['render'] {
   return () => {
     let component: ReactRenderer<ListHandle> | null = null
     let host: HTMLDivElement | null = null
     const place = (props: SuggestionProps<I>) => {
       const rect = props.clientRect?.()
       if (!rect || !host) return
+      host.style.display = hideWhenEmpty && props.items.length === 0 ? 'none' : ''
       const below = rect.bottom + 6
       const h = Math.min(360, host.offsetHeight || 300)
       host.style.left = `${Math.min(rect.left, window.innerWidth - 270)}px`
@@ -98,6 +101,7 @@ export function popupRenderer<I>(): SuggestionOptions<I>['render'] {
         place(props)
       },
       onKeyDown: (props) => {
+        if (host?.style.display === 'none') return false
         if (props.event.key === 'Escape') {
           host?.remove()
           host = null
@@ -202,3 +206,102 @@ export const mentionSuggestion: Omit<SuggestionOptions<MenuItem>, 'editor'> = {
   command: ({ editor, range, props }) => props.command(editor, range),
   render: popupRenderer<MenuItem>(),
 }
+
+interface SearchHit {
+  pageId: string
+  title: string
+  spaceKey: string
+  spaceName: string
+}
+
+/** `[[` → search pages and insert a link (or create the page). */
+export const PageLinkSuggest = Extension.create<{ pageId: string }>({
+  name: 'pageLinkSuggest',
+  addOptions() {
+    return { pageId: '' }
+  },
+  addProseMirrorPlugins() {
+    const pageId = this.options.pageId
+    const insertLink = (editor: Editor, range: Range, id: string, title: string) =>
+      editor
+        .chain()
+        .focus()
+        .deleteRange(range)
+        .insertContent([{ type: 'text', text: title, marks: [{ type: 'link', attrs: { href: `/pages/${id}` } }] }, { type: 'text', text: ' ' }])
+        .run()
+    return [
+      Suggestion<MenuItem>({
+        editor: this.editor,
+        char: '[[',
+        allowSpaces: true,
+        allowedPrefixes: null,
+        pluginKey: new PluginKey('pageLinkSuggest'),
+        items: async ({ query }) => {
+          const q = query.replace(/\]+$/, '').trim()
+          let hits: SearchHit[] = []
+          if (q) {
+            hits = await api.get<SearchHit[]>(`/search?q=${encodeURIComponent(q)}`).catch(() => [])
+          } else {
+            const r = await api.get<{ viewed: { id: string; title: string; spaceName: string }[] }>('/recent').catch(() => ({ viewed: [] }))
+            hits = r.viewed.map((v) => ({ pageId: v.id, title: v.title, spaceKey: '', spaceName: v.spaceName }))
+          }
+          const items: MenuItem[] = hits
+            .filter((h) => h.pageId !== pageId)
+            .slice(0, 8)
+            .map((h) => ({
+              title: h.title,
+              description: h.spaceName,
+              group: q ? 'Pages' : 'Recently viewed',
+              icon: <FileText size={16} />,
+              command: (editor, range) => insertLink(editor, range, h.pageId, h.title),
+            }))
+          if (q && !hits.some((h) => h.title.toLowerCase() === q.toLowerCase())) {
+            items.push({
+              title: `Create “${q}”`,
+              description: 'New child page of this page',
+              group: 'New',
+              icon: <FilePlus2 size={16} />,
+              command: async (editor, range) => {
+                const page = await api.get<{ spaceKey: string }>(`/pages/${pageId}`)
+                const created = await api.post<{ id: string }>('/pages', { spaceKey: page.spaceKey, parentId: pageId, title: q })
+                insertLink(editor, range, created.id, q)
+              },
+            })
+          }
+          return items
+        },
+        command: ({ editor, range, props }) => props.command(editor, range),
+        render: popupRenderer<MenuItem>(),
+      }),
+    ]
+  },
+})
+
+/** `:name` → one of our emoticons (tick, cross, smile, …). */
+export const EmoticonSuggest = Extension.create({
+  name: 'emoticonSuggest',
+  addProseMirrorPlugins() {
+    return [
+      Suggestion<MenuItem>({
+        editor: this.editor,
+        char: ':',
+        allowSpaces: false,
+        pluginKey: new PluginKey('emoticonSuggest'),
+        items: ({ query }) => {
+          // need at least one letter, so times like 10:30 or "Note:" don't open the menu
+          if (!query) return []
+          const q = query.toLowerCase()
+          return EMOTICONS.filter((n) => n.includes(q))
+            .slice(0, 10)
+            .map((name) => ({
+              title: name.replace(/-/g, ' '),
+              icon: <Emoticon name={name} size={18} />,
+              command: (editor: Editor, range: Range) => editor.chain().focus().deleteRange(range).insertContent([{ type: 'emoticon', attrs: { name } }, { type: 'text', text: ' ' }]).run(),
+            }))
+        },
+        command: ({ editor, range, props }) => props.command(editor, range),
+        render: popupRenderer<MenuItem>(true),
+      }),
+    ]
+  },
+})

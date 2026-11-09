@@ -456,3 +456,10 @@ table.list tr:hover td { background: var(--bg-soft); }
 .access-steps li svg { flex: none; margin-top: 2px; color: var(--text-soft); }
 .access-steps li.yes svg { color: var(--success); }
 .access-steps li.no svg { color: var(--danger); }
+/* shortcuts */
+.shortcuts { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 28px; }
+.shortcuts h4 { margin: 10px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: var(--text-soft); }
+.shortcut-row { display: flex; justify-content: space-between; gap: 12px; padding: 4px 0; font-size: 13.5px; border-bottom: 1px solid var(--border); }
+.shortcut-row .keys { display: inline-flex; gap: 3px; flex: none; }
+kbd { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 1px 6px; border-radius: 5px; border: 1px solid var(--border); border-bottom-width: 2px; background: var(--bg-hover); }
+@media (max-width: 640px) { .shortcuts { grid-template-columns: 1fr; } }

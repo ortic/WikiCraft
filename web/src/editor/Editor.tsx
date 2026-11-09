@@ -25,7 +25,7 @@ import 'katex/dist/katex.min.css'
 import { Bold, Italic, Underline, Strikethrough, Code, Link as LinkIcon, Highlighter, MessageSquarePlus, Heading2, List } from 'lucide-react'
 import { api, initials, userColor, type Attachment, type User } from '../api'
 import { AttachmentNode, Anchor, Callout, ChildPages, Column, Columns, CommentMark, DateNode, DecisionItem, DecisionList, Embed, Emoticon, Include, Macro, Status, Toc } from './nodes'
-import { SlashCommand, mentionSuggestion, slashItems } from './suggest'
+import { EmoticonSuggest, PageLinkSuggest, SlashCommand, mentionSuggestion, slashItems } from './suggest'
 import { CodeBlock } from './CodeBlock'
 import { ImageView } from './ImageView'
 import { TableMenu } from './TableMenu'
@@ -159,6 +159,8 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
         DecisionList,
         DecisionItem,
         Macro.configure({ pageId }),
+        PageLinkSuggest.configure({ pageId }),
+        EmoticonSuggest,
         CommentMark,
         SlashCommand.configure({ items: slashItems((e) => pickFiles('image/*').then((f) => upload(e, f, true)), (e) => pickFiles('*/*').then((f) => upload(e, f, false))) }),
       ],
