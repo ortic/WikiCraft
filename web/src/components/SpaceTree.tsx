@@ -1,4 +1,5 @@
 import { useMemo, useState, type DragEvent } from 'react'
+import { LineIcon, parseSymbol } from '../icons'
 import { useMatch, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, ChevronDown, FileText, Folder, Plus, Lock } from 'lucide-react'
@@ -116,7 +117,7 @@ export default function SpaceTree({ space }: { space: Space }) {
             >
               {kids?.length ? isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} /> : null}
             </span>
-            {n.icon ? <span style={{ width: 18 }}>{n.icon}</span> : n.kind === 'folder' ? <Folder size={14} style={{ flex: 'none' }} /> : <FileText size={14} style={{ flex: 'none', opacity: 0.7 }} />}
+            {parseSymbol(n.icon) ? <LineIcon group="symbols" name={parseSymbol(n.icon)!.name} size={14} style={{ flex: 'none' }} /> : n.kind === 'folder' ? <Folder size={14} style={{ flex: 'none' }} /> : <FileText size={14} style={{ flex: 'none', opacity: 0.7 }} />}
             <span className="title" style={{ marginLeft: 6 }}>
               {n.title || 'Untitled'}
             </span>

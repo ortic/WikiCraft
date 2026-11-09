@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { SymbolTile, parseSymbol } from '../icons'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { FilePlus2 } from 'lucide-react'
@@ -36,7 +37,7 @@ export default function TemplatePicker({ spaceKey, parentId, onClose }: { spaceK
   }
   const card = (key: string, icon: React.ReactNode, name: string, desc: string | null, onClick: () => void, badge?: string) => (
     <button key={key} className="space-card" style={{ textAlign: 'left', cursor: 'pointer', alignItems: 'flex-start' }} disabled={busy} onClick={onClick}>
-      <span style={{ fontSize: 22, width: 30, textAlign: 'center' }}>{icon}</span>
+      <span style={{ width: 32, display: 'flex', justifyContent: 'center' }}>{icon}</span>
       <div style={{ minWidth: 0 }}>
         <div style={{ fontWeight: 600 }}>
           {name} {badge && <span className="badge">{badge}</span>}
@@ -49,7 +50,7 @@ export default function TemplatePicker({ spaceKey, parentId, onClose }: { spaceK
     <Modal title="Create a page" onClose={onClose} width={760}>
       <div className="grid-cards">
         {card('blank', <FilePlus2 size={22} />, 'Blank page', 'Start from scratch', () => create())}
-        {templates.data?.map((t) => card(t.id, t.icon ?? '📄', t.name, t.description, () => create(t.id), t.builtin ? undefined : t.spaceKey ? 'space' : 'workspace'))}
+        {templates.data?.map((t) => card(t.id, <SymbolTile value={parseSymbol(t.icon) ? t.icon : 'document:slate'} size={30} />, t.name, t.description, () => create(t.id), t.builtin ? undefined : t.spaceKey ? 'space' : 'workspace'))}
       </div>
     </Modal>
   )

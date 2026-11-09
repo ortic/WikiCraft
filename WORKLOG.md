@@ -8,9 +8,9 @@ No git commits are made (user didn't ask). Dev Postgres: docker container `wikic
 
 | Area | State |
 |---|---|
-| `crates/doc-model` (PM JSON, Yjs ⇄ PM, Markdown, HTML, text) | ✅ 11 tests |
-| `crates/confluence` (XML + CSV reader, storage → PM, import plan) | ✅ 10 unit + 2 real-export tests |
-| `crates/server` (axum API, authz, yrs collab, tantivy, importer) | ✅ 3 unit + 8 integration tests |
+| `crates/doc-model` (PM JSON, Yjs ⇄ PM, Markdown, HTML, text) | OK 11 tests |
+| `crates/confluence` (XML + CSV reader, storage → PM, import plan) | OK 10 unit + 2 real-export tests |
+| `crates/server` (axum API, authz, yrs collab, tantivy, importer) | OK 3 unit + 8 integration tests |
 | `web/` frontend | not started |
 
 ## Log
@@ -32,18 +32,18 @@ No git commits are made (user didn't ask). Dev Postgres: docker container `wikic
 - CLI: `wikicraft serve|migrate|analyze-confluence <zip>|import-confluence <zip> --as-user <email>|reindex`
 
 ## Security review findings (independent review agent, 2026-11-09) — status
-1. [✅] HIGH copy w/ children leaks restricted descendants (pages.rs copy) → filter via visible_page_ids, copy restrictions
-2. [✅] HIGH cross-space move exposes restricted descendants → require view on all descendants + source space admin
-3. [✅] HIGH stack overflow via deep nesting (markdown blockquotes `>`*20000, Yjs nested elements) → depth caps
-4. [✅] MED 2 GiB body limit on all routes incl. login/setup; argon2 unthrottled → 1 MiB JSON limit, rate limit login
-5. [✅] MED WS: 64 MiB messages, unbounded presence, spoofable client ids, no re-check after revoke/trash, persist into trashed page
-6. [✅] MED markdown zip import: bombs/alloc from declared size, file count; parentId not validated (also copy parentId) → breadcrumbs leak
-7. [✅] MED admin can reset owner/admin passwords; password change doesn't revoke sessions
-8. [✅] MED move doesn't reindex → stale space_id in search; filter_visible trusts index space
-9. [✅] MED importer drops unmappable restriction subjects (fail-open); allUsersSubject→anonymous_access needs checking
-10. [✅] LOW-MED trash list shows restricted titles; restore drops inherited restriction; trash affects invisible descendants
+1. [x] HIGH copy w/ children leaks restricted descendants (pages.rs copy) → filter via visible_page_ids, copy restrictions
+2. [x] HIGH cross-space move exposes restricted descendants → require view on all descendants + source space admin
+3. [x] HIGH stack overflow via deep nesting (markdown blockquotes `>`*20000, Yjs nested elements) → depth caps
+4. [x] MED 2 GiB body limit on all routes incl. login/setup; argon2 unthrottled → 1 MiB JSON limit, rate limit login
+5. [x] MED WS: 64 MiB messages, unbounded presence, spoofable client ids, no re-check after revoke/trash, persist into trashed page
+6. [x] MED markdown zip import: bombs/alloc from declared size, file count; parentId not validated (also copy parentId) → breadcrumbs leak
+7. [x] MED admin can reset owner/admin passwords; password change doesn't revoke sessions
+8. [x] MED move doesn't reindex → stale space_id in search; filter_visible trusts index space
+9. [x] MED importer drops unmappable restriction subjects (fail-open); allUsersSubject→anonymous_access needs checking
+10. [x] LOW-MED trash list shows restricted titles; restore drops inherited restriction; trash affects invisible descendants
 11. [◐ O(n²) fixed; entry caps/zip reopen remain (admin-only)] LOW confluence archive hardening (64 GiB entry cap, gz unbounded, O(n²) normalize, reopen zip per entry)
-12. [✅ (URL schemes sanitized server-side too)] LOW guests list users/groups; group ops not ws-scoped; no server-side URL scheme check; space admin can enable anonymous
+12. [x (URL schemes sanitized server-side too)] LOW guests list users/groups; group ops not ws-scoped; no server-side URL scheme check; space admin can enable anonymous
 - Security fixes landed with regression tests (crates/server/tests/security.rs, 5 tests). Depth cap: MAX_DEPTH=40 because
   each doc level = 2 JSON levels and serde_json's recursion limit (128) made deep docs unreadable from Postgres.
 - Imports never enable anonymous access automatically (reported as anonymousAccessInConfluence instead).

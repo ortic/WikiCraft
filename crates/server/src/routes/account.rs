@@ -296,7 +296,7 @@ pub async fn mail_test(State(state): State<AppState>, CurrentUser(user): Current
         Some(t) => validate_email(&t)?,
         None => user.email.clone().ok_or_else(|| ApiError::bad("your account has no e-mail address"))?,
     };
-    let html = crate::mail::layout("Test e-mail", "<p>✅ E-mail delivery from WikiCraft works.</p>", "Sent from the admin console.");
+    let html = crate::mail::layout("Test e-mail", "<p>E-mail delivery from WikiCraft works.</p>", "Sent from the admin console.");
     state
         .mailer
         .send_now(&to, "WikiCraft test e-mail", "E-mail delivery from WikiCraft works.\n", Some(&html))

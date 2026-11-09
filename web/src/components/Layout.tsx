@@ -153,17 +153,17 @@ export default function Layout() {
             </NavLink>
             <SpaceTree space={current} />
             {current.role === 'admin' && (
-              <NavLink to={`/spaces/${current.key}/settings`} className="nav-item" style={{ marginTop: 8 }}>
+              <NavLink to={`/spaces/${current.key}/settings`} className={({ isActive }) => `nav-item${isActive && !['trash', 'export'].includes(new URLSearchParams(loc.search).get('tab') ?? '') ? ' active' : ''}`} style={{ marginTop: 8 }}>
                 <Settings size={15} /> Space settings
               </NavLink>
             )}
             {(current.role === 'admin' || current.role === 'editor') && (
-              <NavLink to={`/spaces/${current.key}/settings?tab=trash`} className="nav-item">
+              <NavLink to={`/spaces/${current.key}/settings?tab=trash`} className={({ isActive }) => `nav-item${isActive && (new URLSearchParams(loc.search).get('tab') ?? '') === 'trash' ? ' active' : ''}`}>
                 <Trash2 size={15} /> Trash
               </NavLink>
             )}
             {current.role !== 'admin' && (
-              <NavLink to={`/spaces/${current.key}/settings?tab=export`} className="nav-item">
+              <NavLink to={`/spaces/${current.key}/settings?tab=export`} className={({ isActive }) => `nav-item${isActive && (new URLSearchParams(loc.search).get('tab') ?? '') === 'export' ? ' active' : ''}`}>
                 <Download size={15} /> Export
               </NavLink>
             )}

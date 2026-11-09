@@ -7,6 +7,8 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5199,
+    // the icon set is shared with the Rust crates (crates/doc-model/assets/icons.json)
+    fs: { allow: ['..'] },
     proxy: {
       '/api': { target: backend, changeOrigin: false, ws: true },
     },

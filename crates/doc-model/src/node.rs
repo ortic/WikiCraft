@@ -58,6 +58,8 @@ pub mod nodes {
     pub const CALLOUT: &str = "callout";
     pub const STATUS: &str = "status";
     pub const DATE: &str = "date";
+    /// Inline emoticon (`name` = Confluence emoticon name, drawn by our icon set).
+    pub const EMOTICON: &str = "emoticon";
     pub const ATTACHMENT: &str = "attachment";
     pub const EMBED: &str = "embed";
     pub const TOC: &str = "toc";
@@ -99,7 +101,8 @@ pub const MAX_DEPTH: usize = 40;
 
 /// Inline node types (live inside paragraphs/headings next to text).
 pub fn is_inline(kind: &str) -> bool {
-    matches!(kind, nodes::TEXT | nodes::HARD_BREAK | nodes::MENTION | nodes::STATUS | nodes::DATE | nodes::MATH_INLINE | nodes::ANCHOR) || kind == nodes::IMAGE // images are inline in our schema (Tiptap `inline: true`)
+    matches!(kind, nodes::TEXT | nodes::HARD_BREAK | nodes::MENTION | nodes::STATUS | nodes::DATE | nodes::EMOTICON | nodes::MATH_INLINE | nodes::ANCHOR)
+        || kind == nodes::IMAGE // images are inline in our schema (Tiptap `inline: true`)
 }
 
 impl Node {

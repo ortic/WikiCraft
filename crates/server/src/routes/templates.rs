@@ -27,7 +27,7 @@ const BUILTINS: &[Builtin] = &[
     Builtin {
         id: "builtin:meeting-notes",
         name: "Meeting notes",
-        icon: "🗓️",
+        icon: "calendar",
         description: "Agenda, notes, decisions and action items",
         title: "Meeting notes {date}",
         markdown: "**Date:** {date}\n\n**Participants:** @\n\n## Goals\n\n- \n\n## Agenda & notes\n\n| Time | Item | Who | Notes |\n| --- | --- | --- | --- |\n|  |  |  |  |\n\n## Decisions\n\n- \n\n## Action items\n\n- [ ] \n",
@@ -35,7 +35,7 @@ const BUILTINS: &[Builtin] = &[
     Builtin {
         id: "builtin:decision",
         name: "Decision record",
-        icon: "⚖️",
+        icon: "decision",
         description: "Document an important decision (ADR style)",
         title: "Decision: ",
         markdown: "> [!NOTE]\n> **Status:** proposed · **Owner:** @ · **Due date:** {date}\n\n## Context\n\nWhat is the issue that we're seeing that is motivating this decision?\n\n## Options considered\n\n| Option | Pros | Cons |\n| --- | --- | --- |\n| A |  |  |\n| B |  |  |\n\n## Decision\n\nWhat did we decide, and why?\n\n## Consequences\n\nWhat becomes easier or harder because of this change?\n",
@@ -43,7 +43,7 @@ const BUILTINS: &[Builtin] = &[
     Builtin {
         id: "builtin:how-to",
         name: "How-to article",
-        icon: "🧭",
+        icon: "compass",
         description: "Step-by-step instructions",
         title: "How to ",
         markdown: "Short introduction: what this guide helps you do.\n\n> [!TIP]\n> Prerequisites: list anything the reader needs first.\n\n## Steps\n\n1. First step\n2. Second step\n3. Third step\n\n## Related articles\n\n- \n",
@@ -51,15 +51,15 @@ const BUILTINS: &[Builtin] = &[
     Builtin {
         id: "builtin:retrospective",
         name: "Retrospective",
-        icon: "🔁",
+        icon: "loop",
         description: "What went well, what to improve, actions",
         title: "Retrospective {date}",
-        markdown: "**Team:** · **Sprint / period:** \n\n## What went well 👍\n\n- \n\n## What could be improved 👎\n\n- \n\n## Action items\n\n- [ ] \n",
+        markdown: "**Team:** · **Sprint / period:** \n\n## What went well\n\n- \n\n## What could be improved\n\n- \n\n## Action items\n\n- [ ] \n",
     },
     Builtin {
         id: "builtin:runbook",
         name: "Runbook",
-        icon: "🚨",
+        icon: "siren",
         description: "Operational procedure for an alert or incident",
         title: "Runbook: ",
         markdown: "> [!WARNING]\n> Use this runbook when: describe the alert or symptom.\n\n## Impact\n\nWho is affected and how badly?\n\n## Diagnosis\n\n```bash\n# commands to check the system\n```\n\n## Mitigation\n\n1. \n\n## Escalation\n\n- On-call: @\n",
@@ -67,7 +67,7 @@ const BUILTINS: &[Builtin] = &[
     Builtin {
         id: "builtin:requirements",
         name: "Product requirements",
-        icon: "📋",
+        icon: "clipboard",
         description: "Problem, goals, requirements and open questions",
         title: "PRD: ",
         markdown: "| | |\n| --- | --- |\n| **Owner** | @ |\n| **Status** | Draft |\n| **Target release** | |\n\n## Problem\n\n## Goals\n\n- \n\n## Requirements\n\n| # | Requirement | User story | Importance |\n| --- | --- | --- | --- |\n| 1 |  |  | Must have |\n\n## Out of scope\n\n## Open questions\n\n- [ ] \n",

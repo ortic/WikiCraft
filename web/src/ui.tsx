@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
+import { SymbolTile, parseSymbol } from './icons'
 import { useQuery } from '@tanstack/react-query'
 import { X } from 'lucide-react'
 import { api, initials, userColor, type Me } from './api'
@@ -28,7 +29,8 @@ export function Avatar({ name, id, size = 26 }: { name: string; id?: string; siz
 }
 
 export function SpaceIcon({ space, size = 24 }: { space: { key: string; name: string; icon?: string | null }; size?: number }) {
-  if (space.icon) return <span style={{ fontSize: size * 0.8, width: size, textAlign: 'center' }}>{space.icon}</span>
+  // icons are symbols from our set; anything else (e.g. legacy emoji) falls back to the letter
+  if (parseSymbol(space.icon)) return <SymbolTile value={space.icon} size={size} />
   return (
     <span className="space-icon" style={{ background: userColor(space.key), width: size, height: size }}>
       {space.name.slice(0, 1).toUpperCase()}

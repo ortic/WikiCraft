@@ -3,8 +3,9 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Trash2, RotateCcw, Users, X } from 'lucide-react'
 import { api, formatDate, type Space } from '../api'
+import { SymbolPicker } from '../icons'
 import ExportPanel from '../components/ExportPanel'
-import { ErrorBox, Spinner, useToast } from '../ui'
+import { ErrorBox, SpaceIcon, Spinner, useToast } from '../ui'
 
 interface Grant {
   subjectType: 'user' | 'group'
@@ -61,7 +62,10 @@ function Details({ space }: { space: Space }) {
   return (
     <div style={{ maxWidth: 520 }}>
       <div className="field"><label>Name</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
-      <div className="field"><label>Icon (emoji)</label><input className="input" value={icon} onChange={(e) => setIcon(e.target.value)} placeholder="📘" /></div>
+      <div className="field">
+        <label className="row">Icon <SpaceIcon space={{ key: space.key, name, icon }} size={26} /></label>
+        <SymbolPicker value={icon || null} onChange={(v) => setIcon(v ?? '')} />
+      </div>
       <div className="field"><label>Description</label><textarea className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} /></div>
       <div className="field"><label>Key</label><input className="input" value={space.key} disabled /></div>
       <button className="btn btn-primary" onClick={save}>Save</button>
@@ -121,7 +125,7 @@ function Permissions({ space }: { space: Space }) {
       <div className="row" style={{ marginBottom: 10 }}>
         <select className="select" value={pick} onChange={(e) => setPick(e.target.value)} style={{ maxWidth: 360 }}>
           <option value="">Add a person or group…</option>
-          {groups.data?.map((g) => <option key={g.id} value={`group:${g.id}`}>👥 {g.name}</option>)}
+          {groups.data?.map((g) => <option key={g.id} value={`group:${g.id}`}>{g.name} (group)</option>)}
           {users.data?.map((u) => <option key={u.id} value={`user:${u.id}`}>{u.name}</option>)}
         </select>
         <button className="btn" onClick={add} disabled={!pick}>Add</button>

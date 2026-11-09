@@ -245,31 +245,6 @@ fn status_color(c: &str) -> &'static str {
     }
 }
 
-fn emoticon(name: &str) -> &'static str {
-    match name {
-        "smile" => "🙂",
-        "sad" => "🙁",
-        "cheeky" => "😛",
-        "laugh" => "😀",
-        "wink" => "😉",
-        "thumbs-up" => "👍",
-        "thumbs-down" => "👎",
-        "information" => "ℹ️",
-        "tick" => "✅",
-        "cross" => "❌",
-        "warning" => "⚠️",
-        "plus" => "➕",
-        "minus" => "➖",
-        "question" => "❓",
-        "light-on" => "💡",
-        "light-off" => "💡",
-        "yellow-star" | "red-star" | "green-star" | "blue-star" => "⭐",
-        "heart" => "❤️",
-        "broken-heart" => "💔",
-        _ => "🙂",
-    }
-}
-
 impl Conv<'_> {
     fn children(&mut self, children: &[Dom], marks: &[Mark], pre: bool) -> Vec<Node> {
         let mut out = Vec::new();
@@ -415,6 +390,12 @@ impl Conv<'_> {
             }
             "ac:emoticon" => {
                 self.stats.emoticons += 1;
+                // Confluence's own emoticons are drawn by our icon set
+                let name = el.attr("ac:name").unwrap_or("");
+                if wikicraft_doc_model::icons::is_emoticon(name) {
+                    return vec![Node::new(nodes::EMOTICON).attr("name", name)];
+                }
+                // any other emoji a Cloud user inserted is their content: keep the character
                 let emoji = el
                     .attr("ac:emoji-fallback")
                     .filter(|f| !f.starts_with(':'))
@@ -425,8 +406,8 @@ impl Conv<'_> {
                             chars
                         })
                     })
-                    .unwrap_or_else(|| emoticon(el.attr("ac:name").unwrap_or("")).to_string());
-                vec![Node::text_marked(emoji, marks.to_vec())]
+                    .unwrap_or_default();
+                if emoji.is_empty() { vec![] } else { vec![Node::text_marked(emoji, marks.to_vec())] }
             }
             "ac:placeholder" => vec![],
             "ac:inline-comment-marker" => {
@@ -993,6 +974,19 @@ mod tests {
 
     fn json(n: &Node) -> String {
         serde_json::to_string(n).unwrap()
+    }
+
+    #[test]
+    fn emoticons_become_icons_not_emoji() {
+        let (doc, stats) = conv(
+            r#"<p>done <ac:emoticon ac:name="tick"/> and <ac:emoticon ac:name="unknown-thing"/> <ac:emoticon ac:name="rocket" ac:emoji-fallback="🚀"/></p>"#,
+        );
+        let p = &doc.content[0];
+        assert_eq!(stats.emoticons, 3);
+        assert!(p.content.iter().any(|n| n.kind == nodes::EMOTICON && n.attr_str("name") == Some("tick")));
+        // an emoji a Cloud user typed is their content and stays text; unknown names are dropped
+        let text: String = p.content.iter().filter_map(|n| n.text.clone()).collect();
+        assert!(text.contains('\u{1F680}') && !text.contains("unknown"), "{text}");
     }
 
     #[test]

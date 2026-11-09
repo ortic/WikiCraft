@@ -107,8 +107,8 @@ export default function RestrictionsDialog({ page, onClose }: { page: Page; onCl
                 <option value="">Add a person or group…</option>
                 {subjects.map((s) => (
                   <option key={s.type + s.id} value={s.type + ':' + s.id}>
-                    {s.type === 'group' ? '👥 ' : ''}
                     {s.name}
+                    {s.type === 'group' ? ' (group)' : ''}
                   </option>
                 ))}
               </select>

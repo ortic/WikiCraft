@@ -162,8 +162,8 @@ impl Renderer<'_> {
             nodes::DETAILS_SUMMARY => self.wrap("<summary>", n, "</summary>"),
             nodes::DETAILS_CONTENT => self.wrap("<div class=\"details-content\">", n, "</div>"),
             nodes::CALLOUT => {
-                let kind = n.attr_str("type").unwrap_or("info");
-                let icon = n.attr_str("emoji").map(|e| format!("<span class=\"callout-icon\">{}</span>", escape(e))).unwrap_or_default();
+                let kind = n.attr_str("type").filter(|k| matches!(*k, "info" | "note" | "success" | "warning" | "error")).unwrap_or("info");
+                let icon = crate::icons::line_svg("callout", kind, "callout-icon", "20").unwrap_or_default();
                 let open = format!("<div class=\"callout callout-{kind}\" data-type=\"callout\">{icon}<div class=\"callout-body\">");
                 self.wrap(&open, n, "</div></div>");
             }
@@ -179,10 +179,16 @@ impl Renderer<'_> {
                 let d = n.attr_str("date").unwrap_or("");
                 let _ = write!(self.out, "<time datetime=\"{0}\">{0}</time>", escape(d));
             }
+            nodes::EMOTICON => {
+                if let Some(svg) = n.attr_str("name").and_then(crate::icons::emoticon_svg) {
+                    self.out.push_str(&svg);
+                }
+            }
             nodes::ATTACHMENT => {
                 let name = n.attr_str("name").unwrap_or("attachment");
                 let href = n.attr_str("href").and_then(safe_url).unwrap_or("#");
-                let _ = write!(self.out, "<p class=\"attachment\"><a href=\"{}\">📎 {}</a></p>", escape(href), escape(name));
+                let clip = crate::icons::line_svg("ui", "paperclip", "attachment-icon", "16").unwrap_or_default();
+                let _ = write!(self.out, "<p class=\"attachment\"><a href=\"{}\">{clip} {}</a></p>", escape(href), escape(name));
             }
             nodes::EMBED => {
                 let url = n.attr_str("url").and_then(safe_url).unwrap_or("#");

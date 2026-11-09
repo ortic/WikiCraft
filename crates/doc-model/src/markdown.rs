@@ -356,7 +356,7 @@ impl MdWriter {
                                 "- [ ] ".into()
                             }
                         }
-                        nodes::DECISION_LIST => "- ✅ ".into(),
+                        nodes::DECISION_LIST => "- **Decision:** ".into(),
                         _ => "- ".into(),
                     };
                     let indent = " ".repeat(marker.chars().count());
@@ -409,7 +409,7 @@ impl MdWriter {
             nodes::ATTACHMENT => {
                 let name = n.attr_str("name").unwrap_or("attachment");
                 let href = n.attr_str("href").unwrap_or("");
-                self.line(prefix, &format!("📎 [{}]({})", md_escape(name), href));
+                self.line(prefix, &format!("[{}]({})", md_escape(name), href));
             }
             nodes::EMBED => {
                 let url = n.attr_str("url").unwrap_or("");
@@ -508,6 +508,7 @@ fn inline_md(content: &[Node]) -> String {
             nodes::MENTION => s.push_str(&format!("@{}", n.attr_str("label").or(n.attr_str("id")).unwrap_or("user"))),
             nodes::STATUS => s.push_str(&format!("`{}`", n.attr_str("text").unwrap_or("").to_uppercase())),
             nodes::DATE => s.push_str(n.attr_str("date").unwrap_or("")),
+            nodes::EMOTICON => s.push_str(crate::icons::emoticon_shortcut(n.attr_str("name").unwrap_or(""))),
             nodes::MATH_INLINE => s.push_str(&format!("${}$", n.attr_str("latex").unwrap_or(""))),
             nodes::ANCHOR => {}
             _ => s.push_str(&inline_md(&n.content)),

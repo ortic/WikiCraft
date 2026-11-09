@@ -2,6 +2,7 @@
 //! (Yjs/y-prosemirror, Markdown, HTML, plain text).
 
 pub mod html;
+pub mod icons;
 pub mod markdown;
 pub mod node;
 pub mod text;

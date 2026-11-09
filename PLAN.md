@@ -68,29 +68,29 @@
 
 | Capability | C | DC | D | X | O | B | WikiCraft target |
 |---|:-:|:-:|:-:|:-:|:-:|:-:|:-:|
-| Spaces + nested page tree | ✅ | ✅ | ✅ | ✅ (nested pages, subwikis) | ✅ (collections) | ✅ (books) | P0 |
-| Real-time co-editing | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ | P0 |
-| Inline + page comments | ✅ | ✅ | ✅ | ✅ (annotations) | ✅ | ✅ (page only) | P0 |
-| Version history + diff + restore | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | P0 |
-| Page-level restrictions | ✅ | ✅ | ✅ (Business) | ✅ | ⚠️ | ✅ | P0/P1 |
-| Templates / blueprints | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | P1 |
-| Macro ecosystem | ✅✅ | ✅✅ | ⚠️ | ✅✅ | ⚠️ | ❌ | P1 (parity layer) |
-| Structured data / page properties | ✅ (page properties, databases) | ✅ (page properties) | ✅ (Bases) | ✅✅ (classes, AWM) | ❌ | ❌ | P1/P2 |
-| Whiteboards | ✅ | ❌ | ✅ (Excalidraw) | ⚠️ (draw.io) | ❌ | ❌ | P2 |
-| Databases | ✅ | ❌ | ✅ | ✅ (AWM/LiveData) | ❌ | ❌ | P2 |
-| Full-text search incl. attachments | ✅ | ✅ | ✅ (Business) | ✅ (Solr) | ✅ | ✅ | P0/P1 |
-| AI Q&A / semantic search | ✅ (Rovo) | ⚠️ | ✅ | ⚠️ (LLM extension) | ✅ | ❌ | P2 |
-| SSO (OIDC/SAML/LDAP) | ✅ (Guard) | ✅ | ✅ (Business) | ✅ | ✅ | ✅ | P1 |
-| SCIM | ✅ | ⚠️ | ✅ (EE) | ⚠️ | ⚠️ | ❌ | P2 |
-| Audit log | ✅ | ✅ | ✅ (EE) | ✅ | ✅ | ✅ | P1 |
-| Public / anonymous access | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | P1 |
-| Confluence import | — | — | ✅ (Business) | ✅✅ | ✅ | ⚠️ | **P0/P1 (flagship)** |
-| PDF/Word export | ✅ | ✅ | ⚠️ | ✅ | ⚠️ | ✅ | P1 |
-| REST API + webhooks | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | P0/P1 |
-| Plugin / app framework | ✅ (Forge) | ✅ (P2) | ❌ | ✅✅ | ⚠️ | ⚠️ (themes) | P2 (WASM) |
-| MCP server | ✅ (Rovo MCP) | ❌ | ✅ | ⚠️ | ✅ | ❌ | P1 |
-| Multilingual page translations | ⚠️ (apps) | ⚠️ (apps) | ❌ | ✅ | ❌ | ❌ | P3 |
-| Self-hosted / air-gapped | ❌ | ✅ (until 2029) | ✅ | ✅ | ✅ | ✅ | P0 |
+| Spaces + nested page tree | Yes | Yes | Yes | Yes (nested pages, subwikis) | Yes (collections) | Yes (books) | P0 |
+| Real-time co-editing | Yes | Yes | Yes | Yes | Yes | No | P0 |
+| Inline + page comments | Yes | Yes | Yes | Yes (annotations) | Yes | Yes (page only) | P0 |
+| Version history + diff + restore | Yes | Yes | Yes | Yes | Yes | Yes | P0 |
+| Page-level restrictions | Yes | Yes | Yes (Business) | Yes | Partial | Yes | P0/P1 |
+| Templates / blueprints | Yes | Yes | Yes | Yes | Yes | Yes | P1 |
+| Macro ecosystem | Yes+ | Yes+ | Partial | Yes+ | Partial | No | P1 (parity layer) |
+| Structured data / page properties | Yes (page properties, databases) | Yes (page properties) | Yes (Bases) | Yes+ (classes, AWM) | No | No | P1/P2 |
+| Whiteboards | Yes | No | Yes (Excalidraw) | Partial (draw.io) | No | No | P2 |
+| Databases | Yes | No | Yes | Yes (AWM/LiveData) | No | No | P2 |
+| Full-text search incl. attachments | Yes | Yes | Yes (Business) | Yes (Solr) | Yes | Yes | P0/P1 |
+| AI Q&A / semantic search | Yes (Rovo) | Partial | Yes | Partial (LLM extension) | Yes | No | P2 |
+| SSO (OIDC/SAML/LDAP) | Yes (Guard) | Yes | Yes (Business) | Yes | Yes | Yes | P1 |
+| SCIM | Yes | Partial | Yes (EE) | Partial | Partial | No | P2 |
+| Audit log | Yes | Yes | Yes (EE) | Yes | Yes | Yes | P1 |
+| Public / anonymous access | Yes | Yes | Yes | Yes | Yes | Yes | P1 |
+| Confluence import | — | — | Yes (Business) | Yes+ | Yes | Partial | **P0/P1 (flagship)** |
+| PDF/Word export | Yes | Yes | Partial | Yes | Partial | Yes | P1 |
+| REST API + webhooks | Yes | Yes | Yes | Yes | Yes | Yes | P0/P1 |
+| Plugin / app framework | Yes (Forge) | Yes (P2) | No | Yes+ | Partial | Partial (themes) | P2 (WASM) |
+| MCP server | Yes (Rovo MCP) | No | Yes | Partial | Yes | No | P1 |
+| Multilingual page translations | Partial (apps) | Partial (apps) | No | Yes | No | No | P3 |
+| Self-hosted / air-gapped | No | Yes (until 2029) | Yes | Yes | Yes | Yes | P0 |
 
 ---
 
@@ -707,13 +707,13 @@ Checksums of fixture A matched its `content-sha256.tsv`.
 
 | Check | A (Cloud CSV, 2026) | B (classic XML, 2020) |
 |---|---|---|
-| Page tree rebuilt | ✅ depth 0–7, 0 cycles, **2 orphans** (parent missing), 1 duplicate title | ✅ depth 0–4, 0 orphans, 0 cycles |
-| Sibling order | ⚠️ `child_position` set on only 1,316 / 2,171 pages, so we need a fallback (Confluence default: alphabetical) | ✅ `position` on all |
-| Storage bodies parse as strict XML (after normalization, §6.3 #6) | ✅ 2,366 / 2,366 | ✅ 44 / 44 (**94 bodies, incl. history, failed before un-escaping `]] >`**) |
-| Page links (`ri:page`) resolved by (space, title) | ⚠️ 718 resolved · **194 point to titles not in the export** (21%) · 3 cross-space | ✅ 12 / 12 |
-| Attachment refs (`ri:attachment`) resolved by filename | ⚠️ 1,912 / 1,932 (20 unresolved) | ✅ 102 / 102 |
-| Attachment binaries at `attachments/<container>/<id>/<version>` | n/a (not mirrored) | ✅ 218 / 218 present |
-| User refs (`ri:user`) resolved against the user list | ⚠️ 29,455 / 29,609 (154 unresolved); **86% legacy `userkey`, 14% `account-id`** | n/a (14 users, `atlassianAccountId`) |
+| Page tree rebuilt | OK depth 0–7, 0 cycles, **2 orphans** (parent missing), 1 duplicate title | OK depth 0–4, 0 orphans, 0 cycles |
+| Sibling order | Partial: `child_position` set on only 1,316 / 2,171 pages, so we need a fallback (Confluence default: alphabetical) | OK `position` on all |
+| Storage bodies parse as strict XML (after normalization, §6.3 #6) | OK 2,366 / 2,366 | OK 44 / 44 (**94 bodies, incl. history, failed before un-escaping `]] >`**) |
+| Page links (`ri:page`) resolved by (space, title) | Partial: 718 resolved · **194 point to titles not in the export** (21%) · 3 cross-space | OK 12 / 12 |
+| Attachment refs (`ri:attachment`) resolved by filename | Partial: 1,912 / 1,932 (20 unresolved) | OK 102 / 102 |
+| Attachment binaries at `attachments/<container>/<id>/<version>` | n/a (not mirrored) | OK 218 / 218 present |
+| User refs (`ri:user`) resolved against the user list | Partial: 29,455 / 29,609 (154 unresolved); **86% legacy `userkey`, 14% `account-id`** | n/a (14 users, `atlassianAccountId`) |
 | Body formats | `bodytypeid` 2 = storage XHTML (pages, comments, blogs), 0 = **wiki markup** (space descriptions), 1 = JSON content properties (3,184 rows) | `bodyType` 2 = storage, 0 = wiki markup (space description), 1 = content properties |
 | Content statuses | current, **draft** (2,281 rows, 46 `drafttype=live`), deleted, historical | current, draft, deleted, **archived**, historical |
 

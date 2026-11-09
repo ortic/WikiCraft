@@ -7,13 +7,12 @@ import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { FileText, Paperclip, ListTree, Hash, Puzzle, Link2, Download } from 'lucide-react'
 import { api, type Page, type PmNode } from '../api'
+import { Emoticon as EmoticonIcon, LineIcon } from '../icons'
 
-const CALLOUT_ICONS: Record<string, string> = { info: 'ℹ️', note: '📝', success: '✅', warning: '⚠️', error: '⛔' }
 const CALLOUT_TYPES = ['info', 'note', 'success', 'warning', 'error']
 
 function CalloutView({ node, updateAttributes, editor }: ReactNodeViewProps) {
-  const type = (node.attrs.type as string) || 'info'
-  const icon = (node.attrs.emoji as string) || CALLOUT_ICONS[type] || 'ℹ️'
+  const type = CALLOUT_TYPES.includes(node.attrs.type as string) ? (node.attrs.type as string) : 'info'
   const cycle = () => {
     if (!editor.isEditable) return
     const next = CALLOUT_TYPES[(CALLOUT_TYPES.indexOf(type) + 1) % CALLOUT_TYPES.length]
@@ -22,7 +21,7 @@ function CalloutView({ node, updateAttributes, editor }: ReactNodeViewProps) {
   return (
     <NodeViewWrapper className="callout" data-callout={type}>
       <span className="callout-icon" contentEditable={false} onClick={cycle} title={editor.isEditable ? 'Change panel type' : undefined} style={{ cursor: editor.isEditable ? 'pointer' : 'default' }}>
-        {icon}
+        <LineIcon group="callout" name={type} size={20} />
       </span>
       <NodeViewContent className="callout-body" />
     </NodeViewWrapper>
@@ -62,6 +61,31 @@ function StatusView({ node, updateAttributes, editor }: ReactNodeViewProps) {
     </NodeViewWrapper>
   )
 }
+
+/** Inline emoticon from our icon set (Confluence's tick, cross, smile, …). */
+export const Emoticon = Node.create({
+  name: 'emoticon',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: true,
+  addAttributes() {
+    return { name: { default: 'smile' } }
+  },
+  parseHTML() {
+    return [{ tag: 'span[data-type="emoticon"]', getAttrs: (el) => ({ name: (el as HTMLElement).dataset.name }) }]
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['span', mergeAttributes({ 'data-type': 'emoticon', 'data-name': HTMLAttributes.name, class: 'emoticon-node' })]
+  },
+  addNodeView() {
+    return ReactNodeViewRenderer(({ node }: ReactNodeViewProps) => (
+      <NodeViewWrapper as="span" className="emoticon-node">
+        <EmoticonIcon name={node.attrs.name as string} />
+      </NodeViewWrapper>
+    ))
+  },
+})
 
 export const Status = Node.create({
   name: 'status',
