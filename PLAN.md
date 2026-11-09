@@ -393,7 +393,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 ### 4.8 Templates & blueprints
 - [~] **P1** Page templates: global and per space; create from template; template picker with preview `C D X O B` (no preview; workspace templates API only)
 - [~] **P1** Built-in template gallery (meeting notes, decision log, retrospective, how-to, troubleshooting, product
-      requirements, project plan, runbook, incident postmortem, onboarding, architecture/arc42, ADR, OKRs) `C` (6 built-ins so far)
+      requirements, project plan, runbook, incident postmortem, onboarding, architecture/arc42, ADR, OKRs) `C` (12 built-ins so far)
 - [~] **P1** Template variables / placeholders (prompt for values on create) `C X` ({date} only; no prompts)
 - [ ] **P1** Blueprints: template + index page + labels + naming rule (e.g. meeting notes auto-dated under a parent) `C`
 - [ ] **P1** Default template per space / per parent (child pages inherit a template) `C X`
