@@ -1,0 +1,25 @@
+# ingress-nginx example. WebSockets (/api/pages/*/collab) need long timeouts; no sticky sessions
+# are required — replicas relay live edits via PostgreSQL.
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: wikicraft
+  annotations:
+    nginx.ingress.kubernetes.io/proxy-body-size: "4g"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-send-timeout: "3600"
+    nginx.ingress.kubernetes.io/proxy-request-buffering: "off"
+    # cert-manager.io/cluster-issuer: letsencrypt
+spec:
+  ingressClassName: nginx
+  tls:
+    - hosts: [wiki.example.com]
+      secretName: wikicraft-tls
+  rules:
+    - host: wiki.example.com
+      http:
+        paths:
+          - path: /
+            pathType: Prefix
+            backend:
+              service: { name: wikicraft, port: { name: http } }

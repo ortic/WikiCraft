@@ -1,0 +1,29 @@
+# Scaled mode on one machine: 2 replicas behind nginx, shared Postgres search, live-edit relay.
+# Attachments use a shared volume here; use S3 (WIKICRAFT_S3_*) on Kubernetes.
+#   docker compose -f deploy/compose/docker-compose.scale.yml up -d --build   → http://localhost:8788
+services:
+  db:
+    image: postgres:17-alpine
+    environment: { POSTGRES_USER: wikicraft, POSTGRES_PASSWORD: wikicraft, POSTGRES_DB: wikicraft }
+    volumes: [db:/var/lib/postgresql/data]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U wikicraft"], interval: 5s, retries: 10 }
+  wikicraft:
+    build: ../..
+    image: wikicraft:latest
+    deploy: { replicas: 2 }
+    depends_on: { db: { condition: service_healthy } }
+    environment:
+      WIKICRAFT_DATABASE_URL: postgres://wikicraft:wikicraft@db:5432/wikicraft
+      WIKICRAFT_BASE_URL: http://localhost:8788
+      WIKICRAFT_CLUSTER: postgres
+      WIKICRAFT_SEARCH: postgres
+      WIKICRAFT_LOG_FORMAT: json
+    volumes: [blobs:/data/blobs]
+  lb:
+    image: nginx:1.27-alpine
+    depends_on: [wikicraft]
+    ports: ["8788:80"]
+    volumes: [./nginx.conf:/etc/nginx/conf.d/default.conf:ro]
+volumes:
+  db:
+  blobs:

@@ -1,3 +1,5 @@
 .playwright-mcp/
 data/
 target/
+deploy/kubernetes/secret.yaml
+web/tsconfig.tsbuildinfo

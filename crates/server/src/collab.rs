@@ -368,11 +368,15 @@ pub async fn flush_all(state: &AppState) {
     }
 }
 
-/// Rejects cross-site WebSocket hijacking: the Origin must match the Host.
-fn same_origin(headers: &HeaderMap) -> bool {
+/// Rejects cross-site WebSocket hijacking: the Origin must be the configured public URL or match
+/// the Host header.
+fn same_origin(headers: &HeaderMap, base_url: &str) -> bool {
     let Some(origin) = headers.get(header::ORIGIN).and_then(|v| v.to_str().ok()) else {
         return true; // non-browser clients (CLI, tests) don't send Origin
     };
+    if origin.trim_end_matches('/').eq_ignore_ascii_case(base_url.trim_end_matches('/')) {
+        return true;
+    }
     let host = headers.get("x-forwarded-host").or_else(|| headers.get(header::HOST)).and_then(|v| v.to_str().ok()).unwrap_or("");
     let origin_host = origin.split("://").nth(1).unwrap_or("").trim_end_matches('/');
     !host.is_empty() && origin_host.eq_ignore_ascii_case(host)
@@ -386,7 +390,7 @@ pub async fn ws_handler(
     headers: HeaderMap,
     ws: WebSocketUpgrade,
 ) -> ApiResult<Response> {
-    if !same_origin(&headers) {
+    if !same_origin(&headers, &state.config.base_url) {
         return Err(ApiError::Forbidden);
     }
     let principal = Principal::load(&state, user.clone()).await?;

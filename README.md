@@ -28,6 +28,36 @@ docker compose up -d
 open http://localhost:8787     # first visit runs the setup wizard
 ```
 
+## Deployment & scaling
+
+WikiCraft runs as a single stateless binary. Pick the mode that fits:
+
+| | Single instance (default) | Scaled (several replicas) |
+|---|---|---|
+| Start with | `docker compose up -d` | [`deploy/kubernetes`](deploy/kubernetes) (`kubectl apply -k`) or [`deploy/compose/docker-compose.scale.yml`](deploy/compose/docker-compose.scale.yml) |
+| Database | PostgreSQL | PostgreSQL (managed/HA recommended) |
+| Attachments & import uploads | local volume (`/data`) | S3-compatible: `WIKICRAFT_S3_BUCKET`, `_ENDPOINT`, `_REGION`, `_ACCESS_KEY_ID`, `_SECRET_ACCESS_KEY` |
+| Search | `WIKICRAFT_SEARCH=tantivy` (embedded) | `WIKICRAFT_SEARCH=postgres` (shared full-text index) |
+| Live collaboration | in-process | `WIKICRAFT_CLUSTER=postgres` (replicas relay edits via LISTEN/NOTIFY; **no sticky sessions needed**) |
+| Background jobs | Postgres queue | same queue; any replica claims jobs, heartbeats, crashed jobs are detected |
+| Sessions, SSO state, login throttling | PostgreSQL | PostgreSQL |
+
+Nothing else is kept on local disk in scaled mode: `/data` only holds import scratch space
+(an `emptyDir` on Kubernetes), and the container runs as non-root with a read-only root filesystem.
+
+**Operations**
+
+- **Logs**: stdout only; `WIKICRAFT_LOG_FORMAT=json` for log shippers (Loki, ELK, Datadog). Every
+  request gets an `x-request-id` (accepted from your proxy or generated), included in the logs.
+  Levels via `RUST_LOG` (e.g. `info,wikicraft=debug`).
+- **Probes**: liveness `GET /api/health`, readiness `GET /api/ready` (503 while shutting down or
+  when the database is unreachable).
+- **Metrics**: Prometheus text format at `GET /api/metrics` (HTTP responses, latency, WebSocket
+  connections, live rooms, DB pool, jobs); protect with `WIKICRAFT_METRICS_TOKEN`.
+- **Shutdown**: SIGTERM marks the pod not-ready, drains and flushes live documents.
+- **Migrations** run automatically on startup and are serialized by a Postgres advisory lock, so
+  rolling updates with several pods are safe.
+
 ## Development
 
 Requirements: Rust ≥ 1.85, Node ≥ 20, PostgreSQL ≥ 15 (or Docker).
@@ -80,7 +110,12 @@ All settings are flags or environment variables:
 | `WIKICRAFT_BASE_URL` | `http://127.0.0.1:8787` | public URL |
 | `WIKICRAFT_DATA_DIR` | `./data` | search index, uploads, local attachment storage |
 | `WIKICRAFT_STATIC_DIR` | `./web/dist` | built frontend |
-| `WIKICRAFT_S3_BUCKET` / `WIKICRAFT_S3_ENDPOINT` | — | store attachments in S3/MinIO/R2 (credentials via `AWS_*`) |
+| `WIKICRAFT_S3_BUCKET` / `WIKICRAFT_S3_ENDPOINT` | — | store attachments and uploads in S3/MinIO/R2/Ceph |
+| `WIKICRAFT_S3_REGION` / `WIKICRAFT_S3_ACCESS_KEY_ID` / `WIKICRAFT_S3_SECRET_ACCESS_KEY` | `AWS_*` env | S3 credentials |
+| `WIKICRAFT_SEARCH` | `tantivy` | `tantivy` (embedded) or `postgres` (shared, for several replicas) |
+| `WIKICRAFT_CLUSTER` | `none` | `postgres` to run several replicas (live-edit relay) |
+| `WIKICRAFT_LOG_FORMAT` | `text` | `json` for structured logs |
+| `WIKICRAFT_METRICS_TOKEN` | — | bearer token for `/api/metrics` |
 | `WIKICRAFT_MAX_UPLOAD_MB` | `2048` | max upload (attachments, imports) |
 | `WIKICRAFT_SECURE_COOKIES` | `false` | set `true` behind HTTPS |
 | `WIKICRAFT_SESSION_DAYS` | `30` | session lifetime |

@@ -34,11 +34,33 @@ enum Command {
     },
     /// Rebuild the search index.
     Reindex,
+    /// Probe the running server's `/api/health` (for container HEALTHCHECKs); exits non-zero when unhealthy.
+    Healthcheck,
+}
+
+/// Plain-TCP GET of `/api/health` on the configured bind address (no curl/shell needed in the image).
+fn healthcheck(bind: std::net::SocketAddr) -> anyhow::Result<()> {
+    use std::io::{Read, Write};
+    use std::time::Duration;
+    let mut addr = bind;
+    if addr.ip().is_unspecified() {
+        addr.set_ip(if addr.is_ipv4() { std::net::Ipv4Addr::LOCALHOST.into() } else { std::net::Ipv6Addr::LOCALHOST.into() });
+    }
+    let mut s = std::net::TcpStream::connect_timeout(&addr, Duration::from_secs(3))?;
+    s.set_read_timeout(Some(Duration::from_secs(3)))?;
+    s.write_all(format!("GET /api/health HTTP/1.0\r\nHost: {addr}\r\n\r\n").as_bytes())?;
+    let mut body = String::new();
+    s.take(64 * 1024).read_to_string(&mut body)?;
+    anyhow::ensure!(body.starts_with("HTTP/1.") && body.contains(" 200 ") && body.contains("\"ok\""), "unhealthy: {}", body.lines().next().unwrap_or(""));
+    Ok(())
 }
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
     let cli = Cli::parse();
+    if let Some(Command::Healthcheck) = cli.command {
+        return healthcheck(cli.config.bind);
+    }
     // logs go to stdout only (12-factor): the platform (docker, kubernetes, systemd) collects them
     let filter = EnvFilter::try_from_default_env().unwrap_or_else(|_| EnvFilter::new("info,tower_http=info,sqlx=warn,tantivy=warn"));
     if cli.config.log_format.eq_ignore_ascii_case("json") {
@@ -47,6 +69,7 @@ async fn main() -> anyhow::Result<()> {
         tracing_subscriber::fmt().with_env_filter(filter).init();
     }
     match cli.command.unwrap_or(Command::Serve) {
+        Command::Healthcheck => unreachable!(),
         Command::AnalyzeConfluence { path } => {
             let report = tokio::task::spawn_blocking(move || wikicraft::importer::analyze(&path)).await??;
             println!("{}", serde_json::to_string_pretty(&report)?);

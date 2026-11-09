@@ -1,0 +1,19 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: wikicraft
+data:
+  WIKICRAFT_BIND: "0.0.0.0:8787"
+  WIKICRAFT_BASE_URL: "https://wiki.example.com"
+  WIKICRAFT_SECURE_COOKIES: "true"
+  # scaled mode: no per-pod state
+  WIKICRAFT_CLUSTER: "postgres"          # relay live editing between replicas
+  WIKICRAFT_SEARCH: "postgres"           # shared full-text index
+  WIKICRAFT_S3_BUCKET: "wikicraft"       # attachments + import uploads
+  WIKICRAFT_S3_ENDPOINT: ""              # empty for AWS S3; e.g. https://s3.example.com for MinIO/Ceph/R2
+  WIKICRAFT_S3_REGION: "eu-central-1"
+  # observability
+  WIKICRAFT_LOG_FORMAT: "json"
+  RUST_LOG: "info,tower_http=info,sqlx=warn"
+  WIKICRAFT_MAX_UPLOAD_MB: "4096"
+  # optional SSO (see README): WIKICRAFT_OIDC_ISSUER / WIKICRAFT_OIDC_CLIENT_ID
