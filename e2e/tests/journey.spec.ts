@@ -1,0 +1,198 @@
+// One journey through a fresh WikiCraft: setup, spaces, editing, collaboration, comments,
+// search, sharing, export and two-factor sign-in. Tests run in order and build on each other.
+
+import { createHmac } from 'node:crypto'
+import { expect, test, type Browser, type BrowserContext } from '@playwright/test'
+
+const OWNER = { name: 'Olivia Owner', email: 'olivia@e2e.test', password: 'correct horse battery' }
+const MEMBER = { name: 'Max Member', email: 'max@e2e.test', password: 'password-123' }
+
+test.describe.configure({ mode: 'serial' })
+
+let ownerState: Awaited<ReturnType<BrowserContext['storageState']>>
+let pageUrl = ''
+let pageId = ''
+
+async function login(browser: Browser, who: { email: string; password: string }) {
+  const ctx = await browser.newContext()
+  const p = await ctx.newPage()
+  await p.goto('/login')
+  await p.locator('input[autocomplete=username]').fill(who.email)
+  await p.locator('input[type=password]').fill(who.password)
+  await p.getByRole('button', { name: 'Log in' }).click()
+  await p.waitForURL('/')
+  return p
+}
+
+function totp(secretB32: string, offset = 0) {
+  const alphabet = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+  let bits = 0
+  let value = 0
+  const bytes: number[] = []
+  for (const c of secretB32.replace(/\s|=/g, '').toUpperCase()) {
+    value = (value << 5) | alphabet.indexOf(c)
+    bits += 5
+    if (bits >= 8) {
+      bytes.push((value >>> (bits - 8)) & 255)
+      bits -= 8
+    }
+  }
+  const counter = Buffer.alloc(8)
+  counter.writeBigUInt64BE(BigInt(Math.floor(Date.now() / 1000 / 30) + offset))
+  const h = createHmac('sha1', Buffer.from(bytes)).update(counter).digest()
+  const o = h[h.length - 1] & 15
+  return String((h.readUInt32BE(o) & 0x7fffffff) % 1_000_000).padStart(6, '0')
+}
+
+test('first-run setup creates the workspace and its owner', async ({ page }) => {
+  await page.goto('/')
+  await expect(page.getByRole('heading', { name: 'Welcome to WikiCraft' })).toBeVisible()
+  const field = (label: string) => page.locator('.field', { hasText: label }).locator('input')
+  await field('Workspace name').fill('E2E Corp')
+  await field('Your name').fill(OWNER.name)
+  await field('E-mail').fill(OWNER.email)
+  await field('Password').fill(OWNER.password)
+  await page.getByRole('button', { name: 'Create workspace' }).click()
+  // the app shell (sidebar) only renders once signed in
+  await expect(page.locator('.sidebar')).toBeVisible({ timeout: 20_000 })
+  ownerState = await page.context().storageState()
+})
+
+test('owner creates a space and a page with rich content', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState })
+  const page = await ctx.newPage()
+  await page.goto('/spaces')
+  await page.getByRole('button', { name: 'Create space' }).first().click()
+  await page.getByPlaceholder('e.g. Engineering').fill('Product')
+  await page.locator('.modal').getByRole('button', { name: 'Create space' }).click()
+  await page.waitForURL(/\/spaces\/PRODUCT/)
+
+  // a page through the API (stable), then content through the editor
+  const created = await page.evaluate(async () => {
+    const r = await fetch('/api/pages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-wikicraft': '1' }, body: JSON.stringify({ spaceKey: 'PRODUCT', title: 'Roadmap 2027' }) })
+    return (await r.json()).id as string
+  })
+  pageId = created
+  pageUrl = `/pages/${created}`
+  await page.goto(pageUrl)
+  const editor = page.locator('.ProseMirror[contenteditable="true"]')
+  await expect(editor).toBeVisible({ timeout: 20_000 })
+  await editor.click()
+  await page.keyboard.type('Our plan for the year: ship the mobile app.')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('/info', { delay: 30 })
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('Dates are estimates.')
+  await expect(page.locator('.callout .callout-icon svg')).toBeVisible()
+  await page.keyboard.press('Enter')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('/table', { delay: 30 })
+  await page.keyboard.press('Enter')
+  await expect(page.locator('.table-menu')).toBeVisible()
+  await page.keyboard.type('Quarter')
+  // the content survives a reload (persisted by the collaboration server)
+  await page.waitForTimeout(3000)
+  await page.reload()
+  await expect(page.locator('.ProseMirror')).toContainText('ship the mobile app', { timeout: 20_000 })
+  await expect(page.locator('.ProseMirror table')).toContainText('Quarter')
+  await ctx.close()
+})
+
+test('two people edit the same page live', async ({ browser }) => {
+  const ownerCtx = await browser.newContext({ storageState: ownerState })
+  const owner = await ownerCtx.newPage()
+  await owner.goto('/admin/users')
+  await owner.evaluate(async (m) => {
+    await fetch('/api/users', { method: 'POST', headers: { 'content-type': 'application/json', 'x-wikicraft': '1' }, body: JSON.stringify({ ...m, role: 'member' }) })
+  }, MEMBER)
+  const member = await login(browser, MEMBER)
+  await owner.goto(pageUrl)
+  await member.goto(pageUrl)
+  const ownerEditor = owner.locator('.ProseMirror[contenteditable="true"]')
+  const memberEditor = member.locator('.ProseMirror[contenteditable="true"]')
+  await expect(ownerEditor).toBeVisible({ timeout: 20_000 })
+  await expect(memberEditor).toBeVisible({ timeout: 20_000 })
+  await ownerEditor.locator('p').first().click()
+  await owner.keyboard.press('End')
+  await owner.keyboard.type(' Owner was here.')
+  await expect(memberEditor).toContainText('Owner was here.', { timeout: 15_000 })
+  await memberEditor.locator('p').first().click()
+  await member.keyboard.press('End')
+  await member.keyboard.type(' Max too.')
+  await expect(ownerEditor).toContainText('Max too.', { timeout: 15_000 })
+  await ownerCtx.close()
+  await member.context().close()
+})
+
+test('comments and search', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState })
+  const page = await ctx.newPage()
+  await page.goto(pageUrl)
+  await page.getByTitle('Comments').click()
+  await page.locator('.side-panel textarea').first().fill('Can we pull the mobile app into Q2?')
+  await page.locator('.side-panel .btn-primary').first().click()
+  await expect(page.locator('.side-panel')).toContainText('pull the mobile app into Q2')
+  // search (index updates asynchronously)
+  await expect
+    .poll(async () => page.evaluate(async () => (await (await fetch('/api/search?q=mobile')).json()).length), { timeout: 20_000 })
+    .toBeGreaterThan(0)
+  await page.keyboard.press('Control+k')
+  await page.getByPlaceholder(/Search pages/).fill('mobile')
+  await expect(page.locator('.palette').getByText('Roadmap 2027').first()).toBeVisible()
+  await ctx.close()
+})
+
+test('a public link shows the page without an account', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState })
+  const page = await ctx.newPage()
+  await page.goto(pageUrl)
+  await page.getByRole('button', { name: 'Share' }).click()
+  await page.getByRole('button', { name: 'Create public link' }).click()
+  const url = await page.locator('.share-link input').first().inputValue()
+  await ctx.close()
+  const anon = await browser.newContext()
+  const p = await anon.newPage()
+  await p.goto(url)
+  await expect(p.locator('.public-main > h1')).toHaveText('Roadmap 2027')
+  await expect(p.locator('.public-article')).toContainText('ship the mobile app')
+  await expect(p.getByText('Shared publicly')).toBeVisible()
+  await anon.close()
+})
+
+test('space export produces a downloadable archive', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState, acceptDownloads: true })
+  const page = await ctx.newPage()
+  await page.goto('/spaces/PRODUCT/settings?tab=export')
+  await page.getByText('Website (HTML)').click()
+  await page.getByRole('button', { name: /^Export / }).click()
+  await expect(page.getByText('Export ready')).toBeVisible({ timeout: 30_000 })
+  const [download] = await Promise.all([page.waitForEvent('download'), page.locator('a[download]').click()])
+  expect(download.suggestedFilename()).toMatch(/^PRODUCT-html-.*\.zip$/)
+  await ctx.close()
+})
+
+test('two-factor sign-in', async ({ browser }) => {
+  const member = await login(browser, MEMBER)
+  await member.goto('/settings')
+  await member.getByRole('button', { name: 'Set up two-factor authentication' }).click()
+  const secret = (await member.locator('.mfa-setup code').textContent())!.replace(/\s/g, '')
+  await member.locator('.mfa-setup .otp-input').fill(totp(secret))
+  await member.getByRole('button', { name: 'Turn on' }).click()
+  await expect(member.locator('.recovery-codes code')).toHaveCount(10)
+  await member.context().close()
+
+  const ctx = await browser.newContext()
+  const p = await ctx.newPage()
+  await p.goto('/login')
+  await p.locator('input[autocomplete=username]').fill(MEMBER.email)
+  await p.locator('input[type=password]').fill(MEMBER.password)
+  await p.getByRole('button', { name: 'Log in' }).click()
+  await expect(p.getByRole('heading', { name: 'Two-factor sign-in' })).toBeVisible()
+  // the enrolment code is used up; the next step's code is within the accepted window
+  await p.locator('.otp-input').fill(totp(secret, 1))
+  await p.getByRole('button', { name: 'Verify' }).click()
+  await p.waitForURL('/')
+  expect(await p.evaluate(async () => (await (await fetch('/api/me')).json()).user?.email)).toBe(MEMBER.email)
+  await ctx.close()
+  void pageId
+})

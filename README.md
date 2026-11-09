@@ -90,6 +90,18 @@ Integration tests create a throwaway database per test, boot the full app on an 
 and exercise it over HTTP and WebSockets (auth/CSRF, permissions, collaboration between two Yjs
 peers, both Confluence export formats end-to-end, security regressions).
 
+### Browser tests (end to end)
+
+`e2e/` drives Chromium through one journey on a fresh database: setup, a space and a page with
+rich content, two people editing live, comments and search, a public link, space export and
+two-factor sign-in.
+
+```bash
+cd web && npm run build && cd ../e2e
+npm ci && npx playwright install chromium
+npx playwright test      # starts the server on :8799 with a fresh database (scripts/e2e-server.sh)
+```
+
 ### CLI
 
 ```bash
