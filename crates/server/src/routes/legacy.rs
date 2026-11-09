@@ -136,6 +136,32 @@ pub async fn tiny(State(state): State<AppState>, Path(tiny): Path<String>) -> Ap
     }
 }
 
+/// `GET /opensearch.xml`: lets browsers add the wiki as a search engine (address-bar search).
+pub async fn opensearch(State(state): State<AppState>) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    let base = state.config.base_url.trim_end_matches('/').to_string();
+    let ws = workspace(&state).await;
+    let name: String = sqlx::query_scalar("SELECT name FROM workspaces WHERE id = $1")
+        .bind(ws)
+        .fetch_optional(&state.db)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_else(|| "WikiCraft".into());
+    let esc = wikicraft_doc_model::html::escape;
+    // ShortName is limited to 16 characters
+    let short: String = name.chars().take(16).collect();
+    let xml = format!(
+        "<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<OpenSearchDescription xmlns=\"http://a9.com/-/spec/opensearch/1.1/\" xmlns:moz=\"http://www.mozilla.org/2006/browser/search/\">\n  <ShortName>{}</ShortName>\n  <Description>Search {}</Description>\n  <InputEncoding>UTF-8</InputEncoding>\n  <Image width=\"16\" height=\"16\" type=\"image/svg+xml\">{}/favicon.svg</Image>\n  <Url type=\"text/html\" method=\"get\" template=\"{}/search?q={{searchTerms}}\"/>\n  <moz:SearchForm>{}/search</moz:SearchForm>\n</OpenSearchDescription>\n",
+        esc(&short),
+        esc(&name),
+        esc(&base),
+        esc(&base),
+        esc(&base)
+    );
+    ([(axum::http::header::CONTENT_TYPE, "application/opensearchdescription+xml; charset=utf-8")], xml).into_response()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

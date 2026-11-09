@@ -267,6 +267,7 @@ components:
         events:
           type: array
           items: *id001
+        format: *id001
         spaceKey:
           type:
           - string
@@ -2124,6 +2125,156 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /pages/{id}/verification:
+    get:
+      tags:
+      - Pages
+      summary: Verification state of a page
+      operationId: get_pages_id_verification
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: &id008
+                type: object
+                properties:
+                  status:
+                    enum:
+                    - none
+                    - verified
+                    - expired
+                  verifiedBy:
+                    type: object
+                    properties:
+                      id: *id002
+                      name: *id001
+                  verifiedAt: *id001
+                  expiresAt: *id001
+                  note: *id001
+                  editedSince: *id003
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - {}
+      - session: []
+      - token: []
+    put:
+      tags:
+      - Pages
+      summary: Verify a page (editors), optionally until a number of days from now
+      operationId: put_pages_id_verification
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                days: *id005
+                note: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: *id008
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+      - Pages
+      summary: Remove the verification (editors)
+      operationId: delete_pages_id_verification
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '204':
+          description: Removed
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /pages/{id}/access-request:
+    post:
+      tags:
+      - Pages
+      summary: Ask the page's admins for access (always 204; reveals nothing about the page)
+      operationId: post_pages_id_access_request
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message: *id001
+      responses:
+        '204':
+          description: Sent
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /pages/{id}/verification/request:
+    post:
+      tags:
+      - Pages
+      summary: Ask someone who may edit the page to review and verify it
+      operationId: post_pages_id_verification_request
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId: *id002
+                note: *id001
+      responses:
+        '204':
+          description: Requested
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /comments/{id}/like:
     put:
       tags:
@@ -2946,6 +3097,36 @@ paths:
       - {}
       - session: []
       - token: []
+  /reports/verification:
+    get:
+      tags:
+      - Reports
+      summary: Verified pages by state
+      operationId: get_reports_verification
+      parameters:
+      - name: status
+        in: query
+        required: false
+        description: expired | verified | edited
+        schema: *id001
+      - name: space
+        in: query
+        required: false
+        description: space key
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - {}
+      - session: []
+      - token: []
   /reports/tasks:
     get:
       tags:
@@ -3488,6 +3669,12 @@ paths:
                   items: *id001
                 spaceKey: *id001
                 active: *id003
+                format:
+                  enum:
+                  - json
+                  - slack
+                  - teams
+                  - googlechat
               required:
               - url
       responses:
@@ -3531,6 +3718,12 @@ paths:
                   items: *id001
                 spaceKey: *id001
                 active: *id003
+                format:
+                  enum:
+                  - json
+                  - slack
+                  - teams
+                  - googlechat
       responses:
         '204': *id007
         4XX:

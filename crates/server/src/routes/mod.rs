@@ -1,3 +1,4 @@
+pub mod access_request;
 pub mod account;
 pub mod admin;
 pub mod attachments;
@@ -19,6 +20,7 @@ pub mod spaces;
 pub mod tasks;
 pub mod templates;
 pub mod users;
+pub mod verification;
 pub mod webhooks;
 
 use axum::Router;
@@ -117,6 +119,10 @@ pub fn router(state: AppState) -> Router {
         .route("/labels/{name}", get(search::by_label))
         .route("/pages/{id}/access/{who}", get(inspect::explain))
         .route("/pages/{id}/like", put(likes::like_page).delete(likes::unlike_page))
+        .route("/pages/{id}/verification", get(verification::get).put(verification::verify).delete(verification::unverify))
+        .route("/pages/{id}/verification/request", post(verification::request_review))
+        .route("/pages/{id}/access-request", post(access_request::request))
+        .route("/reports/verification", get(verification::report))
         .route("/comments/{id}/like", put(likes::like_comment).delete(likes::unlike_comment))
         .route("/pages/{id}/share-links", get(share::list).post(share::create))
         .route("/share-links/{id}", delete(share::revoke))
@@ -172,6 +178,7 @@ pub fn router(state: AppState) -> Router {
         .route("/wiki/spaces/{key}/pages/{id}/{*rest}", get(legacy::cloud_page))
         .route("/spaces/{key}/pages/{id}", get(legacy::cloud_page))
         .route("/spaces/{key}/pages/{id}/{*rest}", get(legacy::cloud_page))
+        .route("/opensearch.xml", get(legacy::opensearch))
         .route("/x/{tiny}", get(legacy::tiny))
         .route("/wiki/x/{tiny}", get(legacy::tiny));
 

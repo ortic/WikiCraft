@@ -229,6 +229,8 @@ pub async fn digests(state: &AppState) -> anyhow::Result<usize> {
                 "page_updated" => format!("{who} updated “{title}”"),
                 "share" => format!("{who} shared “{title}” with you"),
                 "like" => format!("{who} liked “{title}”"),
+                "verification_request" => format!("{who} asked you to review and verify “{title}”"),
+                "access_request" => format!("{who} asked for access to “{title}”"),
                 other => format!("{who}: {other} on “{title}”"),
             };
             let anchor = n.data.get("commentId").and_then(Value::as_str).map(|c| format!("#comment-{c}")).unwrap_or_default();

@@ -11,7 +11,7 @@ use crate::app::{AppState, new_id};
 use crate::audit;
 use crate::auth::{CurrentUser, require_admin};
 use crate::error::{ApiError, ApiResult};
-use crate::webhooks::{EVENTS, new_secret, validate_url};
+use crate::webhooks::{EVENTS, FORMATS, new_secret, validate_url};
 
 #[derive(Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
@@ -20,6 +20,7 @@ pub struct HookRow {
     name: String,
     url: String,
     events: Vec<String>,
+    format: String,
     space_key: Option<String>,
     active: bool,
     failure_count: i32,
@@ -29,7 +30,7 @@ pub struct HookRow {
     last_error: Option<String>,
 }
 
-const HOOK_SELECT: &str = "SELECT w.id, w.name, w.url, w.events, s.key AS space_key, w.active, w.failure_count, w.created_at,
+const HOOK_SELECT: &str = "SELECT w.id, w.name, w.url, w.events, w.format, s.key AS space_key, w.active, w.failure_count, w.created_at,
         d.created_at AS last_delivery_at, d.response_status AS last_status, d.last_error
      FROM webhooks w LEFT JOIN spaces s ON s.id = w.space_id
      LEFT JOIN LATERAL (SELECT created_at, response_status, last_error FROM webhook_deliveries WHERE webhook_id = w.id ORDER BY created_at DESC LIMIT 1) d ON true";
@@ -53,6 +54,15 @@ pub struct HookInput {
     /// space key; empty = all spaces
     space_key: Option<String>,
     active: Option<bool>,
+    /// `json` (default) | `slack` (also Mattermost) | `teams` | `googlechat`
+    format: Option<String>,
+}
+
+fn check_format(f: Option<&str>) -> ApiResult<()> {
+    match f {
+        Some(f) if !FORMATS.contains(&f) => Err(ApiError::bad(format!("unknown format {f}; known: {}", FORMATS.join(", ")))),
+        _ => Ok(()),
+    }
 }
 
 async fn space_id(state: &AppState, ws: Uuid, key: Option<&str>) -> ApiResult<Option<Option<Uuid>>> {
@@ -83,10 +93,11 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
     let url = validate_url(req.url.as_deref().unwrap_or("")).map_err(|e| ApiError::bad(format!("{e}")))?;
     let events = req.events.unwrap_or_default();
     check_events(&events)?;
+    check_format(req.format.as_deref())?;
     let space = space_id(&state, user.workspace_id, req.space_key.as_deref()).await?.flatten();
     let id = new_id();
     let secret = new_secret();
-    sqlx::query("INSERT INTO webhooks (id, workspace_id, name, url, secret, events, space_id, active, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)")
+    sqlx::query("INSERT INTO webhooks (id, workspace_id, name, url, secret, events, space_id, active, created_by, format) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)")
         .bind(id)
         .bind(user.workspace_id)
         .bind(req.name.unwrap_or_default().trim())
@@ -96,6 +107,7 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
         .bind(space)
         .bind(req.active.unwrap_or(true))
         .bind(user.id)
+        .bind(req.format.as_deref().unwrap_or("json"))
         .execute(&state.db)
         .await?;
     audit::log(&state, user.workspace_id, Some(user.id), "webhook.create", Some("webhook"), Some(id), json!({"url": url.as_str(), "events": events})).await;
@@ -112,10 +124,11 @@ pub async fn update(State(state): State<AppState>, CurrentUser(user): CurrentUse
     if let Some(e) = &req.events {
         check_events(e)?;
     }
+    check_format(req.format.as_deref())?;
     let space = space_id(&state, user.workspace_id, req.space_key.as_deref()).await?;
     let n = sqlx::query(
         "UPDATE webhooks SET name = COALESCE($3, name), url = COALESCE($4, url), events = COALESCE($5, events), active = COALESCE($6, active),
-            space_id = CASE WHEN $7 THEN $8 ELSE space_id END, failure_count = CASE WHEN $6 THEN 0 ELSE failure_count END
+            space_id = CASE WHEN $7 THEN $8 ELSE space_id END, format = COALESCE($9, format), failure_count = CASE WHEN $6 THEN 0 ELSE failure_count END
          WHERE id = $1 AND workspace_id = $2",
     )
     .bind(id)
@@ -126,6 +139,7 @@ pub async fn update(State(state): State<AppState>, CurrentUser(user): CurrentUse
     .bind(req.active)
     .bind(space.is_some())
     .bind(space.flatten())
+    .bind(req.format.as_deref())
     .execute(&state.db)
     .await?
     .rows_affected();

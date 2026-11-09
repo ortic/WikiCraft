@@ -147,3 +147,33 @@ async fn private_targets_are_refused_by_default() {
     .await;
     assert!(events(&recv).is_empty());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn chat_formats_for_slack_and_teams() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (url, recv) = spawn_receiver().await;
+    let (st, _) = app.post(&owner, "/admin/webhooks", json!({"url": url, "format": "carrier-pigeon"})).await;
+    assert_eq!(st, 400);
+    let (st, hook) = app.post(&owner, "/admin/webhooks", json!({"url": url, "format": "slack", "events": ["page.created"]})).await;
+    assert_eq!(st, 201);
+    let hook_id = hook["id"].as_str().unwrap().to_string();
+    app.post(&owner, "/spaces", json!({"key": "CHAT", "name": "Chat"})).await;
+    app.post(&owner, "/pages", json!({"spaceKey": "CHAT", "title": "Launch plan"})).await;
+    app.eventually(|| async { (!events(&recv).is_empty()).then_some(()) }).await;
+    let (event, body, _) = events(&recv).remove(0);
+    assert_eq!(event, "page.created");
+    let text = body["text"].as_str().unwrap();
+    assert!(text.contains("created <") && text.contains("/pages/") && text.ends_with("|Launch plan> in Chat"), "{text}");
+
+    let (_, list) = app.get(&owner, "/admin/webhooks").await;
+    assert_eq!(list["hooks"][0]["format"], "slack");
+    assert_eq!(app.patch(&owner, &format!("/admin/webhooks/{hook_id}"), json!({"format": "teams"})).await.0, 204);
+    app.post(&owner, "/pages", json!({"spaceKey": "CHAT", "title": "Retro"})).await;
+    app.eventually(|| async { (events(&recv).len() >= 2).then_some(()) }).await;
+    let (_, body, _) = events(&recv).remove(1);
+    assert_eq!(body["type"], "message");
+    let card = &body["attachments"][0];
+    assert_eq!(card["contentType"], "application/vnd.microsoft.card.adaptive");
+    assert!(card["content"]["body"][0]["text"].as_str().unwrap().contains("[Retro]("));
+}

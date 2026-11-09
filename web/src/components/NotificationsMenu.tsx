@@ -26,6 +26,10 @@ function describe(n: Notification): string {
       return `${who} mentioned you in ${n.pageTitle}`
     case 'like':
       return `${who} liked ${n.pageTitle}`
+    case 'access_request':
+      return `${who} asked for access to ${n.pageTitle}`
+    case 'verification_request':
+      return `${who} asked you to review and verify ${n.pageTitle}`
     case 'page_updated':
       return `${who} updated ${n.pageTitle}${n.data.version ? ` (v${n.data.version})` : ''}`
     default:

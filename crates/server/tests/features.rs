@@ -100,3 +100,15 @@ async fn attachment_text_is_searchable_and_blog_and_views() {
     assert!(p["views"].as_i64().unwrap() >= 2);
     assert_eq!(p["viewers"], 1);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn opensearch_description() {
+    let app = common::spawn().await;
+    let _owner = app.setup().await;
+    let r = common::client().get(format!("{}/opensearch.xml", app.base)).send().await.unwrap();
+    assert_eq!(r.status(), 200);
+    assert!(r.headers()["content-type"].to_str().unwrap().starts_with("application/opensearchdescription+xml"));
+    let body = r.text().await.unwrap();
+    assert!(body.contains(&format!("template=\"{}/search?q={{searchTerms}}\"", app.base)), "{body}");
+    assert!(body.contains("<ShortName>"));
+}

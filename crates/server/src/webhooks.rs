@@ -20,6 +20,72 @@ use crate::app::AppState;
 pub const EVENTS: &[&str] =
     &["page.created", "page.updated", "page.moved", "page.trashed", "page.restored", "comment.created", "attachment.created", "space.created", "ping"];
 const MAX_ATTEMPTS: i32 = 8;
+/// payload formats: our JSON, or chat messages
+pub const FORMATS: &[&str] = &["json", "slack", "teams", "googlechat"];
+
+/// One line describing an event, and the link it is about.
+fn summary(event: &str, payload: &Value) -> (String, Option<String>, Option<String>) {
+    let data = &payload["data"];
+    let actor = data["actor"]["name"].as_str().unwrap_or("Someone");
+    let title = data["page"]["title"].as_str().unwrap_or("a page");
+    let url = data["page"]["url"].as_str().map(str::to_string);
+    let space = data["space"]["name"].as_str().unwrap_or("");
+    let in_space = if space.is_empty() { String::new() } else { format!(" in {space}") };
+    let text = match event {
+        "page.created" => format!("{actor} created {{link}}{in_space}"),
+        "page.updated" => format!("{actor} updated {{link}}{in_space} (version {})", data["page"]["version"]),
+        "page.moved" => format!("{actor} moved {{link}}{in_space}"),
+        "page.trashed" => format!("{actor} moved {{link}} to the trash"),
+        "page.restored" => format!("{actor} restored {{link}}{in_space}"),
+        "comment.created" => format!("{actor} commented on {{link}}"),
+        "attachment.created" => format!("{actor} attached files to {{link}}"),
+        "space.created" => format!("{actor} created the space {}", data["space"]["name"].as_str().unwrap_or("")),
+        "ping" => "WikiCraft webhook test: the connection works.".into(),
+        other => format!("{actor}: {other} on {{link}}"),
+    };
+    (text, url, Some(title.to_string()))
+}
+
+/// The request body for a hook's format.
+pub fn render_body(format: &str, event: &str, payload: &Value) -> Value {
+    if format == "json" || !FORMATS.contains(&format) {
+        return payload.clone();
+    }
+    let (text, url, title) = summary(event, payload);
+    let title = title.unwrap_or_default();
+    match format {
+        "teams" => {
+            // Markdown link inside an Adaptive Card (Teams "Workflows" webhooks)
+            let clean = title.replace(['[', ']'], "");
+            let link = match &url {
+                Some(u) => format!("[{clean}]({u})"),
+                None => clean,
+            };
+            json!({
+                "type": "message",
+                "attachments": [{
+                    "contentType": "application/vnd.microsoft.card.adaptive",
+                    "content": {
+                        "$schema": "http://adaptivecards.io/schemas/adaptive-card.json",
+                        "type": "AdaptiveCard",
+                        "version": "1.4",
+                        "body": [{"type": "TextBlock", "text": text.replace("{link}", &link), "wrap": true}]
+                    }
+                }]
+            })
+        }
+        _ => {
+            // Slack, Mattermost and Google Chat: `<url|label>` links; Slack wants &, <, > escaped
+            let esc = |s: &str| s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;");
+            let link = match &url {
+                Some(u) => format!("<{}|{}>", u, esc(&title).replace('|', "/")),
+                None => esc(&title),
+            };
+            let text = esc(&text).replace("{link}", &link);
+            json!({ "text": text })
+        }
+    }
+}
 
 /// Queues `event` for every active hook of the workspace that wants it (space-scoped hooks only
 /// for events in their space). Never fails the caller.
@@ -157,6 +223,7 @@ struct Due {
     attempts: i32,
     url: String,
     secret: String,
+    format: String,
 }
 
 /// Sends what's due. Returns the number of deliveries attempted.
@@ -170,7 +237,7 @@ pub async fn deliver_due(state: &AppState) -> anyhow::Result<usize> {
             ORDER BY d.created_at LIMIT 20 FOR UPDATE SKIP LOCKED)
          UPDATE webhook_deliveries d SET next_attempt_at = now() + interval '2 minutes' FROM batch, webhooks w
          WHERE d.id = batch.id AND w.id = d.webhook_id
-         RETURNING d.id, d.webhook_id, d.event, d.payload, d.attempts, w.url, w.secret",
+         RETURNING d.id, d.webhook_id, d.event, d.payload, d.attempts, w.url, w.secret, w.format",
     )
     .fetch_all(&state.db)
     .await?;
@@ -181,7 +248,7 @@ pub async fn deliver_due(state: &AppState) -> anyhow::Result<usize> {
         if let Some(o) = payload.as_object_mut() {
             o.insert("deliveryId".into(), json!(d.id));
         }
-        let body = serde_json::to_vec(&payload)?;
+        let body = serde_json::to_vec(&render_body(&d.format, &d.event, &payload))?;
         let result: anyhow::Result<u16> = async {
             let u = validate_url(&d.url)?;
             let addr = resolve(&u, state.config.webhook_allow_private).await?;
@@ -299,6 +366,20 @@ mod tests {
         for ip in ["8.8.8.8", "1.1.1.1", "2606:4700::1111"] {
             assert!(!is_private(ip.parse().unwrap()), "{ip}");
         }
+    }
+
+    #[test]
+    fn chat_formats() {
+        let payload = serde_json::json!({"event": "page.updated", "data": {
+            "page": {"title": "Q3 <plan> & budget", "url": "https://wiki.test/pages/1", "version": 4},
+            "space": {"name": "Finance"}, "actor": {"name": "Ann"}}});
+        let slack = super::render_body("slack", "page.updated", &payload);
+        assert_eq!(slack["text"], "Ann updated <https://wiki.test/pages/1|Q3 &lt;plan&gt; &amp; budget> in Finance (version 4)");
+        let teams = super::render_body("teams", "page.updated", &payload);
+        assert_eq!(teams["attachments"][0]["content"]["body"][0]["text"], "Ann updated [Q3 <plan> & budget](https://wiki.test/pages/1) in Finance (version 4)");
+        assert_eq!(super::render_body("json", "page.updated", &payload), payload);
+        let ping = super::render_body("googlechat", "ping", &serde_json::json!({"event": "ping", "data": {}}));
+        assert!(ping["text"].as_str().unwrap().contains("works"));
     }
 
     #[test]

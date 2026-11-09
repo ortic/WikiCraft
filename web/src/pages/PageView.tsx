@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate, FileText } from 'lucide-react'
-import { api, formatDate, type Page, type Space } from '../api'
+import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate, FileText, BadgeCheck, UserCheck } from 'lucide-react'
+import { NoAccess, RequestReviewDialog, VerificationBadge, VerifyDialog } from '../components/Verification'
+import { ApiError, api, formatDate, type Page, type Space } from '../api'
 import { PageDecor } from '../components/PageDecor'
 import { ErrorBox, Spinner, useMe, useToast } from '../ui'
 import Editor, { PresenceAvatars, type Presence } from '../editor/Editor'
@@ -28,6 +29,8 @@ export default function PageView() {
   const [menu, setMenu] = useState(false)
   const [restrictions, setRestrictions] = useState(false)
   const [share, setShare] = useState(false)
+  const [verifyOpen, setVerifyOpen] = useState(false)
+  const [reviewOpen, setReviewOpen] = useState(false)
   const [focusComment, setFocusComment] = useState<string | null>(null)
   const [pendingComment, setPendingComment] = useState<{ text: string; apply: (id: string) => void } | null>(null)
   const [words, setWords] = useState(0)
@@ -70,7 +73,11 @@ export default function PageView() {
   }, [])
 
   if (page.isLoading) return <div className="page-wrap"><Spinner /></div>
-  if (page.error) return <div className="page-wrap"><ErrorBox error={page.error} /></div>
+  if (page.error) {
+    const status = page.error instanceof ApiError ? page.error.status : 0
+    if (status === 404 || status === 403) return <div className="page-wrap"><NoAccess pageId={id!} signedIn={!!user} /></div>
+    return <div className="page-wrap"><ErrorBox error={page.error} /></div>
+  }
   const p = page.data!
   const canEdit = p.access.edit
 
@@ -198,6 +205,16 @@ export default function PageView() {
                 <a className="menu-item" href={`/api/pages/${p.id}/export?format=html`} style={{ color: 'inherit', textDecoration: 'none' }}>
                   <Download size={15} /> Export as HTML
                 </a>
+                {canEdit && (
+                  <div className="menu-item" onClick={() => { setMenu(false); setVerifyOpen(true) }}>
+                    <BadgeCheck size={15} /> Verify page…
+                  </div>
+                )}
+                {user && (
+                  <div className="menu-item" onClick={() => { setMenu(false); setReviewOpen(true) }}>
+                    <UserCheck size={15} /> Request review…
+                  </div>
+                )}
                 {user && (
                   <div className="menu-item" onClick={copy}>
                     <Copy size={15} /> Copy page
@@ -253,6 +270,7 @@ export default function PageView() {
                 <span>{words} words</span>
               </>
             )}
+            <VerificationBadge pageId={p.id} onClick={canEdit ? () => setVerifyOpen(true) : undefined} />
             {p.pageStatus && <span className="badge">{p.pageStatus}</span>}
             {!canEdit && <span className="badge">Read only</span>}
           </div>
@@ -328,6 +346,8 @@ export default function PageView() {
       )}
       {panel === 'attachments' && <AttachmentsPanel page={p} onClose={() => setPanel(null)} />}
       {restrictions && <RestrictionsDialog page={p} onClose={() => setRestrictions(false)} />}
+      {verifyOpen && <VerifyDialog pageId={p.id} onClose={() => setVerifyOpen(false)} />}
+      {reviewOpen && <RequestReviewDialog pageId={p.id} onClose={() => setReviewOpen(false)} />}
       {share && <ShareDialog pageId={p.id} title={p.title} restricted={!!p.restricted} onClose={() => setShare(false)} />}
     </div>
   )

@@ -73,3 +73,46 @@ async fn explains_space_roles_groups_and_inherited_restrictions() {
     let (st, _) = app.get(&fiona, &format!("/pages/{q1}/access/{mark_id}")).await;
     assert_eq!(st, 200, "editors on the page administer it");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn request_access_notifies_page_admins_only() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (alice, alice_id) = app.user(&owner, "alice@acme.test", "member").await;
+    let (bob, _) = app.user(&owner, "bob@acme.test", "member").await;
+    let (carol, _) = app.user(&owner, "carol@acme.test", "member").await;
+    // HR space: alice administers it, carol may view, bob can't see it
+    let (_, sp) = app.post(&owner, "/spaces", json!({"key": "HR", "name": "HR", "defaultRole": "none"})).await;
+    let home = sp["homePageId"].as_str().unwrap().to_string();
+    let (_, me) = app.get(&carol, "/me").await;
+    let carol_id = me["user"]["id"].as_str().unwrap().to_string();
+    app.put(
+        &owner,
+        "/spaces/HR/permissions",
+        json!({"grants": [{"subjectType": "user", "subjectId": alice_id, "role": "admin"}, {"subjectType": "user", "subjectId": carol_id, "role": "viewer"}]}),
+    )
+    .await;
+    let (_, pg) = app.post(&owner, "/pages", json!({"spaceKey": "HR", "parentId": home, "title": "Salary bands"})).await;
+    let pg = pg["id"].as_str().unwrap().to_string();
+    assert_eq!(app.get(&bob, &format!("/pages/{pg}")).await.0, 404);
+
+    for _ in 0..2 {
+        let (st, _) = app.post(&bob, &format!("/pages/{pg}/access-request"), json!({"message": "Need it for planning"})).await;
+        assert_eq!(st, 204);
+    }
+    // unknown pages answer the same
+    let (st, _) = app.post(&bob, &format!("/pages/{}/access-request", uuid::Uuid::new_v4()), json!({})).await;
+    assert_eq!(st, 204);
+
+    let (_, n) = app.get(&alice, "/notifications").await;
+    let reqs: Vec<_> = n["items"].as_array().unwrap().iter().filter(|i| i["kind"] == "access_request").collect();
+    assert_eq!(reqs.len(), 1, "one request per day: {n}");
+    assert_eq!(reqs[0]["actorName"], "bob");
+    assert_eq!(reqs[0]["pageTitle"], "Salary bands");
+    assert_eq!(reqs[0]["data"]["excerpt"], "Need it for planning");
+    // viewers aren't asked; workspace admins aren't either when the space has admins
+    for c in [&carol, &owner] {
+        let (_, n) = app.get(c, "/notifications").await;
+        assert!(!n["items"].as_array().unwrap().iter().any(|i| i["kind"] == "access_request"), "{n}");
+    }
+}

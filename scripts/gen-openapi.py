@@ -27,7 +27,7 @@ schemas = {
     "SearchHit": obj({"pageId": uuid, "title": txt, "snippet": {"type": "string", "description": "HTML with <b> highlights"}, "spaceKey": txt, "spaceName": txt, "score": {"type": "number"}}),
     "Job": obj({"id": uuid, "kind": txt, "status": {"enum": ["queued", "running", "succeeded", "failed"]}, "progress": anyobj, "result": anyobj, "error": {"type": ["string", "null"]}, "createdAt": dt, "finishedAt": {"type": ["string", "null"], "format": "date-time"}}),
     "ShareLink": obj({"id": uuid, "token": txt, "includeChildren": boolean, "expiresAt": {"type": ["string", "null"], "format": "date-time"}, "views": num}),
-    "Webhook": obj({"id": uuid, "name": txt, "url": txt, "events": arr(txt), "spaceKey": {"type": ["string", "null"]}, "active": boolean, "failureCount": num}),
+    "Webhook": obj({"id": uuid, "name": txt, "url": txt, "events": arr(txt), "format": txt, "spaceKey": {"type": ["string", "null"]}, "active": boolean, "failureCount": num}),
     "WebhookEvent": obj({"event": txt, "timestamp": dt, "webhookId": uuid, "deliveryId": uuid, "data": anyobj}),
     "Task": obj({"pageId": uuid, "idx": num, "text": txt, "done": boolean, "due": {"type": ["string", "null"], "format": "date"}, "pageTitle": txt, "spaceKey": txt}),
     "Restriction": obj({"kind": {"enum": ["view", "edit"]}, "subjectType": {"enum": ["user", "group"]}, "subjectId": uuid}),
@@ -133,6 +133,12 @@ op("/pages/{id}/favorite", "put", "Pages", "Star", res=NO)
 op("/pages/{id}/favorite", "delete", "Pages", "Unstar", res=NO)
 op("/pages/{id}/like", "put", "Pages", "Like a page", res=resp(obj({"count": num, "liked": boolean, "names": arr(txt)})))
 op("/pages/{id}/like", "delete", "Pages", "Remove your like", res=resp(obj({"count": num, "liked": boolean, "names": arr(txt)})))
+VERIFICATION = obj({"status": {"enum": ["none", "verified", "expired"]}, "verifiedBy": obj({"id": uuid, "name": txt}), "verifiedAt": txt, "expiresAt": txt, "note": txt, "editedSince": boolean})
+op("/pages/{id}/verification", "get", "Pages", "Verification state of a page", res=resp(VERIFICATION), public=True)
+op("/pages/{id}/verification", "put", "Pages", "Verify a page (editors), optionally until a number of days from now", req=body(obj({"days": num, "note": txt})), res=resp(VERIFICATION))
+op("/pages/{id}/verification", "delete", "Pages", "Remove the verification (editors)", res=resp(None, "204", "Removed"))
+op("/pages/{id}/access-request", "post", "Pages", "Ask the page's admins for access (always 204; reveals nothing about the page)", req=body(obj({"message": txt})), res=resp(None, "204", "Sent"))
+op("/pages/{id}/verification/request", "post", "Pages", "Ask someone who may edit the page to review and verify it", req=body(obj({"userId": uuid, "note": txt})), res=resp(None, "204", "Requested"))
 op("/comments/{id}/like", "put", "Comments", "Like a comment", res=NO)
 op("/comments/{id}/like", "delete", "Comments", "Remove your like", res=NO)
 op("/pages/{id}/watch", "put", "Pages", "Watch (notifications)", res=NO)
@@ -166,6 +172,7 @@ op("/notifications/read", "post", "Notifications", "Mark notifications as read",
 op("/tasks", "get", "Tasks", "Tasks assigned to me", res=resp(arr(S("Task"))), query=[q("status", "open | done | all")])
 op("/reports/pages", "get", "Reports", "Pages by label / recently updated (contentbylabel, recently-updated)", query=[q("labels", "comma-separated"), q("spaces", "comma-separated keys"), q("operator", "all = every label"), q("sort", "title | updated | created"), q("max", "limit", num)], public=True)
 op("/reports/properties", "get", "Reports", "Page properties report (detailssummary)", query=[q("labels", "comma-separated"), q("spaces", "comma-separated keys")], public=True)
+op("/reports/verification", "get", "Reports", "Verified pages by state", query=[q("status", "expired | verified | edited"), q("space", "space key")], public=True)
 op("/reports/tasks", "get", "Reports", "Task report (tasks-report-macro)", query=[q("spaces", "keys"), q("labels", "labels"), q("status", "open | done | all")], public=True)
 op("/templates", "get", "Templates", "Built-in and custom templates", query=[q("space", "space key")])
 op("/templates", "post", "Templates", "Save a template", req=body(obj({"name": txt, "description": txt, "spaceKey": txt, "content": S("PmNode"), "pageId": uuid})))
@@ -190,8 +197,8 @@ op("/admin/settings", "put", "Admin", "Change workspace settings", req=body(obj(
 op("/admin/mail", "get", "Admin", "E-mail configuration and outbox status")
 op("/admin/mail/test", "post", "Admin", "Send a test e-mail", req=body(obj({"to": txt})))
 op("/admin/webhooks", "get", "Webhooks", "Webhooks and available events", res=resp(obj({"hooks": arr(S("Webhook")), "events": arr(txt)})))
-op("/admin/webhooks", "post", "Webhooks", "Add a webhook (returns the signing secret once)", req=body(obj({"name": txt, "url": txt, "events": arr(txt), "spaceKey": txt, "active": boolean}, ["url"])), res=resp(obj({"id": uuid, "secret": txt}), "201", "Created"))
-op("/admin/webhooks/{id}", "patch", "Webhooks", "Change a webhook", req=body(obj({"name": txt, "url": txt, "events": arr(txt), "spaceKey": txt, "active": boolean})), res=NO)
+op("/admin/webhooks", "post", "Webhooks", "Add a webhook (returns the signing secret once)", req=body(obj({"name": txt, "url": txt, "events": arr(txt), "spaceKey": txt, "active": boolean, "format": {"enum": ["json", "slack", "teams", "googlechat"]}}, ["url"])), res=resp(obj({"id": uuid, "secret": txt}), "201", "Created"))
+op("/admin/webhooks/{id}", "patch", "Webhooks", "Change a webhook", req=body(obj({"name": txt, "url": txt, "events": arr(txt), "spaceKey": txt, "active": boolean, "format": {"enum": ["json", "slack", "teams", "googlechat"]}})), res=NO)
 op("/admin/webhooks/{id}", "delete", "Webhooks", "Delete a webhook", res=NO)
 op("/admin/webhooks/{id}/test", "post", "Webhooks", "Queue a ping event", res={"202": {"description": "Queued"}})
 op("/admin/webhooks/{id}/deliveries", "get", "Webhooks", "Latest deliveries")

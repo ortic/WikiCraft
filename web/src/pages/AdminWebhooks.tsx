@@ -10,6 +10,7 @@ interface Hook {
   url: string
   events: string[]
   spaceKey: string | null
+  format?: string
   active: boolean
   failureCount: number
   lastDeliveryAt: string | null
@@ -73,7 +74,7 @@ export default function AdminWebhooks() {
             <button className="btn btn-ghost small" title="Delete" onClick={() => confirm('Delete this webhook?') && act(() => api.del(`/admin/webhooks/${h.id}`), 'Webhook deleted')}><Trash2 size={14} /></button>
           </div>
           <div className="faint small" style={{ marginTop: 6 }}>
-            {h.events.length ? h.events.join(', ') : 'all events'} · {h.spaceKey ? `space ${h.spaceKey}` : 'all spaces'}
+            {h.format && h.format !== 'json' ? `${FORMATS[h.format] ?? h.format} · ` : ''}{h.events.length ? h.events.join(', ') : 'all events'} · {h.spaceKey ? `space ${h.spaceKey}` : 'all spaces'}
             {h.lastDeliveryAt ? ` · last delivery ${formatDate(h.lastDeliveryAt)}${h.lastStatus ? ` (HTTP ${h.lastStatus})` : ''}` : ''}
             {h.lastError && h.failureCount > 0 ? ` · ${h.lastError}` : ''}
           </div>
@@ -112,8 +113,15 @@ function Deliveries({ hookId }: { hookId: string }) {
   )
 }
 
+const FORMATS: Record<string, string> = {
+  json: 'Any endpoint (WikiCraft JSON, signed)',
+  slack: 'Slack or Mattermost channel',
+  teams: 'Microsoft Teams channel (Workflows)',
+  googlechat: 'Google Chat space',
+}
+
 function CreateHook({ events, onClose }: { events: string[]; onClose: () => void }) {
-  const [form, setForm] = useState({ name: '', url: 'https://', spaceKey: '' })
+  const [form, setForm] = useState({ name: '', url: 'https://', spaceKey: '', format: 'json' })
   const [selected, setSelected] = useState<string[]>([])
   const [error, setError] = useState<string | null>(null)
   const [secret, setSecret] = useState<string | null>(null)
@@ -139,6 +147,13 @@ function CreateHook({ events, onClose }: { events: string[]; onClose: () => void
   return (
     <Modal title="Add webhook" onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={submit}>Create</button></>}>
       <div className="field"><label>Name</label><input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} placeholder="e.g. Slack relay" /></div>
+      <div className="field">
+        <label>Send to</label>
+        <select className="select" value={form.format} onChange={(e) => setForm({ ...form, format: e.target.value })}>
+          {Object.entries(FORMATS).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+        </select>
+        {form.format !== 'json' && <div className="faint small">Paste the channel’s incoming-webhook URL; events arrive as readable messages with a link to the page.</div>}
+      </div>
       <div className="field"><label>Endpoint URL</label><input className="input" value={form.url} onChange={(e) => setForm({ ...form, url: e.target.value })} autoFocus /></div>
       <div className="field">
         <label>Events</label>
