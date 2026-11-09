@@ -534,9 +534,9 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P1** Confluence HTML export (fallback when XML/CSV isn't available) `D`
 - [~] **P1** Confluence site / full backup import (multiple spaces, users, groups, global permissions) `X` (multi-space + users; no global permissions)
 - [ ] **P1** Confluence REST API live migration (pull spaces directly with an API token: no export size limits, incremental re-sync) `X(pro)`
-- [~] **P0** Markdown / Markdown-zip (Obsidian vault with wikilinks, front matter) `D O` (API only; no import UI)
+- [x] **P0** Markdown / Markdown-zip (Obsidian vault with wikilinks, front matter) `D O`
 - [ ] **P1** HTML files / zip `D`
-- [ ] **P1** Notion export (Markdown + CSV databases, HTML) `D O`
+- [~] **P1** Notion export (Markdown + CSV databases, HTML) `D O` (Markdown + CSV; no HTML export format)
 - [ ] **P1** DOCX (Word) import as page(s); split by heading `D X`
 - [ ] **P2** PDF import (text + images) `D`
 - [ ] **P2** Google Docs (via export or Drive API)

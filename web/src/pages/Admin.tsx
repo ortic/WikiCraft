@@ -490,6 +490,8 @@ function ImportAdmin() {
         )}
       </div>
 
+      <MarkdownImport />
+
       <RestoreBackup onJob={(id) => { setJobId(id); qc.invalidateQueries({ queryKey: ['jobs'] }) }} />
 
       {j && (
@@ -598,6 +600,60 @@ function RestoreBackup({ onJob }: { onJob: (id: string) => void }) {
         <input className="input" style={{ width: 220 }} placeholder="New space key (optional)" value={spaceKey} onChange={(e) => setSpaceKey(e.target.value.toUpperCase())} />
         <button className="btn btn-primary" disabled={!selected || busy} onClick={start}>{busy ? <Spinner /> : <RefreshCw size={15} />} Restore</button>
       </div>
+    </div>
+  )
+}
+
+/** Admin → Import: Markdown folders, Obsidian vaults and Notion exports into a space. */
+function MarkdownImport() {
+  const toast = useToast()
+  const file = useRef<HTMLInputElement>(null)
+  const spaces = useQuery({ queryKey: ['spaces'], queryFn: () => api.get<{ key: string; name: string }[]>('/spaces') })
+  const [selected, setSelected] = useState<File | null>(null)
+  const [space, setSpace] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ pages: number; attachments: number; space: string } | null>(null)
+  const start = async () => {
+    if (!selected || !space) return
+    setBusy(true)
+    setResult(null)
+    try {
+      const form = new FormData()
+      form.append('spaceKey', space)
+      form.append('file', selected)
+      const r = await api.upload<{ pages: number; attachments: number }>('/imports/markdown', form)
+      setResult({ ...r, space })
+      setSelected(null)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Import failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="card" style={{ marginBottom: 18 }}>
+      <h3 style={{ marginTop: 0 }}>Import Markdown, Notion or Obsidian</h3>
+      <p className="muted" style={{ marginTop: 0 }}>
+        Upload a <b>.md</b> file or a <b>.zip</b> of Markdown files: a Notion export (“Markdown &amp; CSV”), an Obsidian vault or any docs folder. Folders become
+        page trees, images become attachments, links and <code>[[wiki links]]</code> are rewritten, Notion databases become tables, and front matter titles and tags are kept.
+      </p>
+      <input ref={file} type="file" accept=".zip,.md,.markdown" hidden onChange={(e) => setSelected(e.target.files?.[0] ?? null)} />
+      <div className="row" style={{ flexWrap: 'wrap' }}>
+        <button className="btn" onClick={() => file.current?.click()}><Upload size={15} /> {selected ? selected.name : 'Choose file (.zip or .md)'}</button>
+        {selected && <span className="faint small">{formatBytes(selected.size)}</span>}
+        <span className="spacer" />
+        <select className="select" style={{ width: 220 }} value={space} onChange={(e) => setSpace(e.target.value)}>
+          <option value="">Into space…</option>
+          {spaces.data?.map((s) => <option key={s.key} value={s.key}>{s.name}</option>)}
+        </select>
+        <button className="btn btn-primary" disabled={!selected || !space || busy} onClick={start}>{busy ? <Spinner /> : <Upload size={15} />} Import</button>
+      </div>
+      {result && (
+        <p style={{ marginBottom: 0 }}>
+          <CheckCircle2 size={15} color="var(--success)" style={{ verticalAlign: -2 }} /> Imported {result.pages} pages and {result.attachments} attachments into{' '}
+          <Link to={`/spaces/${result.space}`}>{result.space}</Link>.
+        </p>
+      )}
     </div>
   )
 }

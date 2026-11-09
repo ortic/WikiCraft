@@ -167,6 +167,7 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
             if zip.len() > MAX_FILES * 4 {
                 anyhow::bail!("too many entries in zip");
             }
+            let mut nested: Vec<Vec<u8>> = Vec::new();
             for i in 0..zip.len() {
                 let f = zip.by_index(i)?;
                 if f.is_dir() {
@@ -189,7 +190,40 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
                 if total > MAX_TOTAL {
                     anyhow::bail!("zip content larger than {} MB", MAX_TOTAL / 1024 / 1024);
                 }
+                if name.to_lowercase().ends_with(".zip") && !name.contains('/') {
+                    nested.push(buf);
+                    continue;
+                }
                 out.push((name, Bytes::from(buf)));
+            }
+            // one level of nesting (Notion: "Export-<id>.zip" inside the download)
+            if out.is_empty() {
+                for inner in nested {
+                    let mut z = zip::ZipArchive::new(std::io::Cursor::new(inner))?;
+                    for i in 0..z.len() {
+                        let f = z.by_index(i)?;
+                        if f.is_dir() {
+                            continue;
+                        }
+                        let Some(name) = f.enclosed_name().map(|n| n.to_string_lossy().replace('\\', "/")) else { continue };
+                        if name.starts_with("__MACOSX") || name.split('/').any(|s| s.starts_with('.')) {
+                            continue;
+                        }
+                        if out.len() >= MAX_FILES {
+                            anyhow::bail!("more than {MAX_FILES} files");
+                        }
+                        let mut buf = Vec::new();
+                        let read = f.take(MAX_ENTRY + 1).read_to_end(&mut buf)? as u64;
+                        if read > MAX_ENTRY {
+                            anyhow::bail!("{name} is larger than {} MB", MAX_ENTRY / 1024 / 1024);
+                        }
+                        total += read;
+                        if total > MAX_TOTAL {
+                            anyhow::bail!("zip content larger than {} MB", MAX_TOTAL / 1024 / 1024);
+                        }
+                        out.push((name, Bytes::from(buf)));
+                    }
+                }
             }
             Ok(out)
         })
@@ -202,6 +236,14 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
     files.sort_by(|a, b| a.0.cmp(&b.0));
     let is_md = |n: &str| n.to_lowercase().ends_with(".md") || n.to_lowercase().ends_with(".markdown");
     let assets: HashMap<String, Bytes> = files.iter().filter(|(n, _)| !is_md(n)).cloned().collect();
+    // every directory that holds files ("A.md" next to "A/" is that folder's page)
+    let dirs: std::collections::HashSet<String> = files
+        .iter()
+        .flat_map(|(n, _)| {
+            let parts: Vec<&str> = n.split('/').collect();
+            (1..parts.len()).map(move |i| parts[..i].join("/")).collect::<Vec<_>>()
+        })
+        .collect();
 
     // folder pages first (sorted paths guarantee parents first)
     let mut folder_pages: HashMap<String, Uuid> = HashMap::new();
@@ -227,6 +269,7 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
             return Ok(Some(*id));
         }
         let (parent_dir, name) = dir.rsplit_once('/').unwrap_or(("", dir));
+        let name = clean_name(name);
         let parent = Box::pin(ensure_folder(state, user, space, root, folders, parent_dir, pos, created)).await?;
         *pos += 1.0;
         let id = insert_page(
@@ -255,9 +298,18 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
         let stem = file.rsplit_once('.').map(|(s, _)| s).unwrap_or(file);
         let src = String::from_utf8_lossy(data);
         let imported = markdown::markdown_to_pm(&src);
-        let is_index = matches!(stem.to_lowercase().as_str(), "index" | "readme") && !dir.is_empty();
+        let own_dir = if dir.is_empty() { stem.to_string() } else { format!("{dir}/{stem}") };
+        // README/index inside a folder, or "Page.md" next to "Page/" (Notion, Obsidian, Docusaurus)
+        let folder_dir: Option<String> = if matches!(stem.to_lowercase().as_str(), "index" | "readme") && !dir.is_empty() {
+            Some(dir.to_string())
+        } else if dirs.contains(&own_dir) {
+            Some(own_dir.clone())
+        } else {
+            None
+        };
         let (fm_title, fm_labels) = imported.front_matter.as_deref().map(front_matter).unwrap_or_default();
-        let title: String = fm_title.or_else(|| imported.title.clone()).unwrap_or_else(|| stem.replace(['-', '_'], " ")).chars().take(255).collect();
+        let title: String =
+            fm_title.or_else(|| imported.title.clone()).unwrap_or_else(|| clean_name(stem).replace(['-', '_'], " ")).chars().take(255).collect();
         let mut doc = imported.doc;
         // drop the H1 used as the title
         if doc.content.first().is_some_and(|n| n.kind == nodes::HEADING && n.attr_i64("level") == Some(1)) && imported.title.is_some() {
@@ -266,9 +318,9 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
                 doc.content.push(Node::paragraph(vec![]));
             }
         }
-        let id = if is_index {
+        let id = if let Some(fd) = &folder_dir {
             let folder =
-                ensure_folder(state, user, space.id, root_parent, &mut folder_pages, dir, &mut pos, &mut created).await?.ok_or(ApiError::bad("bad folder"))?;
+                ensure_folder(state, user, space.id, root_parent, &mut folder_pages, fd, &mut pos, &mut created).await?.ok_or(ApiError::bad("bad folder"))?;
             sqlx::query("UPDATE pages SET title = $2 WHERE id = $1").bind(folder).bind(&title).execute(&state.db).await?;
             folder
         } else {
@@ -299,9 +351,86 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
         }
         title_index.insert(title.to_lowercase(), id);
         title_index.insert(stem.to_lowercase(), id);
+        title_index.insert(clean_name(stem).to_lowercase(), id);
         path_index.insert(name.clone(), id);
         pending_docs.push((id, dir.to_string(), doc));
     }
+    // CSV files (Notion databases) become table pages; a "DB.csv" next to "DB/" is that
+    // folder's page, and first-column cells link to the row pages
+    let csv_names: Vec<&String> = files.iter().map(|(n, _)| n).filter(|n| n.to_lowercase().ends_with(".csv")).collect();
+    for name in csv_names.iter().copied() {
+        let lower = name.to_lowercase();
+        // Notion writes "DB.csv" and "DB_all.csv" (all properties): prefer the latter
+        if !lower.ends_with("_all.csv") && csv_names.iter().any(|o| o.to_lowercase() == format!("{}_all.csv", &lower[..lower.len() - 4])) {
+            continue;
+        }
+        let Some(data) = assets.get(name.as_str()) else { continue };
+        let (dir, file) = name.rsplit_once('/').unwrap_or(("", name.as_str()));
+        let stem = file[..file.len() - 4].trim_end_matches("_all");
+        let rows = parse_csv(&String::from_utf8_lossy(data));
+        if rows.is_empty() {
+            continue;
+        }
+        let cell = |kind: &str, text: &str, link: bool| {
+            let mut t = Node::text(text);
+            if link && !text.is_empty() {
+                t.marks.push(wikicraft_doc_model::Mark::new("link").attr("href", format!("wikilink:{text}")));
+            }
+            Node::new(kind).with_content(vec![Node::paragraph(if text.is_empty() { vec![] } else { vec![t] })])
+        };
+        let width = rows[0].len().clamp(1, 30);
+        let table_rows: Vec<Node> = rows
+            .iter()
+            .take(1001)
+            .enumerate()
+            .map(|(i, r)| {
+                let cells = (0..width).map(|c| {
+                    let text = r.get(c).map(String::as_str).unwrap_or("").trim();
+                    let link = i > 0 && c == 0 && title_index.contains_key(&text.to_lowercase());
+                    cell(if i == 0 { nodes::TABLE_HEADER } else { nodes::TABLE_CELL }, text, link)
+                });
+                Node::new(nodes::TABLE_ROW).with_content(cells.collect())
+            })
+            .collect();
+        let doc = Node::doc(vec![Node::new(nodes::TABLE).with_content(table_rows)]);
+        let title = clean_name(stem);
+        let own_dir = if dir.is_empty() { stem.to_string() } else { format!("{dir}/{stem}") };
+        let id = if dirs.contains(&own_dir) {
+            let folder = ensure_folder(state, user, space.id, root_parent, &mut folder_pages, &own_dir, &mut pos, &mut created)
+                .await?
+                .ok_or(ApiError::bad("bad folder"))?;
+            sqlx::query("UPDATE pages SET title = $2 WHERE id = $1").bind(folder).bind(&title).execute(&state.db).await?;
+            folder
+        } else {
+            let parent = ensure_folder(state, user, space.id, root_parent, &mut folder_pages, dir, &mut pos, &mut created).await?;
+            pos += 1.0;
+            created += 1;
+            insert_page(
+                &state.db,
+                NewPage {
+                    id: new_id(),
+                    workspace_id: user.workspace_id,
+                    space_id: space.id,
+                    parent_id: parent,
+                    kind: "page".into(),
+                    title: title.clone(),
+                    content: Node::empty_doc(),
+                    position: pos,
+                    created_by: Some(user.id),
+                    created_at: None,
+                    source_ref: None,
+                },
+            )
+            .await?
+        };
+        title_index.entry(title.to_lowercase()).or_insert(id);
+        path_index.insert(name.to_string(), id);
+        if lower.ends_with("_all.csv") {
+            path_index.insert(format!("{}.csv", &name[..name.len() - 8]), id);
+        }
+        pending_docs.push((id, dir.to_string(), doc));
+    }
+
     // second pass: images → attachments, wiki links → page links
     let mut attachments = 0;
     for (id, dir, mut doc) in pending_docs {
@@ -342,7 +471,7 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
                             Some(pid) => format!("/pages/{pid}{a}"),
                             None => format!("/missing?space={}&title={}", space.key, t),
                         })
-                    } else if !path.contains("://") && (path.ends_with(".md") || path.ends_with(".markdown")) {
+                    } else if !path.contains("://") && (path.ends_with(".md") || path.ends_with(".markdown") || path.ends_with(".csv")) {
                         let decoded = percent_decode(&path);
                         // the exact file first (relative to this page), then by file name / title
                         let joined = normalize_path(&if dir.is_empty() { decoded.clone() } else { format!("{dir}/{decoded}") });
@@ -373,6 +502,55 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
         state.search.enqueue(*id);
     }
     Ok(json!({ "pages": created, "attachments": attachments }))
+}
+
+/// Removes the 32-hex-digit id Notion appends to every file and folder name.
+fn clean_name(name: &str) -> String {
+    let n = name.trim();
+    match n.rsplit_once(' ') {
+        Some((base, id)) if id.len() == 32 && id.chars().all(|c| c.is_ascii_hexdigit()) && !base.trim().is_empty() => base.trim().to_string(),
+        _ => n.to_string(),
+    }
+}
+
+/// Minimal RFC 4180 CSV reader (quoted fields, escaped quotes, newlines in quotes, BOM).
+fn parse_csv(text: &str) -> Vec<Vec<String>> {
+    let text = text.strip_prefix('\u{feff}').unwrap_or(text);
+    let (mut rows, mut row, mut field) = (Vec::new(), Vec::new(), String::new());
+    let mut chars = text.chars().peekable();
+    let mut quoted = false;
+    while let Some(c) = chars.next() {
+        if quoted {
+            match c {
+                '"' if chars.peek() == Some(&'"') => {
+                    field.push('"');
+                    chars.next();
+                }
+                '"' => quoted = false,
+                _ => field.push(c),
+            }
+            continue;
+        }
+        match c {
+            '"' if field.is_empty() => quoted = true,
+            ',' => row.push(std::mem::take(&mut field)),
+            '\r' => {}
+            '\n' => {
+                row.push(std::mem::take(&mut field));
+                rows.push(std::mem::take(&mut row));
+            }
+            _ => field.push(c),
+        }
+        if rows.len() > 5000 {
+            break;
+        }
+    }
+    if !field.is_empty() || !row.is_empty() {
+        row.push(field);
+        rows.push(row);
+    }
+    rows.retain(|r: &Vec<String>| r.iter().any(|f| !f.trim().is_empty()));
+    rows
 }
 
 /// `%XX` escapes → bytes (invalid sequences are kept as they are).
@@ -437,6 +615,18 @@ fn normalize_path(p: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn notion_names_and_csv() {
+        assert_eq!(clean_name("Project plan 0123456789abcdef0123456789abcdef"), "Project plan");
+        assert_eq!(clean_name("Plain name"), "Plain name");
+        assert_eq!(clean_name("0123456789abcdef0123456789abcdef"), "0123456789abcdef0123456789abcdef");
+        let rows = parse_csv("\u{feff}Name,Status,Notes\r\nAlpha,Done,\"multi\nline, with comma\"\r\n\"Quote \"\"x\"\"\",Open,\n\n");
+        assert_eq!(rows.len(), 3);
+        assert_eq!(rows[1][2], "multi\nline, with comma");
+        assert_eq!(rows[2][0], "Quote \"x\"");
+        assert_eq!(rows[2][2], "");
+    }
 
     #[test]
     fn decoding_and_front_matter() {
