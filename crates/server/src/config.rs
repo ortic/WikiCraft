@@ -34,6 +34,18 @@ pub struct Config {
     #[arg(long, env = "WIKICRAFT_S3_ENDPOINT")]
     pub s3_endpoint: Option<String>,
 
+    /// S3 region (defaults to AWS_REGION / us-east-1).
+    #[arg(long, env = "WIKICRAFT_S3_REGION")]
+    pub s3_region: Option<String>,
+
+    /// S3 access key id (defaults to AWS_ACCESS_KEY_ID).
+    #[arg(long, env = "WIKICRAFT_S3_ACCESS_KEY_ID")]
+    pub s3_access_key_id: Option<String>,
+
+    /// S3 secret access key (defaults to AWS_SECRET_ACCESS_KEY).
+    #[arg(long, env = "WIKICRAFT_S3_SECRET_ACCESS_KEY", hide_env_values = true)]
+    pub s3_secret_access_key: Option<String>,
+
     /// Maximum upload size in megabytes (attachments and imports).
     #[arg(long, env = "WIKICRAFT_MAX_UPLOAD_MB", default_value_t = 2048)]
     pub max_upload_mb: u64,
@@ -55,7 +67,7 @@ pub struct Config {
     pub oidc_client_id: Option<String>,
 
     /// OIDC client secret.
-    #[arg(long, env = "WIKICRAFT_OIDC_CLIENT_SECRET")]
+    #[arg(long, env = "WIKICRAFT_OIDC_CLIENT_SECRET", hide_env_values = true)]
     pub oidc_client_secret: Option<String>,
 
     /// Label of the SSO button on the login page.

@@ -40,6 +40,9 @@ pub async fn spawn_with(tweak: impl FnOnce(&mut Config)) -> TestApp {
         static_dir: data.path().join("static"),
         s3_bucket: None,
         s3_endpoint: None,
+        s3_region: None,
+        s3_access_key_id: None,
+        s3_secret_access_key: None,
         max_upload_mb: 512,
         secure_cookies: false,
         session_days: 30,
@@ -58,6 +61,7 @@ pub async fn spawn_with(tweak: impl FnOnce(&mut Config)) -> TestApp {
     let state = AppState::new(config).await.unwrap();
     tokio::spawn(wikicraft::collab::persist_loop(state.clone()));
     wikicraft::cluster::spawn(&state);
+    wikicraft::jobs::spawn_worker(&state);
     let app = wikicraft::routes::router(state.clone());
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     TestApp { base: format!("http://{addr}"), state, _data: data }

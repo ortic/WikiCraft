@@ -15,7 +15,7 @@ use wikicraft_doc_model::{Mark, Node, marks, nodes, text, ydoc};
 
 use crate::app::{AppState, new_id};
 
-#[derive(Debug, Clone, Deserialize, Default)]
+#[derive(Debug, Clone, Deserialize, serde::Serialize, Default)]
 #[serde(rename_all = "camelCase", default)]
 pub struct ImportOptions {
     /// Import a single-space export under this key instead of the original one.

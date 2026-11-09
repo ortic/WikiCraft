@@ -1,0 +1,109 @@
+//! Background job queue in PostgreSQL. Any replica claims queued jobs (`FOR UPDATE SKIP LOCKED`),
+//! keeps a heartbeat while working, and jobs of crashed workers are failed after a timeout.
+//! Job inputs (uploaded files) live in the blob store, so they're reachable from every replica.
+
+use std::time::Duration;
+
+use serde_json::Value;
+use uuid::Uuid;
+
+use crate::app::AppState;
+use crate::importer::{self, ImportOptions};
+
+const STALE_AFTER_SECS: i64 = 120;
+
+#[derive(sqlx::FromRow)]
+struct Claimed {
+    id: Uuid,
+    workspace_id: Uuid,
+    created_by: Option<Uuid>,
+    kind: String,
+    input: Option<Value>,
+}
+
+/// Starts the worker loop of this replica.
+pub fn spawn_worker(state: &AppState) {
+    let state = state.clone();
+    tokio::spawn(async move {
+        let mut tick = tokio::time::interval(Duration::from_secs(2));
+        loop {
+            tick.tick().await;
+            if state.shutting_down.load(std::sync::atomic::Ordering::SeqCst) {
+                return;
+            }
+            if let Err(e) = fail_stale(&state).await {
+                tracing::warn!("job housekeeping failed: {e}");
+            }
+            match claim(&state).await {
+                Ok(Some(job)) => run(&state, job).await,
+                Ok(None) => {}
+                Err(e) => tracing::warn!("job claim failed: {e}"),
+            }
+        }
+    });
+}
+
+async fn fail_stale(state: &AppState) -> sqlx::Result<()> {
+    sqlx::query(
+        "UPDATE jobs SET status = 'failed', error = 'worker stopped while running the job (restart/crash); delete partial results and retry', finished_at = now()
+         WHERE status = 'running' AND heartbeat_at < now() - make_interval(secs => $1)",
+    )
+    .bind(STALE_AFTER_SECS as f64)
+    .execute(&state.db)
+    .await?;
+    Ok(())
+}
+
+async fn claim(state: &AppState) -> sqlx::Result<Option<Claimed>> {
+    sqlx::query_as::<_, Claimed>(
+        "UPDATE jobs SET status = 'running', worker = $1, started_at = now(), heartbeat_at = now()
+         WHERE id = (SELECT id FROM jobs WHERE status = 'queued' AND input IS NOT NULL ORDER BY created_at FOR UPDATE SKIP LOCKED LIMIT 1)
+         RETURNING id, workspace_id, created_by, kind, input",
+    )
+    .bind(state.node_id.to_string())
+    .fetch_optional(&state.db)
+    .await
+}
+
+async fn run(state: &AppState, job: Claimed) {
+    tracing::info!(job = %job.id, kind = %job.kind, "running job");
+    // heartbeat while working
+    let hb_state = state.clone();
+    let id = job.id;
+    let heartbeat = tokio::spawn(async move {
+        let mut t = tokio::time::interval(Duration::from_secs(20));
+        loop {
+            t.tick().await;
+            let _ = sqlx::query("UPDATE jobs SET heartbeat_at = now() WHERE id = $1").bind(id).execute(&hb_state.db).await;
+        }
+    });
+    let input = job.input.unwrap_or_default();
+    let upload_key = input.get("upload").and_then(Value::as_str).map(String::from);
+    let result: anyhow::Result<()> = async {
+        match job.kind.as_str() {
+            "import.confluence" => {
+                let key = upload_key.clone().ok_or_else(|| anyhow::anyhow!("job has no upload"))?;
+                let local = state.config.upload_dir().join(format!("{}.job", job.id));
+                state.blobs.download_to(&key, &local).await?;
+                let opts: ImportOptions = serde_json::from_value(input.get("options").cloned().unwrap_or_default()).unwrap_or_default();
+                let actor = job.created_by.ok_or_else(|| anyhow::anyhow!("job has no creator"))?;
+                // run() records success/failure on the job row and removes the local file
+                importer::run(state.clone(), job.id, job.workspace_id, actor, local, opts).await;
+                Ok(())
+            }
+            other => anyhow::bail!("unknown job kind {other}"),
+        }
+    }
+    .await;
+    heartbeat.abort();
+    if let Err(e) = result {
+        let _ = sqlx::query("UPDATE jobs SET status = 'failed', error = $2, finished_at = now() WHERE id = $1")
+            .bind(job.id)
+            .bind(format!("{e:#}"))
+            .execute(&state.db)
+            .await;
+    }
+    if let Some(k) = upload_key {
+        let _ = state.blobs.delete_key(&k).await;
+    }
+}

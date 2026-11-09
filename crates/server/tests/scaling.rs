@@ -121,3 +121,53 @@ async fn live_editing_across_two_replicas() {
     let c = Peer::connect(&app2.base, &page, &token).await;
     assert!(c.text().contains("final words from one"));
 }
+
+/// S3-compatible object storage (MinIO on 127.0.0.1:9100, bucket `wikicraft-test`); skipped when absent.
+#[tokio::test(flavor = "multi_thread")]
+async fn s3_storage_and_job_queue() {
+    if reqwest::get("http://127.0.0.1:9100/minio/health/live").await.is_err() {
+        eprintln!("skipping: MinIO not running");
+        return;
+    }
+    let app = common::spawn_with(|c| {
+        c.s3_bucket = Some("wikicraft-test".into());
+        c.s3_endpoint = Some("http://127.0.0.1:9100".into());
+        c.s3_region = Some("us-east-1".into());
+        c.s3_access_key_id = Some("wikicraft".into());
+        c.s3_secret_access_key = Some("wikicraft-secret".into());
+    })
+    .await;
+    assert!(app.state.blobs.backend_name().contains("AmazonS3"), "{}", app.state.blobs.backend_name());
+    let c = app.setup().await;
+    let (_, sp) = app.post(&c, "/spaces", json!({"key": "S3", "name": "S3"})).await;
+    let home = sp["homePageId"].as_str().unwrap().to_string();
+    let data = format!("hello from object storage {}", uuid::Uuid::new_v4()).into_bytes();
+    let form = reqwest::multipart::Form::new().part("file", reqwest::multipart::Part::bytes(data.clone()).file_name("hello.txt"));
+    let r = c.post(app.url(&format!("/pages/{home}/attachments"))).multipart(form).send().await.unwrap();
+    assert_eq!(r.status(), 201);
+    let id = r.json::<serde_json::Value>().await.unwrap()[0]["id"].as_str().unwrap().to_string();
+    let got = c.get(app.url(&format!("/attachments/{id}/content"))).send().await.unwrap().bytes().await.unwrap();
+    assert_eq!(got.as_ref(), data.as_slice());
+    assert!(!app.state.config.blob_dir().exists(), "nothing stored on local disk");
+
+    // import job: upload goes to object storage, a queue worker runs it
+    let zip = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../research/confluence-import/fixtures/modelop-cloud-xml/export.zip");
+    if !zip.exists() {
+        return;
+    }
+    let form = reqwest::multipart::Form::new()
+        .text("options", json!({"skipHistory": true}).to_string())
+        .part("file", reqwest::multipart::Part::bytes(std::fs::read(zip).unwrap()).file_name("export.zip"));
+    let r = c.post(app.url("/imports/confluence")).multipart(form).send().await.unwrap();
+    let job = r.json::<serde_json::Value>().await.unwrap()["jobId"].as_str().unwrap().to_string();
+    let done = app
+        .eventually(|| async {
+            let (_, j) = app.get(&c, &format!("/jobs/{job}")).await;
+            matches!(j["status"].as_str(), Some("succeeded" | "failed")).then_some(j)
+        })
+        .await;
+    assert_eq!(done["status"], "succeeded", "{done}");
+    let worker: Option<String> = sqlx::query_scalar("SELECT worker FROM jobs WHERE id = $1::uuid").bind(&job).fetch_one(&app.state.db).await.unwrap();
+    assert_eq!(worker, Some(app.state.node_id.to_string()));
+    assert_eq!(done["result"]["created"]["attachments"], 202);
+}

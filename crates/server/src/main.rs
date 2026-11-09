@@ -100,14 +100,9 @@ async fn main() -> anyhow::Result<()> {
         Command::Serve => {
             let bind = cli.config.bind;
             let state = AppState::new(cli.config).await?;
-            // jobs interrupted by a restart
-            sqlx::query(
-                "UPDATE jobs SET status = 'failed', error = 'interrupted by server restart', finished_at = now() WHERE status IN ('queued', 'running')",
-            )
-            .execute(&state.db)
-            .await?;
             tokio::spawn(wikicraft::collab::persist_loop(state.clone()));
             wikicraft::cluster::spawn(&state);
+            wikicraft::jobs::spawn_worker(&state);
             let app = wikicraft::routes::router(state.clone());
             let listener = tokio::net::TcpListener::bind(bind).await?;
             tracing::info!("WikiCraft listening on http://{bind}");

@@ -11,6 +11,7 @@ pub mod config;
 pub mod error;
 pub mod extract;
 pub mod importer;
+pub mod jobs;
 pub mod mcp;
 pub mod metrics;
 pub mod oidc;

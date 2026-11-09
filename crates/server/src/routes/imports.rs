@@ -79,16 +79,21 @@ pub async fn upload_confluence(State(state): State<AppState>, CurrentUser(user):
     Ok((StatusCode::ACCEPTED, Json(json!({ "jobId": job }))))
 }
 
+/// Stores the upload in the blob store and queues the job; any replica's worker picks it up.
 pub async fn start_confluence_import(state: &AppState, user: &User, path: PathBuf, opts: ImportOptions) -> ApiResult<Uuid> {
     let job = new_id();
-    sqlx::query("INSERT INTO jobs (id, workspace_id, kind, created_by, progress) VALUES ($1, $2, 'import.confluence', $3, $4)")
+    let key = format!("uploads/{job}.zip");
+    let stored = state.blobs.put_file(&key, &path).await;
+    let _ = tokio::fs::remove_file(&path).await;
+    stored.map_err(ApiError::Internal)?;
+    sqlx::query("INSERT INTO jobs (id, workspace_id, kind, created_by, progress, input) VALUES ($1, $2, 'import.confluence', $3, $4, $5)")
         .bind(job)
         .bind(user.workspace_id)
         .bind(user.id)
         .bind(json!({"phase": "queued"}))
+        .bind(json!({"upload": key, "options": opts}))
         .execute(&state.db)
         .await?;
-    tokio::spawn(importer::run(state.clone(), job, user.workspace_id, user.id, path, opts));
     Ok(job)
 }
 
