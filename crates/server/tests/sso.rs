@@ -163,3 +163,36 @@ async fn ldap_still_works_when_local_passwords_are_disabled() {
     let (st, _) = app.post(&client(), "/auth/login", json!({"email": "dana", "password": "dana-secret-1"})).await;
     assert_eq!(st, 200, "directory login allowed");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn directory_logins_dont_take_over_admins_or_local_groups() {
+    if !ldap_running().await {
+        eprintln!("skipping: LDAP server not running");
+        return;
+    }
+    let app = common::spawn_with(|c| c.auth_providers = Some(ldap_providers())).await;
+    let owner = app.setup().await;
+    // a local admin happens to have the directory user's e-mail
+    let (_, admin_id) = app.user(&owner, "dana@acme.test", "admin").await;
+    let (st, body) = app.post(&client(), "/auth/login", json!({"email": "dana", "password": "dana-secret-1"})).await;
+    assert_eq!(st, 400);
+    assert!(body["message"].as_str().unwrap().contains("administrator account"), "{body}");
+    let linked: i64 = sqlx::query_scalar("SELECT count(*) FROM identities WHERE user_id = $1::uuid").bind(&admin_id).fetch_one(&app.state.db).await.unwrap();
+    assert_eq!(linked, 0);
+
+    // with an ordinary account: a local group named like a directory group isn't taken over
+    let (_, _) = app.patch(&owner, &format!("/users/{admin_id}"), json!({"role": "member"})).await;
+    let (_, g) = app.post(&owner, "/groups", json!({"name": "Engineering"})).await;
+    let local = g["id"].as_str().unwrap().to_string();
+    let dana = client();
+    let (st, body) = app.post(&dana, "/auth/login", json!({"email": "dana", "password": "dana-secret-1"})).await;
+    assert_eq!(st, 200, "{body}");
+    let groups: Vec<(String, String)> =
+        sqlx::query_as("SELECT g.id::text, g.name FROM group_members m JOIN groups g ON g.id = m.group_id WHERE m.user_id = $1::uuid ORDER BY g.name")
+            .bind(&admin_id)
+            .fetch_all(&app.state.db)
+            .await
+            .unwrap();
+    assert!(!groups.iter().any(|(id, _)| *id == local), "local group untouched: {groups:?}");
+    assert!(groups.iter().any(|(_, n)| n == "Engineering (corp)"), "{groups:?}");
+}

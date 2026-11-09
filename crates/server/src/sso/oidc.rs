@@ -164,15 +164,17 @@ async fn complete(state: &AppState, provider: &Provider, c: &OidcConfig, headers
         .and_then(Value::as_array)
         .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
         .unwrap_or_default();
-    let email =
-        claims.email().map(|e| e.to_string()).or_else(|| raw.get("preferred_username").and_then(Value::as_str).filter(|u| u.contains('@')).map(String::from));
+    // the username fallback is user-chosen at some IdPs: never treat it as verified
+    let claimed_email = claims.email().map(|e| e.to_string());
+    let from_username = claimed_email.is_none();
+    let email = claimed_email.or_else(|| raw.get("preferred_username").and_then(Value::as_str).filter(|u| u.contains('@')).map(String::from));
     let name = claims.name().and_then(|n| n.get(None)).map(|n| n.to_string()).or_else(|| claims.preferred_username().map(|u| u.to_string()));
     let ext = External {
         provider_key: claims.issuer().to_string(),
         subject: claims.subject().to_string(),
         email,
-        // Entra ID doesn't send email_verified; its `email` comes from the tenant directory
-        email_verified: claims.email_verified(),
+        // Entra ID doesn't send email_verified; its addresses are trusted per provider type
+        email_verified: if from_username { None } else { claims.email_verified() },
         name,
         groups,
     };

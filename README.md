@@ -160,9 +160,13 @@ added; the login page shows a button per provider, and LDAP accounts use the nor
 | `saml` | Okta, Entra ID, ADFS, Keycloak, Shibboleth, OneLogin, … | build feature `saml` (on in the Docker image); SP metadata at `{BASE_URL}/api/auth/sso/{id}/metadata`, ACS `{BASE_URL}/api/auth/sso/{id}/acs`; signed responses only (no SHA-1), SP-initiated only |
 
 Common options: `name` (button label), `allowedDomains` (only these e-mail domains),
+`trustEmail` (use e-mail addresses the provider doesn't mark as verified — default on for LDAP,
+SAML and single-tenant Microsoft, off otherwise; `true` also allows linking existing admin
+accounts),
 `autoCreate` (create accounts on first login; default on for private providers and for public
 ones restricted by `allowedDomains` / `allowedOrgs`, off for unrestricted Google/GitHub), `defaultRole` (`member` /
-`guest`), `syncGroups` (mirror the provider's groups into WikiCraft groups of the same name).
+`guest`), `syncGroups` (mirror the provider's groups into WikiCraft groups; a name already used by a
+local group gets a "(provider)" suffix instead of taking that group over).
 
 Accounts are linked by the provider's stable subject id; on first login an existing account with
 the same verified e-mail (including authors imported from Confluence) is claimed. Deactivated

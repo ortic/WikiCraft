@@ -46,6 +46,11 @@ pub struct Common {
     /// Role of auto-created users: `member` (default) or `guest`.
     #[serde(default)]
     pub default_role: Option<String>,
+    /// Trust e-mail addresses the provider doesn't explicitly mark as verified (default: yes
+    /// for LDAP, SAML and single-tenant Microsoft, whose directories are administered; no for
+    /// other OIDC providers and GitHub). `true` also allows linking to existing admin accounts.
+    #[serde(default)]
+    pub trust_email: Option<bool>,
 }
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
@@ -202,6 +207,18 @@ impl Provider {
         }
     }
 
+    /// Whether this sign-in's e-mail may be used to link, claim or restrict by domain.
+    pub fn email_trusted(&self, verified: Option<bool>) -> bool {
+        match verified {
+            Some(v) => v,
+            None => self.common().trust_email.unwrap_or(match self {
+                Provider::Ldap(_) | Provider::Saml(_) => true,
+                Provider::Oidc(c) => c.preset.as_deref() == Some("microsoft"),
+                Provider::Github(_) => false,
+            }),
+        }
+    }
+
     pub fn auto_create(&self) -> bool {
         let c = self.common();
         let restricted = !c.allowed_domains.is_empty() || matches!(self, Provider::Github(g) if !g.allowed_orgs.is_empty());
@@ -346,9 +363,11 @@ impl From<sqlx::Error> for SignInError {
 pub async fn sign_in(state: &AppState, provider: &Provider, ext: External) -> Result<Uuid, SignInError> {
     let common = provider.common();
     let email = ext.email.as_deref().map(|e| e.trim().to_lowercase()).filter(|e| e.contains('@'));
+    // unverified addresses are only used when the provider is trusted for them (fail closed)
+    let trusted = provider.email_trusted(ext.email_verified);
     if !common.allowed_domains.is_empty() {
         let domain = email.as_deref().and_then(|e| e.rsplit('@').next()).unwrap_or("");
-        let ok = ext.email_verified != Some(false) && common.allowed_domains.iter().any(|d| d.eq_ignore_ascii_case(domain));
+        let ok = trusted && common.allowed_domains.iter().any(|d| d.eq_ignore_ascii_case(domain));
         if !ok {
             return Err(SignInError::Denied(format!("{} accounts from this e-mail domain are not allowed", provider.display_name())));
         }
@@ -365,9 +384,9 @@ pub async fn sign_in(state: &AppState, provider: &Provider, ext: External) -> Re
         Some((_, status)) if status == "deactivated" => return Err(SignInError::Denied("your account is deactivated".into())),
         Some((id, _)) => id,
         None => {
-            let by_email: Option<(Uuid, String)> = match &email {
-                Some(e) if ext.email_verified != Some(false) => {
-                    sqlx::query_as("SELECT id, status FROM users WHERE workspace_id = $1 AND lower(email) = $2")
+            let by_email: Option<(Uuid, String, String)> = match &email {
+                Some(e) if trusted => {
+                    sqlx::query_as("SELECT id, status, role FROM users WHERE workspace_id = $1 AND lower(email) = $2")
                         .bind(ws)
                         .bind(e)
                         .fetch_optional(&state.db)
@@ -376,8 +395,15 @@ pub async fn sign_in(state: &AppState, provider: &Provider, ext: External) -> Re
                 _ => None,
             };
             let id = match by_email {
-                Some((_, status)) if status == "deactivated" => return Err(SignInError::Denied("your account is deactivated".into())),
-                Some((id, status)) => {
+                Some((_, status, _)) if status == "deactivated" => return Err(SignInError::Denied("your account is deactivated".into())),
+                // admin accounts are only linked on an explicit trust signal
+                Some((_, _, role)) if (role == "owner" || role == "admin") && ext.email_verified != Some(true) && common.trust_email != Some(true) => {
+                    return Err(SignInError::Denied(format!(
+                        "{} matches an administrator account; sign in with your password and ask for the identity to be linked (or set trustEmail for this provider)",
+                        email.as_deref().unwrap_or("this e-mail")
+                    )));
+                }
+                Some((id, status, _)) => {
                     if status == "placeholder" || status == "invited" {
                         // imported Confluence author claims their content / invitation accepted via SSO
                         sqlx::query("UPDATE users SET status = 'active', name = $2 WHERE id = $1").bind(id).bind(&name).execute(&state.db).await?;
@@ -399,7 +425,7 @@ pub async fn sign_in(state: &AppState, provider: &Provider, ext: External) -> Re
                     sqlx::query("INSERT INTO users (id, workspace_id, email, name, role, status) VALUES ($1, $2, $3, $4, $5, 'active')")
                         .bind(id)
                         .bind(ws)
-                        .bind(email.as_deref().filter(|_| ext.email_verified != Some(false)))
+                        .bind(email.as_deref().filter(|_| trusted))
                         .bind(&name)
                         .bind(role)
                         .execute(&state.db)
@@ -434,22 +460,32 @@ pub async fn sign_in(state: &AppState, provider: &Provider, ext: External) -> Re
 async fn sync_groups(state: &AppState, ws: Uuid, provider_id: &str, user: Uuid, groups: &[String]) -> sqlx::Result<()> {
     let prefix = format!("sso:{provider_id}:");
     let mut wanted: Vec<Uuid> = Vec::new();
-    for g in groups.iter().filter(|g| !g.trim().is_empty()).take(500) {
+    for g in groups.iter().map(|g| g.trim()).filter(|g| !g.is_empty() && g.chars().count() <= 200).take(500) {
         let ext_ref = format!("{prefix}{g}");
-        let id: Uuid = sqlx::query_scalar(
-            "INSERT INTO groups (id, workspace_id, name, external_ref) VALUES ($1, $2, $3, $4)
-             ON CONFLICT (workspace_id, lower(name)) DO UPDATE SET external_ref = COALESCE(groups.external_ref, EXCLUDED.external_ref) RETURNING id",
-        )
-        .bind(new_id())
-        .bind(ws)
-        .bind(g.trim())
-        .bind(&ext_ref)
-        .fetch_one(&state.db)
-        .await?;
-        wanted.push(id);
+        // only groups this provider created are reused; an existing local group (or another
+        // provider's) with the same name is never taken over — ours gets a suffix instead
+        let mut id: Option<Uuid> =
+            sqlx::query_scalar("SELECT id FROM groups WHERE workspace_id = $1 AND external_ref = $2").bind(ws).bind(&ext_ref).fetch_optional(&state.db).await?;
+        for name in [g.to_string(), format!("{g} ({provider_id})")] {
+            if id.is_some() {
+                break;
+            }
+            id = sqlx::query_scalar(
+                "INSERT INTO groups (id, workspace_id, name, external_ref) VALUES ($1, $2, $3, $4) ON CONFLICT (workspace_id, lower(name)) DO NOTHING RETURNING id",
+            )
+            .bind(new_id())
+            .bind(ws)
+            .bind(&name)
+            .bind(&ext_ref)
+            .fetch_optional(&state.db)
+            .await?;
+        }
+        if let Some(id) = id {
+            wanted.push(id);
+        }
     }
     sqlx::query(
-        "DELETE FROM group_members m USING groups g WHERE m.group_id = g.id AND m.user_id = $1 AND g.workspace_id = $2 AND g.external_ref LIKE $3 || '%' AND NOT (g.id = ANY($4))",
+        "DELETE FROM group_members m USING groups g WHERE m.group_id = g.id AND m.user_id = $1 AND g.workspace_id = $2 AND starts_with(g.external_ref, $3) AND NOT (g.id = ANY($4))",
     )
     .bind(user)
     .bind(ws)
@@ -531,6 +567,16 @@ pub fn safe_next(next: Option<String>) -> String {
         .unwrap_or_else(|| "/".into())
 }
 
+pub fn urlencode(s: &str) -> String {
+    s.bytes().map(|b| if b.is_ascii_alphanumeric() { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
+}
+
+/// Redirect to the login page with an error message.
+pub fn login_error(msg: &str) -> axum::response::Response {
+    use axum::response::IntoResponse;
+    axum::response::Redirect::to(&format!("/login?error={}", urlencode(msg))).into_response()
+}
+
 #[cfg(test)]
 mod next_tests {
     #[test]
@@ -540,14 +586,4 @@ mod next_tests {
         }
         assert_eq!(super::safe_next(Some("/pages/1?x=1#y".into())), "/pages/1?x=1#y");
     }
-}
-
-pub fn urlencode(s: &str) -> String {
-    s.bytes().map(|b| if b.is_ascii_alphanumeric() { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
-}
-
-/// Redirect to the login page with an error message.
-pub fn login_error(msg: &str) -> axum::response::Response {
-    use axum::response::IntoResponse;
-    axum::response::Redirect::to(&format!("/login?error={}", urlencode(msg))).into_response()
 }
