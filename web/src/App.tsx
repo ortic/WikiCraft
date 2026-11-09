@@ -15,6 +15,7 @@ import SpaceSettings from './pages/SpaceSettings'
 import LabelPage from './pages/LabelPage'
 import Settings from './pages/Settings'
 import Blog from './pages/Blog'
+import TasksPage from './pages/Tasks'
 
 export default function App() {
   const setup = useQuery({ queryKey: ['setup'], queryFn: () => api.get<{ needsSetup: boolean }>('/setup') })
@@ -50,6 +51,7 @@ export default function App() {
           <Route path="/labels/:name" element={<LabelPage />} />
           <Route path="/admin/*" element={<Admin />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/tasks" element={<TasksPage />} />
           <Route path="*" element={<div className="empty">Not found</div>} />
         </Route>
       </Routes>

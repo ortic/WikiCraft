@@ -43,13 +43,21 @@ pub fn extract(doc: &Node) -> Vec<TaskEntry> {
             });
         }
         out.push(TaskEntry {
-            text: first.map(text::inline_text).unwrap_or_default().trim().to_string(),
+            // without the assignee / due date (shown separately), whitespace collapsed
+            text: first.map(|f| text::inline_text(&without_people_and_dates(f))).unwrap_or_default().split_whitespace().collect::<Vec<_>>().join(" "),
             done: n.attr_bool("checked").unwrap_or(false),
             assignee,
             due,
         });
     });
     out
+}
+
+fn without_people_and_dates(n: &Node) -> Node {
+    let mut n = n.clone();
+    n.content.retain(|c| c.kind != nodes::MENTION && c.kind != nodes::DATE);
+    n.content = n.content.iter().map(without_people_and_dates).collect();
+    n
 }
 
 /// Replaces the task index of a page.
@@ -149,6 +157,6 @@ mod tests {
         assert!(t[0].done && !t[1].done);
         assert_eq!(t[1].assignee, Some(uid));
         assert_eq!(t[1].due.unwrap().to_string(), "2026-12-24");
-        assert!(t[1].text.starts_with("open thing"));
+        assert_eq!(t[1].text, "open thing", "assignee and date are not part of the text");
     }
 }
