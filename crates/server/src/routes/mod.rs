@@ -2,6 +2,7 @@ pub mod admin;
 pub mod attachments;
 pub mod auth;
 pub mod comments;
+pub mod exports;
 pub mod imports;
 pub mod legacy;
 pub mod notifications;
@@ -89,8 +90,11 @@ pub fn router(state: AppState) -> Router {
         .route("/imports/confluence", post(imports::upload_confluence).layer(DefaultBodyLimit::max(max_upload)))
         .route("/imports/confluence/analyze", post(imports::analyze_confluence).layer(DefaultBodyLimit::max(max_upload)))
         .route("/imports/markdown", post(imports::upload_markdown).layer(DefaultBodyLimit::max(max_upload)))
+        .route("/imports/backup", post(exports::restore).layer(DefaultBodyLimit::max(max_upload)))
         .route("/jobs", get(imports::list_jobs))
         .route("/jobs/{id}", get(imports::get_job))
+        .route("/jobs/{id}/download", get(exports::download))
+        .route("/spaces/{key}/export", post(exports::start))
         // admin
         .route("/admin/audit", get(admin::audit))
         .route("/admin/stats", get(admin::stats))

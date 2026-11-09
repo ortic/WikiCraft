@@ -9,6 +9,7 @@ pub mod cluster;
 pub mod collab;
 pub mod config;
 pub mod error;
+pub mod export;
 pub mod extract;
 pub mod importer;
 pub mod jobs;

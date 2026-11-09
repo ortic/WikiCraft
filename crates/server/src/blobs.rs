@@ -111,6 +111,11 @@ impl BlobStore {
         self.store.to_string()
     }
 
+    /// Streams a non-content-addressed object (export archives, uploads).
+    pub async fn stream_key(&self, key: &str) -> anyhow::Result<BoxStream<'static, object_store::Result<Bytes>>> {
+        Ok(self.store.get(&Path::from(key)).await?.into_stream())
+    }
+
     pub async fn stream(&self, key: &str) -> anyhow::Result<BoxStream<'static, object_store::Result<Bytes>>> {
         Ok(self.store.get(&Self::path(key)).await?.into_stream())
     }

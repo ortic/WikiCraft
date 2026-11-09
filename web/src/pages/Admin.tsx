@@ -371,16 +371,27 @@ function ImportAdmin() {
         )}
       </div>
 
+      <RestoreBackup onJob={(id) => { setJobId(id); qc.invalidateQueries({ queryKey: ['jobs'] }) }} />
+
       {j && (
         <div className="card" style={{ marginBottom: 18 }}>
           <div className="row">
             {j.status === 'succeeded' ? <CheckCircle2 color="var(--success)" size={18} /> : j.status === 'failed' ? <XCircle color="var(--danger)" size={18} /> : <Spinner />}
-            <b>Import {j.status}</b>
+            <b>{j.kind === 'export.space' ? 'Export' : j.kind === 'import.backup' ? 'Restore' : 'Import'} {j.status}</b>
             <span className="faint small">{j.progress?.phase}{j.progress?.total ? ` · ${j.progress.done ?? 0}/${j.progress.total}` : ''}</span>
           </div>
           {j.progress?.total ? <div className="progress" style={{ marginTop: 10 }}><div style={{ width: `${Math.round(((j.progress.done ?? 0) / j.progress.total) * 100)}%` }} /></div> : null}
           {j.error && <p className="error-text">{j.error}</p>}
-          {j.status === 'succeeded' && <div style={{ marginTop: 14 }}><ReportView result={j.result} /></div>}
+          {j.status === 'succeeded' && j.kind === 'import.backup' && (
+            <p style={{ marginBottom: 0 }}>
+              Restored <Link to={`/spaces/${j.result?.spaceKey}`}>{j.result?.spaceKey}</Link>: {j.result?.pages} pages, {j.result?.attachments} attachments, {j.result?.comments} comments
+              {j.result?.unmappedRestrictions ? ` · ${j.result.unmappedRestrictions} restrictions referred to unknown people or groups and now allow only you` : ''}
+            </p>
+          )}
+          {j.status === 'succeeded' && j.kind === 'export.space' && (
+            <p style={{ marginBottom: 0 }}>{j.result?.file ? <a href={`/api/jobs/${j.id}/download`}>{j.result.filename}</a> : 'This export has expired.'}</p>
+          )}
+          {j.status === 'succeeded' && j.kind === 'import.confluence' && <div style={{ marginTop: 14 }}><ReportView result={j.result} /></div>}
         </div>
       )}
 
@@ -426,5 +437,48 @@ function Audit() {
         ))}
       </tbody>
     </table>
+  )
+}
+
+/** Admin → Import: restore a space from a WikiCraft backup archive. */
+function RestoreBackup({ onJob }: { onJob: (id: string) => void }) {
+  const toast = useToast()
+  const file = useRef<HTMLInputElement>(null)
+  const [selected, setSelected] = useState<File | null>(null)
+  const [spaceKey, setSpaceKey] = useState('')
+  const [busy, setBusy] = useState(false)
+  const start = async () => {
+    if (!selected) return
+    setBusy(true)
+    try {
+      const form = new FormData()
+      form.append('file', selected)
+      if (spaceKey.trim()) form.append('spaceKey', spaceKey.trim())
+      const r = await api.upload<{ jobId: string; spaceKey: string }>('/imports/backup', form)
+      toast(`Restoring into space ${r.spaceKey}…`)
+      onJob(r.jobId)
+      setSelected(null)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Restore failed')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="card" style={{ marginBottom: 18 }}>
+      <h3 style={{ marginTop: 0 }}>Restore a space backup</h3>
+      <p className="muted" style={{ marginTop: 0 }}>
+        Upload a <b>full backup</b> made under Space settings → Export. The space is restored as a new space with its pages, tree, labels, comments,
+        attachments and restrictions; people and groups are matched by e-mail and name.
+      </p>
+      <input ref={file} type="file" accept=".zip" hidden onChange={(e) => setSelected(e.target.files?.[0] ?? null)} />
+      <div className="row" style={{ flexWrap: 'wrap' }}>
+        <button className="btn" onClick={() => file.current?.click()}><Upload size={15} /> {selected ? selected.name : 'Choose backup (.zip)'}</button>
+        {selected && <span className="faint small">{formatBytes(selected.size)}</span>}
+        <span className="spacer" />
+        <input className="input" style={{ width: 220 }} placeholder="New space key (optional)" value={spaceKey} onChange={(e) => setSpaceKey(e.target.value.toUpperCase())} />
+        <button className="btn btn-primary" disabled={!selected || busy} onClick={start}>{busy ? <Spinner /> : <RefreshCw size={15} />} Restore</button>
+      </div>
+    </div>
   )
 }

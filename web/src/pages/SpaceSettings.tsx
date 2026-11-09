@@ -3,6 +3,7 @@ import { useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Trash2, RotateCcw, Users, X } from 'lucide-react'
 import { api, formatDate, type Space } from '../api'
+import ExportPanel from '../components/ExportPanel'
 import { ErrorBox, Spinner, useToast } from '../ui'
 
 interface Grant {
@@ -17,11 +18,13 @@ const ROLES = ['viewer', 'commenter', 'editor', 'admin']
 export default function SpaceSettings() {
   const { key } = useParams()
   const [params, setParams] = useSearchParams()
-  const tab = params.get('tab') ?? 'details'
+  const requested = params.get('tab') ?? 'details'
   const space = useQuery({ queryKey: ['space', key], queryFn: () => api.get<Space>(`/spaces/${key}`) })
   if (space.isLoading) return <div className="content-pad"><Spinner /></div>
   if (space.error) return <div className="content-pad"><ErrorBox error={space.error} /></div>
   const s = space.data!
+  // non-admins have no details/permissions tabs
+  const tab = s.role !== 'admin' && (requested === 'details' || requested === 'permissions') ? 'export' : requested
   return (
     <div className="content-pad">
       <h1 style={{ marginTop: 0 }}>{s.name} · Settings</h1>
@@ -33,10 +36,12 @@ export default function SpaceSettings() {
           </>
         )}
         <button className={`tab ${tab === 'trash' ? 'active' : ''}`} onClick={() => setParams({ tab: 'trash' })}>Trash</button>
+        <button className={`tab ${tab === 'export' ? 'active' : ''}`} onClick={() => setParams({ tab: 'export' })}>Export</button>
       </div>
       {tab === 'details' && s.role === 'admin' && <Details space={s} />}
       {tab === 'permissions' && s.role === 'admin' && <Permissions space={s} />}
       {tab === 'trash' && <TrashList space={s} />}
+      {tab === 'export' && <ExportPanel space={s} />}
     </div>
   )
 }

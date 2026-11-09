@@ -34,6 +34,9 @@ pub fn spawn_worker(state: &AppState) {
             if let Err(e) = fail_stale(&state).await {
                 tracing::warn!("job housekeeping failed: {e}");
             }
+            if let Err(e) = expire_exports(&state).await {
+                tracing::warn!("export cleanup failed: {e}");
+            }
             match claim(&state).await {
                 Ok(Some(job)) => run(&state, job).await,
                 Ok(None) => {}
@@ -51,6 +54,22 @@ async fn fail_stale(state: &AppState) -> sqlx::Result<()> {
     .bind(STALE_AFTER_SECS as f64)
     .execute(&state.db)
     .await?;
+    Ok(())
+}
+
+/// Deletes export archives after [`crate::export::EXPORT_TTL_HOURS`].
+async fn expire_exports(state: &AppState) -> anyhow::Result<()> {
+    let old: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT id, result->>'file' FROM jobs WHERE kind = 'export.space' AND status = 'succeeded' AND result ? 'file'
+         AND finished_at < now() - make_interval(hours => $1) LIMIT 20",
+    )
+    .bind(crate::export::EXPORT_TTL_HOURS as i32)
+    .fetch_all(&state.db)
+    .await?;
+    for (id, key) in old {
+        let _ = state.blobs.delete_key(&key).await;
+        sqlx::query("UPDATE jobs SET result = (result - 'file') || '{\"expired\": true}' WHERE id = $1").bind(id).execute(&state.db).await?;
+    }
     Ok(())
 }
 
@@ -91,6 +110,21 @@ async fn run(state: &AppState, job: Claimed) {
                 importer::run(state.clone(), job.id, job.workspace_id, actor, local, opts).await;
                 Ok(())
             }
+            "export.space" => {
+                let actor = job.created_by.ok_or_else(|| anyhow::anyhow!("job has no creator"))?;
+                let result = crate::export::run_export(state, job.id, actor, &input).await?;
+                finish(state, job.id, result).await
+            }
+            "import.backup" => {
+                let key = upload_key.clone().ok_or_else(|| anyhow::anyhow!("job has no upload"))?;
+                let local = state.config.upload_dir().join(format!("{}.job", job.id));
+                state.blobs.download_to(&key, &local).await?;
+                let actor = job.created_by.ok_or_else(|| anyhow::anyhow!("job has no creator"))?;
+                let opts: crate::export::RestoreOptions = serde_json::from_value(input.get("options").cloned().unwrap_or_default()).unwrap_or_default();
+                let result = crate::export::run_restore(state, job.id, actor, &local, opts).await;
+                let _ = tokio::fs::remove_file(&local).await;
+                finish(state, job.id, result?).await
+            }
             other => anyhow::bail!("unknown job kind {other}"),
         }
     }
@@ -106,4 +140,13 @@ async fn run(state: &AppState, job: Claimed) {
     if let Some(k) = upload_key {
         let _ = state.blobs.delete_key(&k).await;
     }
+}
+
+async fn finish(state: &AppState, id: Uuid, result: Value) -> anyhow::Result<()> {
+    sqlx::query("UPDATE jobs SET status = 'succeeded', result = $2, progress = '{\"phase\": \"done\"}', finished_at = now() WHERE id = $1")
+        .bind(id)
+        .bind(result)
+        .execute(&state.db)
+        .await?;
+    Ok(())
 }

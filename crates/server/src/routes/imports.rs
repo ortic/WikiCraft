@@ -21,7 +21,7 @@ use crate::routes::pages::{NewPage, insert_page};
 use crate::routes::spaces::load_space;
 
 /// Streams the uploaded file field to disk. Returns (path, other text fields).
-async fn receive_upload(state: &AppState, mp: &mut Multipart) -> ApiResult<(PathBuf, HashMap<String, String>, Option<String>)> {
+pub(crate) async fn receive_upload(state: &AppState, mp: &mut Multipart) -> ApiResult<(PathBuf, HashMap<String, String>, Option<String>)> {
     let mut fields = HashMap::new();
     let mut path = None;
     let mut filename = None;
@@ -207,6 +207,7 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
     let mut folder_pages: HashMap<String, Uuid> = HashMap::new();
     let mut created = 0;
     let mut title_index: HashMap<String, Uuid> = HashMap::new();
+    let mut path_index: HashMap<String, Uuid> = HashMap::new();
     let mut pending_docs: Vec<(Uuid, String, Node)> = Vec::new();
     let mut pos = 0.0;
     async fn ensure_folder(
@@ -255,7 +256,8 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
         let src = String::from_utf8_lossy(data);
         let imported = markdown::markdown_to_pm(&src);
         let is_index = matches!(stem.to_lowercase().as_str(), "index" | "readme") && !dir.is_empty();
-        let title = imported.title.clone().unwrap_or_else(|| stem.replace(['-', '_'], " "));
+        let (fm_title, fm_labels) = imported.front_matter.as_deref().map(front_matter).unwrap_or_default();
+        let title: String = fm_title.or_else(|| imported.title.clone()).unwrap_or_else(|| stem.replace(['-', '_'], " ")).chars().take(255).collect();
         let mut doc = imported.doc;
         // drop the H1 used as the title
         if doc.content.first().is_some_and(|n| n.kind == nodes::HEADING && n.attr_i64("level") == Some(1)) && imported.title.is_some() {
@@ -292,8 +294,12 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
             created += 1;
             id
         };
+        for l in fm_labels.iter().filter_map(|l| crate::routes::pages::normalize_label(l)).take(50) {
+            sqlx::query("INSERT INTO labels (page_id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING").bind(id).bind(l).execute(&state.db).await?;
+        }
         title_index.insert(title.to_lowercase(), id);
         title_index.insert(stem.to_lowercase(), id);
+        path_index.insert(name.clone(), id);
         pending_docs.push((id, dir.to_string(), doc));
     }
     // second pass: images → attachments, wiki links → page links
@@ -309,7 +315,7 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
         });
         let mut urls: HashMap<String, String> = HashMap::new();
         for src in images {
-            let decoded = src.replace("%20", " ");
+            let decoded = percent_decode(&src);
             let joined = normalize_path(&if dir.is_empty() { decoded.clone() } else { format!("{dir}/{decoded}") });
             let data = assets.get(&joined).or_else(|| assets.iter().find(|(k, _)| k.ends_with(&format!("/{decoded}")) || **k == decoded).map(|(_, v)| v));
             if let Some(data) = data {
@@ -328,16 +334,27 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
             for m in &mut n.marks {
                 if m.kind == "link" {
                     let href = m.attr_str("href").unwrap_or("").to_string();
-                    let target = href.strip_prefix("wikilink:").map(String::from).or_else(|| {
-                        (!href.contains("://") && (href.ends_with(".md") || href.contains(".md#")))
-                            .then(|| href.rsplit('/').next().unwrap_or(&href).split(".md").next().unwrap_or("").replace("%20", " "))
-                    });
-                    if let Some(t) = target {
-                        let (t, anchor) = t.split_once('#').map(|(a, b)| (a.to_string(), Some(b.to_string()))).unwrap_or((t, None));
-                        let new = match title_index.get(&t.to_lowercase()) {
-                            Some(pid) => format!("/pages/{pid}{}", anchor.map(|a| format!("#{a}")).unwrap_or_default()),
+                    let (path, anchor) = href.split_once('#').map(|(a, b)| (a.to_string(), Some(b.to_string()))).unwrap_or((href.clone(), None));
+                    let hash = anchor.map(|a| format!("#{a}")).unwrap_or_default();
+                    let new = if let Some(t) = href.strip_prefix("wikilink:") {
+                        let (t, a) = t.split_once('#').map(|(x, y)| (x, format!("#{y}"))).unwrap_or((t, String::new()));
+                        Some(match title_index.get(&t.to_lowercase()) {
+                            Some(pid) => format!("/pages/{pid}{a}"),
                             None => format!("/missing?space={}&title={}", space.key, t),
-                        };
+                        })
+                    } else if !path.contains("://") && (path.ends_with(".md") || path.ends_with(".markdown")) {
+                        let decoded = percent_decode(&path);
+                        // the exact file first (relative to this page), then by file name / title
+                        let joined = normalize_path(&if dir.is_empty() { decoded.clone() } else { format!("{dir}/{decoded}") });
+                        let stem = decoded.rsplit('/').next().unwrap_or(&decoded).rsplit_once('.').map(|(s, _)| s).unwrap_or(&decoded).to_string();
+                        Some(match path_index.get(&joined).or_else(|| title_index.get(&stem.to_lowercase())) {
+                            Some(pid) => format!("/pages/{pid}{hash}"),
+                            None => format!("/missing?space={}&title={}", space.key, stem),
+                        })
+                    } else {
+                        None
+                    };
+                    if let Some(new) = new {
                         m.attrs.insert("href".into(), Value::String(new));
                     }
                 }
@@ -358,6 +375,51 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
     Ok(json!({ "pages": created, "attachments": attachments }))
 }
 
+/// `%XX` escapes → bytes (invalid sequences are kept as they are).
+fn percent_decode(s: &str) -> String {
+    let b = s.as_bytes();
+    let hex = |c: u8| (c as char).to_digit(16).map(|d| d as u8);
+    let mut out = Vec::with_capacity(b.len());
+    let mut i = 0;
+    while i < b.len() {
+        if b[i] == b'%'
+            && i + 2 < b.len()
+            && let (Some(h), Some(l)) = (hex(b[i + 1]), hex(b[i + 2]))
+        {
+            out.push(h * 16 + l);
+            i += 3;
+            continue;
+        }
+        out.push(b[i]);
+        i += 1;
+    }
+    String::from_utf8_lossy(&out).into_owned()
+}
+
+/// `title` and `labels` from simple front matter (`key: value`, values as YAML/JSON scalars or
+/// flow lists).
+fn front_matter(fm: &str) -> (Option<String>, Vec<String>) {
+    let scalar = |v: &str| -> String {
+        let v = v.trim();
+        serde_json::from_str::<String>(v).unwrap_or_else(|_| v.trim_matches(['\'', '"']).to_string())
+    };
+    let mut title = None;
+    let mut labels = Vec::new();
+    for line in fm.lines() {
+        let Some((k, v)) = line.split_once(':') else { continue };
+        match k.trim().to_lowercase().as_str() {
+            "title" => title = Some(scalar(v)).filter(|t| !t.is_empty()),
+            "labels" | "tags" => {
+                let v = v.trim();
+                labels = serde_json::from_str::<Vec<String>>(v)
+                    .unwrap_or_else(|_| v.trim_start_matches('[').trim_end_matches(']').split(',').map(scalar).filter(|l| !l.is_empty()).collect());
+            }
+            _ => {}
+        }
+    }
+    (title, labels)
+}
+
 fn normalize_path(p: &str) -> String {
     let mut out: Vec<&str> = Vec::new();
     for seg in p.split('/') {
@@ -370,4 +432,22 @@ fn normalize_path(p: &str) -> String {
         }
     }
     out.join("/")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn decoding_and_front_matter() {
+        assert_eq!(percent_decode("Setup-%20step%201-2.md"), "Setup- step 1-2.md");
+        assert_eq!(percent_decode("%C3%A4rger%"), "ärger%");
+        assert_eq!(percent_decode("ä%2"), "ä%2");
+        let (t, l) = front_matter("title: \"A: b/c\"\nlabels: [\"x\", \"y\"]\nother: 1");
+        assert_eq!(t.as_deref(), Some("A: b/c"));
+        assert_eq!(l, vec!["x", "y"]);
+        let (t, l) = front_matter("title: Plain title\ntags: a, b");
+        assert_eq!(t.as_deref(), Some("Plain title"));
+        assert_eq!(l, vec!["a", "b"]);
+    }
 }

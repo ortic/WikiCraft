@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Search, Home as HomeIcon, LayoutGrid, Star, Settings, Plus, LogOut, Moon, Shield, Menu, Trash2, UserCog, Newspaper, ListChecks } from 'lucide-react'
+import { Search, Home as HomeIcon, LayoutGrid, Star, Settings, Plus, LogOut, Moon, Shield, Menu, Trash2, UserCog, Newspaper, ListChecks, Download } from 'lucide-react'
 import { api, type Page, type Space } from '../api'
 import { Avatar, Logo, SpaceIcon, useMe } from '../ui'
 import SpaceTree from './SpaceTree'
@@ -160,6 +160,11 @@ export default function Layout() {
             {(current.role === 'admin' || current.role === 'editor') && (
               <NavLink to={`/spaces/${current.key}/settings?tab=trash`} className="nav-item">
                 <Trash2 size={15} /> Trash
+              </NavLink>
+            )}
+            {current.role !== 'admin' && (
+              <NavLink to={`/spaces/${current.key}/settings?tab=export`} className="nav-item">
+                <Download size={15} /> Export
               </NavLink>
             )}
           </>
