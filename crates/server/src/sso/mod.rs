@@ -308,7 +308,11 @@ pub async fn list(State(state): State<AppState>) -> Json<Value> {
             json!({ "id": p.id(), "name": p.display_name(), "type": p.kind(), "preset": preset, "loginUrl": redirect.then(|| format!("/api/auth/sso/{}/login", p.id())) })
         })
         .collect();
-    Json(json!({ "passwordLogin": !state.config.disable_password_login, "providers": providers }))
+    Json(json!({
+        "passwordLogin": !state.config.disable_password_login,
+        "passwordReset": !state.config.disable_password_login && state.mailer.enabled(),
+        "providers": providers,
+    }))
 }
 
 /// An identity asserted by an external provider.
@@ -374,8 +378,8 @@ pub async fn sign_in(state: &AppState, provider: &Provider, ext: External) -> Re
             let id = match by_email {
                 Some((_, status)) if status == "deactivated" => return Err(SignInError::Denied("your account is deactivated".into())),
                 Some((id, status)) => {
-                    if status == "placeholder" {
-                        // imported Confluence author claims their content
+                    if status == "placeholder" || status == "invited" {
+                        // imported Confluence author claims their content / invitation accepted via SSO
                         sqlx::query("UPDATE users SET status = 'active', name = $2 WHERE id = $1").bind(id).bind(&name).execute(&state.db).await?;
                     }
                     id

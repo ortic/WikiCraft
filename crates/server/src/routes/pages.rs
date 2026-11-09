@@ -161,6 +161,7 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
         .or(template_title.map(|t| t.trim().to_string()).filter(|t| !t.is_empty()))
         .unwrap_or_else(|| "Untitled".into());
     let position = next_position(&state, space.id, req.parent_id).await?;
+    let doc = content.clone();
     let id = insert_page(
         &state.db,
         NewPage {
@@ -180,6 +181,11 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
     .await?;
     state.search.enqueue(id);
     sqlx::query("INSERT INTO watches (user_id, page_id) VALUES ($1, $2) ON CONFLICT DO NOTHING").bind(user.id).bind(id).execute(&state.db).await?;
+    // content created through the API: index its tasks and notify mentioned people right away
+    crate::routes::tasks::index_page(&mut *state.db.acquire().await?, id, &doc).await?;
+    if let Err(e) = crate::routes::notifications::notify_page_mentions(&state, id, &doc, Some(user.id)).await {
+        tracing::warn!(page = %id, "mention notifications failed: {e:#}");
+    }
     Ok((StatusCode::CREATED, Json(json!({ "id": id }))))
 }
 

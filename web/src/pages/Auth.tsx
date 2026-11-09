@@ -2,7 +2,7 @@ import { useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Building2, KeyRound } from 'lucide-react'
 import { api } from '../api'
-import { Logo } from '../ui'
+import { Logo, Spinner } from '../ui'
 
 export function Setup() {
   const qc = useQueryClient()
@@ -74,7 +74,7 @@ export function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(() => new URLSearchParams(location.search).get('error'))
-  const info = useQuery({ queryKey: ['auth-providers'], queryFn: () => api.get<{ passwordLogin: boolean; providers: Provider[] }>('/auth/providers') })
+  const info = useQuery({ queryKey: ['auth-providers'], queryFn: () => api.get<{ passwordLogin: boolean; passwordReset: boolean; providers: Provider[] }>('/auth/providers') })
   const next = new URLSearchParams(location.search).get('next') ?? '/'
   const [busy, setBusy] = useState(false)
   const redirects = (info.data?.providers ?? []).filter((p) => p.loginUrl)
@@ -119,7 +119,12 @@ export function Login() {
               <input className="input" type={directory.length > 0 ? 'text' : 'email'} autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
             </div>
             <div className="field">
-              <label>Password</label>
+              <label className="row">
+                Password
+                {info.data?.passwordReset && (
+                  <a className="small" style={{ marginLeft: 'auto', fontWeight: 400 }} href="/forgot-password">Forgot password?</a>
+                )}
+              </label>
               <input className="input" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
           </>
@@ -129,6 +134,160 @@ export function Login() {
           <button className="btn btn-primary" style={wide} disabled={busy}>
             Log in
           </button>
+        )}
+      </form>
+    </div>
+  )
+}
+
+const wideBtn = { width: '100%', justifyContent: 'center', height: 38 } as const
+
+function tokenParam() {
+  return new URLSearchParams(location.search).get('token') ?? ''
+}
+
+/** `/forgot-password` — asks for a reset link. */
+export function ForgotPassword() {
+  const [email, setEmail] = useState('')
+  const [sent, setSent] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      await api.post('/auth/forgot', { email })
+      setSent(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="auth">
+      <form className="auth-card" onSubmit={submit}>
+        <Logo />
+        <h1>Reset your password</h1>
+        {sent ? (
+          <p className="muted">If an account with a password exists for <b>{email}</b>, we've sent a link to choose a new one. It's valid for one hour.</p>
+        ) : (
+          <>
+            <p className="muted" style={{ marginTop: 0 }}>Enter your e-mail and we'll send you a link to choose a new password.</p>
+            <div className="field">
+              <label>E-mail</label>
+              <input className="input" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+            </div>
+            {error && <p className="error-text">{error}</p>}
+            <button className="btn btn-primary" style={wideBtn} disabled={busy}>Send reset link</button>
+          </>
+        )}
+        <p className="small" style={{ textAlign: 'center', marginBottom: 0 }}><a href="/login">Back to log in</a></p>
+      </form>
+    </div>
+  )
+}
+
+/** `/reset-password?token=…` */
+export function ResetPassword() {
+  const [password, setPassword] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    if (password !== confirm) return setError("The passwords don't match")
+    setBusy(true)
+    setError(null)
+    try {
+      await api.post('/auth/reset', { token: tokenParam(), password })
+      location.href = '/'
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong')
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="auth">
+      <form className="auth-card" onSubmit={submit}>
+        <Logo />
+        <h1>Choose a new password</h1>
+        <p className="muted" style={{ marginTop: 0 }}>You'll be signed out everywhere else.</p>
+        <div className="field">
+          <label>New password</label>
+          <input className="input" type="password" autoComplete="new-password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
+        </div>
+        <div className="field">
+          <label>Repeat password</label>
+          <input className="input" type="password" autoComplete="new-password" minLength={8} required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+        </div>
+        {error && <p className="error-text">{error}</p>}
+        <button className="btn btn-primary" style={wideBtn} disabled={busy}>Save and sign in</button>
+      </form>
+    </div>
+  )
+}
+
+/** `/accept-invite?token=…` */
+export function AcceptInvite() {
+  const info = useQuery({ queryKey: ['invite', tokenParam()], queryFn: () => api.get<{ email: string; name: string; workspace: string; passwordLogin: boolean }>(`/auth/invite?token=${encodeURIComponent(tokenParam())}`), retry: false })
+  const sso = useQuery({ queryKey: ['auth-providers'], queryFn: () => api.get<{ providers: Provider[] }>('/auth/providers') })
+  const [name, setName] = useState<string | null>(null)
+  const [password, setPassword] = useState('')
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      await api.post('/auth/accept-invite', { token: tokenParam(), name: name ?? info.data?.name ?? '', password })
+      location.href = '/'
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong')
+      setBusy(false)
+    }
+  }
+  const redirects = (sso.data?.providers ?? []).filter((p) => p.loginUrl)
+  return (
+    <div className="auth">
+      <form className="auth-card" onSubmit={submit}>
+        <Logo />
+        {info.error ? (
+          <>
+            <h1>Invitation not valid</h1>
+            <p className="muted">{info.error instanceof Error ? info.error.message : 'This link is invalid or has expired.'} Ask an administrator for a new invitation.</p>
+            <p className="small"><a href="/login">Go to log in</a></p>
+          </>
+        ) : !info.data ? (
+          <Spinner />
+        ) : (
+          <>
+            <h1>Join {info.data.workspace}</h1>
+            <p className="muted" style={{ marginTop: 0 }}>You were invited as <b>{info.data.email}</b>.</p>
+            {redirects.length > 0 && (
+              <div className="sso-buttons" style={{ marginBottom: 14 }}>
+                {redirects.map((p) => (
+                  <a key={p.id} className="btn" style={wideBtn} href={`${p.loginUrl}?next=%2F`}><ProviderIcon p={p} /> Continue with {p.name}</a>
+                ))}
+              </div>
+            )}
+            {info.data.passwordLogin && (
+              <>
+                <div className="field">
+                  <label>Your name</label>
+                  <input className="input" required value={name ?? info.data.name} onChange={(e) => setName(e.target.value)} autoFocus />
+                </div>
+                <div className="field">
+                  <label>Choose a password</label>
+                  <input className="input" type="password" autoComplete="new-password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} />
+                </div>
+                {error && <p className="error-text">{error}</p>}
+                <button className="btn btn-primary" style={wideBtn} disabled={busy}>Create my account</button>
+              </>
+            )}
+          </>
         )}
       </form>
     </div>

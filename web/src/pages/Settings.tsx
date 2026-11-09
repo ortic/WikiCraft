@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { KeyRound, Trash2, Copy, Bot } from 'lucide-react'
+import { KeyRound, Trash2, Copy, Bot, Mail } from 'lucide-react'
 import { api, formatDate } from '../api'
 import { useMe, useToast } from '../ui'
 
@@ -58,6 +58,8 @@ export default function Settings() {
           Save
         </button>
       </div>
+
+      <EmailPreferences />
 
       <div className="card" style={{ marginBottom: 16 }}>
         <h3 style={{ marginTop: 0 }} className="row"><KeyRound size={17} /> Personal API tokens</h3>
@@ -122,6 +124,37 @@ export default function Settings() {
         <p className="faint small">Claude Code: <code>claude mcp add --transport http wikicraft {mcpUrl} --header "Authorization: Bearer &lt;token&gt;"</code></p>
         <p className="faint small">Tools: search, get_page, list_spaces, list_children, recent_changes, create_page, update_page, append_to_page, add_comment.</p>
       </div>
+    </div>
+  )
+}
+
+function EmailPreferences() {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const prefs = useQuery({ queryKey: ['preferences'], queryFn: () => api.get<{ emailNotifications: 'all' | 'important' | 'none'; mailEnabled: boolean }>('/me/preferences') })
+  const p = prefs.data
+  if (!p) return null
+  const set = async (v: string) => {
+    try {
+      await api.put('/me/preferences', { emailNotifications: v })
+      qc.invalidateQueries({ queryKey: ['preferences'] })
+      toast('Saved')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Failed')
+    }
+  }
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <h3 style={{ marginTop: 0 }} className="row"><Mail size={17} /> E-mail notifications</h3>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        Notifications you haven't seen in WikiCraft after a couple of minutes are e-mailed to you as one summary.
+        {!p.mailEnabled && ' (E-mail is not configured on this server yet.)'}
+      </p>
+      <select className="select" style={{ maxWidth: 420 }} value={p.emailNotifications} onChange={(e) => set(e.target.value)}>
+        <option value="important">Mentions, comments and replies (recommended)</option>
+        <option value="all">Everything, including updates to pages I watch</option>
+        <option value="none">Don't e-mail me</option>
+      </select>
     </div>
   )
 }

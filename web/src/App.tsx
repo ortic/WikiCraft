@@ -3,7 +3,7 @@ import { useQuery } from '@tanstack/react-query'
 import { api } from './api'
 import { ToastProvider, useMe, Spinner } from './ui'
 import Layout from './components/Layout'
-import { Login, Setup } from './pages/Auth'
+import { AcceptInvite, ForgotPassword, Login, ResetPassword, Setup } from './pages/Auth'
 import Home from './pages/Home'
 import SpacesPage, { SpaceHome } from './pages/Spaces'
 import PageView from './pages/PageView'
@@ -32,6 +32,10 @@ export default function App() {
   const user = me.data?.user
   // anonymous visitors may read public spaces; everything else needs a login
   const publicPath = loc.pathname.startsWith('/pages/') || loc.pathname.startsWith('/spaces/')
+  // account links from e-mails work whether or not someone is signed in in this browser
+  if (loc.pathname === '/accept-invite') return <AcceptInvite />
+  if (loc.pathname === '/reset-password') return <ResetPassword />
+  if (!user && loc.pathname === '/forgot-password') return <ForgotPassword />
   if (!user && loc.pathname === '/login') return <Login />
   if (!user && !publicPath) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />
   return (

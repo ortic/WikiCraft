@@ -1,3 +1,4 @@
+pub mod account;
 pub mod admin;
 pub mod attachments;
 pub mod auth;
@@ -28,6 +29,14 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/login", post(auth::login))
         .route("/auth/logout", post(auth::logout))
         .route("/auth/providers", get(crate::sso::list))
+        .route("/auth/forgot", post(account::forgot))
+        .route("/auth/reset", post(account::reset))
+        .route("/auth/invite", get(account::invite_info))
+        .route("/auth/accept-invite", post(account::accept_invite))
+        .route("/me/preferences", get(account::get_preferences).put(account::put_preferences))
+        .route("/users/invite", post(account::invite))
+        .route("/admin/mail", get(account::mail_status))
+        .route("/admin/mail/test", post(account::mail_test))
         .route("/auth/sso/{id}/login", get(crate::sso::oidc::sso_login))
         .route("/auth/sso/{id}/callback", get(crate::sso::oidc::sso_callback))
         .route("/auth/oidc", get(crate::sso::oidc::legacy_info))

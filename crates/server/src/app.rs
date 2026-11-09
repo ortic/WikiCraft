@@ -23,6 +23,8 @@ pub struct Inner {
     pub relay: Option<crate::cluster::Relay>,
     /// configured external sign-in providers
     pub providers: Vec<crate::sso::Provider>,
+    /// outgoing e-mail (disabled without `WIKICRAFT_SMTP_URL`)
+    pub mailer: crate::mail::Mailer,
     pub db: PgPool,
     pub config: Config,
     pub blobs: BlobStore,
@@ -47,6 +49,7 @@ impl AppState {
         let blobs = BlobStore::new(&config).await?;
         let search = SearchIndex::open(&config, db.clone())?;
         let providers = crate::sso::load(&config)?;
+        let mailer = crate::mail::Mailer::new(&config)?;
         let relay = match config.cluster.as_str() {
             "postgres" => Some(crate::cluster::Relay::new()),
             "none" | "" => None,
@@ -59,6 +62,7 @@ impl AppState {
                 node_id: uuid::Uuid::new_v4(),
                 relay,
                 providers,
+                mailer,
                 db,
                 config,
                 blobs,

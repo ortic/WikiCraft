@@ -58,6 +58,18 @@ pub struct Config {
     #[arg(long, env = "WIKICRAFT_SESSION_DAYS", default_value_t = 30)]
     pub session_days: i64,
 
+    /// Outgoing mail server: `smtps://user:pass@mail.example.com` (TLS, port 465),
+    /// `smtp://user:pass@mail.example.com:587?tls=required` (STARTTLS) or
+    /// `smtp://localhost:1025` (unencrypted, local relays/dev only). URL-encode special
+    /// characters in the password.
+    /// Enables invitations, password reset and notification e-mails.
+    #[arg(long, env = "WIKICRAFT_SMTP_URL", hide_env_values = true)]
+    pub smtp_url: Option<String>,
+
+    /// Sender of e-mails.
+    #[arg(long, env = "WIKICRAFT_MAIL_FROM", default_value = "WikiCraft <wikicraft@localhost>")]
+    pub mail_from: String,
+
     /// External sign-in providers as a JSON list (OIDC, GitHub, LDAP, SAML; see README).
     #[arg(long, env = "WIKICRAFT_AUTH_PROVIDERS", hide_env_values = true)]
     pub auth_providers: Option<String>,

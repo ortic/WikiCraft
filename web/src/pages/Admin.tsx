@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Upload, FileSearch, CheckCircle2, XCircle, UserPlus, Users, Activity, Database, RefreshCw } from 'lucide-react'
+import { Upload, FileSearch, CheckCircle2, XCircle, UserPlus, Users, Activity, Database, RefreshCw, Mail, Send } from 'lucide-react'
 import { api, formatBytes, formatDate, type Job } from '../api'
 import { Avatar, Modal, Spinner, useMe, useToast } from '../ui'
 
@@ -72,6 +72,44 @@ function Overview() {
           <Upload size={14} /> Import from Confluence
         </Link>
       </div>
+      <MailStatus />
+    </div>
+  )
+}
+
+function MailStatus() {
+  const toast = useToast()
+  const mail = useQuery({ queryKey: ['admin-mail'], queryFn: () => api.get<{ enabled: boolean; from: string; pending: number; failed: number; sentLastDay: number; lastError: string | null }>('/admin/mail') })
+  const [busy, setBusy] = useState(false)
+  const m = mail.data
+  if (!m) return null
+  return (
+    <div className="card" style={{ marginTop: 24, maxWidth: 720 }}>
+      <h3 style={{ marginTop: 0 }} className="row"><Mail size={17} /> E-mail</h3>
+      {m.enabled ? (
+        <>
+          <p className="muted" style={{ marginTop: 0 }}>
+            Sending as <b>{m.from}</b> · {m.sentLastDay} sent in the last 24 h · {m.pending} queued{m.failed ? ` · ${m.failed} failed` : ''}
+          </p>
+          {m.lastError && <p className="error-text small">Last error: {m.lastError}</p>}
+          <button className="btn" disabled={busy} onClick={async () => {
+            setBusy(true)
+            try {
+              const r = await api.post<{ to: string }>('/admin/mail/test', {})
+              toast(`Test e-mail sent to ${r.to}`)
+            } catch (e) {
+              toast(e instanceof Error ? e.message : 'Sending failed')
+            } finally {
+              setBusy(false)
+            }
+          }}>{busy ? <Spinner /> : <Send size={14} />} Send a test e-mail to me</button>
+        </>
+      ) : (
+        <p className="muted" style={{ margin: 0 }}>
+          Not configured. Set <code>WIKICRAFT_SMTP_URL</code> (and <code>WIKICRAFT_MAIL_FROM</code>) to send invitations, password-reset links and notification e-mails.
+          Until then, invitation links are shown to you to share yourself.
+        </p>
+      )}
     </div>
   )
 }
@@ -107,7 +145,7 @@ function UsersAdmin() {
         </label>
         <span className="spacer" />
         <button className="btn btn-primary" onClick={() => setInvite(true)}>
-          <UserPlus size={15} /> Add user
+          <UserPlus size={15} /> Invite / add user
         </button>
       </div>
       <table className="list">
@@ -129,7 +167,18 @@ function UsersAdmin() {
                 )}
               </td>
               <td>
-                {u.status === 'placeholder' ? <span className="badge">imported</span> : u.role === 'owner' ? <span className="badge">active</span> : (
+                {u.status === 'placeholder' ? <span className="badge">imported</span> : u.status === 'invited' ? (
+                  <span className="row" style={{ gap: 6 }}>
+                    <span className="badge">invited</span>
+                    <button className="btn btn-ghost small" onClick={async () => {
+                      try {
+                        const r = await api.post<{ emailed: boolean; inviteUrl: string }>('/users/invite', { email: u.email, role: u.role })
+                        if (r.emailed) toast(`Invitation sent again to ${u.email}`)
+                        else { await navigator.clipboard?.writeText(r.inviteUrl).catch(() => {}); toast('E-mail is not configured — new invitation link copied') }
+                      } catch (e) { toast(e instanceof Error ? e.message : 'Failed') }
+                    }}>Resend</button>
+                  </span>
+                ) : u.role === 'owner' ? <span className="badge">active</span> : (
                   <select className="select" style={{ width: 130, height: 28 }} value={u.status} onChange={(e) => update(u.id, { status: e.target.value })}>
                     <option value="active">active</option>
                     <option value="deactivated">deactivated</option>
@@ -148,23 +197,56 @@ function UsersAdmin() {
 
 function AddUserDialog({ onClose }: { onClose: () => void }) {
   const qc = useQueryClient()
+  const [mode, setMode] = useState<'invite' | 'password'>('invite')
   const [form, setForm] = useState({ name: '', email: '', password: '', role: 'member' })
   const [error, setError] = useState<string | null>(null)
+  const [invited, setInvited] = useState<{ emailed: boolean; inviteUrl: string } | null>(null)
   const submit = async () => {
+    setError(null)
     try {
-      await api.post('/users', form)
-      qc.invalidateQueries({ queryKey: ['admin-users'] })
-      onClose()
+      if (mode === 'invite') {
+        setInvited(await api.post<{ emailed: boolean; inviteUrl: string }>('/users/invite', { email: form.email, name: form.name || undefined, role: form.role }))
+        qc.invalidateQueries({ queryKey: ['admin-users'] })
+      } else {
+        await api.post('/users', form)
+        qc.invalidateQueries({ queryKey: ['admin-users'] })
+        onClose()
+      }
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Failed')
     }
   }
+  if (invited)
+    return (
+      <Modal title="Invitation created" onClose={onClose} footer={<button className="btn btn-primary" onClick={onClose}>Done</button>}>
+        {invited.emailed ? (
+          <p style={{ marginTop: 0 }}>An invitation was e-mailed to <b>{form.email}</b>. The link is valid for 7 days.</p>
+        ) : (
+          <p style={{ marginTop: 0 }}>E-mail isn't configured on this server, so share this invitation link with <b>{form.email}</b> yourself (valid for 7 days):</p>
+        )}
+        <div className="row">
+          <input className="input" readOnly value={invited.inviteUrl} onFocus={(e) => e.target.select()} />
+          <button className="btn" onClick={() => navigator.clipboard?.writeText(invited.inviteUrl)}>Copy</button>
+        </div>
+      </Modal>
+    )
   return (
-    <Modal title="Add user" onClose={onClose} footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={submit}>Create</button></>}>
-      <p className="muted small" style={{ marginTop: 0 }}>If an imported Confluence author has this e-mail, the account is linked to their pages and comments.</p>
-      <div className="field"><label>Name</label><input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} autoFocus /></div>
-      <div className="field"><label>E-mail</label><input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
-      <div className="field"><label>Initial password</label><input className="input" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>
+    <Modal
+      title="Add people"
+      onClose={onClose}
+      footer={<><button className="btn" onClick={onClose}>Cancel</button><button className="btn btn-primary" onClick={submit}>{mode === 'invite' ? 'Send invitation' : 'Create'}</button></>}
+    >
+      <div className="tabs" style={{ marginTop: -6 }}>
+        <button className={`tab ${mode === 'invite' ? 'active' : ''}`} onClick={() => setMode('invite')}>Invite by e-mail</button>
+        <button className={`tab ${mode === 'password' ? 'active' : ''}`} onClick={() => setMode('password')}>Create with password</button>
+      </div>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        {mode === 'invite' ? 'They get an e-mail with a link to choose their name and password. ' : ''}
+        If an imported Confluence author has this e-mail, the account is linked to their pages and comments.
+      </p>
+      <div className="field"><label>E-mail</label><input className="input" type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} autoFocus /></div>
+      <div className="field"><label>Name{mode === 'invite' ? ' (optional)' : ''}</label><input className="input" value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></div>
+      {mode === 'password' && <div className="field"><label>Initial password</label><input className="input" type="password" value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} /></div>}
       <div className="field">
         <label>Role</label>
         <select className="select" value={form.role} onChange={(e) => setForm({ ...form, role: e.target.value })}>

@@ -13,6 +13,7 @@ pub mod export;
 pub mod extract;
 pub mod importer;
 pub mod jobs;
+pub mod mail;
 pub mod mcp;
 pub mod metrics;
 pub mod routes;

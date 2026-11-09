@@ -58,12 +58,15 @@ pub async fn spawn_with(tweak: impl FnOnce(&mut Config)) -> TestApp {
         search: "tantivy".into(),
         cluster: "none".into(),
         metrics_token: None,
+        smtp_url: None,
+        mail_from: "WikiCraft <wiki@acme.test>".into(),
     };
     tweak(&mut config);
     let state = AppState::new(config).await.unwrap();
     tokio::spawn(wikicraft::collab::persist_loop(state.clone()));
     wikicraft::cluster::spawn(&state);
     wikicraft::jobs::spawn_worker(&state);
+    wikicraft::mail::spawn_worker(&state);
     let app = wikicraft::routes::router(state.clone());
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     TestApp { base: format!("http://{addr}"), state, _data: data }
