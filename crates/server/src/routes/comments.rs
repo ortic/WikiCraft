@@ -92,6 +92,14 @@ pub async fn create(
         .await?;
     notify_comment(&state, page_id, user.id, id, &doc).await?;
     let row = sqlx::query_as::<_, CommentRow>(sqlx::AssertSqlSafe(format!("{SELECT} WHERE c.id = $1"))).bind(id).fetch_one(&state.db).await?;
+    crate::webhooks::emit_page(
+        &state,
+        "comment.created",
+        page_id,
+        Some(user.id),
+        json!({"comment": {"id": id, "parentId": req.parent_id, "text": text::excerpt(&doc, 280)}}),
+    )
+    .await;
     Ok((StatusCode::CREATED, Json(row)))
 }
 

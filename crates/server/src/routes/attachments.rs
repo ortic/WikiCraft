@@ -153,6 +153,14 @@ pub async fn upload(
         return Err(ApiError::bad("no file in request"));
     }
     let rows = sqlx::query_as::<_, AttachmentRow>(sqlx::AssertSqlSafe(format!("{SELECT} WHERE a.id = ANY($1)"))).bind(&ids).fetch_all(&state.db).await?;
+    crate::webhooks::emit_page(
+        &state,
+        "attachment.created",
+        page_id,
+        Some(user.id),
+        serde_json::json!({"attachments": serde_json::to_value(&rows).unwrap_or_default()}),
+    )
+    .await;
     Ok((StatusCode::CREATED, Json(rows)))
 }
 

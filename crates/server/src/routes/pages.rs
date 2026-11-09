@@ -65,6 +65,7 @@ pub async fn insert_page<'e, E: PgExecutor<'e> + Copy>(db: E, p: NewPage) -> Api
 
 /// Snapshot the current content as a new version if it differs from the latest version.
 pub async fn create_version(state: &AppState, page_id: Uuid, editor: Option<Uuid>, message: Option<String>) -> anyhow::Result<Option<i32>> {
+    let message_for_hook = message.clone();
     let mut tx = state.db.begin().await?;
     let row: Option<(String, Value, i32)> =
         sqlx::query_as("SELECT title, content, version FROM pages WHERE id = $1 FOR UPDATE").bind(page_id).fetch_optional(&mut *tx).await?;
@@ -97,6 +98,7 @@ pub async fn create_version(state: &AppState, page_id: Uuid, editor: Option<Uuid
     if let Err(e) = crate::routes::notifications::notify_page_updated(state, page_id, next, editor).await {
         tracing::warn!("watch notifications failed: {e:#}");
     }
+    crate::webhooks::emit_page(state, "page.updated", page_id, editor, json!({"version": next, "message": message_for_hook})).await;
     Ok(Some(next))
 }
 
@@ -186,6 +188,7 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
     if let Err(e) = crate::routes::notifications::notify_page_mentions(&state, id, &doc, Some(user.id)).await {
         tracing::warn!(page = %id, "mention notifications failed: {e:#}");
     }
+    crate::webhooks::emit_page(&state, "page.created", id, Some(user.id), json!({})).await;
     Ok((StatusCode::CREATED, Json(json!({ "id": id }))))
 }
 
@@ -505,6 +508,7 @@ pub async fn move_page(
         json!({"parentId": req.parent_id, "spaceChanged": target_space != from_space}),
     )
     .await;
+    crate::webhooks::emit_page(&state, "page.moved", id, Some(user.id), json!({"spaceChanged": target_space != from_space})).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -622,6 +626,7 @@ pub async fn trash(State(state): State<AppState>, CurrentUser(user): CurrentUser
         state.rooms.evict(*i);
     }
     audit::log(&state, user.workspace_id, Some(user.id), "page.trash", Some("page"), Some(id), json!({"count": ids.len()})).await;
+    crate::webhooks::emit_page(&state, "page.trashed", id, Some(user.id), json!({"count": ids.len()})).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -661,6 +666,7 @@ pub async fn restore(State(state): State<AppState>, CurrentUser(user): CurrentUs
         state.search.enqueue(*i);
     }
     audit::log(&state, user.workspace_id, Some(user.id), "page.restore", Some("page"), Some(id), json!({"count": ids.len()})).await;
+    crate::webhooks::emit_page(&state, "page.restored", id, Some(user.id), json!({})).await;
     Ok(StatusCode::NO_CONTENT)
 }
 

@@ -173,6 +173,8 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
         .bind(space.id)
         .fetch_one(&state.db)
         .await?;
+    crate::webhooks::emit(&state, user.workspace_id, "space.created", Some(space.id), json!({"space": {"id": space.id, "key": space.key, "name": space.name}}))
+        .await;
     Ok((StatusCode::CREATED, Json(space)))
 }
 

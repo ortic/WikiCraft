@@ -59,6 +59,7 @@ pub async fn spawn_with(tweak: impl FnOnce(&mut Config)) -> TestApp {
         cluster: "none".into(),
         metrics_token: None,
         smtp_url: None,
+        webhook_allow_private: true,
         mail_from: "WikiCraft <wiki@acme.test>".into(),
     };
     tweak(&mut config);
@@ -67,6 +68,7 @@ pub async fn spawn_with(tweak: impl FnOnce(&mut Config)) -> TestApp {
     wikicraft::cluster::spawn(&state);
     wikicraft::jobs::spawn_worker(&state);
     wikicraft::mail::spawn_worker(&state);
+    wikicraft::webhooks::spawn_worker(&state);
     let app = wikicraft::routes::router(state.clone());
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     TestApp { base: format!("http://{addr}"), state, _data: data }

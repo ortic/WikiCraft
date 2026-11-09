@@ -4,6 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Upload, FileSearch, CheckCircle2, XCircle, UserPlus, Users, Activity, Database, RefreshCw, Mail, Send, Globe } from 'lucide-react'
 import { api, formatBytes, formatDate, type Job } from '../api'
 import { Avatar, Modal, Spinner, useMe, useToast } from '../ui'
+import AdminWebhooks from './AdminWebhooks'
 
 export default function Admin() {
   const me = useMe()
@@ -16,6 +17,7 @@ export default function Admin() {
         <NavLink to="/admin/users" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>Users</NavLink>
         <NavLink to="/admin/groups" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>Groups</NavLink>
         <NavLink to="/admin/import" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>Import</NavLink>
+        <NavLink to="/admin/webhooks" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>Webhooks</NavLink>
         <NavLink to="/admin/audit" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>Audit log</NavLink>
       </div>
       <Routes>
@@ -23,6 +25,7 @@ export default function Admin() {
         <Route path="users" element={<UsersAdmin />} />
         <Route path="groups" element={<GroupsAdmin />} />
         <Route path="import" element={<ImportAdmin />} />
+        <Route path="webhooks" element={<AdminWebhooks />} />
         <Route path="audit" element={<Audit />} />
         <Route path="*" element={<Navigate to="/admin" replace />} />
       </Routes>

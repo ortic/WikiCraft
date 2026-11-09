@@ -127,6 +127,7 @@ async fn main() -> anyhow::Result<()> {
             wikicraft::cluster::spawn(&state);
             wikicraft::jobs::spawn_worker(&state);
             wikicraft::mail::spawn_worker(&state);
+            wikicraft::webhooks::spawn_worker(&state);
             let app = wikicraft::routes::router(state.clone());
             let listener = tokio::net::TcpListener::bind(bind).await?;
             tracing::info!("WikiCraft listening on http://{bind}");

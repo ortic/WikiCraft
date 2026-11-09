@@ -5725,6 +5725,7 @@ dependencies = [
  "dashmap",
  "futures",
  "hex",
+ "hmac 0.13.0",
  "ldap3",
  "lettre",
  "mime_guess",

@@ -66,6 +66,10 @@ pub struct Config {
     #[arg(long, env = "WIKICRAFT_SMTP_URL", hide_env_values = true)]
     pub smtp_url: Option<String>,
 
+    /// Allow webhooks to private / loopback addresses (off by default: SSRF protection).
+    #[arg(long, env = "WIKICRAFT_WEBHOOK_ALLOW_PRIVATE", default_value_t = false)]
+    pub webhook_allow_private: bool,
+
     /// Sender of e-mails.
     #[arg(long, env = "WIKICRAFT_MAIL_FROM", default_value = "WikiCraft <wikicraft@localhost>")]
     pub mail_from: String,

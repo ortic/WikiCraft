@@ -19,3 +19,4 @@ pub mod metrics;
 pub mod routes;
 pub mod search;
 pub mod sso;
+pub mod webhooks;

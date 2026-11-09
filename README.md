@@ -200,8 +200,28 @@ must send `x-wikicraft: 1`) or with a personal token: `Authorization: Bearer wct
 | Comments | `GET/POST /pages/{id}/comments`, `PATCH/DELETE /comments/{id}` |
 | Attachments | `GET/POST /pages/{id}/attachments`, `GET /attachments/{id}/content`, `DELETE /attachments/{id}` |
 | Discovery | `GET /search?q=&space=`, `GET /recent`, `GET /favorites`, `GET /labels/{name}`, `GET /resolve?space=&title=` / `?source=confluence:<id>` |
-| Import | `POST /imports/confluence` (multipart `file`, `options`), `POST /imports/confluence/analyze`, `POST /imports/markdown`, `GET /jobs/{id}` |
-| Admin | `GET/POST /users`, `PATCH /users/{id}`, `GET/POST /groups`, group members, `GET /admin/audit`, `GET /admin/stats`, `POST /admin/reindex` |
+| Reports | `GET /reports/pages?labels=&spaces=&operator=all&sort=&max=`, `GET /reports/properties?labels=`, `GET /reports/tasks?spaces=&status=`, `GET /tasks` (mine) |
+| Sharing | `GET/POST /pages/{id}/share-links`, `DELETE /share-links/{id}`, public: `GET /public/{token}[/pages/{id}]`, `GET /public/{token}/attachments/{id}` |
+| Import / export | `POST /imports/confluence` (multipart `file`, `options`), `POST /imports/confluence/analyze`, `POST /imports/markdown`, `POST /imports/backup`, `POST /spaces/{key}/export {format: html\|markdown\|backup}`, `GET /jobs/{id}`, `GET /jobs/{id}/download` |
+| Account | `POST /auth/forgot`, `POST /auth/reset`, `GET /auth/invite`, `POST /auth/accept-invite`, `GET/PUT /me/preferences`, `GET /auth/providers` |
+| Admin | `GET/POST /users`, `POST /users/invite`, `PATCH /users/{id}`, `GET/POST /groups`, group members, `GET /admin/audit`, `GET /admin/stats`, `POST /admin/reindex`, `GET/PUT /admin/settings`, `GET /admin/mail`, `POST /admin/mail/test`, webhooks (below) |
+
+### Webhooks
+
+Admins register endpoints under Admin → Webhooks (or `POST /api/admin/webhooks {url, events, spaceKey}`).
+Events: `page.created`, `page.updated` (new version), `page.moved`, `page.trashed`, `page.restored`,
+`comment.created`, `attachment.created`, `space.created` (plus `ping` from "Send test"). Each
+delivery is a JSON `POST`:
+
+```json
+{"event": "page.created", "timestamp": "…", "webhookId": "…", "deliveryId": "…",
+ "data": {"page": {"id": "…", "title": "…", "version": 1, "url": "https://wiki/pages/…"},
+          "space": {"key": "ENG", "name": "Engineering"}, "actor": {"name": "…", "email": "…"}}}
+```
+
+Verify `X-WikiCraft-Signature: sha256=<hex HMAC-SHA256(body, secret)>`. Non-2xx answers are
+retried with exponential backoff (8 attempts). Payloads carry metadata only, never page content.
+Targets on private/loopback addresses are refused unless `WIKICRAFT_WEBHOOK_ALLOW_PRIVATE=true`.
 
 ## AI assistants (MCP)
 

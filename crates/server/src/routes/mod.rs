@@ -15,6 +15,7 @@ pub mod spaces;
 pub mod tasks;
 pub mod templates;
 pub mod users;
+pub mod webhooks;
 
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
@@ -99,6 +100,10 @@ pub fn router(state: AppState) -> Router {
         .route("/pages/{id}/share-links", get(share::list).post(share::create))
         .route("/share-links/{id}", delete(share::revoke))
         .route("/admin/settings", get(share::get_settings).put(share::put_settings))
+        .route("/admin/webhooks", get(webhooks::list).post(webhooks::create))
+        .route("/admin/webhooks/{id}", axum::routing::patch(webhooks::update).delete(webhooks::delete))
+        .route("/admin/webhooks/{id}/test", post(webhooks::test))
+        .route("/admin/webhooks/{id}/deliveries", get(webhooks::deliveries))
         .route("/public/{token}", get(share::view))
         .route("/public/{token}/pages/{id}", get(share::view_page))
         .route("/public/{token}/attachments/{id}", get(share::attachment))
