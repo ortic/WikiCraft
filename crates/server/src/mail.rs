@@ -272,7 +272,7 @@ pub fn esc(s: &str) -> String {
 pub fn layout(title: &str, body: &str, footer: &str) -> String {
     format!(
         "<!doctype html><html><head><meta charset=\"utf-8\"><title>{t}</title></head><body style=\"margin:0;background:#f6f7f9;font-family:-apple-system,'Segoe UI',Roboto,sans-serif;color:#1f2328\">\
-         <div style=\"max-width:560px;margin:0 auto;padding:24px\"><div style=\"font-weight:700;font-size:18px;margin-bottom:16px\">📘 WikiCraft</div>\
+         <div style=\"max-width:560px;margin:0 auto;padding:24px\"><div style=\"font-weight:700;font-size:18px;margin-bottom:16px\"><span style=\"display:inline-block;width:22px;height:22px;border-radius:6px;background:#2563eb;color:#fff;text-align:center;line-height:22px;font-size:13px;margin-right:8px;vertical-align:-3px\">W</span>WikiCraft</div>\
          <div style=\"background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:24px;line-height:1.55\">{body}</div>\
          <p style=\"color:#6b7280;font-size:12px;margin-top:16px\">{footer}</p></div></body></html>",
         t = esc(title)

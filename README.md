@@ -13,11 +13,12 @@ end-of-life (2029-03-28).
 - **Search**: full-text (tantivy) with snippets, permission-aware
 - **Confluence import**: classic XML exports *and* the new Cloud CSV exports, with history, attachments, comments (incl. inline), labels, restrictions, authors, macro mapping, link rewriting and a dry-run report
 - **Markdown / Obsidian import**: zip of Markdown files with images and `[[wikilinks]]`
-- **Export**: Markdown, HTML, JSON
-- **Single sign-on**: OpenID Connect (Keycloak, Entra ID, Okta, Google, Authentik, …) with just-in-time provisioning and account linking
+- **Export & backup**: single pages as Markdown/HTML/JSON; whole spaces as a browsable static HTML site, a Markdown folder tree (re-importable) or a full backup that restores into a new space
+- **Sign-in**: local accounts, OpenID Connect (Microsoft Entra ID, Google, GitLab, Okta, Keycloak, Authentik, …), GitHub, LDAP / Active Directory and SAML 2.0 — several at once, with just-in-time provisioning, domain rules, group sync and account linking
+- **E-mail**: invitations, password reset and notification digests over SMTP (outbox with retries)
 - **AI-ready**: built-in [MCP](https://modelcontextprotocol.io) server — Claude & co. can search, read and write pages with the user's permissions
 - **Templates**: built-in (meeting notes, decision record, how-to, retrospective, runbook, PRD) and custom space/workspace templates
-- **Notifications**: mentions, comments, watched-page updates; watch/unwatch pages
+- **Notifications**: mentions, comments, watched-page updates (in-app and as e-mail digest); watch/unwatch pages; a "My tasks" view of task items assigned to you
 - **Migration-friendly URLs**: old Confluence links (`/display/KEY/Title`, `viewpage.action?pageId=`, Cloud `/wiki/spaces/…/pages/ID`, `/x/` tiny links) redirect to the imported pages
 - **API**: REST + personal API tokens; audit log
 
@@ -124,6 +125,8 @@ All settings are flags or environment variables:
 | `WIKICRAFT_MICROSOFT_CLIENT_ID` / `_SECRET` / `_TENANT` / `_ALLOWED_DOMAINS` | — | "Continue with Microsoft" (Entra ID) shortcut |
 | `WIKICRAFT_OIDC_ISSUER` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_NAME` / `_AUTO_CREATE` | — | single generic OIDC provider (redirect URI `{BASE_URL}/api/auth/oidc/callback`) |
 | `WIKICRAFT_DISABLE_PASSWORD_LOGIN` | `false` | turn off local passwords (SSO / LDAP only) |
+| `WIKICRAFT_SMTP_URL` | — | outgoing mail: `smtps://user:pass@host` (TLS), `smtp://user:pass@host:587?tls=required` (STARTTLS) or `smtp://host:25` (plain, local relays) |
+| `WIKICRAFT_MAIL_FROM` | `WikiCraft <wikicraft@localhost>` | sender address |
 
 ### Sign-in: SSO, LDAP / Active Directory, SAML
 

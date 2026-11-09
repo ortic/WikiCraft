@@ -385,7 +385,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P1** Page likes / "helpful" signal `C X`
 - [~] **P1** Comment sorting and filtering (open / resolved / mine) `C` (resolved toggle only)
 - [~] **P1** Tasks: assign via mention, due dates, "my tasks" view across spaces, reminders `C` (My tasks page done; no reminders)
-- [~] **P1** Comment notifications + reply via email `C DC` (in-app only; no email)
+- [~] **P1** Comment notifications + reply via email `C DC` (e-mail digest; no reply by e-mail)
 - [x] **P2** Comment permissions separate from edit (commenter role) `C X`
 - [ ] **P2** Suggestions / suggested edits (track-changes mode) `N(GDocs-like)`
 - [ ] **P3** Annotations on attachments (PDF comments)
@@ -470,9 +470,9 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P3** ABAC policies via `cedar-policy` (attributes like department, location)
 
 ### 4.13 Authentication & identity
-- [~] **P0** Local accounts: email + password (argon2id), email verification, password reset `D X B O` (no e-mail verification or reset flow)
+- [~] **P0** Local accounts: email + password (argon2id), email verification, password reset `D X B O` (reset done; no e-mail verification)
 - [~] **P0** Sessions: secure cookies, CSRF protection, session list + revoke, idle/absolute timeouts (no session list/revoke or idle timeout)
-- [ ] **P0** Invitations (email link), invite-only or open sign-up with domain restriction `C D O`
+- [~] **P0** Invitations (email link), invite-only or open sign-up with domain restriction `C D O` (invite-only; no open sign-up)
 - [x] **P1** OIDC (Google, Microsoft Entra ID, Okta, Keycloak, Authentik, GitLab) `C D X B O`
 - [x] **P1** SAML 2.0 SSO `C D X B`
 - [x] **P1** LDAP / Active Directory (bind auth + group sync) `DC D X B`
@@ -499,7 +499,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 
 ### 4.15 Notifications & watching
 - [x] **P0** In-app notification center (mentions, comments, replies, shares, task assignments) `C D O`
-- [ ] **P1** Email notifications with batching / digest (immediate, hourly, daily) `C DC X O`
+- [~] **P1** Email notifications with batching / digest (immediate, hourly, daily) `C DC X O` (2-minute digest; no hourly/daily choice)
 - [~] **P1** Watch page / page subtree / space / blog; auto-watch on create/edit `C X` (pages only; auto-watch on create)
 - [ ] **P1** Notification preferences per channel and event type `C`
 - [ ] **P1** Slack / Microsoft Teams / Mattermost notifications (per user and per space channel) `C O`
@@ -612,8 +612,8 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P1** WCAG 2.2 AA compliance target; automated axe checks in CI `C`
 
 ### 4.25 Administration
-- [~] **P0** Admin console: users (invite, deactivate, reset MFA, change role), groups, spaces overview `C D X B` (no invites, MFA reset or spaces overview)
-- [ ] **P0** Email (SMTP) settings with a test send `D X B`
+- [~] **P0** Admin console: users (invite, deactivate, reset MFA, change role), groups, spaces overview `C D X B` (no MFA reset or spaces overview)
+- [x] **P0** Email (SMTP) settings with a test send `D X B`
 - [~] **P0** Storage settings (local / S3) and usage `D` (env config only; usage in admin stats)
 - [ ] **P1** Branding: logo, colors, login page, custom CSS (scoped), custom HTML header/footer (admin opt-in) `C X B`
 - [ ] **P1** Global announcement banner `C`
