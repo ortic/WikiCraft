@@ -83,3 +83,94 @@ pub async fn ready(State(state): State<AppState>) -> (axum::http::StatusCode, Js
         Json(json!({ "ready": ok, "database": db_ok, "shuttingDown": shutting_down })),
     )
 }
+
+#[derive(Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct SpaceOverview {
+    id: Uuid,
+    key: String,
+    name: String,
+    icon: Option<String>,
+    default_role: String,
+    anonymous_access: bool,
+    archived_at: Option<chrono::DateTime<chrono::Utc>>,
+    pages: i64,
+    attachments: i64,
+    storage_bytes: i64,
+    last_updated: Option<chrono::DateTime<chrono::Utc>>,
+    personal: bool,
+}
+
+/// `GET /api/admin/spaces` — every space, archived ones included, with size and activity.
+pub async fn spaces(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Vec<SpaceOverview>>> {
+    require_admin(&user)?;
+    Ok(Json(
+        sqlx::query_as::<_, SpaceOverview>(
+            "SELECT s.id, s.key, s.name, s.icon, s.default_role, s.anonymous_access, s.archived_at,
+                    (SELECT count(*) FROM pages p WHERE p.space_id = s.id AND p.deleted_at IS NULL) AS pages,
+                    (SELECT count(*) FROM attachments a JOIN pages p ON p.id = a.page_id WHERE p.space_id = s.id AND a.deleted_at IS NULL) AS attachments,
+                    (SELECT COALESCE(sum(a.size), 0)::bigint FROM attachments a JOIN pages p ON p.id = a.page_id WHERE p.space_id = s.id AND a.deleted_at IS NULL) AS storage_bytes,
+                    (SELECT max(p.updated_at) FROM pages p WHERE p.space_id = s.id) AS last_updated,
+                    s.personal_owner_id IS NOT NULL AS personal
+             FROM spaces s WHERE s.workspace_id = $1 ORDER BY s.archived_at IS NOT NULL, lower(s.name)",
+        )
+        .bind(user.workspace_id)
+        .fetch_all(&state.db)
+        .await?,
+    ))
+}
+
+async fn space_by_key(state: &AppState, ws: Uuid, key: &str) -> ApiResult<(Uuid, Option<chrono::DateTime<chrono::Utc>>)> {
+    sqlx::query_as("SELECT id, archived_at FROM spaces WHERE workspace_id = $1 AND upper(key) = upper($2)")
+        .bind(ws)
+        .bind(key)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or(ApiError::NotFound("space"))
+}
+
+/// `POST /api/admin/spaces/{key}/unarchive`
+pub async fn unarchive(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    axum::extract::Path(key): axum::extract::Path<String>,
+) -> ApiResult<axum::http::StatusCode> {
+    require_admin(&user)?;
+    let (id, _) = space_by_key(&state, user.workspace_id, &key).await?;
+    sqlx::query("UPDATE spaces SET archived_at = NULL WHERE id = $1").bind(id).execute(&state.db).await?;
+    crate::audit::log(&state, user.workspace_id, Some(user.id), "space.unarchive", Some("space"), Some(id), json!({"key": key})).await;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+pub struct ConfirmDelete {
+    confirm: String,
+}
+
+/// `DELETE /api/admin/spaces/{key} {confirm: <key>}` — permanently deletes an archived space
+/// with all its pages, history, comments and attachments.
+pub async fn delete_space(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    axum::extract::Path(key): axum::extract::Path<String>,
+    Json(req): Json<ConfirmDelete>,
+) -> ApiResult<axum::http::StatusCode> {
+    require_admin(&user)?;
+    let (id, archived) = space_by_key(&state, user.workspace_id, &key).await?;
+    if archived.is_none() {
+        return Err(ApiError::bad("archive the space first; only archived spaces can be deleted"));
+    }
+    if !req.confirm.eq_ignore_ascii_case(&key) {
+        return Err(ApiError::bad("type the space key to confirm"));
+    }
+    let pages: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM pages WHERE space_id = $1").bind(id).fetch_all(&state.db).await?;
+    for p in &pages {
+        state.rooms.evict(*p);
+    }
+    sqlx::query("DELETE FROM spaces WHERE id = $1").bind(id).execute(&state.db).await?;
+    for p in pages {
+        state.search.enqueue(p);
+    }
+    crate::audit::log(&state, user.workspace_id, Some(user.id), "space.delete", Some("space"), Some(id), json!({"key": key})).await;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}

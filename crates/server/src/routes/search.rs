@@ -84,6 +84,8 @@ pub struct SearchResult {
 pub async fn search(State(state): State<AppState>, MaybeUser(user): MaybeUser, Query(q): Query<SearchQuery>) -> ApiResult<Json<Vec<SearchResult>>> {
     let p = Principal::load(&state, user).await?;
     let mut spaces = visible_spaces(&state, &p).await?;
+    // archived spaces stay readable but drop out of search
+    spaces.retain(|(s, _)| s.archived_at.is_none());
     if let Some(k) = &q.space {
         spaces.retain(|(s, _)| s.key.eq_ignore_ascii_case(k));
     }

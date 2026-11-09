@@ -3298,6 +3298,69 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /admin/spaces:
+    get:
+      tags:
+      - Admin
+      summary: All spaces incl. archived, with size and activity
+      operationId: get_admin_spaces
+      responses:
+        '200':
+          description: OK
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /admin/spaces/{key}:
+    delete:
+      tags:
+      - Admin
+      summary: Permanently delete an archived space
+      operationId: delete_admin_spaces_key
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                confirm:
+                  type: string
+                  description: the space key
+      responses:
+        '204': *id007
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /admin/spaces/{key}/unarchive:
+    post:
+      tags:
+      - Admin
+      summary: Restore an archived space
+      operationId: post_admin_spaces_key_unarchive
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '204': *id007
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /admin/settings:
     get:
       tags:

@@ -40,6 +40,7 @@ impl SpaceRow {
             default_role: self.default_role.clone(),
             anonymous_access: self.anonymous_access,
             personal_owner_id: self.personal_owner_id,
+            archived: self.archived_at.is_some(),
         }
     }
 }

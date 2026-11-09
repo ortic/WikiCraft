@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate } from 'lucide-react'
-import { api, formatDate, type Page } from '../api'
+import { api, formatDate, type Page, type Space } from '../api'
 import { SymbolTile, parseSymbol } from '../icons'
 import { ErrorBox, Spinner, useMe, useToast } from '../ui'
 import Editor, { PresenceAvatars, type Presence } from '../editor/Editor'
@@ -22,6 +22,7 @@ export default function PageView() {
   const me = useMe()
   const user = me.data?.user ?? null
   const page = useQuery({ queryKey: ['page', id], queryFn: () => api.get<Page>(`/pages/${id}`), retry: false })
+  const space = useQuery({ queryKey: ['space', page.data?.spaceKey], queryFn: () => api.get<Space>(`/spaces/${page.data!.spaceKey}`), enabled: !!page.data?.spaceKey })
   const [panel, setPanel] = useState<Panel>(null)
   const [presence, setPresence] = useState<Presence[]>([])
   const [menu, setMenu] = useState(false)
@@ -210,6 +211,9 @@ export default function PageView() {
         </div>
 
         <div className={`page-wrap ${p.fullWidth ? 'full' : ''}`}>
+          {space.data?.archivedAt && (
+            <div className="archived-banner">This space was archived on {formatDate(space.data.archivedAt)} and is read-only.</div>
+          )}
           {parseSymbol(p.icon) && (
             <div className="page-icon">
               <SymbolTile value={p.icon} size={44} />

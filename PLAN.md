@@ -196,12 +196,12 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P2** Release tracks (choose when new features roll out) `C`
 
 ### 4.2 Spaces
-- [~] **P0** Create / edit / delete spaces (name, key, description, icon/emoji, cover) `C D X O B` (icon picker; no delete UI, no cover image)
+- [~] **P0** Create / edit / delete spaces (name, key, description, icon/emoji, cover) `C D X O B` (no cover image)
 - [x] **P0** Space home / overview page `C D X`
 - [ ] **P0** Personal spaces per user `C D`
 - [~] **P1** Space directory with search, categories, filters (team, personal, archived, starred) `C X` (name/key filter only)
 - [ ] **P1** Space categories / tags `C`
-- [~] **P1** Space archive (read-only, hidden from search by default) and restore `C` (API only; not read-only, no restore)
+- [x] **P1** Space archive (read-only, hidden from search by default) and restore `C`
 - [~] **P1** Space sidebar: page tree, shortcuts/links, blog, whiteboards, databases, custom sections `C` (page tree + blog only)
 - [ ] **P1** Space-level look & feel: theme, colors, header image, sidebar config `C X`
 - [ ] **P1** Space templates (create a space prefilled with a page structure) `C X`
@@ -612,7 +612,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P1** WCAG 2.2 AA compliance target; automated axe checks in CI `C`
 
 ### 4.25 Administration
-- [~] **P0** Admin console: users (invite, deactivate, reset MFA, change role), groups, spaces overview `C D X B` (no spaces overview)
+- [x] **P0** Admin console: users (invite, deactivate, reset MFA, change role), groups, spaces overview `C D X B`
 - [x] **P0** Email (SMTP) settings with a test send `D X B`
 - [~] **P0** Storage settings (local / S3) and usage `D` (env config only; usage in admin stats)
 - [ ] **P1** Branding: logo, colors, login page, custom CSS (scoped), custom HTML header/footer (admin opt-in) `C X B`

@@ -69,6 +69,21 @@ function Details({ space }: { space: Space }) {
       <div className="field"><label>Description</label><textarea className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} /></div>
       <div className="field"><label>Key</label><input className="input" value={space.key} disabled /></div>
       <button className="btn btn-primary" onClick={save}>Save</button>
+      <div className="card danger-zone" style={{ marginTop: 28 }}>
+        <b>Archive this space</b>
+        <p className="muted small" style={{ margin: '4px 0 10px' }}>Archived spaces are read-only and leave search and the space list. Workspace admins can restore them under Admin → Spaces.</p>
+        <button
+          className="btn"
+          onClick={async () => {
+            if (!confirm(`Archive “${space.name}”?`)) return
+            await api.del(`/spaces/${space.key}`)
+            qc.invalidateQueries({ queryKey: ['spaces'] })
+            location.href = '/spaces'
+          }}
+        >
+          Archive space
+        </button>
+      </div>
     </div>
   )
 }

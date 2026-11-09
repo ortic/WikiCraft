@@ -97,10 +97,18 @@ pub struct SpaceAccessRow {
     pub default_role: String,
     pub anonymous_access: bool,
     pub personal_owner_id: Option<Uuid>,
+    /// archived spaces are read-only for everyone
+    #[sqlx(default)]
+    pub archived: bool,
 }
 
-/// Effective role of `p` in a space.
+/// Effective role of `p` in a space (at most viewer while the space is archived).
 pub async fn space_role(state: &AppState, p: &Principal, space: &SpaceAccessRow) -> ApiResult<Role> {
+    let role = space_role_unarchived(state, p, space).await?;
+    Ok(if space.archived { role.min(Role::Viewer) } else { role })
+}
+
+async fn space_role_unarchived(state: &AppState, p: &Principal, space: &SpaceAccessRow) -> ApiResult<Role> {
     let Some(user) = &p.user else {
         return Ok(if space.anonymous_access { Role::Viewer } else { Role::None });
     };
@@ -130,11 +138,13 @@ pub async fn space_role(state: &AppState, p: &Principal, space: &SpaceAccessRow)
 }
 
 pub async fn load_space_access(state: &AppState, space_id: Uuid) -> ApiResult<SpaceAccessRow> {
-    sqlx::query_as::<_, SpaceAccessRow>("SELECT id, workspace_id, default_role, anonymous_access, personal_owner_id FROM spaces WHERE id = $1")
-        .bind(space_id)
-        .fetch_optional(&state.db)
-        .await?
-        .ok_or(ApiError::NotFound("space"))
+    sqlx::query_as::<_, SpaceAccessRow>(
+        "SELECT id, workspace_id, default_role, anonymous_access, personal_owner_id, archived_at IS NOT NULL AS archived FROM spaces WHERE id = $1",
+    )
+    .bind(space_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(ApiError::NotFound("space"))
 }
 
 /// What a principal may do with a page.

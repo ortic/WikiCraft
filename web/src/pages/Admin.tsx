@@ -5,6 +5,7 @@ import { Upload, FileSearch, CheckCircle2, XCircle, UserPlus, Users, Activity, D
 import { api, formatBytes, formatDate, type Job } from '../api'
 import { Avatar, Modal, Spinner, useMe, useToast } from '../ui'
 import AdminWebhooks from './AdminWebhooks'
+import AdminSpaces from './AdminSpaces'
 
 export default function Admin() {
   const me = useMe()
@@ -14,6 +15,7 @@ export default function Admin() {
       <h1 style={{ marginTop: 0 }}>Administration</h1>
       <div className="tabs">
         <NavLink end to="/admin" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>Overview</NavLink>
+        <NavLink to="/admin/spaces" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>Spaces</NavLink>
         <NavLink to="/admin/users" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>Users</NavLink>
         <NavLink to="/admin/groups" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>Groups</NavLink>
         <NavLink to="/admin/import" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>Import</NavLink>
@@ -22,6 +24,7 @@ export default function Admin() {
       </div>
       <Routes>
         <Route index element={<Overview />} />
+        <Route path="spaces" element={<AdminSpaces />} />
         <Route path="users" element={<UsersAdmin />} />
         <Route path="groups" element={<GroupsAdmin />} />
         <Route path="import" element={<ImportAdmin />} />

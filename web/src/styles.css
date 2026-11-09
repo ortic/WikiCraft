@@ -470,3 +470,6 @@ kbd { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 1px 6p
 .like-btn.liked { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 50%, var(--border)); background: color-mix(in srgb, var(--accent) 8%, transparent); }
 .c-foot { display: flex; gap: 8px; margin-top: 4px; }
 .c-foot .like-btn { height: 22px; padding: 0 8px; font-size: 12px; }
+.archived-banner { margin-bottom: 14px; padding: 8px 14px; border-radius: 8px; background: color-mix(in srgb, var(--c-warning, #d97706) 12%, transparent); color: var(--text); font-size: 13.5px; }
+.archived-row td { opacity: .75; }
+.danger-zone { border-color: color-mix(in srgb, var(--danger) 30%, var(--border)); }
