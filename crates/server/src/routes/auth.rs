@@ -130,6 +130,11 @@ pub async fn login(State(state): State<AppState>, headers: HeaderMap, Json(req):
     match (ok, user) {
         (true, Some((id, ws))) => {
             crate::auth::clear_login_failures(&state, &email).await;
+            // second factor: no session yet, just a short-lived challenge
+            if crate::routes::security::required(&state, id).await? {
+                let token = crate::routes::security::challenge(&state, id).await?;
+                return Ok(Json(json!({ "mfaRequired": true, "mfaToken": token })).into_response());
+            }
             let cookie = create_session(&state, id, &headers).await?;
             audit::log(&state, ws, Some(id), "auth.login", None, None, json!({})).await;
             Ok(([(header::SET_COOKIE, cookie)], Json(json!({ "ok": true }))).into_response())

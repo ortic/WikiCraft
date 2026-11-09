@@ -16,6 +16,7 @@ pub mod jobs;
 pub mod mail;
 pub mod mcp;
 pub mod metrics;
+pub mod mfa;
 pub mod routes;
 pub mod search;
 pub mod sso;

@@ -101,11 +101,19 @@ pub async fn create_session(state: &AppState, user_id: Uuid, headers: &HeaderMap
     let token = random_token();
     let days = state.config.session_days;
     let ua = headers.get(header::USER_AGENT).and_then(|v| v.to_str().ok()).map(|s| s.chars().take(300).collect::<String>());
-    sqlx::query("INSERT INTO sessions (token_hash, user_id, expires_at, user_agent) VALUES ($1, $2, now() + make_interval(days => $3), $4)")
+    // shown in the session list only (behind a proxy: the first X-Forwarded-For hop)
+    let ip = headers
+        .get("x-forwarded-for")
+        .or_else(|| headers.get("x-real-ip"))
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(',').next())
+        .map(|v| v.trim().chars().take(64).collect::<String>());
+    sqlx::query("INSERT INTO sessions (token_hash, user_id, expires_at, user_agent, ip) VALUES ($1, $2, now() + make_interval(days => $3), $4, $5)")
         .bind(token_hash(&token))
         .bind(user_id)
         .bind(days as i32)
         .bind(ua)
+        .bind(ip)
         .execute(&state.db)
         .await?;
     sqlx::query("UPDATE users SET last_login_at = now() WHERE id = $1").bind(user_id).execute(&state.db).await?;

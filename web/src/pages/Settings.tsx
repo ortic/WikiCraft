@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { KeyRound, Trash2, Copy, Bot, Mail } from 'lucide-react'
 import { api, formatDate } from '../api'
+import SecuritySettings from '../components/SecuritySettings'
 import { useMe, useToast } from '../ui'
 
 interface Token {
@@ -60,6 +61,8 @@ export default function Settings() {
       </div>
 
       <EmailPreferences />
+
+      <SecuritySettings />
 
       <div className="card" style={{ marginBottom: 16 }}>
         <h3 style={{ marginTop: 0 }} className="row"><KeyRound size={17} /> Personal API tokens</h3>

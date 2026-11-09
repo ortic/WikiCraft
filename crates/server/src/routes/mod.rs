@@ -10,6 +10,7 @@ pub mod notifications;
 pub mod pages;
 pub mod reports;
 pub mod search;
+pub mod security;
 pub mod share;
 pub mod spaces;
 pub mod tasks;
@@ -33,6 +34,16 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/logout", post(auth::logout))
         .route("/auth/providers", get(crate::sso::list))
         .route("/auth/forgot", post(account::forgot))
+        .route("/auth/mfa", post(security::login))
+        .route("/me/sessions", get(security::sessions))
+        .route("/me/sessions/{id}", delete(security::revoke_session))
+        .route("/me/sessions/revoke-others", post(security::revoke_others))
+        .route("/me/mfa", get(security::status))
+        .route("/me/mfa/setup", post(security::setup))
+        .route("/me/mfa/enable", post(security::enable))
+        .route("/me/mfa/disable", post(security::disable))
+        .route("/me/mfa/recovery-codes", post(security::new_recovery_codes))
+        .route("/users/{id}/reset-mfa", post(security::admin_reset))
         .route("/auth/reset", post(account::reset))
         .route("/auth/invite", get(account::invite_info))
         .route("/auth/accept-invite", post(account::accept_invite))

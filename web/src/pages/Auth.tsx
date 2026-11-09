@@ -77,6 +77,8 @@ export function Login() {
   const info = useQuery({ queryKey: ['auth-providers'], queryFn: () => api.get<{ passwordLogin: boolean; passwordReset: boolean; providers: Provider[] }>('/auth/providers') })
   const next = new URLSearchParams(location.search).get('next') ?? '/'
   const [busy, setBusy] = useState(false)
+  const [mfaToken, setMfaToken] = useState<string | null>(null)
+  const [code, setCode] = useState('')
   const redirects = (info.data?.providers ?? []).filter((p) => p.loginUrl)
   const directory = (info.data?.providers ?? []).filter((p) => p.type === 'ldap')
   // the form signs in local accounts and directory (LDAP / AD) accounts
@@ -86,7 +88,16 @@ export function Login() {
     setBusy(true)
     setError(null)
     try {
-      await api.post('/auth/login', { email, password })
+      if (mfaToken) {
+        await api.post('/auth/mfa', { mfaToken, code })
+      } else {
+        const r = await api.post<{ ok?: boolean; mfaRequired?: boolean; mfaToken?: string }>('/auth/login', { email, password })
+        if (r.mfaRequired && r.mfaToken) {
+          setMfaToken(r.mfaToken)
+          setBusy(false)
+          return
+        }
+      }
       location.href = next.startsWith('/') && !next.startsWith('//') ? next : '/'
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Login failed')
@@ -94,6 +105,25 @@ export function Login() {
     }
   }
   const wide = { width: '100%', justifyContent: 'center', height: 38 } as const
+  if (mfaToken)
+    return (
+      <div className="auth">
+        <form className="auth-card" onSubmit={submit}>
+          <Logo />
+          <h1>Two-factor sign-in</h1>
+          <p className="muted" style={{ marginTop: 0 }}>Enter the 6-digit code from your authenticator app, or one of your recovery codes.</p>
+          <div className="field">
+            <label>Code</label>
+            <input className="input otp-input" inputMode="numeric" autoComplete="one-time-code" required value={code} onChange={(e) => setCode(e.target.value)} autoFocus placeholder="123 456" />
+          </div>
+          {error && <p className="error-text">{error}</p>}
+          <button className="btn btn-primary" style={wide} disabled={busy}>Verify</button>
+          <p className="small" style={{ textAlign: 'center', marginBottom: 0 }}>
+            <a href="/login" onClick={(e) => { e.preventDefault(); setMfaToken(null); setCode(''); setError(null) }}>Use a different account</a>
+          </p>
+        </form>
+      </div>
+    )
   return (
     <div className="auth">
       <form className="auth-card" onSubmit={submit}>

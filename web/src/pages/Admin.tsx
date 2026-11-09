@@ -179,7 +179,7 @@ function UsersAdmin() {
       </div>
       <table className="list">
         <thead>
-          <tr><th>Name</th><th>E-mail</th><th>Role</th><th>Status</th><th>Last login</th></tr>
+          <tr><th>Name</th><th>E-mail</th><th>Role</th><th>Status</th><th>Last login</th><th /></tr>
         </thead>
         <tbody>
           {users.data?.map((u) => (
@@ -215,6 +215,14 @@ function UsersAdmin() {
                 )}
               </td>
               <td className="faint small">{formatDate(u.lastLoginAt) || 'never'}</td>
+              <td>
+                {u.role !== 'owner' && u.status === 'active' && (
+                  <button className="btn btn-ghost small" title="Reset two-factor authentication (e.g. lost phone); signs the person out" onClick={async () => {
+                    if (!confirm(`Reset two-factor authentication for ${u.name}? They'll be signed out and can sign in with their password only.`)) return
+                    try { await api.post(`/users/${u.id}/reset-mfa`); toast(`Two-factor authentication reset for ${u.name}`) } catch (e) { toast(e instanceof Error ? e.message : 'Failed') }
+                  }}>Reset 2FA</button>
+                )}
+              </td>
             </tr>
           ))}
         </tbody>

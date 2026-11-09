@@ -471,12 +471,12 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 
 ### 4.13 Authentication & identity
 - [~] **P0** Local accounts: email + password (argon2id), email verification, password reset `D X B O` (reset done; no e-mail verification)
-- [~] **P0** Sessions: secure cookies, CSRF protection, session list + revoke, idle/absolute timeouts (no session list/revoke or idle timeout)
+- [~] **P0** Sessions: secure cookies, CSRF protection, session list + revoke, idle/absolute timeouts (no idle timeout)
 - [~] **P0** Invitations (email link), invite-only or open sign-up with domain restriction `C D O` (invite-only; no open sign-up)
 - [x] **P1** OIDC (Google, Microsoft Entra ID, Okta, Keycloak, Authentik, GitLab) `C D X B O`
 - [x] **P1** SAML 2.0 SSO `C D X B`
 - [x] **P1** LDAP / Active Directory (bind auth + group sync) `DC D X B`
-- [ ] **P1** MFA: TOTP, WebAuthn/passkeys, recovery codes; enforce per workspace/group `C D`
+- [~] **P1** MFA: TOTP, WebAuthn/passkeys, recovery codes; enforce per workspace/group `C D` (TOTP + recovery codes; no passkeys or enforcement)
 - [~] **P1** Personal API tokens (scoped, expiring) and OAuth2 apps (authorization code + PKCE) `C D X O B` (unscoped tokens; no OAuth2 apps)
 - [~] **P1** User profiles (avatar, title, department, timezone, language, bio) and people directory `C X` (name/password only; no directory)
 - [ ] **P2** SCIM 2.0 provisioning (users + groups) `C D`
@@ -612,7 +612,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P1** WCAG 2.2 AA compliance target; automated axe checks in CI `C`
 
 ### 4.25 Administration
-- [~] **P0** Admin console: users (invite, deactivate, reset MFA, change role), groups, spaces overview `C D X B` (no MFA reset or spaces overview)
+- [~] **P0** Admin console: users (invite, deactivate, reset MFA, change role), groups, spaces overview `C D X B` (no spaces overview)
 - [x] **P0** Email (SMTP) settings with a test send `D X B`
 - [~] **P0** Storage settings (local / S3) and usage `D` (env config only; usage in admin stats)
 - [ ] **P1** Branding: logo, colors, login page, custom CSS (scoped), custom HTML header/footer (admin opt-in) `C X B`

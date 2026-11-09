@@ -439,3 +439,10 @@ table.list tr:hover td { background: var(--bg-soft); }
 .share-btn { height: 30px; gap: 6px; margin: 0 4px; }
 .event-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(190px, 1fr)); gap: 4px 12px; }
 .badge-danger { background: color-mix(in srgb, var(--danger) 14%, transparent); color: var(--danger); }
+.otp-input { font-size: 22px; letter-spacing: 6px; text-align: center; height: 48px; font-variant-numeric: tabular-nums; }
+.mfa-setup { display: grid; grid-template-columns: 200px 1fr; gap: 18px; align-items: start; }
+.mfa-qr { background: #fff; border-radius: 10px; padding: 4px; border: 1px solid var(--border); line-height: 0; }
+.mfa-qr svg { width: 100%; height: auto; }
+.recovery-codes { display: grid; grid-template-columns: 1fr 1fr; gap: 6px 18px; padding: 12px 16px; border-radius: 10px; background: var(--bg-hover); }
+.recovery-codes code { font-size: 15px; letter-spacing: 1px; background: none; }
+@media (max-width: 560px) { .mfa-setup { grid-template-columns: 1fr; } }
