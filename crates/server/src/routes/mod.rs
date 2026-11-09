@@ -8,6 +8,7 @@ pub mod imports;
 pub mod inspect;
 pub mod legacy;
 pub mod notifications;
+pub mod openapi;
 pub mod pages;
 pub mod reports;
 pub mod search;
@@ -138,6 +139,7 @@ pub fn router(state: AppState) -> Router {
         .route("/admin/stats", get(admin::stats))
         .route("/admin/reindex", post(admin::reindex))
         .route("/health", get(admin::health))
+        .route("/openapi.yaml", get(openapi::spec))
         .route("/ready", get(admin::ready))
         .route("/metrics", get(crate::metrics::render))
         // MCP server for AI assistants (bearer token auth inside the tools)
