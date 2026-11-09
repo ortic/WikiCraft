@@ -211,7 +211,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P1** Space key rename with redirects `X`
 - [ ] **P2** Space-level announcement banner `C`
 - [ ] **P2** Space analytics (views, contributors, popular pages) `C`
-- [ ] **P2** Space export / import (native format) `C DC X`
+- [x] **P2** Space export / import (native format) `C DC X`
 - [ ] **P2** Watch space / follow space activity `C X`
 
 ### 4.3 Content types & information architecture
@@ -384,7 +384,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P1** Reactions (emoji) on pages and comments `C O`
 - [ ] **P1** Page likes / "helpful" signal `C X`
 - [~] **P1** Comment sorting and filtering (open / resolved / mine) `C` (resolved toggle only)
-- [~] **P1** Tasks: assign via mention, due dates, "my tasks" view across spaces, reminders `C` (no reminders)
+- [~] **P1** Tasks: assign via mention, due dates, "my tasks" view across spaces, reminders `C` (My tasks page done; no reminders)
 - [~] **P1** Comment notifications + reply via email `C DC` (in-app only; no email)
 - [x] **P2** Comment permissions separate from edit (commenter role) `C X`
 - [ ] **P2** Suggestions / suggested edits (track-changes mode) `N(GDocs-like)`
@@ -549,12 +549,12 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 ### 4.19 Export, print & publishing
 - [~] **P1** Export page / subtree to PDF (headers/footers, TOC, page numbers, cover page, custom CSS/template) `C X B` (browser print-to-PDF only)
 - [ ] **P1** Export to Word (DOCX) `C X B`
-- [~] **P1** Export to Markdown / HTML (zip with attachments) `D O B` (single page only; no zip/attachments)
+- [x] **P1** Export to Markdown / HTML (zip with attachments) `D O B`
 - [x] **P1** Print-friendly view `C X B`
-- [ ] **P1** Native space export/backup format (JSON + blobs, versioned) for move/restore between instances `C X`
+- [x] **P1** Native space export/backup format (JSON + blobs, versioned) for move/restore between instances `C X`
 - [ ] **P2** Export to Confluence-compatible format (reverse migration, an anti-lock-in promise)
 - [ ] **P2** Scheduled exports to S3/Git (docs-as-code mirror)
-- [ ] **P2** Static site publishing of a space (public docs portal, custom domain, SEO, sitemap, search) `C(apps) X`
+- [~] **P2** Static site publishing of a space (public docs portal, custom domain, SEO, sitemap, search) `C(apps) X` (static HTML export only)
 - [ ] **P3** Git sync (two-way Markdown sync with a repository) `Wiki.js`
 
 ### 4.20 Integrations
