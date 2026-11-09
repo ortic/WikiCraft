@@ -117,17 +117,20 @@ struct OutboxRow {
     attempts: i32,
 }
 
-/// Sends what's due in the outbox.
+/// Sends what's due in the outbox. Rows are leased (not locked in an open transaction) while
+/// the SMTP conversation runs, so a slow mail server doesn't pin database connections.
 pub async fn drain(state: &AppState) -> anyhow::Result<usize> {
     let mut sent = 0;
     loop {
-        let mut tx = state.db.begin().await?;
         let rows = sqlx::query_as::<_, OutboxRow>(
-            "SELECT id, to_address, subject, body_text, body_html, attempts FROM outbox
-             WHERE sent_at IS NULL AND attempts < $1 AND next_attempt_at <= now() ORDER BY created_at LIMIT 10 FOR UPDATE SKIP LOCKED",
+            "WITH batch AS (
+                SELECT id FROM outbox WHERE sent_at IS NULL AND attempts < $1 AND next_attempt_at <= now()
+                ORDER BY created_at LIMIT 10 FOR UPDATE SKIP LOCKED)
+             UPDATE outbox o SET next_attempt_at = now() + interval '2 minutes' FROM batch WHERE o.id = batch.id
+             RETURNING o.id, o.to_address, o.subject, o.body_text, o.body_html, o.attempts",
         )
         .bind(MAX_ATTEMPTS)
-        .fetch_all(&mut *tx)
+        .fetch_all(&state.db)
         .await?;
         if rows.is_empty() {
             return Ok(sent);
@@ -137,7 +140,7 @@ pub async fn drain(state: &AppState) -> anyhow::Result<usize> {
                 Ok(()) => {
                     sqlx::query("UPDATE outbox SET sent_at = now(), attempts = attempts + 1, last_error = NULL WHERE id = $1")
                         .bind(r.id)
-                        .execute(&mut *tx)
+                        .execute(&state.db)
                         .await?;
                     sent += 1;
                 }
@@ -150,12 +153,11 @@ pub async fn drain(state: &AppState) -> anyhow::Result<usize> {
                     .bind(r.id)
                     .bind(format!("{e:#}"))
                     .bind(1i32 << r.attempts.clamp(0, 10))
-                    .execute(&mut *tx)
+                    .execute(&state.db)
                     .await?;
                 }
             }
         }
-        tx.commit().await?;
     }
 }
 

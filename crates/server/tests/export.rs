@@ -190,4 +190,23 @@ async fn export_and_restore_a_space() {
     assert_eq!(st, 404, "restored restriction hides the page");
     let (st, _) = app.get(&owner, &format!("/pages/{r_secret}")).await;
     assert_eq!(st, 200);
+    // the restored space opens with the original default role only after the restore
+    let (_, doc2) = app.get(&owner, "/spaces/DOC2").await;
+    assert_eq!(doc2["defaultRole"], "editor");
+
+    // a broken backup (attachment file missing) fails without leaving a half-restored space
+    let mut broken = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    broken.start_file("manifest.json", zip::write::SimpleFileOptions::default()).unwrap();
+    std::io::Write::write_all(&mut broken, serde_json::to_vec(&manifest).unwrap().as_slice()).unwrap();
+    let broken = broken.finish().unwrap().into_inner();
+    let r = restore("DOC3", broken).await.unwrap();
+    assert_eq!(r.status(), 202);
+    let body: Value = r.json().await.unwrap();
+    let job = body["jobId"].as_str().unwrap().to_string();
+    app.eventually(|| async {
+        let (_, j) = app.get(&owner, &format!("/jobs/{job}")).await;
+        (j["status"] == "failed").then_some(())
+    })
+    .await;
+    assert_eq!(app.get(&owner, "/spaces/DOC3").await.0, 404, "cleaned up");
 }

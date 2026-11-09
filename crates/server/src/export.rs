@@ -55,6 +55,8 @@ struct PageRow {
     updated_at: chrono::DateTime<chrono::Utc>,
     created_by: Option<String>,
     updated_by: Option<String>,
+    /// display name for HTML/Markdown (e-mails stay in backups only)
+    updated_by_name: Option<String>,
 }
 
 #[derive(sqlx::FromRow)]
@@ -186,7 +188,7 @@ pub async fn run_export(state: &AppState, job_id: Uuid, actor: Uuid, input: &Val
 
     let rows = sqlx::query_as::<_, PageRow>(
         "SELECT p.id, p.parent_id, p.kind, p.title, p.icon, p.position, p.content, p.page_status, p.full_width, p.created_at, p.updated_at,
-                cu.email AS created_by, uu.email AS updated_by
+                cu.email AS created_by, uu.email AS updated_by, COALESCE(uu.name, cu.name) AS updated_by_name
          FROM pages p LEFT JOIN users cu ON cu.id = p.created_by LEFT JOIN users uu ON uu.id = p.updated_by
          WHERE p.space_id = $1 AND p.deleted_at IS NULL ORDER BY p.position, lower(p.title)",
     )
@@ -580,7 +582,7 @@ fn html_page(pg: &Page, doc: &Node, file: &str, by_id: &HashMap<Uuid, &Page>, ex
     let meta = format!(
         "Last updated {}{}",
         pg.row.updated_at.format("%Y-%m-%d"),
-        pg.row.updated_by.as_deref().or(pg.row.created_by.as_deref()).map(|u| format!(" by {}", e(u))).unwrap_or_default()
+        pg.row.updated_by_name.as_deref().map(|u| format!(" by {}", e(u))).unwrap_or_default()
     );
     format!(
         "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{title} · {space}</title><link rel=\"stylesheet\" href=\"{css}\"></head><body><header><nav class=\"crumbs\">{crumbs}</nav></header><main class=\"{width}\"><h1>{title}</h1><p class=\"meta\">{meta}</p>{labels}<article>{body}</article>{children}</main></body></html>",
@@ -675,8 +677,8 @@ fn read_manifest(path: &std::path::Path) -> anyhow::Result<Manifest> {
     let f = zip.by_name("manifest.json").map_err(|_| anyhow::anyhow!("not a WikiCraft space backup (manifest.json missing)"))?;
     let mut buf = Vec::new();
     // a manifest holds all page content; cap it to keep memory bounded
-    let read = f.take(512 * 1024 * 1024 + 1).read_to_end(&mut buf)?;
-    anyhow::ensure!(read <= 512 * 1024 * 1024, "manifest.json is too large");
+    let read = f.take(256 * 1024 * 1024 + 1).read_to_end(&mut buf)?;
+    anyhow::ensure!(read <= 256 * 1024 * 1024, "manifest.json is too large");
     let m: Manifest = serde_json::from_slice(&buf)?;
     anyhow::ensure!(m.format == BACKUP_FORMAT, "not a WikiCraft space backup");
     anyhow::ensure!(m.version == 1, "unsupported backup version {}", m.version);
@@ -724,7 +726,8 @@ pub async fn run_restore(state: &AppState, job_id: Uuid, actor: Uuid, archive: &
         &name,
         m.space.description.as_deref(),
         m.space.icon.as_deref(),
-        default_role,
+        // closed while restoring: content lands before its restrictions do
+        "none",
         None,
     )
     .await
@@ -734,6 +737,7 @@ pub async fn run_restore(state: &AppState, job_id: Uuid, actor: Uuid, archive: &
         .bind(user.id)
         .execute(&state.db)
         .await?;
+    let outcome: anyhow::Result<Value> = async {
 
     // people and groups are matched by e-mail / name in this workspace
     let users: HashMap<String, Uuid> = sqlx::query_as::<_, (String, Uuid)>("SELECT lower(email), id FROM users WHERE workspace_id = $1 AND email IS NOT NULL")
@@ -818,7 +822,8 @@ pub async fn run_restore(state: &AppState, job_id: Uuid, actor: Uuid, archive: &
         let Some(&page) = page_ids.get(&a.page_id) else { continue };
         let p = archive.to_path_buf();
         let file = a.file.clone();
-        let data = tokio::task::spawn_blocking(move || read_entry(&p, &file, 4 * 1024 * 1024 * 1024)).await??;
+        let max = state.config.max_upload_mb.saturating_mul(1024 * 1024);
+        let data = tokio::task::spawn_blocking(move || read_entry(&p, &file, max)).await??;
         let new =
             crate::routes::attachments::store_attachment(state, user.workspace_id, page, person(&a.created_by), &a.filename, data, Some(a.created_at), None)
                 .await
@@ -918,8 +923,6 @@ pub async fn run_restore(state: &AppState, job_id: Uuid, actor: Uuid, archive: &
     for id in page_ids.values() {
         state.search.enqueue(*id);
     }
-    crate::audit::log(state, user.workspace_id, Some(user.id), "space.restored", Some("space"), Some(space.id), json!({"key": key, "pages": m.pages.len()}))
-        .await;
     Ok(json!({
         "spaceKey": key,
         "pages": m.pages.len(),
@@ -927,6 +930,30 @@ pub async fn run_restore(state: &AppState, job_id: Uuid, actor: Uuid, archive: &
         "comments": restored_comments,
         "unmappedRestrictions": unmapped,
     }))
+    }
+    .await;
+    match outcome {
+        Ok(result) => {
+            // open the space only now that every restriction is in place
+            sqlx::query("UPDATE spaces SET default_role = $2 WHERE id = $1").bind(space.id).bind(default_role).execute(&state.db).await?;
+            crate::audit::log(
+                state,
+                user.workspace_id,
+                Some(user.id),
+                "space.restored",
+                Some("space"),
+                Some(space.id),
+                json!({"key": key, "pages": m.pages.len()}),
+            )
+            .await;
+            Ok(result)
+        }
+        Err(e) => {
+            // never leave a half-restored space (with content but missing restrictions) behind
+            let _ = sqlx::query("DELETE FROM spaces WHERE id = $1").bind(space.id).execute(&state.db).await;
+            Err(e)
+        }
+    }
 }
 
 /// Points page links, attachment URLs and comment anchors at the restored ids.

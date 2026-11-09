@@ -152,7 +152,7 @@ pub async fn explain(State(state): State<AppState>, CurrentUser(me): CurrentUser
         }
     }
     Ok(Json(json!({
-        "user": target.map(|u| json!({"id": u.id, "name": u.name, "email": u.email, "role": u.role, "status": u.status})),
+        "user": target.map(|u| json!({"id": u.id, "name": u.name, "role": u.role, "status": u.status})),
         "spaceRole": role.as_str(),
         "access": {"view": access.view, "comment": access.comment, "edit": access.edit, "admin": access.admin},
         "steps": steps,

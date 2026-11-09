@@ -139,7 +139,11 @@ pub async fn upload_markdown(State(state): State<AppState>, CurrentUser(user): C
     res.map(|v| (StatusCode::CREATED, Json(v)))
 }
 
+/// Markdown imports hold their files in memory: at most two at a time.
+static MARKDOWN_IMPORTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
+
 async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, fields: &HashMap<String, String>, filename: &str) -> ApiResult<Value> {
+    let _slot = MARKDOWN_IMPORTS.acquire().await.map_err(|e| ApiError::Internal(e.into()))?;
     let p = Principal::load(state, Some(user.clone())).await?;
     let key = fields.get("spaceKey").ok_or(ApiError::bad("spaceKey is required"))?;
     let (space, role) = load_space(state, &p, key).await?;
@@ -161,7 +165,7 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
             let mut zip = zip::ZipArchive::new(std::fs::File::open(&p)?)?;
             const MAX_FILES: usize = 5_000;
             const MAX_ENTRY: u64 = 64 * 1024 * 1024;
-            const MAX_TOTAL: u64 = 1024 * 1024 * 1024;
+            const MAX_TOTAL: u64 = 512 * 1024 * 1024;
             let mut out = Vec::new();
             let mut total = 0u64;
             if zip.len() > MAX_FILES * 4 {

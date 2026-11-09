@@ -71,12 +71,19 @@ pub struct ReportPage {
 }
 
 /// Candidate pages (label / space filters in SQL), then permission filtering.
-async fn pages(state: &AppState, p: &Principal, q: &ReportQuery, require_labels: bool, default_max: i64) -> ApiResult<Vec<ReportPage>> {
+async fn pages(state: &AppState, p: &Principal, q: &ReportQuery, require_labels: bool, default_max: i64, with_content: bool) -> ApiResult<Vec<ReportPage>> {
     let ws = workspace_of(state, p).await?;
     let labels = q.labels();
     if require_labels && labels.is_empty() {
         return Ok(vec![]);
     }
+    // only spaces the caller can see are queried at all (anonymous visitors of a private wiki
+    // get nothing without touching pages)
+    let visible_sp = visible_spaces(state, p).await?;
+    if visible_sp.is_empty() {
+        return Ok(vec![]);
+    }
+    let space_ids: Vec<Uuid> = visible_sp.iter().map(|(s, _)| s.id).collect();
     let spaces = q.spaces();
     let order = match q.sort.as_deref() {
         Some("title") => "lower(p.title)",
@@ -86,9 +93,10 @@ async fn pages(state: &AppState, p: &Principal, q: &ReportQuery, require_labels:
     let max = q.max(default_max);
     let rows = sqlx::query_as::<_, ReportPage>(sqlx::AssertSqlSafe(format!(
         "SELECT p.id, p.title, p.kind, p.space_id, s.key AS space_key, s.name AS space_name, p.created_at, p.updated_at, u.name AS updated_by_name,
-                COALESCE((SELECT array_agg(l.name ORDER BY l.name) FROM labels l WHERE l.page_id = p.id), '{{}}') AS labels, p.content
+                COALESCE((SELECT array_agg(l.name ORDER BY l.name) FROM labels l WHERE l.page_id = p.id), '{{}}') AS labels,
+                CASE WHEN $6 THEN p.content ELSE 'null'::jsonb END AS content
          FROM pages p JOIN spaces s ON s.id = p.space_id LEFT JOIN users u ON u.id = p.updated_by
-         WHERE p.workspace_id = $1 AND p.deleted_at IS NULL AND s.archived_at IS NULL
+         WHERE p.workspace_id = $1 AND p.deleted_at IS NULL AND s.archived_at IS NULL AND p.space_id = ANY($5)
            AND (cardinality($2::text[]) = 0 OR upper(s.key) = ANY($2))
            AND (cardinality($3::text[]) = 0 OR (
                 CASE WHEN $4 THEN (SELECT count(DISTINCT l.name) FROM labels l WHERE l.page_id = p.id AND l.name = ANY($3)) = cardinality($3)
@@ -99,9 +107,10 @@ async fn pages(state: &AppState, p: &Principal, q: &ReportQuery, require_labels:
     .bind(&spaces)
     .bind(&labels)
     .bind(q.all_labels())
+    .bind(&space_ids)
+    .bind(with_content)
     .fetch_all(&state.db)
     .await?;
-    let visible_sp = visible_spaces(state, p).await?;
     let pairs: Vec<(Uuid, Uuid)> = rows.iter().map(|r| (r.id, r.space_id)).collect();
     let visible = filter_visible(state, p, &visible_sp, &pairs).await?;
     Ok(rows.into_iter().filter(|r| visible.contains(&r.id)).take(max as usize).collect())
@@ -110,7 +119,7 @@ async fn pages(state: &AppState, p: &Principal, q: &ReportQuery, require_labels:
 /// `GET /api/reports/pages?labels=&spaces=&operator=&sort=&max=` (contentbylabel, recently-updated)
 pub async fn pages_report(State(state): State<AppState>, MaybeUser(user): MaybeUser, Query(q): Query<ReportQuery>) -> ApiResult<Json<Vec<ReportPage>>> {
     let p = Principal::load(&state, user).await?;
-    Ok(Json(pages(&state, &p, &q, false, 20).await?))
+    Ok(Json(pages(&state, &p, &q, false, 20, false).await?))
 }
 
 /// Key/value pairs of a page's properties table: the first table whose rows all have two
@@ -139,7 +148,7 @@ pub fn properties(doc: &Node) -> Vec<(String, String)> {
 /// `GET /api/reports/properties?labels=&spaces=&max=` (detailssummary / content-report-table)
 pub async fn properties_report(State(state): State<AppState>, MaybeUser(user): MaybeUser, Query(q): Query<ReportQuery>) -> ApiResult<Json<Value>> {
     let p = Principal::load(&state, user).await?;
-    let rows = pages(&state, &p, &q, true, 100).await?;
+    let rows = pages(&state, &p, &q, true, 100, true).await?;
     let mut columns: Vec<String> = Vec::new();
     let mut seen: HashSet<String> = HashSet::new();
     let mut out = Vec::new();
@@ -180,11 +189,16 @@ pub struct TaskReportRow {
 pub async fn tasks_report(State(state): State<AppState>, MaybeUser(user): MaybeUser, Query(q): Query<ReportQuery>) -> ApiResult<Json<Vec<TaskReportRow>>> {
     let p = Principal::load(&state, user).await?;
     let ws = workspace_of(&state, &p).await?;
+    let visible_sp = visible_spaces(&state, &p).await?;
+    if visible_sp.is_empty() {
+        return Ok(Json(vec![]));
+    }
+    let space_ids: Vec<Uuid> = visible_sp.iter().map(|(s, _)| s.id).collect();
     let status = q.status.clone().unwrap_or_else(|| "open".into());
     let rows = sqlx::query_as::<_, TaskReportRow>(
         "SELECT t.page_id, t.idx, t.text, t.done, t.due, t.assignee_id, a.name AS assignee_name, p.title AS page_title, p.space_id, s.key AS space_key
          FROM tasks t JOIN pages p ON p.id = t.page_id JOIN spaces s ON s.id = p.space_id LEFT JOIN users a ON a.id = t.assignee_id
-         WHERE p.workspace_id = $1 AND p.deleted_at IS NULL AND s.archived_at IS NULL
+         WHERE p.workspace_id = $1 AND p.deleted_at IS NULL AND s.archived_at IS NULL AND p.space_id = ANY($5)
            AND ($2 = 'all' OR t.done = ($2 = 'done'))
            AND (cardinality($3::text[]) = 0 OR upper(s.key) = ANY($3))
            AND (cardinality($4::text[]) = 0 OR EXISTS (SELECT 1 FROM labels l WHERE l.page_id = p.id AND l.name = ANY($4)))
@@ -194,9 +208,9 @@ pub async fn tasks_report(State(state): State<AppState>, MaybeUser(user): MaybeU
     .bind(&status)
     .bind(q.spaces())
     .bind(q.labels())
+    .bind(&space_ids)
     .fetch_all(&state.db)
     .await?;
-    let visible_sp = visible_spaces(&state, &p).await?;
     let pairs: Vec<(Uuid, Uuid)> = rows.iter().map(|r| (r.page_id, r.space_id)).collect();
     let visible = filter_visible(&state, &p, &visible_sp, &pairs).await?;
     Ok(Json(rows.into_iter().filter(|r| visible.contains(&r.page_id)).take(q.max(50) as usize).collect()))

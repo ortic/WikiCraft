@@ -109,12 +109,17 @@ fn is_private(ip: IpAddr) -> bool {
         }
         IpAddr::V6(v6) => {
             let s = v6.segments();
+            let embedded = |a: u16, b: u16| is_private(IpAddr::V4(std::net::Ipv4Addr::new((a >> 8) as u8, a as u8, (b >> 8) as u8, b as u8)));
             v6.is_loopback()
                 || v6.is_unspecified()
                 || v6.is_multicast()
                 || (s[0] & 0xfe00) == 0xfc00
                 || (s[0] & 0xffc0) == 0xfe80
                 || v6.to_ipv4_mapped().is_some_and(|v4| is_private(IpAddr::V4(v4)))
+                // NAT64 (64:ff9b::/96), 6to4 (2002::/16) and IPv4-compatible (::a.b.c.d) forms
+                || (s[0] == 0x64 && s[1] == 0xff9b && s[2..6].iter().all(|x| *x == 0) && embedded(s[6], s[7]))
+                || (s[0] == 0x2002 && embedded(s[1], s[2]))
+                || (s[0..6].iter().all(|x| *x == 0) && embedded(s[6], s[7]))
         }
     }
 }
@@ -132,7 +137,10 @@ pub fn validate_url(url: &str) -> anyhow::Result<openidconnect::url::Url> {
 async fn resolve(u: &openidconnect::url::Url, allow_private: bool) -> anyhow::Result<SocketAddr> {
     let host = u.host_str().unwrap_or_default().trim_start_matches('[').trim_end_matches(']').to_string();
     let port = u.port_or_known_default().unwrap_or(443);
-    let addrs: Vec<SocketAddr> = tokio::net::lookup_host((host.as_str(), port)).await?.collect();
+    let addrs: Vec<SocketAddr> = tokio::time::timeout(Duration::from_secs(5), tokio::net::lookup_host((host.as_str(), port)))
+        .await
+        .map_err(|_| anyhow::anyhow!("resolving {host} timed out"))??
+        .collect();
     anyhow::ensure!(!addrs.is_empty(), "{host} doesn't resolve");
     if !allow_private && let Some(bad) = addrs.iter().find(|a| is_private(a.ip())) {
         anyhow::bail!("{host} resolves to a private address ({}); set WIKICRAFT_WEBHOOK_ALLOW_PRIVATE=true to allow internal targets", bad.ip());
@@ -153,13 +161,18 @@ struct Due {
 
 /// Sends what's due. Returns the number of deliveries attempted.
 pub async fn deliver_due(state: &AppState) -> anyhow::Result<usize> {
-    let mut tx = state.db.begin().await?;
+    // lease the batch for two minutes (other replicas skip it) instead of holding a
+    // transaction open across slow HTTP calls; a crashed worker's lease simply expires
     let due = sqlx::query_as::<_, Due>(
-        "SELECT d.id, d.webhook_id, d.event, d.payload, d.attempts, w.url, w.secret FROM webhook_deliveries d JOIN webhooks w ON w.id = d.webhook_id
-         WHERE d.delivered_at IS NULL AND d.failed_at IS NULL AND d.next_attempt_at <= now()
-         ORDER BY d.created_at LIMIT 20 FOR UPDATE OF d SKIP LOCKED",
+        "WITH batch AS (
+            SELECT d.id FROM webhook_deliveries d
+            WHERE d.delivered_at IS NULL AND d.failed_at IS NULL AND d.next_attempt_at <= now()
+            ORDER BY d.created_at LIMIT 20 FOR UPDATE SKIP LOCKED)
+         UPDATE webhook_deliveries d SET next_attempt_at = now() + interval '2 minutes' FROM batch, webhooks w
+         WHERE d.id = batch.id AND w.id = d.webhook_id
+         RETURNING d.id, d.webhook_id, d.event, d.payload, d.attempts, w.url, w.secret",
     )
-    .fetch_all(&mut *tx)
+    .fetch_all(&state.db)
     .await?;
     let n = due.len();
     for d in due {
@@ -174,6 +187,8 @@ pub async fn deliver_due(state: &AppState) -> anyhow::Result<usize> {
             let addr = resolve(&u, state.config.webhook_allow_private).await?;
             let client = openidconnect::reqwest::Client::builder()
                 .redirect(openidconnect::reqwest::redirect::Policy::none())
+                // a proxy would connect on our behalf and skip the address check
+                .no_proxy()
                 .timeout(Duration::from_secs(10))
                 .user_agent("WikiCraft-Webhooks/1")
                 .resolve(u.host_str().unwrap_or_default(), addr)
@@ -197,9 +212,9 @@ pub async fn deliver_due(state: &AppState) -> anyhow::Result<usize> {
                     .bind(d.id)
                     .bind(status as i32)
                     .bind(ms)
-                    .execute(&mut *tx)
+                    .execute(&state.db)
                     .await?;
-                sqlx::query("UPDATE webhooks SET failure_count = 0 WHERE id = $1").bind(d.webhook_id).execute(&mut *tx).await?;
+                sqlx::query("UPDATE webhooks SET failure_count = 0 WHERE id = $1").bind(d.webhook_id).execute(&state.db).await?;
             }
             other => {
                 let (status, err) = match other {
@@ -218,14 +233,13 @@ pub async fn deliver_due(state: &AppState) -> anyhow::Result<usize> {
                 // 10 s, 20 s, 40 s, … ~21 min
                 .bind((10i64 << d.attempts.clamp(0, 7)) as f64)
                 .bind(last)
-                .execute(&mut *tx)
+                .execute(&state.db)
                 .await?;
-                sqlx::query("UPDATE webhooks SET failure_count = failure_count + 1 WHERE id = $1").bind(d.webhook_id).execute(&mut *tx).await?;
+                sqlx::query("UPDATE webhooks SET failure_count = failure_count + 1 WHERE id = $1").bind(d.webhook_id).execute(&state.db).await?;
                 tracing::info!(delivery = %d.id, attempt = d.attempts + 1, "webhook delivery failed: {err}");
             }
         }
     }
-    tx.commit().await?;
     Ok(n)
 }
 
@@ -264,9 +278,22 @@ mod tests {
 
     #[test]
     fn private_addresses() {
-        for ip in
-            ["127.0.0.1", "10.1.2.3", "192.168.0.1", "172.16.5.4", "169.254.169.254", "100.64.0.1", "0.0.0.0", "::1", "fd00::1", "fe80::1", "::ffff:10.0.0.1"]
-        {
+        for ip in [
+            "127.0.0.1",
+            "10.1.2.3",
+            "192.168.0.1",
+            "172.16.5.4",
+            "169.254.169.254",
+            "100.64.0.1",
+            "0.0.0.0",
+            "::1",
+            "fd00::1",
+            "fe80::1",
+            "::ffff:10.0.0.1",
+            "64:ff9b::a9fe:a9fe",
+            "2002:7f00:1::",
+            "::7f00:1",
+        ] {
             assert!(is_private(ip.parse().unwrap()), "{ip}");
         }
         for ip in ["8.8.8.8", "1.1.1.1", "2606:4700::1111"] {
