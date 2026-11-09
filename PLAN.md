@@ -457,7 +457,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Permission checks enforced in API, collab WebSocket, search, exports, AI, notifications, webhooks (single authz crate, no bypass paths)
 - [ ] **P1** Granular space permissions (Confluence-compatible set): view, add/delete pages, add/delete blog, add/delete comments, add/delete attachments, set page restrictions, export, admin, archive, delete own content `C DC`
 - [x] **P1** Anonymous / public access per space (read-only) `C X B O`
-- [ ] **P1** Public share links for a single page (with optional expiry, password, subtree inclusion, disable globally) `C D O`
+- [~] **P1** Public share links for a single page (with optional expiry, password, subtree inclusion, disable globally) `C D O` (no password)
 - [x] **P1** Guest users limited to specific spaces `C`
 - [ ] **P1** Request access flow (request → owner approves) `C`
 - [ ] **P1** "Inspect permissions": why can user X see/edit page Y? `C`

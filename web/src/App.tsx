@@ -16,6 +16,7 @@ import LabelPage from './pages/LabelPage'
 import Settings from './pages/Settings'
 import Blog from './pages/Blog'
 import TasksPage from './pages/Tasks'
+import PublicPageView from './pages/PublicPage'
 
 export default function App() {
   const setup = useQuery({ queryKey: ['setup'], queryFn: () => api.get<{ needsSetup: boolean }>('/setup') })
@@ -32,6 +33,14 @@ export default function App() {
   const user = me.data?.user
   // anonymous visitors may read public spaces; everything else needs a login
   const publicPath = loc.pathname.startsWith('/pages/') || loc.pathname.startsWith('/spaces/')
+  // public share links: no account, no app chrome
+  if (loc.pathname.startsWith('/s/'))
+    return (
+      <Routes>
+        <Route path="/s/:token" element={<PublicPageView />} />
+        <Route path="/s/:token/:pageId" element={<PublicPageView />} />
+      </Routes>
+    )
   // account links from e-mails work whether or not someone is signed in in this browser
   if (loc.pathname === '/accept-invite') return <AcceptInvite />
   if (loc.pathname === '/reset-password') return <ResetPassword />

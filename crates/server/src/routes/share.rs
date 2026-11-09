@@ -1,0 +1,306 @@
+//! Public share links: anyone with the link can read a page (and optionally its sub-pages)
+//! without an account. Links can expire, be revoked, and be switched off workspace-wide.
+//! Sub-pages with their own view restrictions — and everything below them — are never
+//! included. Public pages are rendered to HTML on the server; images and attachments are
+//! served through the link.
+
+use std::collections::HashSet;
+
+use axum::Json;
+use axum::extract::{Path, State};
+use axum::http::StatusCode;
+use axum::response::Response;
+use serde::Deserialize;
+use serde_json::{Value, json};
+use uuid::Uuid;
+use wikicraft_doc_model::{Node, html, nodes};
+
+use crate::app::{AppState, new_id};
+use crate::audit;
+use crate::auth::{CurrentUser, random_token, require_admin};
+use crate::authz::{Need, Principal, require_page};
+use crate::error::{ApiError, ApiResult};
+
+/// Whether the page or one of its ancestors has a view restriction.
+async fn restricted(state: &AppState, page: Uuid) -> ApiResult<bool> {
+    Ok(sqlx::query_scalar(
+        "WITH RECURSIVE anc AS (SELECT id, parent_id, 0 AS depth FROM pages WHERE id = $1
+                                UNION ALL SELECT p.id, p.parent_id, anc.depth + 1 FROM pages p JOIN anc ON p.id = anc.parent_id WHERE anc.depth < 200)
+         SELECT EXISTS (SELECT 1 FROM page_restrictions r JOIN anc ON r.page_id = anc.id WHERE r.kind = 'view')",
+    )
+    .bind(page)
+    .fetch_one(&state.db)
+    .await?)
+}
+
+async fn links_enabled(state: &AppState, ws: Uuid) -> ApiResult<bool> {
+    let v: Option<bool> =
+        sqlx::query_scalar("SELECT (settings->>'publicLinks')::boolean FROM workspaces WHERE id = $1").bind(ws).fetch_optional(&state.db).await?.flatten();
+    Ok(v.unwrap_or(true))
+}
+
+#[derive(serde::Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct LinkRow {
+    id: Uuid,
+    token: String,
+    include_children: bool,
+    created_by_name: Option<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+    expires_at: Option<chrono::DateTime<chrono::Utc>>,
+    views: i64,
+    last_viewed_at: Option<chrono::DateTime<chrono::Utc>>,
+}
+
+/// `GET /api/pages/{id}/share-links` (editors of the page)
+pub async fn list(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(page): Path<Uuid>) -> ApiResult<Json<Value>> {
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    require_page(&state, &p, page, Need::Edit).await?;
+    let links = sqlx::query_as::<_, LinkRow>(
+        "SELECT l.id, l.token, l.include_children, u.name AS created_by_name, l.created_at, l.expires_at, l.views, l.last_viewed_at
+         FROM share_links l LEFT JOIN users u ON u.id = l.created_by
+         WHERE l.page_id = $1 AND l.revoked_at IS NULL AND (l.expires_at IS NULL OR l.expires_at > now()) ORDER BY l.created_at DESC",
+    )
+    .bind(page)
+    .fetch_all(&state.db)
+    .await?;
+    Ok(Json(json!({ "enabled": links_enabled(&state, user.workspace_id).await?, "links": links })))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CreateLink {
+    #[serde(default)]
+    include_children: bool,
+    /// days until the link stops working (none = no expiry)
+    expires_in_days: Option<i64>,
+}
+
+/// `POST /api/pages/{id}/share-links`
+pub async fn create(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(page): Path<Uuid>,
+    Json(req): Json<CreateLink>,
+) -> ApiResult<(StatusCode, Json<Value>)> {
+    if user.is_guest() {
+        return Err(ApiError::Forbidden);
+    }
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    require_page(&state, &p, page, Need::Edit).await?;
+    if !links_enabled(&state, user.workspace_id).await? {
+        return Err(ApiError::bad("public links are turned off for this workspace"));
+    }
+    if restricted(&state, page).await? {
+        return Err(ApiError::bad("pages with view restrictions can't be shared publicly"));
+    }
+    let id = new_id();
+    let token = random_token();
+    let days = req.expires_in_days.filter(|d| *d > 0).map(|d| d.min(3650));
+    sqlx::query(
+        "INSERT INTO share_links (id, token, workspace_id, page_id, include_children, created_by, expires_at)
+         VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $7::bigint IS NULL THEN NULL ELSE now() + make_interval(days => $7::int) END)",
+    )
+    .bind(id)
+    .bind(&token)
+    .bind(user.workspace_id)
+    .bind(page)
+    .bind(req.include_children)
+    .bind(user.id)
+    .bind(days)
+    .execute(&state.db)
+    .await?;
+    audit::log(
+        &state,
+        user.workspace_id,
+        Some(user.id),
+        "page.shared_publicly",
+        Some("page"),
+        Some(page),
+        json!({"includeChildren": req.include_children, "expiresInDays": days}),
+    )
+    .await;
+    Ok((StatusCode::CREATED, Json(json!({ "id": id, "token": token, "url": format!("{}/s/{token}", state.config.base_url.trim_end_matches('/')) }))))
+}
+
+/// `DELETE /api/share-links/{id}`
+pub async fn revoke(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+    let page: Uuid = sqlx::query_scalar("SELECT page_id FROM share_links WHERE id = $1 AND workspace_id = $2")
+        .bind(id)
+        .bind(user.workspace_id)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or(ApiError::NotFound("link"))?;
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    require_page(&state, &p, page, Need::Edit).await?;
+    sqlx::query("UPDATE share_links SET revoked_at = now() WHERE id = $1").bind(id).execute(&state.db).await?;
+    audit::log(&state, user.workspace_id, Some(user.id), "page.share_revoked", Some("page"), Some(page), json!({})).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct Settings {
+    public_links: Option<bool>,
+}
+
+/// `GET|PUT /api/admin/settings` — workspace-wide switches.
+pub async fn get_settings(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Value>> {
+    require_admin(&user)?;
+    Ok(Json(json!({ "publicLinks": links_enabled(&state, user.workspace_id).await? })))
+}
+
+pub async fn put_settings(State(state): State<AppState>, CurrentUser(user): CurrentUser, Json(req): Json<Settings>) -> ApiResult<Json<Value>> {
+    require_admin(&user)?;
+    if let Some(v) = req.public_links {
+        sqlx::query("UPDATE workspaces SET settings = settings || jsonb_build_object('publicLinks', $2::boolean) WHERE id = $1")
+            .bind(user.workspace_id)
+            .bind(v)
+            .execute(&state.db)
+            .await?;
+        audit::log(&state, user.workspace_id, Some(user.id), "workspace.settings", None, None, json!({"publicLinks": v})).await;
+    }
+    get_settings(State(state), CurrentUser(user)).await
+}
+
+// ---- public side ---------------------------------------------------------------------------
+
+struct Shared {
+    link_id: Uuid,
+    root: Uuid,
+    /// root + visible sub-pages (when the link includes children)
+    pages: HashSet<Uuid>,
+}
+
+/// Resolves a token to the set of pages it opens. Unknown, revoked and expired tokens — and
+/// all tokens while public links are off — look the same: not found.
+async fn resolve(state: &AppState, token: &str) -> ApiResult<Shared> {
+    let row: Option<(Uuid, Uuid, Uuid, bool)> = sqlx::query_as(
+        "SELECT l.id, l.workspace_id, l.page_id, l.include_children FROM share_links l JOIN pages p ON p.id = l.page_id JOIN spaces s ON s.id = p.space_id
+         WHERE l.token = $1 AND l.revoked_at IS NULL AND (l.expires_at IS NULL OR l.expires_at > now()) AND p.deleted_at IS NULL AND s.archived_at IS NULL",
+    )
+    .bind(token)
+    .fetch_optional(&state.db)
+    .await?;
+    let (link_id, ws, root, children) = row.ok_or(ApiError::NotFound("page"))?;
+    // switched off, or restricted after the link was made: fail closed
+    if !links_enabled(state, ws).await? || restricted(state, root).await? {
+        return Err(ApiError::NotFound("page"));
+    }
+    let mut pages = HashSet::from([root]);
+    if children {
+        // descend, but never into a page with its own view restriction
+        let ids: Vec<Uuid> = sqlx::query_scalar(
+            "WITH RECURSIVE sub AS (
+                SELECT id FROM pages WHERE parent_id = $1 AND deleted_at IS NULL AND kind <> 'blog'
+                  AND NOT EXISTS (SELECT 1 FROM page_restrictions r WHERE r.page_id = pages.id AND r.kind = 'view')
+                UNION
+                SELECT c.id FROM pages c JOIN sub ON c.parent_id = sub.id
+                WHERE c.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM page_restrictions r WHERE r.page_id = c.id AND r.kind = 'view'))
+             SELECT id FROM sub LIMIT 5000",
+        )
+        .bind(root)
+        .fetch_all(&state.db)
+        .await?;
+        pages.extend(ids);
+    }
+    Ok(Shared { link_id, root, pages })
+}
+
+/// Rewrites links and media so they work for anonymous readers of this share.
+fn public_doc(doc: &mut Node, token: &str, shared: &HashSet<Uuid>) {
+    doc.walk_mut(&mut |n| {
+        for key in ["src", "href"] {
+            let Some(url) = n.attr_str(key).map(String::from) else { continue };
+            if let Some(att) = url.strip_prefix("/api/attachments/").and_then(|r| r.split('/').next()).and_then(|s| s.parse::<Uuid>().ok()) {
+                n.attrs.insert(key.into(), Value::String(format!("/api/public/{token}/attachments/{att}")));
+            }
+        }
+        // live blocks need an account
+        if n.kind == nodes::MACRO || n.kind == nodes::CHILD_PAGES || n.kind == nodes::INCLUDE {
+            n.kind = nodes::PARAGRAPH.into();
+            n.attrs.clear();
+            n.content.clear();
+        }
+        for m in &mut n.marks {
+            if m.kind != "link" {
+                continue;
+            }
+            let Some(href) = m.attrs.get("href").and_then(Value::as_str).map(String::from) else { continue };
+            let target = href.strip_prefix("/pages/").map(|r| r.split(['#', '?', '/']).next().unwrap_or(""));
+            if let Some(id) = target.and_then(|t| t.parse::<Uuid>().ok()) {
+                let anchor = href.split_once('#').map(|(_, a)| format!("#{a}")).unwrap_or_default();
+                let new = if shared.contains(&id) { format!("/s/{token}/{id}{anchor}") } else { href.clone() };
+                m.attrs.insert("href".into(), Value::String(new));
+            } else if let Some(att) = href.strip_prefix("/api/attachments/").and_then(|r| r.split('/').next()).and_then(|s| s.parse::<Uuid>().ok()) {
+                m.attrs.insert("href".into(), Value::String(format!("/api/public/{token}/attachments/{att}")));
+            }
+        }
+    });
+}
+
+async fn render_page(state: &AppState, token: &str, s: &Shared, page: Uuid) -> ApiResult<Json<Value>> {
+    if !s.pages.contains(&page) {
+        return Err(ApiError::NotFound("page"));
+    }
+    let (title, content, updated_at, space_name, updated_by): (String, Value, chrono::DateTime<chrono::Utc>, String, Option<String>) = sqlx::query_as(
+        "SELECT p.title, p.content, p.updated_at, s.name, u.name FROM pages p JOIN spaces s ON s.id = p.space_id LEFT JOIN users u ON u.id = p.updated_by WHERE p.id = $1",
+    )
+    .bind(page)
+    .fetch_one(&state.db)
+    .await?;
+    let mut doc = match state.rooms.get(page) {
+        Some(room) => room.snapshot(),
+        None => Node::from_json(&content)?,
+    };
+    public_doc(&mut doc, token, &s.pages);
+    let body = html::render(&doc, &html::HtmlOptions { heading_ids: true });
+    // the shared tree (titles only) for navigation
+    let tree: Vec<(Uuid, Option<Uuid>, String)> = if s.pages.len() > 1 {
+        let ids: Vec<Uuid> = s.pages.iter().copied().collect();
+        sqlx::query_as("SELECT id, parent_id, title FROM pages WHERE id = ANY($1) ORDER BY position, lower(title)").bind(&ids).fetch_all(&state.db).await?
+    } else {
+        vec![]
+    };
+    let tree: Vec<Value> =
+        tree.into_iter().map(|(id, parent, title)| json!({"id": id, "parentId": if id == s.root { None } else { parent }, "title": title})).collect();
+    sqlx::query("UPDATE share_links SET views = views + 1, last_viewed_at = now() WHERE id = $1").bind(s.link_id).execute(&state.db).await?;
+    Ok(Json(json!({
+        "id": page,
+        "rootId": s.root,
+        "title": title,
+        "html": body,
+        "updatedAt": updated_at,
+        "updatedByName": updated_by,
+        "spaceName": space_name,
+        "tree": tree,
+    })))
+}
+
+/// `GET /api/public/{token}` — the shared page.
+pub async fn view(State(state): State<AppState>, Path(token): Path<String>) -> ApiResult<Json<Value>> {
+    let s = resolve(&state, &token).await?;
+    let root = s.root;
+    render_page(&state, &token, &s, root).await
+}
+
+/// `GET /api/public/{token}/pages/{id}` — a sub-page of a shared tree.
+pub async fn view_page(State(state): State<AppState>, Path((token, page)): Path<(String, Uuid)>) -> ApiResult<Json<Value>> {
+    let s = resolve(&state, &token).await?;
+    render_page(&state, &token, &s, page).await
+}
+
+/// `GET /api/public/{token}/attachments/{id}` — files of shared pages only.
+pub async fn attachment(State(state): State<AppState>, Path((token, id)): Path<(String, Uuid)>) -> ApiResult<Response> {
+    let s = resolve(&state, &token).await?;
+    let row: Option<(Uuid, String, String, Option<String>, i64)> =
+        sqlx::query_as("SELECT page_id, filename, media_type, blob_key, size FROM attachments WHERE id = $1 AND deleted_at IS NULL")
+            .bind(id)
+            .fetch_optional(&state.db)
+            .await?;
+    let (page, filename, media_type, key, size) = row.ok_or(ApiError::NotFound("attachment"))?;
+    if !s.pages.contains(&page) {
+        return Err(ApiError::NotFound("attachment"));
+    }
+    crate::routes::attachments::serve(&state, filename, media_type, key, size).await
+}

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Upload, FileSearch, CheckCircle2, XCircle, UserPlus, Users, Activity, Database, RefreshCw, Mail, Send } from 'lucide-react'
+import { Upload, FileSearch, CheckCircle2, XCircle, UserPlus, Users, Activity, Database, RefreshCw, Mail, Send, Globe } from 'lucide-react'
 import { api, formatBytes, formatDate, type Job } from '../api'
 import { Avatar, Modal, Spinner, useMe, useToast } from '../ui'
 
@@ -72,7 +72,33 @@ function Overview() {
           <Upload size={14} /> Import from Confluence
         </Link>
       </div>
+      <WorkspaceSettings />
       <MailStatus />
+    </div>
+  )
+}
+
+function WorkspaceSettings() {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const settings = useQuery({ queryKey: ['admin-settings'], queryFn: () => api.get<{ publicLinks: boolean }>('/admin/settings') })
+  if (!settings.data) return null
+  return (
+    <div className="card" style={{ marginTop: 24, maxWidth: 720 }}>
+      <h3 style={{ marginTop: 0 }} className="row"><Globe size={17} /> Sharing</h3>
+      <label className="row">
+        <input
+          type="checkbox"
+          checked={settings.data.publicLinks}
+          onChange={async (e) => {
+            await api.put('/admin/settings', { publicLinks: e.target.checked })
+            qc.invalidateQueries({ queryKey: ['admin-settings'] })
+            toast(e.target.checked ? 'Public links are allowed' : 'Public links are turned off — existing links stop working')
+          }}
+        />
+        Allow public links (anyone with the link can read a shared page)
+      </label>
+      <p className="faint small" style={{ marginBottom: 0 }}>Turning this off disables every existing public link immediately; turning it back on restores them.</p>
     </div>
   )
 }

@@ -165,6 +165,11 @@ pub async fn download(State(state): State<AppState>, MaybeUser(user): MaybeUser,
     let (page_id, filename, media_type, key, size) = row.ok_or(ApiError::NotFound("attachment"))?;
     let p = Principal::load(&state, user).await?;
     require_page(&state, &p, page_id, Need::View).await?;
+    serve(&state, filename, media_type, key, size).await
+}
+
+/// Streams an attachment whose access was already checked (also used by public share links).
+pub async fn serve(state: &AppState, filename: String, media_type: String, key: Option<String>, size: i64) -> ApiResult<Response> {
     let key = key.ok_or(ApiError::NotFound("attachment content"))?;
     let stream = state.blobs.stream(&key).await.map_err(ApiError::Internal)?;
     // only render a safe allowlist inline; everything else (incl. HTML and SVG) downloads

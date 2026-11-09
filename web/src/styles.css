@@ -413,3 +413,27 @@ table.list tr:hover td { background: var(--bg-soft); }
 .macro-tree > ul { padding-left: 0; }
 .macro-tree li { margin: 3px 0; }
 .macro-tree a.current { font-weight: 600; }
+/* share */
+.share-link { display: grid; grid-template-columns: 1fr auto auto; gap: 6px; align-items: center; margin-bottom: 10px; }
+.public-shell { min-height: 100vh; background: var(--bg); }
+.public-header { position: sticky; top: 0; z-index: 5; display: flex; align-items: center; gap: 12px; padding: 10px 20px; border-bottom: 1px solid var(--border); background: color-mix(in srgb, var(--bg) 94%, transparent); backdrop-filter: blur(6px); }
+.public-body { display: flex; max-width: 1180px; margin: 0 auto; }
+.public-nav { width: 260px; flex: none; padding: 24px 12px; border-right: 1px solid var(--border); position: sticky; top: 53px; align-self: flex-start; max-height: calc(100vh - 53px); overflow: auto; }
+.public-nav ul { list-style: none; padding-left: 14px; margin: 2px 0; }
+.public-nav > ul { padding-left: 0; }
+.public-nav a { display: block; padding: 3px 8px; border-radius: 6px; color: var(--text); text-decoration: none; font-size: 14px; }
+.public-nav a:hover { background: var(--bg-hover); }
+.public-nav a.current { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent); font-weight: 600; }
+.public-main { flex: 1; min-width: 0; padding: 32px 40px 80px; max-width: 860px; }
+.public-main > h1 { font-size: 2.1rem; margin: 0 0 4px; }
+.public-article { outline: none; }
+.public-article .image-block.align-center { text-align: center; }
+.public-article .image-caption { display: block; color: var(--text-soft); font-size: 13.5px; margin-top: 6px; }
+.public-nav-toggle { display: none; }
+@media (max-width: 760px) {
+  .public-nav { display: none; position: fixed; inset: 53px 0 0 0; width: auto; background: var(--bg); z-index: 4; border: 0; }
+  .public-nav.open { display: block; }
+  .public-nav-toggle { display: inline-flex; }
+  .public-main { padding: 20px 16px 60px; }
+}
+.share-btn { height: 30px; gap: 6px; margin: 0 4px; }

@@ -10,6 +10,7 @@ pub mod notifications;
 pub mod pages;
 pub mod reports;
 pub mod search;
+pub mod share;
 pub mod spaces;
 pub mod tasks;
 pub mod templates;
@@ -95,6 +96,12 @@ pub fn router(state: AppState) -> Router {
         .route("/recent", get(search::recent))
         .route("/favorites", get(search::favorites))
         .route("/labels/{name}", get(search::by_label))
+        .route("/pages/{id}/share-links", get(share::list).post(share::create))
+        .route("/share-links/{id}", delete(share::revoke))
+        .route("/admin/settings", get(share::get_settings).put(share::put_settings))
+        .route("/public/{token}", get(share::view))
+        .route("/public/{token}/pages/{id}", get(share::view_page))
+        .route("/public/{token}/attachments/{id}", get(share::attachment))
         .route("/reports/pages", get(reports::pages_report))
         .route("/reports/properties", get(reports::properties_report))
         .route("/reports/tasks", get(reports::tasks_report))

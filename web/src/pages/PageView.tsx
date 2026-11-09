@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate } from 'lucide-react'
+import { Share2, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate } from 'lucide-react'
 import { api, formatDate, type Page } from '../api'
 import { ErrorBox, Spinner, useMe, useToast } from '../ui'
 import Editor, { PresenceAvatars, type Presence } from '../editor/Editor'
 import CommentsPanel from '../components/CommentsPanel'
 import AttachmentsPanel from '../components/AttachmentsPanel'
 import RestrictionsDialog from '../components/RestrictionsDialog'
+import ShareDialog from '../components/ShareDialog'
 
 type Panel = 'comments' | 'attachments' | null
 
@@ -24,6 +25,7 @@ export default function PageView() {
   const [presence, setPresence] = useState<Presence[]>([])
   const [menu, setMenu] = useState(false)
   const [restrictions, setRestrictions] = useState(false)
+  const [share, setShare] = useState(false)
   const [focusComment, setFocusComment] = useState<string | null>(null)
   const [pendingComment, setPendingComment] = useState<{ text: string; apply: (id: string) => void } | null>(null)
   const [words, setWords] = useState(0)
@@ -151,6 +153,11 @@ export default function PageView() {
           <Link className="icon-btn" title="Page history" to={`/pages/${p.id}/history`}>
             <HistoryIcon size={16} />
           </Link>
+          {user && (
+            <button className="btn small share-btn" title="Share" onClick={() => setShare(true)}>
+              <Share2 size={14} /> Share
+            </button>
+          )}
           <div style={{ position: 'relative' }}>
             <button className="icon-btn" title="More" onClick={() => setMenu((m) => !m)}>
               <MoreHorizontal size={16} />
@@ -292,6 +299,7 @@ export default function PageView() {
       )}
       {panel === 'attachments' && <AttachmentsPanel page={p} onClose={() => setPanel(null)} />}
       {restrictions && <RestrictionsDialog page={p} onClose={() => setRestrictions(false)} />}
+      {share && <ShareDialog pageId={p.id} title={p.title} restricted={!!p.restricted} onClose={() => setShare(false)} />}
     </div>
   )
 }
