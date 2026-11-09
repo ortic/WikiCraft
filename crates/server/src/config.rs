@@ -58,6 +58,11 @@ pub struct Config {
     #[arg(long, env = "WIKICRAFT_SESSION_DAYS", default_value_t = 30)]
     pub session_days: i64,
 
+    /// Sign out sessions that were inactive for this many minutes (0 = only the absolute
+    /// lifetime `WIKICRAFT_SESSION_DAYS` applies).
+    #[arg(long, env = "WIKICRAFT_SESSION_IDLE_MINUTES", default_value_t = 0)]
+    pub session_idle_minutes: u64,
+
     /// Outgoing mail server: `smtps://user:pass@mail.example.com` (TLS, port 465),
     /// `smtp://user:pass@mail.example.com:587?tls=required` (STARTTLS) or
     /// `smtp://localhost:1025` (unencrypted, local relays/dev only). URL-encode special

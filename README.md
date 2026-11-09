@@ -120,6 +120,7 @@ All settings are flags or environment variables:
 | `WIKICRAFT_MAX_UPLOAD_MB` | `2048` | max upload (attachments, imports) |
 | `WIKICRAFT_SECURE_COOKIES` | `false` | set `true` behind HTTPS |
 | `WIKICRAFT_SESSION_DAYS` | `30` | session lifetime |
+| `WIKICRAFT_SESSION_IDLE_MINUTES` | `0` (off) | sign out sessions inactive this long |
 | `WIKICRAFT_AUTH_PROVIDERS` / `_FILE` | — | sign-in providers (JSON list), see below |
 | `WIKICRAFT_GOOGLE_CLIENT_ID` / `_SECRET` / `_ALLOWED_DOMAINS` | — | "Continue with Google" shortcut |
 | `WIKICRAFT_MICROSOFT_CLIENT_ID` / `_SECRET` / `_TENANT` / `_ALLOWED_DOMAINS` | — | "Continue with Microsoft" (Entra ID) shortcut |

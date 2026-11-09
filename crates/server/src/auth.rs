@@ -138,10 +138,13 @@ pub fn session_token(headers: &HeaderMap) -> Option<&str> {
 async fn user_from_session(state: &AppState, token: &str) -> Result<Option<User>, ApiError> {
     let user = sqlx::query_as::<_, User>(sqlx::AssertSqlSafe(
         "SELECT u.id, u.workspace_id, u.email, u.name, u.role, u.status, u.avatar_url FROM sessions s JOIN users u ON u.id = s.user_id
-         WHERE s.token_hash = $1 AND s.expires_at > now() AND u.status = 'active'"
+         WHERE s.token_hash = $1 AND s.expires_at > now() AND u.status = 'active'
+           AND ($2 = 0 OR s.last_seen_at > now() - make_interval(mins => $2))"
             .to_string(),
     ))
     .bind(token_hash(token))
+    // last_seen_at moves in 5-minute steps, so idle timeouts are accurate to ~5 minutes
+    .bind(state.config.session_idle_minutes.min(i32::MAX as u64) as i32)
     .fetch_optional(&state.db)
     .await?;
     if user.is_some() {

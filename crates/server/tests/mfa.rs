@@ -112,3 +112,12 @@ async fn totp_login_recovery_codes_sessions_and_admin_reset() {
     let (_, s): (u16, Value) = app.get(&c4, "/me/mfa").await;
     assert_eq!(s["enabled"], false);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn idle_sessions_expire() {
+    let app = common::spawn_with(|c| c.session_idle_minutes = 30).await;
+    let owner = app.setup().await;
+    assert_eq!(app.get(&owner, "/recent").await.0, 200);
+    sqlx::query("UPDATE sessions SET last_seen_at = now() - interval '31 minutes'").execute(&app.state.db).await.unwrap();
+    assert_eq!(app.get(&owner, "/recent").await.0, 401, "idle session signed out");
+}

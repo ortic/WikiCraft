@@ -59,6 +59,7 @@ pub async fn spawn_with(tweak: impl FnOnce(&mut Config)) -> TestApp {
         cluster: "none".into(),
         metrics_token: None,
         smtp_url: None,
+        session_idle_minutes: 0,
         webhook_allow_private: true,
         mail_from: "WikiCraft <wiki@acme.test>".into(),
     };
