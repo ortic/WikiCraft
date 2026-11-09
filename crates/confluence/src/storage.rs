@@ -641,7 +641,8 @@ impl Conv<'_> {
             Node::new(nodes::IMAGE)
                 .attr("src", src)
                 .attr("alt", el.attr("ac:alt").map(String::from).or_else(|| caption.clone()))
-                .attr("title", el.attr("ac:title").map(String::from).or(caption))
+                .attr("title", el.attr("ac:title").map(String::from))
+                .attr("caption", caption)
                 .attr("width", width)
                 .attr("align", align),
         ]

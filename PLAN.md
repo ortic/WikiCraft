@@ -196,7 +196,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P2** Release tracks (choose when new features roll out) `C`
 
 ### 4.2 Spaces
-- [~] **P0** Create / edit / delete spaces (name, key, description, icon/emoji, cover) `C D X O B` (no delete UI, no cover image)
+- [~] **P0** Create / edit / delete spaces (name, key, description, icon/emoji, cover) `C D X O B` (icon picker; no delete UI, no cover image)
 - [x] **P0** Space home / overview page `C D X`
 - [ ] **P0** Personal spaces per user `C D`
 - [~] **P1** Space directory with search, categories, filters (team, personal, archived, starred) `C X` (name/key filter only)
@@ -276,8 +276,8 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P0** Code blocks with syntax highlighting, language picker, line numbers, wrap, copy button `C D X O B` (no line numbers or wrap toggle)
 - [x] **P0** Blockquote `C D O`
 - [~] **P0** Callouts / panels: info, note, tip/success, warning, error, custom (emoji + color) `C D X O` (no custom emoji/color picker)
-- [~] **P0** Tables (see §4.4.4) `C D X O B` (no row/column controls)
-- [~] **P0** Images (see §4.4.5) `C D X O B` (no resize/align/caption UI)
+- [x] **P0** Tables (see §4.4.4) `C D X O B`
+- [x] **P0** Images (see §4.4.5) `C D X O B`
 - [x] **P1** Expand / collapse (toggle) blocks `C D O`
 - [~] **P1** Layouts / columns (2–3 columns, sidebars) `C D` (two-column insert only)
 - [~] **P1** Decisions block (decision list) `C` (imported only; no insert UI)
@@ -297,8 +297,8 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P3** Slides / presentation mode for a page `C`
 
 #### 4.4.4 Tables
-- [~] **P0** Insert / delete rows & columns, header row / column, resize columns `C D X O` (insert + column resize only)
-- [ ] **P1** Merge / split cells, cell background color, cell alignment `C D`
+- [x] **P0** Insert / delete rows & columns, header row / column, resize columns `C D X O`
+- [~] **P1** Merge / split cells, cell background color, cell alignment `C D` (no cell alignment)
 - [ ] **P1** Numbered rows, sort by column (view-time), sticky header `C`
 - [ ] **P1** Table width modes (fixed / wide / full) `C`
 - [ ] **P1** Paste from spreadsheets preserving cells `C D`
@@ -306,8 +306,8 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P2** Large table performance (1,000+ rows) `C`
 
 #### 4.4.5 Images & media
-- [~] **P0** Upload, paste, drag & drop, URL images `C D X O B` (no insert-by-URL)
-- [ ] **P0** Resize, align (left/center/right/wrap), caption, alt text `C D`
+- [x] **P0** Upload, paste, drag & drop, URL images `C D X O B`
+- [~] **P0** Resize, align (left/center/right/wrap), caption, alt text `C D` (no text wrap)
 - [ ] **P1** Lightbox / zoom, image border `C D`
 - [ ] **P1** Image annotation (arrows, boxes, text) `C`
 - [ ] **P1** Responsive thumbnails & WebP/AVIF renditions generated server-side `C`

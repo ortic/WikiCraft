@@ -1,11 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useEditor, EditorContent, type Editor as TEditor } from '@tiptap/react'
+import { useEditor, EditorContent, ReactNodeViewRenderer, type Editor as TEditor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import StarterKit from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCaret from '@tiptap/extension-collaboration-caret'
 import { TableKit, TableCell, TableHeader } from '@tiptap/extension-table'
+import { CellSelection } from '@tiptap/pm/tables'
 import { TaskList, TaskItem } from '@tiptap/extension-list'
 import Image from '@tiptap/extension-image'
 import { Placeholder, CharacterCount } from '@tiptap/extensions'
@@ -26,6 +27,8 @@ import { api, initials, userColor, type Attachment, type User } from '../api'
 import { AttachmentNode, Anchor, Callout, ChildPages, Column, Columns, CommentMark, DateNode, DecisionItem, DecisionList, Embed, Emoticon, Include, Macro, Status, Toc } from './nodes'
 import { SlashCommand, mentionSuggestion, slashItems } from './suggest'
 import { CodeBlock } from './CodeBlock'
+import { ImageView } from './ImageView'
+import { TableMenu } from './TableMenu'
 
 const lowlight = createLowlight(common)
 
@@ -49,7 +52,11 @@ const ImageExt = Image.extend({
       ...this.parent?.(),
       width: { default: null, renderHTML: (a: Record<string, unknown>) => (a.width ? { width: a.width } : {}) },
       align: { default: null },
+      caption: { default: null },
     }
+  },
+  addNodeView() {
+    return ReactNodeViewRenderer(ImageView)
   },
 }).configure({ inline: true, allowBase64: false })
 
@@ -263,7 +270,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
         </div>
       )}
       {editor && (
-        <BubbleMenu editor={editor} shouldShow={({ editor, state }) => !state.selection.empty && (editor.isEditable || !!onRequestComment) && !editor.isActive('image')}>
+        <BubbleMenu editor={editor} shouldShow={({ editor, state }) => !state.selection.empty && (editor.isEditable || !!onRequestComment) && !editor.isActive('image') && !(state.selection instanceof CellSelection)}>
           <div className="bubble">
             {editor.isEditable && (
               <>
@@ -286,6 +293,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
           </div>
         </BubbleMenu>
       )}
+      {editor && editor.isEditable && <TableMenu editor={editor} />}
       <EditorContent editor={editor} />
       {/* clicking the empty space below the document puts the cursor at the end */}
       <div

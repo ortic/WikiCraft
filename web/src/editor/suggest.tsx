@@ -138,6 +138,18 @@ export function slashItems(onImage: (editor: Editor) => void, onAttachment: (edi
     { group: 'Panels', title: 'Expand', description: 'Collapsible section', icon: ic(ChevronRight), keywords: 'details toggle collapse', command: (e, r) => e.chain().focus().deleteRange(r).setDetails().run() },
     { group: 'Panels', title: 'Two columns', icon: ic(Columns2), keywords: 'layout section', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'columns', content: [{ type: 'column', content: [{ type: 'paragraph' }] }, { type: 'column', content: [{ type: 'paragraph' }] }] }).run() },
     { group: 'Media', title: 'Image', description: 'Upload an image', icon: ic(ImageIcon), keywords: 'picture photo', command: (e, r) => { e.chain().focus().deleteRange(r).run(); onImage(e) } },
+    {
+      group: 'Media',
+      title: 'Image from link',
+      description: 'Show an image by its URL',
+      icon: ic(Link2),
+      keywords: 'picture url external',
+      command: (e, r) => {
+        const url = window.prompt('Image URL (https://…)')
+        e.chain().focus().deleteRange(r).run()
+        if (url && /^https?:\/\//i.test(url.trim())) e.chain().focus().setImage({ src: url.trim() }).run()
+      },
+    },
     { group: 'Media', title: 'File', description: 'Upload a file with preview', icon: ic(Paperclip), keywords: 'attachment pdf upload', command: (e, r) => { e.chain().focus().deleteRange(r).run(); onAttachment(e) } },
     { group: 'Media', title: 'Embed', description: 'YouTube, Loom, Figma, Miro, Google Docs…', icon: ic(Link2), keywords: 'iframe video', command: (e, r) => { const url = window.prompt('URL to embed'); if (url) e.chain().focus().deleteRange(r).insertContent({ type: 'embed', attrs: { url } }).run() } },
     { group: 'Macros', title: 'Table of contents', icon: ic(Hash), keywords: 'toc headings', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'toc' }).run() },

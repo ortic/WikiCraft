@@ -252,7 +252,19 @@ impl Renderer<'_> {
         if let Some(t) = n.attr_str("title") {
             let _ = write!(extra, " title=\"{}\"", escape(t));
         }
-        let _ = write!(self.out, "<img src=\"{}\" alt=\"{}\"{extra} loading=\"lazy\">", escape(src), escape(alt));
+        let img = format!("<img src=\"{}\" alt=\"{}\"{extra} loading=\"lazy\">", escape(src), escape(alt));
+        let align = n.attr_str("align").filter(|a| matches!(*a, "left" | "center" | "right"));
+        let caption = n.attr_str("caption").filter(|c| !c.trim().is_empty());
+        if align.is_none() && caption.is_none() {
+            self.out.push_str(&img);
+            return;
+        }
+        // images are inline (they live in paragraphs), so a <span> wraps image + caption
+        let _ = write!(self.out, "<span class=\"image-block align-{}\">{img}", align.unwrap_or("none"));
+        if let Some(c) = caption {
+            let _ = write!(self.out, "<span class=\"image-caption\">{}</span>", escape(c));
+        }
+        self.out.push_str("</span>");
     }
 
     fn text(&mut self, n: &Node) {
