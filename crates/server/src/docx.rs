@@ -18,6 +18,7 @@ use wikicraft_doc_model::{Mark, Node, icons, marks, nodes, text};
 
 use crate::app::AppState;
 use crate::authz::{Need, Principal, require_page};
+use crate::routes::reports::Snapshot;
 
 /// An image ready to embed: PNG bytes plus its natural display size in CSS pixels.
 #[derive(Clone)]
@@ -41,6 +42,8 @@ pub struct DocxInput<'a> {
     pub base_url: &'a str,
     /// child pages (title, absolute URL) for the children macro
     pub children: &'a [(String, String)],
+    /// evaluated report macros, one entry per `macro` node in document order
+    pub macros: &'a [Option<Snapshot>],
 }
 
 const MAX_IMAGES: usize = 60;
@@ -246,6 +249,7 @@ struct Renderer<'a> {
     anchors: HashMap<String, String>,
     numberings: Vec<Numbering>,
     icons: HashMap<String, Option<DocxImage>>,
+    macro_idx: usize,
 }
 
 // docx-rs always writes its own decimal list as abstract/num 1, so ours start above it
@@ -264,6 +268,7 @@ pub fn render(input: &DocxInput) -> anyhow::Result<Vec<u8>> {
         anchors,
         numberings: vec![Numbering::new(BULLET_NUM, BULLET_ABS)],
         icons: HashMap::new(),
+        macro_idx: 0,
     };
     let ctx = Ctx { width: TEXT_WIDTH_DXA, ..Default::default() };
     let mut blocks = vec![Block::P(Box::new(Paragraph::new().style("Title").add_run(Run::new().add_text(input.title))))];
@@ -653,10 +658,16 @@ impl Renderer<'_> {
                 out.push(Block::P(Box::new(Paragraph::new().align(AlignmentType::Center).add_run(Run::new().add_text(latex).fonts(fonts).italic()))));
             }
             nodes::MACRO => {
+                let idx = self.macro_idx;
+                self.macro_idx += 1;
                 let name = n.attr_str("name").unwrap_or("macro").to_string();
-                out.push(Block::P(Box::new(
-                    Self::indented(Paragraph::new(), ctx).add_run(Run::new().add_text(format!("Macro: {name}")).size(18).italic().color(MUTED)),
-                )));
+                match self.input.macros.get(idx).and_then(|m| m.as_ref()) {
+                    Some(snap) => self.snapshot(snap, ctx, out),
+                    None => {
+                        let label = Run::new().add_text(format!("Macro: {name}")).size(18).italic().color(MUTED);
+                        out.push(Block::P(Box::new(Self::indented(Paragraph::new(), ctx).add_run(label))));
+                    }
+                }
                 let blocks = self.blocks(&n.content, ctx);
                 out.extend(blocks);
             }
@@ -674,6 +685,54 @@ impl Renderer<'_> {
                 }
             }
         }
+    }
+
+    /// A report macro's result: a small heading line and a table.
+    fn snapshot(&mut self, snap: &Snapshot, ctx: Ctx, out: &mut Vec<Block>) {
+        let label = Run::new().add_text(&snap.title).size(18).bold().color(MUTED);
+        out.push(Block::P(Box::new(Self::indented(Paragraph::new().keep_next(true).line_spacing(spacing(120, 60)), ctx).add_run(label))));
+        if snap.rows.is_empty() {
+            out.push(Block::P(Box::new(Self::indented(Paragraph::new(), ctx).add_run(Run::new().add_text(snap.empty).italic().color(MUTED)))));
+            return;
+        }
+        let cols = snap.header.len().max(1);
+        let width = (ctx.width - ctx.indent).max(1440) as usize;
+        let w = width / cols;
+        let cell = |text: &str, link: Option<&String>, header: bool| {
+            let mut run = Run::new().add_text(text).size(20);
+            if header {
+                run = run.bold();
+            }
+            let p = Paragraph::new().line_spacing(spacing(0, 0));
+            let p = match link {
+                Some(url) => p.add_hyperlink(Hyperlink::new(url, HyperlinkType::External).add_run(run.color(LINK_COLOR))),
+                None => p.add_run(run),
+            };
+            let c = TableCell::new().add_paragraph(p).width(w, WidthType::Dxa);
+            if header { c.shading(Shading::new().fill("F1F5F9")) } else { c }
+        };
+        let mut rows = vec![TableRow::new(snap.header.iter().map(|h| cell(h, None, true)).collect())];
+        for r in &snap.rows {
+            let mut cells: Vec<TableCell> = r.iter().take(cols).map(|(t, l)| cell(t, l.as_ref(), false)).collect();
+            while cells.len() < cols {
+                cells.push(cell("", None, false));
+            }
+            rows.push(TableRow::new(cells));
+        }
+        let border = |pos| TableBorder::new(pos).border_type(BorderType::Single).size(4).color("CBD5E1");
+        let t = Table::new(rows)
+            .set_grid(vec![w; cols])
+            .width(width, WidthType::Dxa)
+            .indent(ctx.indent)
+            .margins(TableCellMargins::new().margin(40, 100, 40, 100))
+            .set_border(border(TableBorderPosition::Top))
+            .set_border(border(TableBorderPosition::Bottom))
+            .set_border(border(TableBorderPosition::Left))
+            .set_border(border(TableBorderPosition::Right))
+            .set_border(border(TableBorderPosition::InsideH))
+            .set_border(border(TableBorderPosition::InsideV));
+        out.push(Block::T(Box::new(t)));
+        out.push(Block::P(Box::new(Paragraph::new().line_spacing(spacing(0, 0)))));
     }
 
     fn aligned(&self, p: Paragraph, n: &Node) -> Paragraph {

@@ -188,8 +188,12 @@ pub struct TaskReportRow {
 /// `GET /api/reports/tasks?spaces=&labels=&status=&max=` (tasks-report-macro)
 pub async fn tasks_report(State(state): State<AppState>, MaybeUser(user): MaybeUser, Query(q): Query<ReportQuery>) -> ApiResult<Json<Vec<TaskReportRow>>> {
     let p = Principal::load(&state, user).await?;
-    let ws = workspace_of(&state, &p).await?;
-    let visible_sp = visible_spaces(&state, &p).await?;
+    tasks_for(&state, &p, &q).await
+}
+
+async fn tasks_for(state: &AppState, p: &Principal, q: &ReportQuery) -> ApiResult<Json<Vec<TaskReportRow>>> {
+    let ws = workspace_of(state, p).await?;
+    let visible_sp = visible_spaces(state, p).await?;
     if visible_sp.is_empty() {
         return Ok(Json(vec![]));
     }
@@ -212,13 +216,289 @@ pub async fn tasks_report(State(state): State<AppState>, MaybeUser(user): MaybeU
     .fetch_all(&state.db)
     .await?;
     let pairs: Vec<(Uuid, Uuid)> = rows.iter().map(|r| (r.page_id, r.space_id)).collect();
-    let visible = filter_visible(&state, &p, &visible_sp, &pairs).await?;
+    let visible = filter_visible(state, p, &visible_sp, &pairs).await?;
     Ok(Json(rows.into_iter().filter(|r| visible.contains(&r.page_id)).take(q.max(50) as usize).collect()))
+}
+
+/// A report macro evaluated once, for static exports (Word): a titled table.
+pub struct Snapshot {
+    pub title: String,
+    pub header: Vec<String>,
+    /// cells: text and an optional link
+    pub rows: Vec<Vec<(String, Option<String>)>>,
+    pub empty: &'static str,
+}
+
+/// Values of `key = x`, `key = "x"` and `key in (a, b)` clauses of a CQL query.
+fn cql_values(cql: &str, key: &str, extra: &str) -> Vec<String> {
+    let lower = cql.to_ascii_lowercase();
+    let mut out = Vec::new();
+    let mut from = 0;
+    while let Some(i) = lower[from..].find(key) {
+        let start = from + i;
+        from = start + key.len();
+        if start > 0 && lower.as_bytes()[start - 1].is_ascii_alphanumeric() {
+            continue;
+        }
+        let rest = cql[from..].trim_start();
+        let value = if let Some(r) = rest.strip_prefix('=') {
+            r
+        } else if rest.get(..2).is_some_and(|op| op.eq_ignore_ascii_case("in")) && !rest[2..].starts_with(|c: char| c.is_alphanumeric()) {
+            &rest[2..]
+        } else {
+            continue;
+        };
+        let v = value.trim_start();
+        if let Some(r) = v.strip_prefix('(') {
+            if let Some(end) = r.find(')') {
+                out.extend(list(&Some(r[..end].to_string())));
+            }
+        } else if let Some(q) = v.chars().next().filter(|c| *c == '"' || *c == '\'') {
+            if let Some(end) = v[1..].find(q) {
+                out.push(v[1..1 + end].to_string());
+            }
+        } else {
+            let word: String = v.chars().take_while(|c| c.is_alphanumeric() || *c == '_' || extra.contains(*c)).collect();
+            if !word.is_empty() {
+                out.push(word);
+            }
+        }
+    }
+    out
+}
+
+/// Labels, spaces and the AND flag from classic macro parameters or a Cloud CQL query
+/// (the server side of the editor's `querySpec`).
+fn query_spec(params: &serde_json::Map<String, Value>, current_space: &str) -> (Vec<String>, Vec<String>, bool) {
+    let get = |k: &str| params.get(k).and_then(|v| v.as_str()).map(str::to_string);
+    let cql = get("cql").unwrap_or_default();
+    let mut labels: Vec<String> = Vec::new();
+    for l in list(&get("labels")).into_iter().chain(list(&get("label"))).chain(cql_values(&cql, "label", ".-")) {
+        let l = l.to_lowercase();
+        if !labels.contains(&l) {
+            labels.push(l);
+        }
+    }
+    let mut spaces: Vec<String> = Vec::new();
+    for s in list(&get("spaces").or(get("space")).or(get("spaceKey"))).into_iter().chain(cql_values(&cql, "space", ".()-")) {
+        let s = if s == "@self" || s.eq_ignore_ascii_case("currentspace()") { current_space.to_string() } else { s };
+        let s = s.to_uppercase();
+        if !s.is_empty() && !matches!(s.as_str(), "@ALL" | "@GLOBAL" | "@PERSONAL") && !spaces.contains(&s) {
+            spaces.push(s);
+        }
+    }
+    let lower = cql.to_lowercase();
+    let all = get("operator").is_some_and(|o| o.eq_ignore_ascii_case("and")) || (lower.matches("label").count() >= 2 && lower.contains(" and "));
+    (labels, spaces, all)
+}
+
+/// Evaluates a live report macro on page `page_id` (in space `space_key`) for `p`.
+/// `None` for macros that aren't reports.
+pub async fn snapshot(
+    state: &AppState,
+    p: &Principal,
+    name: &str,
+    params: &serde_json::Map<String, Value>,
+    page_id: Uuid,
+    space_key: &str,
+    base: &str,
+) -> ApiResult<Option<Snapshot>> {
+    let get = |k: &str| params.get(k).and_then(|v| v.as_str()).map(str::to_string);
+    let num = |keys: &[&str], default: i64| keys.iter().find_map(|k| get(k).and_then(|v| v.trim().parse::<i64>().ok())).unwrap_or(default);
+    let (labels, spaces, all) = query_spec(params, space_key);
+    let link = |id: Uuid| Some(format!("{base}/pages/{id}"));
+    let date = |d: chrono::DateTime<chrono::Utc>| d.format("%-d %b %Y").to_string();
+    let snap = match name {
+        "contentbylabel" | "recently-updated" => {
+            let recent = name == "recently-updated";
+            let spaces =
+                if spaces.is_empty() && recent && !get("spaces").unwrap_or_default().contains("@all") { vec![space_key.to_uppercase()] } else { spaces };
+            if !recent && labels.is_empty() {
+                return Ok(None);
+            }
+            let sort = if recent {
+                "updated"
+            } else {
+                match get("sort").as_deref() {
+                    None | Some("title") => "title",
+                    Some("creation") => "created",
+                    _ => "updated",
+                }
+            };
+            let q = ReportQuery {
+                labels: Some(labels.join(",")),
+                spaces: Some(spaces.join(",")),
+                operator: all.then(|| "all".into()),
+                sort: Some(sort.into()),
+                max: Some(num(&["max", "maxResults"], if recent { 15 } else { 20 })),
+                status: None,
+            };
+            let mut rows: Vec<ReportPage> = pages(state, p, &q, false, 20, false).await?.into_iter().filter(|r| recent || r.id != page_id).collect();
+            if get("reverse").as_deref() == Some("true") {
+                rows.reverse();
+            }
+            let mut header = vec!["Page".to_string(), "Space".into(), "Updated".into()];
+            if !recent {
+                header.push("Labels".into());
+            }
+            Snapshot {
+                title: if recent { "Recently updated".into() } else { format!("Pages labelled {}", labels.join(if all { " and " } else { ", " })) },
+                header,
+                rows: rows
+                    .into_iter()
+                    .map(|r| {
+                        let updated = format!("{}{}", date(r.updated_at), r.updated_by_name.as_ref().map(|n| format!(" by {n}")).unwrap_or_default());
+                        let mut row = vec![(r.title.clone(), link(r.id)), (r.space_name.clone(), None), (updated, None)];
+                        if !recent {
+                            row.push((r.labels.join(", "), None));
+                        }
+                        row
+                    })
+                    .collect(),
+                empty: "No pages found.",
+            }
+        }
+        "detailssummary" | "content-report-table" => {
+            if labels.is_empty() {
+                return Ok(None);
+            }
+            let q = ReportQuery {
+                labels: Some(labels.join(",")),
+                spaces: Some(spaces.join(",")),
+                sort: Some("title".into()),
+                max: Some(num(&["pageSize", "max", "maxResults"], 100)),
+                ..Default::default()
+            };
+            let rows = pages(state, p, &q, true, 100, true).await?;
+            let mut columns: Vec<String> = Vec::new();
+            let mut table = Vec::new();
+            for r in rows {
+                let doc = match state.rooms.get(r.id) {
+                    Some(room) => room.snapshot(),
+                    None => Node::from_json(&r.content).unwrap_or_else(|_| Node::empty_doc()),
+                };
+                let props = properties(&doc);
+                for (k, _) in &props {
+                    if !columns.iter().any(|c| c.eq_ignore_ascii_case(k)) {
+                        columns.push(k.clone());
+                    }
+                }
+                table.push((r, props));
+            }
+            let headings = list(&get("headings"));
+            let columns: Vec<String> = if headings.is_empty() { columns.into_iter().take(8).collect() } else { headings };
+            Snapshot {
+                title: format!("Page properties: {}", labels.join(", ")),
+                header: std::iter::once("Page".to_string()).chain(columns.iter().cloned()).collect(),
+                rows: table
+                    .into_iter()
+                    .map(|(r, props)| {
+                        std::iter::once((r.title.clone(), link(r.id)))
+                            .chain(
+                                columns
+                                    .iter()
+                                    .map(|c| (props.iter().find(|(k, _)| k.eq_ignore_ascii_case(c)).map(|(_, v)| v.clone()).unwrap_or_default(), None)),
+                            )
+                            .collect()
+                    })
+                    .collect(),
+                empty: "No pages with page properties and this label.",
+            }
+        }
+        "tasks-report-macro" => {
+            let spaces = if spaces.is_empty() { vec![space_key.to_uppercase()] } else { spaces };
+            let st = get("status").unwrap_or_default().to_lowercase();
+            let status = if st == "complete" {
+                "done"
+            } else if st.contains("all") {
+                "all"
+            } else {
+                "open"
+            };
+            let q = ReportQuery {
+                spaces: Some(spaces.join(",")),
+                labels: Some(labels.join(",")),
+                status: Some(status.into()),
+                max: Some(num(&["pageSize"], 20)),
+                ..Default::default()
+            };
+            let Json(rows) = tasks_for(state, p, &q).await?;
+            Snapshot {
+                title: format!(
+                    "Tasks ({})",
+                    if status == "open" {
+                        "open"
+                    } else if status == "done" {
+                        "completed"
+                    } else {
+                        "all"
+                    }
+                ),
+                // the done column only says something when finished tasks are listed too
+                header: ["Done", "Task", "Assignee", "Due", "Page"].iter().skip(usize::from(status == "open")).map(|h| h.to_string()).collect(),
+                rows: rows
+                    .into_iter()
+                    .map(|t| {
+                        let row = vec![
+                            ((if t.done { "Yes" } else { "No" }).to_string(), None),
+                            (t.text, None),
+                            (t.assignee_name.unwrap_or_default(), None),
+                            (t.due.map(|d| d.format("%-d %b %Y").to_string()).unwrap_or_default(), None),
+                            (t.page_title, link(t.page_id)),
+                        ];
+                        row.into_iter().skip(usize::from(status == "open")).collect()
+                    })
+                    .collect(),
+                empty: "No tasks.",
+            }
+        }
+        "attachments" => {
+            let rows: Vec<(Uuid, String, i64)> =
+                sqlx::query_as("SELECT id, filename, size FROM attachments WHERE page_id = $1 AND deleted_at IS NULL ORDER BY created_at DESC")
+                    .bind(page_id)
+                    .fetch_all(&state.db)
+                    .await?;
+            Snapshot {
+                title: "Attachments".into(),
+                header: vec!["File".into(), "Size".into()],
+                rows: rows
+                    .into_iter()
+                    .map(|(id, name, size)| vec![(name, Some(format!("{base}/api/attachments/{id}/content"))), (human_size(size), None)])
+                    .collect(),
+                empty: "No attachments on this page.",
+            }
+        }
+        _ => return Ok(None),
+    };
+    Ok(Some(snap))
+}
+
+fn human_size(n: i64) -> String {
+    match n {
+        n if n >= 1 << 20 => format!("{:.1} MB", n as f64 / (1 << 20) as f64),
+        n if n >= 1 << 10 => format!("{:.0} KB", n as f64 / 1024.0),
+        n => format!("{n} B"),
+    }
 }
 
 #[cfg(test)]
 mod tests {
     use wikicraft_doc_model::markdown::markdown_to_pm;
+
+    #[test]
+    fn cql_and_classic_parameters() {
+        let params = |v: serde_json::Value| v.as_object().unwrap().clone();
+        let (labels, spaces, all) =
+            super::query_spec(&params(serde_json::json!({"cql": "label = \"Project\" and label in (q1, 'Q2') and space = currentSpace()"})), "eng");
+        assert_eq!(labels, vec!["project", "q1", "q2"]);
+        assert_eq!(spaces, vec!["ENG"]);
+        assert!(all);
+        let (labels, spaces, all) = super::query_spec(&params(serde_json::json!({"labels": "a, b", "spaces": "@all", "cql": "labels = x"})), "eng");
+        assert_eq!(labels, vec!["a", "b"]);
+        assert!(spaces.is_empty() && !all);
+        let (_, spaces, _) = super::query_spec(&params(serde_json::json!({"cql": "space in (\"DOC\", ops) AND type = page"})), "eng");
+        assert_eq!(spaces, vec!["DOC", "OPS"]);
+    }
 
     #[test]
     fn horizontal_properties_table() {

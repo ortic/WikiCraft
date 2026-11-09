@@ -288,10 +288,14 @@ async fn word_export_of_a_page() {
         p(json!([{"type": "image", "attrs": {"src": "https://example.com/remote.png", "alt": "remote"}}])),
         {"type": "blockquote", "content": [p(json!([t("Quoted wisdom")]))]},
         {"type": "childPages"},
+        {"type": "macro", "attrs": {"name": "contentbylabel", "params": {"cql": "label = \"appendix\" and space = currentSpace()"}}},
+        {"type": "macro", "attrs": {"name": "tasks-report-macro", "params": {"status": "incomplete"}}},
+        {"type": "macro", "attrs": {"name": "gliffy", "params": {}}},
         {"type": "horizontalRule"}
     ]});
     let (st, _) = app.put(&owner, &format!("/pages/{pg}/content"), json!({"content": doc})).await;
     assert_eq!(st, 200);
+    app.put(&owner, &format!("/pages/{child}/labels"), json!({"labels": ["appendix"]})).await;
 
     let r = member.get(app.url(&format!("/pages/{pg}/export?format=docx"))).send().await.unwrap();
     assert_eq!(r.status(), 200);
@@ -318,6 +322,9 @@ async fn word_export_of_a_page() {
         assert!(xml.contains(needle), "{needle} missing");
     }
     assert!(xml.contains("w:vMerge") && xml.contains("w:gridSpan"), "merged cells");
+    // report macros are evaluated for the reader; unknown macros keep a label
+    assert!(xml.contains("Pages labelled appendix") && xml.contains("Tasks (open)") && xml.contains("Macro: gliffy"));
+    assert!(xml.contains("Board deck") && xml.matches("Appendix A").count() >= 2, "child page listed by label too");
     assert!(xml.contains("w:anchor=\"h1\"") && xml.contains("w:name=\"h1\""), "internal link to the bookmarked heading");
     assert!(xml.contains("w:numId"), "lists are numbered");
     assert!(xml.contains("Heading1") && xml.contains("Heading2"));

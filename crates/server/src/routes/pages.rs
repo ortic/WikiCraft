@@ -979,8 +979,8 @@ pub async fn export(State(state): State<AppState>, MaybeUser(user): MaybeUser, P
 }
 
 async fn export_docx(state: &AppState, p: &Principal, id: Uuid, title: String, doc: Node) -> ApiResult<Vec<u8>> {
-    let (space, updated_at, updated_by): (String, chrono::DateTime<chrono::Utc>, Option<String>) = sqlx::query_as(
-        "SELECT s.name, p.updated_at, u.name FROM pages p JOIN spaces s ON s.id = p.space_id LEFT JOIN users u ON u.id = p.updated_by WHERE p.id = $1",
+    let (space, space_key, updated_at, updated_by): (String, String, chrono::DateTime<chrono::Utc>, Option<String>) = sqlx::query_as(
+        "SELECT s.name, s.key, p.updated_at, u.name FROM pages p JOIN spaces s ON s.id = p.space_id LEFT JOIN users u ON u.id = p.updated_by WHERE p.id = $1",
     )
     .bind(id)
     .fetch_one(&state.db)
@@ -1002,6 +1002,19 @@ async fn export_docx(state: &AppState, p: &Principal, id: Uuid, title: String, d
             }
         }
     }
+    // live report macros are evaluated now, for this reader
+    let mut found: Vec<(String, serde_json::Map<String, Value>)> = Vec::new();
+    doc.walk(&mut |n| {
+        if n.kind == wikicraft_doc_model::nodes::MACRO {
+            let params = n.attrs.get("params").and_then(|v| v.as_object()).cloned().unwrap_or_default();
+            found.push((n.attr_str("name").unwrap_or("").to_string(), params));
+        }
+    });
+    let mut macros = Vec::with_capacity(found.len());
+    for (i, (name, params)) in found.iter().enumerate() {
+        let snap = if i < 25 { crate::routes::reports::snapshot(state, p, name, params, id, &space_key, &base).await? } else { None };
+        macros.push(snap);
+    }
     let images = crate::docx::load_images(state, p, &doc).await;
     let by = updated_by.map(|n| format!(" by {n}")).unwrap_or_default();
     let subtitle = format!("{space} \u{00B7} Last updated {}{by}", updated_at.format("%-d %b %Y"));
@@ -1013,6 +1026,7 @@ async fn export_docx(state: &AppState, p: &Principal, id: Uuid, title: String, d
             images: &images,
             base_url: &base,
             children: &children,
+            macros: &macros,
         })
     })
     .await
