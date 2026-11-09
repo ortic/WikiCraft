@@ -139,8 +139,12 @@ fn sp_metadata(entity_id: &str, acs: &str) -> String {
 }
 
 async fn complete(state: &AppState, provider: &Provider, c: &SamlConfig, headers: &HeaderMap, form: AcsForm) -> Result<(String, String), SignInError> {
-    let key = form.relay_state.filter(|k| !k.is_empty()).ok_or_else(|| SignInError::Denied("IdP-initiated sign-in isn't supported; start the login in WikiCraft".into()))?;
-    let pending: Pending = serde_json::from_value(super::take_state(state, &key, headers).await.map_err(|e| SignInError::Denied(e.to_string()))?).map_err(|_| SignInError::Denied("login expired, please try again".into()))?;
+    let key = form
+        .relay_state
+        .filter(|k| !k.is_empty())
+        .ok_or_else(|| SignInError::Denied("IdP-initiated sign-in isn't supported; start the login in WikiCraft".into()))?;
+    let pending: Pending = serde_json::from_value(super::take_state(state, &key, headers).await.map_err(|e| SignInError::Denied(e.to_string()))?)
+        .map_err(|_| SignInError::Denied("login expired, please try again".into()))?;
     if pending.provider != c.common.id {
         return Err(SignInError::Denied("login state belongs to another provider".into()));
     }
@@ -158,10 +162,25 @@ async fn complete(state: &AppState, provider: &Provider, c: &SamlConfig, headers
     Ok((cookie, pending.next))
 }
 
-const EMAIL: &[&str] = &["email", "mail", "emailaddress", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress", "urn:oid:0.9.2342.19200300.100.1.3"];
-const NAME: &[&str] = &["displayName", "name", "http://schemas.microsoft.com/identity/claims/displayname", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name", "urn:oid:2.16.840.1.113730.3.1.241", "cn"];
+const EMAIL: &[&str] =
+    &["email", "mail", "emailaddress", "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/emailaddress", "urn:oid:0.9.2342.19200300.100.1.3"];
+const NAME: &[&str] = &[
+    "displayName",
+    "name",
+    "http://schemas.microsoft.com/identity/claims/displayname",
+    "http://schemas.xmlsoap.org/ws/2005/05/identity/claims/name",
+    "urn:oid:2.16.840.1.113730.3.1.241",
+    "cn",
+];
 const TRANSIENT: &str = "urn:oasis:names:tc:SAML:2.0:nameid-format:transient";
-const STABLE_ID: &[&str] = &["http://schemas.microsoft.com/identity/claims/objectidentifier", "objectGUID", "uid", "urn:oid:0.9.2342.19200300.100.1.1", "eduPersonPrincipalName", "urn:oid:1.3.6.1.4.1.5923.1.1.1.6"];
+const STABLE_ID: &[&str] = &[
+    "http://schemas.microsoft.com/identity/claims/objectidentifier",
+    "objectGUID",
+    "uid",
+    "urn:oid:0.9.2342.19200300.100.1.1",
+    "eduPersonPrincipalName",
+    "urn:oid:1.3.6.1.4.1.5923.1.1.1.6",
+];
 const GROUPS: &[&str] = &["groups", "memberOf", "http://schemas.microsoft.com/ws/2008/06/identity/claims/groups", "http://schemas.xmlsoap.org/claims/Group"];
 
 /// Maps a verified assertion to an external identity.
@@ -170,7 +189,9 @@ fn identity(c: &SamlConfig, a: &Assertion) -> Option<External> {
     let values = |configured: Option<&String>, defaults: &[&str]| -> Vec<String> {
         let names: Vec<&str> = configured.map(|s| vec![s.as_str()]).unwrap_or_else(|| defaults.to_vec());
         for n in names {
-            if let Some(attr) = attrs.iter().find(|at| at.name.as_deref().is_some_and(|x| x.eq_ignore_ascii_case(n)) || at.friendly_name.as_deref().is_some_and(|x| x.eq_ignore_ascii_case(n))) {
+            if let Some(attr) = attrs.iter().find(|at| {
+                at.name.as_deref().is_some_and(|x| x.eq_ignore_ascii_case(n)) || at.friendly_name.as_deref().is_some_and(|x| x.eq_ignore_ascii_case(n))
+            }) {
                 let v: Vec<String> = attr.values.iter().filter_map(|v| v.value.clone()).map(|v| v.trim().to_string()).filter(|v| !v.is_empty()).collect();
                 if !v.is_empty() {
                     return v;

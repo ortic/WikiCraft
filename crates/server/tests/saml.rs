@@ -45,7 +45,8 @@ async fn idp_login(app: &common::TestApp, user: &str, password: &str) -> (String
     let html = login_page.text().await.unwrap();
     let auth_state = input(&html, "AuthState").expect("IdP login form");
     let action = login_url.join(&form_action(&html).unwrap_or_default()).unwrap();
-    let html = idp.post(action).form(&[("username", user), ("password", password), ("AuthState", auth_state.as_str())]).send().await.unwrap().text().await.unwrap();
+    let html =
+        idp.post(action).form(&[("username", user), ("password", password), ("AuthState", auth_state.as_str())]).send().await.unwrap().text().await.unwrap();
     (input(&html, "SAMLResponse").expect("IdP posts a SAMLResponse"), input(&html, "RelayState").expect("RelayState"))
 }
 
@@ -55,7 +56,8 @@ async fn saml_login_against_simplesamlphp() {
         eprintln!("skipping: SAML test IdP not running");
         return;
     }
-    let providers = json!([{"type": "saml", "id": "okta", "name": "Test IdP", "idpMetadataUrl": METADATA, "groupsAttribute": "eduPersonAffiliation", "syncGroups": true}]);
+    let providers =
+        json!([{"type": "saml", "id": "okta", "name": "Test IdP", "idpMetadataUrl": METADATA, "groupsAttribute": "eduPersonAffiliation", "syncGroups": true}]);
     // the IdP knows the SP as localhost:8790; requests still go to the test server's real port
     let app = common::spawn_with(|c| {
         c.base_url = "http://localhost:8790".into();
@@ -67,7 +69,8 @@ async fn saml_login_against_simplesamlphp() {
     let md = reqwest::get(app.url("/auth/sso/okta/metadata")).await.unwrap().text().await.unwrap();
     assert!(md.contains(r#"entityID="http://localhost:8790/api/auth/sso/okta/metadata""#) && md.contains("/api/auth/sso/okta/acs"), "{md}");
 
-    let acs = |b: &reqwest::Client, resp: &str, relay: &str| b.post(app.url("/auth/sso/okta/acs")).form(&[("SAMLResponse", resp), ("RelayState", relay)]).send();
+    let acs =
+        |b: &reqwest::Client, resp: &str, relay: &str| b.post(app.url("/auth/sso/okta/acs")).form(&[("SAMLResponse", resp), ("RelayState", relay)]).send();
     let browser = reqwest::Client::builder().cookie_store(true).redirect(reqwest::redirect::Policy::none()).build().unwrap();
 
     // happy path: account created, groups synced
@@ -77,10 +80,12 @@ async fn saml_login_against_simplesamlphp() {
     assert_eq!(r.headers()["location"], "/", "signed in");
     let (_, me) = app.get(&browser, "/me").await;
     assert_eq!(me["user"]["email"], "user1@example.com");
-    let groups: Vec<String> = sqlx::query_scalar("SELECT g.name FROM group_members m JOIN groups g ON g.id = m.group_id JOIN users u ON u.id = m.user_id WHERE u.email = 'user1@example.com'")
-        .fetch_all(&app.state.db)
-        .await
-        .unwrap();
+    let groups: Vec<String> = sqlx::query_scalar(
+        "SELECT g.name FROM group_members m JOIN groups g ON g.id = m.group_id JOIN users u ON u.id = m.user_id WHERE u.email = 'user1@example.com'",
+    )
+    .fetch_all(&app.state.db)
+    .await
+    .unwrap();
     assert_eq!(groups, vec!["group1".to_string()]);
 
     // replaying the same response is refused (single-use state)

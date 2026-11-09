@@ -53,20 +53,34 @@ async fn get_json(token: &str, url: &str) -> anyhow::Result<Value> {
     Ok(serde_json::from_str(&text)?)
 }
 
-pub async fn callback(state: &AppState, provider: &Provider, c: &GithubConfig, headers: &HeaderMap, code: Option<String>, key: Option<String>, error: Option<String>) -> Response {
+pub async fn callback(
+    state: &AppState,
+    provider: &Provider,
+    c: &GithubConfig,
+    headers: &HeaderMap,
+    code: Option<String>,
+    key: Option<String>,
+    error: Option<String>,
+) -> Response {
     let res: Result<(String, String), SignInError> = async {
         if let Some(e) = error {
             return Err(SignInError::Denied(format!("GitHub: {e}")));
         }
         let (Some(code), Some(key)) = (code, key) else { return Err(SignInError::Denied("missing code/state".into())) };
-        let pending: Pending = serde_json::from_value(super::take_state(state, &key, headers).await.map_err(|e| SignInError::Denied(e.to_string()))?).map_err(|_| SignInError::Denied("login expired".into()))?;
+        let pending: Pending = serde_json::from_value(super::take_state(state, &key, headers).await.map_err(|e| SignInError::Denied(e.to_string()))?)
+            .map_err(|_| SignInError::Denied("login expired".into()))?;
         if pending.provider != c.common.id {
             return Err(SignInError::Denied("login state belongs to another provider".into()));
         }
         let text = http()
             .post(format!("{}/login/oauth/access_token", web(c)))
             .header("accept", "application/json")
-            .form(&[("client_id", c.client_id.as_str()), ("client_secret", c.client_secret.as_str()), ("code", code.as_str()), ("redirect_uri", &super::oidc::redirect_uri(state, &c.common.id))])
+            .form(&[
+                ("client_id", c.client_id.as_str()),
+                ("client_secret", c.client_secret.as_str()),
+                ("code", code.as_str()),
+                ("redirect_uri", &super::oidc::redirect_uri(state, &c.common.id)),
+            ])
             .send()
             .await
             .map_err(anyhow::Error::from)?
@@ -74,13 +88,18 @@ pub async fn callback(state: &AppState, provider: &Provider, c: &GithubConfig, h
             .await
             .map_err(anyhow::Error::from)?;
         let tok: Value = serde_json::from_str(&text).map_err(anyhow::Error::from)?;
-        let token = tok["access_token"].as_str().ok_or_else(|| SignInError::Denied(format!("GitHub token exchange failed: {}", tok["error_description"].as_str().unwrap_or("unknown error"))))?.to_string();
+        let token = tok["access_token"]
+            .as_str()
+            .ok_or_else(|| SignInError::Denied(format!("GitHub token exchange failed: {}", tok["error_description"].as_str().unwrap_or("unknown error"))))?
+            .to_string();
         let user = get_json(&token, &format!("{}/user", api(c))).await?;
         let emails = get_json(&token, &format!("{}/user/emails", api(c))).await.unwrap_or(json!([]));
-        let primary = emails.as_array().into_iter().flatten().find(|e| e["primary"] == true && e["verified"] == true).and_then(|e| e["email"].as_str()).map(String::from);
+        let primary =
+            emails.as_array().into_iter().flatten().find(|e| e["primary"] == true && e["verified"] == true).and_then(|e| e["email"].as_str()).map(String::from);
         if !c.allowed_orgs.is_empty() {
             let orgs = get_json(&token, &format!("{}/user/orgs", api(c))).await?;
-            let member = orgs.as_array().into_iter().flatten().filter_map(|o| o["login"].as_str()).any(|l| c.allowed_orgs.iter().any(|a| a.eq_ignore_ascii_case(l)));
+            let member =
+                orgs.as_array().into_iter().flatten().filter_map(|o| o["login"].as_str()).any(|l| c.allowed_orgs.iter().any(|a| a.eq_ignore_ascii_case(l)));
             if !member {
                 return Err(SignInError::Denied("your GitHub account is not a member of an allowed organization".into()));
             }

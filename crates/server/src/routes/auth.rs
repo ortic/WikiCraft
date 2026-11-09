@@ -110,7 +110,9 @@ pub async fn login(State(state): State<AppState>, headers: HeaderMap, Json(req):
     static DUMMY: tokio::sync::OnceCell<String> = tokio::sync::OnceCell::const_new();
     let dummy = DUMMY.get_or_try_init(|| hash_password("wikicraft-timing-dummy".into())).await?.clone();
     let (ok, user) = match row {
-        Some((id, ws, Some(hash), status)) if status == "active" && !state.config.disable_password_login => (verify_password(req.password, hash).await, Some((id, ws))),
+        Some((id, ws, Some(hash), status)) if status == "active" && !state.config.disable_password_login => {
+            (verify_password(req.password, hash).await, Some((id, ws)))
+        }
         _ => {
             let _ = verify_password(req.password, dummy).await;
             (false, None)

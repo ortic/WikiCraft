@@ -194,7 +194,10 @@ impl Provider {
     fn is_public(&self) -> bool {
         match self {
             Provider::Github(_) => true,
-            Provider::Oidc(c) => matches!(c.preset.as_deref(), Some("google") | Some("gitlab")) || (c.preset.as_deref() == Some("microsoft") && matches!(c.tenant.as_deref(), None | Some("common" | "consumers"))),
+            Provider::Oidc(c) => {
+                matches!(c.preset.as_deref(), Some("google") | Some("gitlab"))
+                    || (c.preset.as_deref() == Some("microsoft") && matches!(c.tenant.as_deref(), None | Some("common" | "consumers")))
+            }
             _ => false,
         }
     }
@@ -349,13 +352,23 @@ pub async fn sign_in(state: &AppState, provider: &Provider, ext: External) -> Re
     let ws: Uuid = sqlx::query_scalar("SELECT id FROM workspaces ORDER BY created_at LIMIT 1").fetch_one(&state.db).await?;
     let name = ext.name.clone().filter(|n| !n.trim().is_empty()).or_else(|| email.clone()).unwrap_or_else(|| "SSO user".into());
     let linked: Option<(Uuid, String)> =
-        sqlx::query_as("SELECT u.id, u.status FROM identities i JOIN users u ON u.id = i.user_id WHERE i.provider = $1 AND i.subject = $2").bind(&ext.provider_key).bind(&ext.subject).fetch_optional(&state.db).await?;
+        sqlx::query_as("SELECT u.id, u.status FROM identities i JOIN users u ON u.id = i.user_id WHERE i.provider = $1 AND i.subject = $2")
+            .bind(&ext.provider_key)
+            .bind(&ext.subject)
+            .fetch_optional(&state.db)
+            .await?;
     let user_id = match linked {
         Some((_, status)) if status == "deactivated" => return Err(SignInError::Denied("your account is deactivated".into())),
         Some((id, _)) => id,
         None => {
             let by_email: Option<(Uuid, String)> = match &email {
-                Some(e) if ext.email_verified != Some(false) => sqlx::query_as("SELECT id, status FROM users WHERE workspace_id = $1 AND lower(email) = $2").bind(ws).bind(e).fetch_optional(&state.db).await?,
+                Some(e) if ext.email_verified != Some(false) => {
+                    sqlx::query_as("SELECT id, status FROM users WHERE workspace_id = $1 AND lower(email) = $2")
+                        .bind(ws)
+                        .bind(e)
+                        .fetch_optional(&state.db)
+                        .await?
+                }
                 _ => None,
             };
             let id = match by_email {
@@ -369,7 +382,10 @@ pub async fn sign_in(state: &AppState, provider: &Provider, ext: External) -> Re
                 }
                 None => {
                     if !provider.auto_create() {
-                        return Err(SignInError::Denied(format!("no WikiCraft account for {}; ask an administrator to invite you", email.as_deref().unwrap_or("this identity"))));
+                        return Err(SignInError::Denied(format!(
+                            "no WikiCraft account for {}; ask an administrator to invite you",
+                            email.as_deref().unwrap_or("this identity")
+                        )));
                     }
                     let id = new_id();
                     let role = match common.default_role.as_deref() {
@@ -388,11 +404,21 @@ pub async fn sign_in(state: &AppState, provider: &Provider, ext: External) -> Re
                     id
                 }
             };
-            sqlx::query("INSERT INTO identities (provider, subject, user_id, email) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING").bind(&ext.provider_key).bind(&ext.subject).bind(id).bind(&email).execute(&state.db).await?;
+            sqlx::query("INSERT INTO identities (provider, subject, user_id, email) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING")
+                .bind(&ext.provider_key)
+                .bind(&ext.subject)
+                .bind(id)
+                .bind(&email)
+                .execute(&state.db)
+                .await?;
             id
         }
     };
-    sqlx::query("UPDATE identities SET last_login = now() WHERE provider = $1 AND subject = $2").bind(&ext.provider_key).bind(&ext.subject).execute(&state.db).await?;
+    sqlx::query("UPDATE identities SET last_login = now() WHERE provider = $1 AND subject = $2")
+        .bind(&ext.provider_key)
+        .bind(&ext.subject)
+        .execute(&state.db)
+        .await?;
     if common.sync_groups {
         sync_groups(state, ws, provider.id(), user_id, &ext.groups).await?;
     }

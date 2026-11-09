@@ -46,12 +46,8 @@ pub async fn authenticate(c: &LdapConfig, username: &str, password: &str) -> any
     let subject = first(id_attr)
         .or_else(|| entry.bin_attrs.iter().find(|(k, _)| k.eq_ignore_ascii_case("objectGUID")).and_then(|(_, v)| v.first()).map(hex::encode))
         .unwrap_or_else(|| entry.dn.to_lowercase());
-    let groups: Vec<String> = entry
-        .attrs
-        .iter()
-        .find(|(k, _)| k.eq_ignore_ascii_case(group_attr))
-        .map(|(_, v)| v.iter().map(|dn| cn_of(dn)).collect())
-        .unwrap_or_default();
+    let groups: Vec<String> =
+        entry.attrs.iter().find(|(k, _)| k.eq_ignore_ascii_case(group_attr)).map(|(_, v)| v.iter().map(|dn| cn_of(dn)).collect()).unwrap_or_default();
     Ok(Some(External {
         provider_key: format!("ldap:{}", c.common.id),
         subject,

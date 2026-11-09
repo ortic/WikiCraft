@@ -11,7 +11,9 @@ use axum::response::{IntoResponse, Redirect, Response};
 use base64::Engine;
 use dashmap::DashMap;
 use openidconnect::core::{CoreAuthenticationFlow, CoreClient, CoreProviderMetadata};
-use openidconnect::{AuthorizationCode, ClientId, ClientSecret, CsrfToken, IssuerUrl, Nonce, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope, TokenResponse};
+use openidconnect::{
+    AuthorizationCode, ClientId, ClientSecret, CsrfToken, IssuerUrl, Nonce, PkceCodeChallenge, PkceCodeVerifier, RedirectUrl, Scope, TokenResponse,
+};
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 
@@ -31,7 +33,11 @@ struct Pending {
 
 fn http() -> openidconnect::reqwest::Client {
     // following redirects would open the client up to SSRF
-    openidconnect::reqwest::ClientBuilder::new().redirect(openidconnect::reqwest::redirect::Policy::none()).timeout(Duration::from_secs(15)).build().expect("http client")
+    openidconnect::reqwest::ClientBuilder::new()
+        .redirect(openidconnect::reqwest::redirect::Policy::none())
+        .timeout(Duration::from_secs(15))
+        .build()
+        .expect("http client")
 }
 
 fn issuer(c: &OidcConfig) -> String {
@@ -51,7 +57,9 @@ async fn metadata(c: &OidcConfig) -> anyhow::Result<CoreProviderMetadata> {
     if let Some(m) = METADATA.get(&iss) {
         return Ok(m.clone());
     }
-    let m = CoreProviderMetadata::discover_async(IssuerUrl::new(iss.clone())?, &http()).await.map_err(|e| anyhow::anyhow!("OIDC discovery for {iss} failed: {e}"))?;
+    let m = CoreProviderMetadata::discover_async(IssuerUrl::new(iss.clone())?, &http())
+        .await
+        .map_err(|e| anyhow::anyhow!("OIDC discovery for {iss} failed: {e}"))?;
     METADATA.insert(iss, m.clone());
     Ok(m)
 }
@@ -82,7 +90,8 @@ pub async fn login(state: &AppState, c: &OidcConfig, next: String, browser: Opti
     // the CSRF token is our state key (stored in the DB so the callback may hit any replica)
     let key = super::put_state(state, &json!({}), browser).await?;
     let k2 = key.clone();
-    let mut req = client.authorize_url(CoreAuthenticationFlow::AuthorizationCode, move || CsrfToken::new(k2.clone()), move || n2.clone()).set_pkce_challenge(challenge);
+    let mut req =
+        client.authorize_url(CoreAuthenticationFlow::AuthorizationCode, move || CsrfToken::new(k2.clone()), move || n2.clone()).set_pkce_challenge(challenge);
     let mut scopes: Vec<String> = vec!["email".into(), "profile".into()];
     scopes.extend(c.scopes.iter().cloned());
     for s in scopes {
@@ -90,7 +99,11 @@ pub async fn login(state: &AppState, c: &OidcConfig, next: String, browser: Opti
     }
     let (url, _, _) = req.url();
     let pending = Pending { provider: c.common.id.clone(), verifier: verifier.secret().clone(), nonce: pending_nonce.secret().clone(), next };
-    sqlx::query("UPDATE auth_states SET data = data || $2 WHERE state = $1").bind(hex::encode(crate::auth::token_hash(&key))).bind(serde_json::to_value(&pending)?).execute(&state.db).await?;
+    sqlx::query("UPDATE auth_states SET data = data || $2 WHERE state = $1")
+        .bind(hex::encode(crate::auth::token_hash(&key)))
+        .bind(serde_json::to_value(&pending)?)
+        .execute(&state.db)
+        .await?;
     Ok(Redirect::to(url.as_str()).into_response())
 }
 
@@ -115,7 +128,12 @@ pub async fn callback(state: &AppState, provider: &Provider, c: &OidcConfig, hea
 
 /// Reads extra claims (e.g. `groups`) from an ID token whose signature was already verified.
 fn raw_claims(id_token: &str) -> Value {
-    id_token.split('.').nth(1).and_then(|p| base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(p).ok()).and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or(Value::Null)
+    id_token
+        .split('.')
+        .nth(1)
+        .and_then(|p| base64::engine::general_purpose::URL_SAFE_NO_PAD.decode(p).ok())
+        .and_then(|b| serde_json::from_slice(&b).ok())
+        .unwrap_or(Value::Null)
 }
 
 async fn complete(state: &AppState, provider: &Provider, c: &OidcConfig, headers: &HeaderMap, cb: Callback) -> Result<(String, String), SignInError> {
@@ -123,7 +141,8 @@ async fn complete(state: &AppState, provider: &Provider, c: &OidcConfig, headers
         return Err(SignInError::Denied(format!("identity provider error: {e} {}", cb.error_description.unwrap_or_default())));
     }
     let (Some(code), Some(key)) = (cb.code, cb.state) else { return Err(SignInError::Denied("missing code/state".into())) };
-    let pending: Pending = serde_json::from_value(super::take_state(state, &key, headers).await.map_err(|e| SignInError::Denied(e.to_string()))?).map_err(|_| SignInError::Denied("login expired, please try again".into()))?;
+    let pending: Pending = serde_json::from_value(super::take_state(state, &key, headers).await.map_err(|e| SignInError::Denied(e.to_string()))?)
+        .map_err(|_| SignInError::Denied("login expired, please try again".into()))?;
     if pending.provider != c.common.id {
         return Err(SignInError::Denied("login state belongs to another provider".into()));
     }
@@ -146,7 +165,8 @@ async fn complete(state: &AppState, provider: &Provider, c: &OidcConfig, headers
         .and_then(Value::as_array)
         .map(|a| a.iter().filter_map(|v| v.as_str().map(String::from)).collect())
         .unwrap_or_default();
-    let email = claims.email().map(|e| e.to_string()).or_else(|| raw.get("preferred_username").and_then(Value::as_str).filter(|u| u.contains('@')).map(String::from));
+    let email =
+        claims.email().map(|e| e.to_string()).or_else(|| raw.get("preferred_username").and_then(Value::as_str).filter(|u| u.contains('@')).map(String::from));
     let name = claims.name().and_then(|n| n.get(None)).map(|n| n.to_string()).or_else(|| claims.preferred_username().map(|u| u.to_string()));
     let ext = External {
         provider_key: claims.issuer().to_string(),
