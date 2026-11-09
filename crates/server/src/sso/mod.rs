@@ -433,25 +433,46 @@ async fn sync_groups(state: &AppState, ws: Uuid, provider_id: &str, user: Uuid, 
     Ok(())
 }
 
+/// Cookie holding a random value that ties a pending login to the browser that started it
+/// (login-CSRF protection: an attacker can't complete their own login in a victim's browser).
+pub const BROWSER_COOKIE: &str = "wc_sso";
+
+/// `SameSite=None` is needed when the IdP returns with a cross-site POST (SAML); browsers only
+/// accept that together with `Secure`.
+pub fn browser_cookie(value: &str, cross_site_post: bool, secure: bool) -> String {
+    let same_site = if cross_site_post { "None" } else { "Lax" };
+    format!("{BROWSER_COOKIE}={value}; Path=/api/auth; HttpOnly; SameSite={same_site}; Max-Age=600{}", if secure { "; Secure" } else { "" })
+}
+
 /// Stores short-lived login state (shared by all replicas); returns the opaque state key.
-pub async fn put_state(state: &AppState, data: &Value) -> anyhow::Result<String> {
+/// With `browser`, completing the login requires the matching [`BROWSER_COOKIE`].
+pub async fn put_state(state: &AppState, data: &Value, browser: Option<&str>) -> anyhow::Result<String> {
     let key = crate::auth::random_token();
+    let mut data = data.clone();
+    if let (Some(b), Some(obj)) = (browser, data.as_object_mut()) {
+        obj.insert("_browser".into(), Value::String(hex::encode(crate::auth::token_hash(b))));
+    }
     sqlx::query("DELETE FROM auth_states WHERE expires_at < now()").execute(&state.db).await?;
     sqlx::query("INSERT INTO auth_states (state, data, expires_at) VALUES ($1, $2, now() + interval '10 minutes')")
         .bind(hex::encode(crate::auth::token_hash(&key)))
-        .bind(data)
+        .bind(&data)
         .execute(&state.db)
         .await?;
     Ok(key)
 }
 
-/// Consumes login state (one-time use).
-pub async fn take_state(state: &AppState, key: &str) -> anyhow::Result<Value> {
+/// Consumes login state (one-time use), checking the browser binding.
+pub async fn take_state(state: &AppState, key: &str, headers: &axum::http::HeaderMap) -> anyhow::Result<Value> {
     let data: Option<Value> = sqlx::query_scalar("DELETE FROM auth_states WHERE state = $1 AND expires_at > now() RETURNING data")
         .bind(hex::encode(crate::auth::token_hash(key)))
         .fetch_optional(&state.db)
         .await?;
-    data.ok_or_else(|| anyhow::anyhow!("login expired, please try again"))
+    let data = data.ok_or_else(|| anyhow::anyhow!("login expired, please try again"))?;
+    if let Some(expected) = data.get("_browser").and_then(Value::as_str) {
+        let actual = crate::auth::cookie_value(headers, BROWSER_COOKIE).map(|v| hex::encode(crate::auth::token_hash(v)));
+        anyhow::ensure!(actual.as_deref() == Some(expected), "this sign-in was started in a different browser, please try again");
+    }
+    Ok(data)
 }
 
 pub fn safe_next(next: Option<String>) -> String {

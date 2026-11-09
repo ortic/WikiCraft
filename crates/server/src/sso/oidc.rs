@@ -73,14 +73,14 @@ macro_rules! oidc_client {
 }
 
 /// Starts the login: redirect to the identity provider.
-pub async fn login(state: &AppState, c: &OidcConfig, next: String) -> anyhow::Result<Response> {
+pub async fn login(state: &AppState, c: &OidcConfig, next: String, browser: Option<&str>) -> anyhow::Result<Response> {
     let md = metadata(c).await?;
     let client = oidc_client!(state, c, md);
     let (challenge, verifier) = PkceCodeChallenge::new_random_sha256();
     let pending_nonce = Nonce::new_random();
     let n2 = pending_nonce.clone();
     // the CSRF token is our state key (stored in the DB so the callback may hit any replica)
-    let key = super::put_state(state, &json!({})).await?;
+    let key = super::put_state(state, &json!({}), browser).await?;
     let k2 = key.clone();
     let mut req = client.authorize_url(CoreAuthenticationFlow::AuthorizationCode, move || CsrfToken::new(k2.clone()), move || n2.clone()).set_pkce_challenge(challenge);
     let mut scopes: Vec<String> = vec!["email".into(), "profile".into()];
@@ -90,7 +90,7 @@ pub async fn login(state: &AppState, c: &OidcConfig, next: String) -> anyhow::Re
     }
     let (url, _, _) = req.url();
     let pending = Pending { provider: c.common.id.clone(), verifier: verifier.secret().clone(), nonce: pending_nonce.secret().clone(), next };
-    sqlx::query("UPDATE auth_states SET data = $2 WHERE state = $1").bind(hex::encode(crate::auth::token_hash(&key))).bind(serde_json::to_value(&pending)?).execute(&state.db).await?;
+    sqlx::query("UPDATE auth_states SET data = data || $2 WHERE state = $1").bind(hex::encode(crate::auth::token_hash(&key))).bind(serde_json::to_value(&pending)?).execute(&state.db).await?;
     Ok(Redirect::to(url.as_str()).into_response())
 }
 
@@ -123,7 +123,7 @@ async fn complete(state: &AppState, provider: &Provider, c: &OidcConfig, headers
         return Err(SignInError::Denied(format!("identity provider error: {e} {}", cb.error_description.unwrap_or_default())));
     }
     let (Some(code), Some(key)) = (cb.code, cb.state) else { return Err(SignInError::Denied("missing code/state".into())) };
-    let pending: Pending = serde_json::from_value(super::take_state(state, &key).await.map_err(|e| SignInError::Denied(e.to_string()))?).map_err(|_| SignInError::Denied("login expired, please try again".into()))?;
+    let pending: Pending = serde_json::from_value(super::take_state(state, &key, headers).await.map_err(|e| SignInError::Denied(e.to_string()))?).map_err(|_| SignInError::Denied("login expired, please try again".into()))?;
     if pending.provider != c.common.id {
         return Err(SignInError::Denied("login state belongs to another provider".into()));
     }
@@ -173,14 +173,26 @@ pub struct LoginQuery {
 pub async fn sso_login(State(state): State<AppState>, Path(id): Path<String>, Query(q): Query<LoginQuery>) -> Response {
     let next = super::safe_next(q.next);
     let Some(p) = super::find(&state, &id).cloned() else { return super::login_error("unknown sign-in provider") };
+    // bind the login to this browser; SAML returns with a cross-site POST, which only carries
+    // a `SameSite=None; Secure` cookie, so it's bound when served over HTTPS
+    let secure = state.config.secure_cookies;
+    let cross_site_post = matches!(p, Provider::Saml(_));
+    let browser = crate::auth::random_token();
+    let bind = (!cross_site_post || secure).then_some(browser.as_str());
     let res = match &p {
-        Provider::Oidc(c) => login(&state, c, next).await,
-        Provider::Github(c) => super::github::login(&state, c, next).await,
+        Provider::Oidc(c) => login(&state, c, next, bind).await,
+        Provider::Github(c) => super::github::login(&state, c, next, bind).await,
         #[cfg(feature = "saml")]
-        Provider::Saml(c) => super::saml::login(&state, c, next).await,
+        Provider::Saml(c) => super::saml::login(&state, c, next, bind).await,
         _ => return super::login_error("this provider signs in with username and password"),
     };
-    res.unwrap_or_else(|e| {
+    res.map(|mut r| {
+        if bind.is_some() {
+            r.headers_mut().append(header::SET_COOKIE, super::browser_cookie(&browser, cross_site_post, secure).parse().expect("cookie header"));
+        }
+        r
+    })
+    .unwrap_or_else(|e| {
         tracing::warn!(provider = %id, "SSO login start failed: {e:#}");
         super::login_error(&format!("{e}"))
     })

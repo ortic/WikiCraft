@@ -80,12 +80,12 @@ fn service_provider(state: &AppState, c: &SamlConfig, md: EntityDescriptor) -> a
 }
 
 /// Starts the login: redirect to the IdP with an `AuthnRequest`; RelayState = our state key.
-pub async fn login(state: &AppState, c: &SamlConfig, next: String) -> anyhow::Result<Response> {
+pub async fn login(state: &AppState, c: &SamlConfig, next: String, browser: Option<&str>) -> anyhow::Result<Response> {
     let sp = service_provider(state, c, idp_metadata(c).await?)?;
     let sso = sp.sso_binding_location(HTTP_REDIRECT_BINDING).ok_or_else(|| anyhow::anyhow!("the IdP has no HTTP-Redirect sign-in endpoint"))?;
     let request = sp.make_authentication_request(&sso).map_err(|e| anyhow::anyhow!("{e}"))?;
     let pending = Pending { provider: c.common.id.clone(), request_id: request.id.clone(), next };
-    let key = super::put_state(state, &serde_json::to_value(&pending)?).await?;
+    let key = super::put_state(state, &serde_json::to_value(&pending)?, browser).await?;
     let url = request.redirect(&key).map_err(|e| anyhow::anyhow!("{e}"))?.ok_or_else(|| anyhow::anyhow!("could not build the IdP redirect"))?;
     Ok(Redirect::to(url.as_str()).into_response())
 }
@@ -140,7 +140,7 @@ fn sp_metadata(entity_id: &str, acs: &str) -> String {
 
 async fn complete(state: &AppState, provider: &Provider, c: &SamlConfig, headers: &HeaderMap, form: AcsForm) -> Result<(String, String), SignInError> {
     let key = form.relay_state.filter(|k| !k.is_empty()).ok_or_else(|| SignInError::Denied("IdP-initiated sign-in isn't supported; start the login in WikiCraft".into()))?;
-    let pending: Pending = serde_json::from_value(super::take_state(state, &key).await.map_err(|e| SignInError::Denied(e.to_string()))?).map_err(|_| SignInError::Denied("login expired, please try again".into()))?;
+    let pending: Pending = serde_json::from_value(super::take_state(state, &key, headers).await.map_err(|e| SignInError::Denied(e.to_string()))?).map_err(|_| SignInError::Denied("login expired, please try again".into()))?;
     if pending.provider != c.common.id {
         return Err(SignInError::Denied("login state belongs to another provider".into()));
     }

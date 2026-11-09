@@ -44,12 +44,29 @@ async fn several_oidc_providers_with_domain_rules() {
     assert_eq!(me["user"]["email"], "sso.user@acme.test");
 
     // a login started at one provider can't be completed at another
-    let no_redirects = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).build().unwrap();
-    let r = no_redirects.get(app.url("/auth/sso/corp/login")).send().await.unwrap();
-    let location = r.headers()["location"].to_str().unwrap().to_string();
-    let state = reqwest::Url::parse(&location).unwrap().query_pairs().find(|(k, _)| k == "state").unwrap().1.to_string();
-    let r = browser().get(app.url(&format!("/auth/sso/partner/callback?code=x&state={state}"))).send().await.unwrap();
-    assert!(r.url().as_str().contains("another%20provider"), "{}", r.url());
+    let manual = || reqwest::Client::builder().cookie_store(true).redirect(reqwest::redirect::Policy::none()).build().unwrap();
+    let login_url = app.url("/auth/sso/corp/login");
+    let start = |c: reqwest::Client| {
+        let login_url = login_url.clone();
+        async move {
+            let r = c.get(login_url).send().await.unwrap();
+            let location = r.headers()["location"].to_str().unwrap().to_string();
+            reqwest::Url::parse(&location).unwrap().query_pairs().find(|(k, _)| k == "state").unwrap().1.to_string()
+        }
+    };
+    let b = manual();
+    let state = start(b.clone()).await;
+    let r = b.get(app.url(&format!("/auth/sso/partner/callback?code=x&state={state}"))).send().await.unwrap();
+    let loc = r.headers()["location"].to_str().unwrap().to_string();
+    assert!(loc.contains("another%20provider"), "{loc}");
+
+    // login CSRF: a login started in one browser can't be completed in another one
+    let attacker = manual();
+    let state = start(attacker.clone()).await;
+    let victim = manual();
+    let r = victim.get(app.url(&format!("/auth/sso/corp/callback?code=x&state={state}"))).send().await.unwrap();
+    let loc = r.headers()["location"].to_str().unwrap().to_string();
+    assert!(loc.contains("different%20browser"), "{loc}");
 
     // unknown providers
     let r = browser().get(app.url("/auth/sso/nope/login")).send().await.unwrap();
@@ -96,11 +113,12 @@ async fn ldap_login_provisions_users_and_syncs_groups() {
     let dana_id = me["user"]["id"].as_str().unwrap().to_string();
 
     // directory groups are mirrored
-    let members: Vec<String> = sqlx::query_scalar("SELECT g.name FROM group_members m JOIN groups g ON g.id = m.group_id WHERE m.user_id = $1::uuid ORDER BY 1")
-        .bind(&dana_id)
-        .fetch_all(&app.state.db)
-        .await
-        .unwrap();
+    let members: Vec<String> =
+        sqlx::query_scalar("SELECT g.name FROM group_members m JOIN groups g ON g.id = m.group_id WHERE m.user_id = $1::uuid ORDER BY 1")
+            .bind(&dana_id)
+            .fetch_all(&app.state.db)
+            .await
+            .unwrap();
     assert!(members.contains(&"Engineering".to_string()), "{members:?}");
 
     // e-mail works as login name too; the same account is used

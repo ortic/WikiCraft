@@ -34,8 +34,8 @@ fn http() -> openidconnect::reqwest::Client {
         .expect("http client")
 }
 
-pub async fn login(state: &AppState, c: &GithubConfig, next: String) -> anyhow::Result<Response> {
-    let key = super::put_state(state, &serde_json::to_value(Pending { provider: c.common.id.clone(), next })?).await?;
+pub async fn login(state: &AppState, c: &GithubConfig, next: String, browser: Option<&str>) -> anyhow::Result<Response> {
+    let key = super::put_state(state, &serde_json::to_value(Pending { provider: c.common.id.clone(), next })?, browser).await?;
     let scope = if c.allowed_orgs.is_empty() { "read:user user:email" } else { "read:user user:email read:org" };
     let url = format!(
         "{}/login/oauth/authorize?client_id={}&redirect_uri={}&scope={}&state={}",
@@ -59,7 +59,7 @@ pub async fn callback(state: &AppState, provider: &Provider, c: &GithubConfig, h
             return Err(SignInError::Denied(format!("GitHub: {e}")));
         }
         let (Some(code), Some(key)) = (code, key) else { return Err(SignInError::Denied("missing code/state".into())) };
-        let pending: Pending = serde_json::from_value(super::take_state(state, &key).await.map_err(|e| SignInError::Denied(e.to_string()))?).map_err(|_| SignInError::Denied("login expired".into()))?;
+        let pending: Pending = serde_json::from_value(super::take_state(state, &key, headers).await.map_err(|e| SignInError::Denied(e.to_string()))?).map_err(|_| SignInError::Denied("login expired".into()))?;
         if pending.provider != c.common.id {
             return Err(SignInError::Denied("login state belongs to another provider".into()));
         }
