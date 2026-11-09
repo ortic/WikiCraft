@@ -196,3 +196,23 @@ test('two-factor sign-in', async ({ browser }) => {
   await ctx.close()
   void pageId
 })
+
+test('find and replace in the editor', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState })
+  const page = await ctx.newPage()
+  await page.goto(pageUrl)
+  const editor = page.locator('.ProseMirror[contenteditable="true"]')
+  await expect(editor).toBeVisible({ timeout: 20_000 })
+  await editor.locator('p').first().click()
+  await page.keyboard.press('Control+h')
+  await page.locator('.find-bar input[data-role=find]').fill('mobile app')
+  await expect(page.locator('.find-count')).toHaveText('1 of 1')
+  await expect(page.locator('.ProseMirror .find-current')).toHaveText('mobile app')
+  await page.locator('.find-bar input[data-role=replace]').fill('iOS app')
+  await page.locator('.find-bar').getByRole('button', { name: 'All' }).click()
+  await expect(page.locator('.find-count')).toHaveText('No results')
+  await expect(editor).toContainText('ship the iOS app')
+  await page.keyboard.press('Escape')
+  await expect(page.locator('.find-bar')).toHaveCount(0)
+  await ctx.close()
+})

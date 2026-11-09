@@ -29,6 +29,7 @@ import { EmoticonSuggest, PageLinkSuggest, SlashCommand, mentionSuggestion, slas
 import { CodeBlock } from './CodeBlock'
 import { ImageView } from './ImageView'
 import { TableMenu } from './TableMenu'
+import { FindBar, FindReplace, findKey } from './FindReplace'
 
 const lowlight = createLowlight(common)
 
@@ -162,6 +163,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
         PageLinkSuggest.configure({ pageId }),
         EmoticonSuggest,
         CommentMark,
+        FindReplace,
         SlashCommand.configure({ items: slashItems((e) => pickFiles('image/*').then((f) => upload(e, f, true)), (e) => pickFiles('*/*').then((f) => upload(e, f, false))) }),
       ],
       editorProps: {
@@ -231,6 +233,26 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
     [provider, ydoc],
   )
 
+  // find (Ctrl+F) and replace (Ctrl+H) while the page or its editor has focus
+  const [find, setFind] = useState<{ replace: boolean; initial: string } | null>(null)
+  const container = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (!(e.ctrlKey || e.metaKey) || e.altKey || !editor) return
+      const key = e.key.toLowerCase()
+      if (key !== 'f' && key !== 'h') return
+      const active = document.activeElement
+      const inPage = !active || active === document.body || !!container.current?.contains(active)
+      if (!inPage || (key === 'h' && !editor.isEditable)) return
+      e.preventDefault()
+      const { from, to } = editor.state.selection
+      const selected = from !== to ? editor.state.doc.textBetween(from, to, ' ').slice(0, 200) : ''
+      setFind((f) => ({ replace: key === 'h' || !!f?.replace, initial: selected || '' }))
+    }
+    window.addEventListener('keydown', onKey)
+    return () => window.removeEventListener('keydown', onKey)
+  }, [editor])
+
   // in-app navigation for internal links; inline comment clicks
   const onClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement
@@ -265,14 +287,15 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
   }
 
   return (
-    <div onClick={onClick}>
+    <div onClick={onClick} ref={container}>
+      {find && editor && <FindBar key={`${find.replace}-${find.initial}`} editor={editor} withReplace={find.replace} initial={find.initial} onClose={() => setFind(null)} />}
       {!synced && (
         <div className="row faint" style={{ padding: '12px 0' }}>
           <div className="spinner" /> {status === 'disconnected' ? 'Reconnecting…' : 'Loading document…'}
         </div>
       )}
       {editor && (
-        <BubbleMenu editor={editor} shouldShow={({ editor, state }) => !state.selection.empty && (editor.isEditable || !!onRequestComment) && !editor.isActive('image') && !(state.selection instanceof CellSelection)}>
+        <BubbleMenu editor={editor} shouldShow={({ editor, state }) => !state.selection.empty && !findKey.getState(state)?.query && (editor.isEditable || !!onRequestComment) && !editor.isActive('image') && !(state.selection instanceof CellSelection)}>
           <div className="bubble">
             {editor.isEditable && (
               <>

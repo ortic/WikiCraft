@@ -196,6 +196,8 @@ export function formatDate(iso: string | null | undefined): string {
   if (!iso) return ''
   const d = new Date(iso)
   const diff = (Date.now() - d.getTime()) / 1000
+  // future dates (due dates, expiries) are always absolute
+  if (diff < -60) return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
   if (diff < 60) return 'just now'
   if (diff < 3600) return `${Math.floor(diff / 60)} min ago`
   if (diff < 86400) return `${Math.floor(diff / 3600)} h ago`

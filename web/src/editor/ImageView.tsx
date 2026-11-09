@@ -1,6 +1,40 @@
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
+import { createPortal } from 'react-dom'
 import { NodeViewWrapper, type ReactNodeViewProps } from '@tiptap/react'
-import { AlignCenter, AlignLeft, AlignRight, Captions, ExternalLink, Maximize2, Trash2, Type } from 'lucide-react'
+import { AlignCenter, AlignLeft, AlignRight, Captions, Download, ExternalLink, Maximize2, Trash2, Type, X, ZoomIn } from 'lucide-react'
+
+/** Full-screen view of an image (click in read mode, double-click while editing). */
+export function Lightbox({ src, alt, caption, onClose }: { src: string; alt: string | null; caption: string | null; onClose: () => void }) {
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        e.stopPropagation()
+        onClose()
+      }
+    }
+    window.addEventListener('keydown', onKey, true)
+    const overflow = document.body.style.overflow
+    document.body.style.overflow = 'hidden'
+    return () => {
+      window.removeEventListener('keydown', onKey, true)
+      document.body.style.overflow = overflow
+    }
+  }, [onClose])
+  return createPortal(
+    <div className="lightbox" role="dialog" aria-modal aria-label={alt || caption || 'Image'} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <div className="lightbox-bar">
+        <a className="icon-btn" href={src} target="_blank" rel="noopener noreferrer" title="Open original"><ExternalLink size={17} /></a>
+        <a className="icon-btn" href={src} download title="Download"><Download size={17} /></a>
+        <button className="icon-btn" title="Close (Esc)" onClick={onClose}><X size={18} /></button>
+      </div>
+      <figure className="lightbox-figure" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+        <img src={src} alt={alt ?? ''} />
+        {(caption || alt) && <figcaption>{caption || alt}</figcaption>}
+      </figure>
+    </div>,
+    document.body,
+  )
+}
 
 /** Image with drag-to-resize, alignment, caption and alt text. */
 export function ImageView({ node, updateAttributes, deleteNode, selected, editor, getPos }: ReactNodeViewProps) {
@@ -8,6 +42,7 @@ export function ImageView({ node, updateAttributes, deleteNode, selected, editor
   const img = useRef<HTMLImageElement>(null)
   const [dragWidth, setDragWidth] = useState<number | null>(null)
   const [captionOpen, setCaptionOpen] = useState(false)
+  const [zoom, setZoom] = useState(false)
   const editable = editor.isEditable
   // attribute changes go through Yjs and drop the node selection: keep the image selected
   const update = (attrs: Record<string, unknown>) => {
@@ -54,7 +89,17 @@ export function ImageView({ node, updateAttributes, deleteNode, selected, editor
   return (
     <NodeViewWrapper as="span" className={`image-block align-${align || 'none'}${selected ? ' is-selected' : ''}`}>
       <span className="image-frame" style={{ width: shown ? `${shown}px` : undefined }}>
-        <img ref={img} src={src} alt={alt ?? ''} draggable={false} style={shown ? { width: '100%' } : undefined} />
+        <img
+          ref={img}
+          src={src}
+          alt={alt ?? ''}
+          draggable={false}
+          className={editable ? undefined : 'zoomable'}
+          style={shown ? { width: '100%' } : undefined}
+          onClick={editable ? undefined : () => setZoom(true)}
+          onDoubleClick={editable ? () => setZoom(true) : undefined}
+        />
+        {zoom && <Lightbox src={src} alt={alt} caption={caption} onClose={() => setZoom(false)} />}
         {editable && selected && (
           <>
             <span className="image-toolbar" contentEditable={false}>
@@ -65,7 +110,7 @@ export function ImageView({ node, updateAttributes, deleteNode, selected, editor
               {btn('Caption', !!caption || captionOpen, () => setCaptionOpen(true), <Captions size={15} />)}
               {btn(alt ? `Alt text: ${alt}` : 'Add alt text', !!alt, editAlt, <Type size={15} />)}
               {btn('Original size', false, () => update({ width: null }), <Maximize2 size={15} />)}
-              {btn('Open image', false, () => window.open(src, '_blank', 'noopener'), <ExternalLink size={15} />)}
+              {btn('View larger (double-click)', false, () => setZoom(true), <ZoomIn size={15} />)}
               <span className="sep" />
               {btn('Delete image', false, () => deleteNode(), <Trash2 size={15} />)}
             </span>
