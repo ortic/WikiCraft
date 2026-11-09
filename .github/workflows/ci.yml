@@ -18,7 +18,13 @@ jobs:
         ports: ["55432:5432"]
         options: >-
           --health-cmd "pg_isready -U wikicraft" --health-interval 5s --health-timeout 5s --health-retries 10
+    env:
+      # ~20 integration-test binaries with full debug info don't fit on a hosted runner
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_INCREMENTAL: "0"
     steps:
+      - name: Free disk space
+        run: sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL && df -h /
       - uses: actions/checkout@v4
       - uses: dtolnay/rust-toolchain@stable
         with:
