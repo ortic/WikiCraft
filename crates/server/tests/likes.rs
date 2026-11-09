@@ -47,3 +47,24 @@ async fn likes_pages_and_comments() {
     assert_eq!(app.put(&lea, &format!("/pages/{id}/like"), json!({})).await.0, 404);
     assert_eq!(app.put(&lea, &format!("/comments/{cid}/like"), json!({})).await.0, 404);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn comment_mentions_notify_only_people_who_can_see_the_page() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (lea, lea_id) = app.user(&owner, "lea@acme.test", "member").await;
+    let (_, guest_id) = app.user(&owner, "gus@acme.test", "guest").await;
+    app.post(&owner, "/spaces", json!({"key": "MEN", "name": "Mentions"})).await;
+    let (_, page) = app.post(&owner, "/pages", json!({"spaceKey": "MEN", "title": "Plan"})).await;
+    let id = page["id"].as_str().unwrap().to_string();
+    let text = format!("@[Lea](user:{lea_id}) and @[Gus](user:{guest_id}) please review");
+    let (st, c) = app.post(&owner, &format!("/pages/{id}/comments"), json!({"text": text})).await;
+    assert_eq!(st, 201);
+    let s = c["content"].to_string();
+    assert!(s.contains("\"type\":\"mention\"") && s.contains(&lea_id) && !s.contains("user:"), "{s}");
+    let (_, n) = app.get(&lea, "/notifications").await;
+    assert!(n.to_string().contains("\"kind\":\"mention\""), "{n}");
+    // the guest has no access to the space: no notification (and no excerpt) for them
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM notifications WHERE user_id = $1::uuid").bind(&guest_id).fetch_one(&app.state.db).await.unwrap();
+    assert_eq!(count, 0);
+}

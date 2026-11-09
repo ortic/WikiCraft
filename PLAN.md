@@ -380,7 +380,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Inline comments anchored to a text range (Yjs relative positions; survive edits) `C D O`
 - [x] **P0** Resolve / reopen inline comments; show resolved comments `C D O`
 - [~] **P0** Edit / delete own comments; admins can moderate `C D X` (no comment edit UI)
-- [~] **P1** Rich comments (formatting, mentions, emoji, images, code) `C D O` (Markdown text only; no mentions/images)
+- [~] **P1** Rich comments (formatting, mentions, emoji, images, code) `C D O` (Markdown + @mentions; no images)
 - [~] **P1** Reactions (emoji) on pages and comments `C O` (likes on pages and comments; no emoji by design)
 - [ ] **P1** Page likes / "helpful" signal `C X`
 - [~] **P1** Comment sorting and filtering (open / resolved / mine) `C` (resolved toggle only)

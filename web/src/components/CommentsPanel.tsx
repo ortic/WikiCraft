@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, RotateCcw, Trash2, X, MessageSquare, ThumbsUp } from 'lucide-react'
 import { api, formatDate, type Comment, type Page, type PmNode } from '../api'
@@ -49,6 +49,16 @@ function RenderDoc({ node }: { node: PmNode }) {
 function Composer({ placeholder, onSubmit, autoFocus, onCancel }: { placeholder: string; onSubmit: (text: string) => Promise<void>; autoFocus?: boolean; onCancel?: () => void }) {
   const [text, setText] = useState('')
   const [busy, setBusy] = useState(false)
+  const ref = useRef<HTMLTextAreaElement>(null)
+  // "@que" before the caret → suggest people; inserted as @[Name](user:<id>) (a mention)
+  const [mention, setMention] = useState<{ start: number; query: string } | null>(null)
+  const [sel, setSel] = useState(0)
+  const people = useQuery({
+    queryKey: ['mention-users', mention?.query],
+    queryFn: () => api.get<{ id: string; name: string }[]>(`/users?q=${encodeURIComponent(mention!.query)}`),
+    enabled: !!mention,
+  })
+  const options = (people.data ?? []).slice(0, 6)
   const submit = async () => {
     if (!text.trim()) return
     setBusy(true)
@@ -59,21 +69,57 @@ function Composer({ placeholder, onSubmit, autoFocus, onCancel }: { placeholder:
       setBusy(false)
     }
   }
+  const onChange = (v: string, caret: number) => {
+    setText(v)
+    const m = /(^|\s)@([^\s@[\]()]{0,30})$/.exec(v.slice(0, caret))
+    setMention(m ? { start: caret - m[2].length - 1, query: m[2] } : null)
+    setSel(0)
+  }
+  const pick = (u: { id: string; name: string }) => {
+    if (!mention || !ref.current) return
+    const caret = ref.current.selectionStart
+    const token = `@[${u.name.replace(/[[\]]/g, '')}](user:${u.id}) `
+    const v = text.slice(0, mention.start) + token + text.slice(caret)
+    setText(v)
+    setMention(null)
+    const pos = mention.start + token.length
+    requestAnimationFrame(() => {
+      ref.current?.focus()
+      ref.current?.setSelectionRange(pos, pos)
+    })
+  }
   return (
-    <div>
+    <div style={{ position: 'relative' }}>
       <textarea
+        ref={ref}
         className="textarea"
         placeholder={placeholder}
         value={text}
         autoFocus={autoFocus}
-        onChange={(e) => setText(e.target.value)}
+        onChange={(e) => onChange(e.target.value, e.target.selectionStart)}
+        onBlur={() => setTimeout(() => setMention(null), 150)}
         onKeyDown={(e) => {
+          if (mention && options.length) {
+            if (e.key === 'ArrowDown') { e.preventDefault(); setSel((s) => (s + 1) % options.length); return }
+            if (e.key === 'ArrowUp') { e.preventDefault(); setSel((s) => (s - 1 + options.length) % options.length); return }
+            if (e.key === 'Enter' || e.key === 'Tab') { e.preventDefault(); pick(options[sel]); return }
+            if (e.key === 'Escape') { e.preventDefault(); setMention(null); return }
+          }
           if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) submit()
         }}
         style={{ minHeight: 60 }}
       />
+      {mention && options.length > 0 && (
+        <div className="menu mention-pop">
+          {options.map((u, i) => (
+            <div key={u.id} className={`menu-item ${i === sel ? 'selected' : ''}`} onMouseDown={(e) => { e.preventDefault(); pick(u) }} onMouseEnter={() => setSel(i)}>
+              <Avatar name={u.name} id={u.id} size={20} /> {u.name}
+            </div>
+          ))}
+        </div>
+      )}
       <div className="row" style={{ marginTop: 6 }}>
-        <span className="faint small">Markdown supported · Ctrl+Enter to send</span>
+        <span className="faint small">Markdown · @ to mention · Ctrl+Enter to send</span>
         <span className="spacer" />
         {onCancel && (
           <button className="btn btn-sm" onClick={onCancel}>

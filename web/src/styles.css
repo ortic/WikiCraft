@@ -473,3 +473,5 @@ kbd { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 1px 6p
 .archived-banner { margin-bottom: 14px; padding: 8px 14px; border-radius: 8px; background: color-mix(in srgb, var(--c-warning, #d97706) 12%, transparent); color: var(--text); font-size: 13.5px; }
 .archived-row td { opacity: .75; }
 .danger-zone { border-color: color-mix(in srgb, var(--danger) 30%, var(--border)); }
+.mention-pop { position: absolute; left: 8px; top: 100%; margin-top: -8px; z-index: 30; min-width: 220px; }
+.mention-pop .menu-item { display: flex; align-items: center; gap: 8px; }

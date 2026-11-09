@@ -70,10 +70,69 @@ pub struct CreateComment {
     inline: Option<Value>,
 }
 
+const MENTION_PATH: &str = "/__mention/";
+
+/// `@[Name](user:<id>)` (what the composer inserts) → `[@Name](/__mention/<id>)`, a link form the
+/// Markdown converter keeps; [`links_to_mentions`] then turns it into a mention node.
+fn mention_links(text: &str) -> String {
+    let mut out = String::with_capacity(text.len());
+    let mut rest = text;
+    while let Some(at) = rest.find("@[") {
+        out.push_str(&rest[..at]);
+        let after = &rest[at + 2..];
+        let parsed = after.find("](user:").and_then(|close| {
+            let name = &after[..close];
+            let tail = &after[close + 7..];
+            let end = tail.find(')')?;
+            let id = tail[..end].parse::<Uuid>().ok()?;
+            (!name.contains(['[', ']', '\n'])).then(|| (format!("[@{name}]({MENTION_PATH}{id})"), close + 7 + end + 1))
+        });
+        match parsed {
+            Some((link, used)) => {
+                out.push_str(&link);
+                rest = &after[used..];
+            }
+            None => {
+                out.push_str("@[");
+                rest = after;
+            }
+        }
+    }
+    out.push_str(rest);
+    out
+}
+
+/// Links produced by [`mention_links`] become mention nodes.
+fn links_to_mentions(doc: &mut Node) {
+    doc.walk_mut(&mut |n| {
+        for c in n.content.iter_mut() {
+            if c.kind != "text" {
+                continue;
+            }
+            let Some(id) = c
+                .marks
+                .iter()
+                .find(|m| m.kind == "link")
+                .and_then(|m| m.attr_str("href"))
+                .and_then(|h| h.strip_prefix(MENTION_PATH))
+                .and_then(|i| i.parse::<Uuid>().ok())
+            else {
+                continue;
+            };
+            let label = c.text.as_deref().unwrap_or("").trim().trim_start_matches('@').to_string();
+            *c = Node::new("mention").attr("id", id.to_string()).attr("label", label);
+        }
+    });
+}
+
 fn comment_doc(content: Option<Value>, text: Option<String>) -> ApiResult<Node> {
     let mut doc = match (content, text) {
         (Some(c), _) => Node::from_json(&c)?,
-        (None, Some(t)) => markdown::markdown_to_pm(&t).doc,
+        (None, Some(t)) => {
+            let mut d = markdown::markdown_to_pm(&mention_links(&t)).doc;
+            links_to_mentions(&mut d);
+            d
+        }
         _ => return Err(ApiError::bad("content or text required")),
     };
     wikicraft_doc_model::node::sanitize_tree(&mut doc);
@@ -144,7 +203,24 @@ async fn notify_comment(state: &AppState, page_id: Uuid, actor: Uuid, comment_id
     .bind(&mentioned)
     .execute(&state.db)
     .await?;
+    mentioned.sort();
+    mentioned.dedup();
+    let ws: Uuid = sqlx::query_scalar("SELECT workspace_id FROM pages WHERE id = $1").bind(page_id).fetch_one(&state.db).await?;
     for m in mentioned.iter().filter(|m| **m != actor) {
+        // only active people of this workspace who can see the page hear about it
+        let user = sqlx::query_as::<_, crate::auth::User>(sqlx::AssertSqlSafe(format!(
+            "SELECT {} FROM users WHERE id = $1 AND workspace_id = $2 AND status = 'active'",
+            crate::auth::USER_COLUMNS
+        )))
+        .bind(m)
+        .bind(ws)
+        .fetch_optional(&state.db)
+        .await?;
+        let Some(user) = user else { continue };
+        let p = Principal::load(state, Some(user)).await?;
+        if !crate::authz::page_access(state, &p, page_id).await.map(|(a, _)| a.view).unwrap_or(false) {
+            continue;
+        }
         sqlx::query("INSERT INTO notifications (id, user_id, kind, page_id, actor_id, data) VALUES ($1, $2, 'mention', $3, $4, $5)")
             .bind(new_id())
             .bind(m)
@@ -216,4 +292,14 @@ pub async fn delete(State(state): State<AppState>, CurrentUser(user): CurrentUse
     }
     sqlx::query("UPDATE comments SET deleted_at = now() WHERE id = $1 OR parent_id = $1").bind(id).execute(&state.db).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+#[cfg(test)]
+mod mention_tests {
+    #[test]
+    fn composer_mentions() {
+        let id = uuid::Uuid::now_v7();
+        assert_eq!(super::mention_links(&format!("hi @[Ann Lee](user:{id}), see @[x]")), format!("hi [@Ann Lee](/__mention/{id}), see @[x]"));
+        assert_eq!(super::mention_links("@[a](user:not-a-uuid)"), "@[a](user:not-a-uuid)");
+    }
 }
