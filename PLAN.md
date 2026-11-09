@@ -184,8 +184,10 @@
 
 ## 4. Feature checklist
 
+Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
+
 ### 4.1 Workspace, tenancy & organization
-- [ ] **P0** Single-workspace self-hosted install with first-run setup wizard (admin account, base URL, email, storage) `D X B`
+- [~] **P0** Single-workspace self-hosted install with first-run setup wizard (admin account, base URL, email, storage) `D X B` (workspace + admin only; other settings via env)
 - [ ] **P1** Multi-workspace (multi-tenant) mode for SaaS / large orgs, each with its own branding, users and settings `C`
 - [ ] **P2** XWiki-style "subwikis" / wiki farm: isolated wikis sharing users `X`
 - [ ] **P1** Custom domain per workspace; base-path deployments (`/wiki`) `C X`
@@ -194,18 +196,18 @@
 - [ ] **P2** Release tracks (choose when new features roll out) `C`
 
 ### 4.2 Spaces
-- [ ] **P0** Create / edit / delete spaces (name, key, description, icon/emoji, cover) `C D X O B`
-- [ ] **P0** Space home / overview page `C D X`
+- [~] **P0** Create / edit / delete spaces (name, key, description, icon/emoji, cover) `C D X O B` (no delete UI, no cover image)
+- [x] **P0** Space home / overview page `C D X`
 - [ ] **P0** Personal spaces per user `C D`
-- [ ] **P1** Space directory with search, categories, filters (team, personal, archived, starred) `C X`
+- [~] **P1** Space directory with search, categories, filters (team, personal, archived, starred) `C X` (name/key filter only)
 - [ ] **P1** Space categories / tags `C`
-- [ ] **P1** Space archive (read-only, hidden from search by default) and restore `C`
-- [ ] **P1** Space sidebar: page tree, shortcuts/links, blog, whiteboards, databases, custom sections `C`
+- [~] **P1** Space archive (read-only, hidden from search by default) and restore `C` (API only; not read-only, no restore)
+- [~] **P1** Space sidebar: page tree, shortcuts/links, blog, whiteboards, databases, custom sections `C` (page tree + blog only)
 - [ ] **P1** Space-level look & feel: theme, colors, header image, sidebar config `C X`
 - [ ] **P1** Space templates (create a space prefilled with a page structure) `C X`
-- [ ] **P1** Space permissions screen (users × groups × anonymous × guests matrix) `C DC X B`
-- [ ] **P1** Space admins / owners, ownership transfer `C`
-- [ ] **P1** Copy space; move pages between spaces `C X`
+- [x] **P1** Space permissions screen (users × groups × anonymous × guests matrix) `C DC X B`
+- [~] **P1** Space admins / owners, ownership transfer `C` (admin role only; no owner/transfer)
+- [~] **P1** Copy space; move pages between spaces `C X` (cross-space move via API only; no copy)
 - [ ] **P1** Space key rename with redirects `X`
 - [ ] **P2** Space-level announcement banner `C`
 - [ ] **P2** Space analytics (views, contributors, popular pages) `C`
@@ -213,89 +215,89 @@
 - [ ] **P2** Watch space / follow space activity `C X`
 
 ### 4.3 Content types & information architecture
-- [ ] **P0** Pages with unlimited nesting (page tree) `C D X O B`
-- [ ] **P0** Drag & drop reorder / move in the tree (with permission checks and link preservation) `C D X O`
-- [ ] **P1** Folders (containers without content) `C`
-- [ ] **P1** Blog posts / news per space (date-based, separate from tree, RSS/Atom) `C X`
-- [ ] **P1** Live docs (always-live document, no publish step) vs. classic pages (draft → publish) as a per-page mode `C`
+- [x] **P0** Pages with unlimited nesting (page tree) `C D X O B`
+- [x] **P0** Drag & drop reorder / move in the tree (with permission checks and link preservation) `C D X O`
+- [~] **P1** Folders (containers without content) `C` (API only; no create UI)
+- [~] **P1** Blog posts / news per space (date-based, separate from tree, RSS/Atom) `C X` (no RSS/Atom feed)
+- [~] **P1** Live docs (always-live document, no publish step) vs. classic pages (draft → publish) as a per-page mode `C` (live mode only; no draft/publish)
 - [ ] **P1** Smart link / embed nodes in the tree (link to an external resource as a tree item) `C`
 - [ ] **P2** Whiteboards as first-class tree items (see §4.10) `C D`
 - [ ] **P2** Databases as first-class tree items (see §4.9) `C D`
-- [ ] **P1** Page emoji / icon and cover image `C D O`
-- [ ] **P1** Page width setting (fixed / full width) `C D`
-- [ ] **P1** Breadcrumbs `C D X O B`
-- [ ] **P1** Permanent links (`/p/<id>`) + human URLs (`/s/<space>/<slug>`); redirects after rename/move `C X`
-- [ ] **P1** Copy page (with or without children, attachments, labels, permissions) `C X D`
+- [~] **P1** Page emoji / icon and cover image `C D O` (icon via API/import; no picker, no cover)
+- [x] **P1** Page width setting (fixed / full width) `C D`
+- [x] **P1** Breadcrumbs `C D X O B`
+- [~] **P1** Permanent links (`/p/<id>`) + human URLs (`/s/<space>/<slug>`); redirects after rename/move `C X` (id permalinks + Confluence redirects; no slug URLs)
+- [~] **P1** Copy page (with or without children, attachments, labels, permissions) `C X D` (no attachments; UI copies single page only)
 - [ ] **P1** Page owner (distinct from creator) and ownership transfer `C`
-- [ ] **P1** Page status lozenge (Rough draft / In progress / Ready for review / Verified / custom) `C`
+- [~] **P1** Page status lozenge (Rough draft / In progress / Ready for review / Verified / custom) `C` (API + badge only; no picker)
 - [ ] **P1** Archive page / subtree `C`
-- [ ] **P1** Trash with restore and purge (per space; retention period) `C D X`
-- [ ] **P1** Duplicate titles allowed (Cloud allows them; the importer must handle both) `C`
+- [~] **P1** Trash with restore and purge (per space; retention period) `C D X` (no purge or retention period)
+- [x] **P1** Duplicate titles allowed (Cloud allows them; the importer must handle both) `C`
 - [ ] **P2** Page tree lazy loading & virtualization (≥ 100k pages per space) `C X`
 - [ ] **P2** Hide pages from tree / navigation `X`
 - [ ] **P3** Knowledge-base / help-center mode: public portal, article feedback ("was this helpful?") `C (JSM KB)`
 
 ### 4.4 Editor
 #### 4.4.1 Fundamentals
-- [ ] **P0** WYSIWYG block editor (Tiptap/ProseMirror) with slash `/` command menu `C D O N`
-- [ ] **P0** Markdown shortcuts (`#`, `-`, `1.`, `>`, ```` ``` ````, `**`, `[]`, `---`) `C D O`
-- [ ] **P0** Undo/redo (collaboration-aware, per user) `C D`
-- [ ] **P0** Copy/paste from Word, Google Docs, web pages, Excel/Sheets (to tables), Markdown text, images from clipboard `C D O`
-- [ ] **P0** Drag & drop blocks (block handles), drag & drop files/images `C D O N`
-- [ ] **P0** Keyboard shortcuts + shortcut help dialog `C D O`
-- [ ] **P1** Floating formatting toolbar + fixed toolbar option `C D`
+- [x] **P0** WYSIWYG block editor (Tiptap/ProseMirror) with slash `/` command menu `C D O N`
+- [x] **P0** Markdown shortcuts (`#`, `-`, `1.`, `>`, ```` ``` ````, `**`, `[]`, `---`) `C D O`
+- [x] **P0** Undo/redo (collaboration-aware, per user) `C D`
+- [~] **P0** Copy/paste from Word, Google Docs, web pages, Excel/Sheets (to tables), Markdown text, images from clipboard `C D O` (HTML + image paste; no Markdown paste)
+- [~] **P0** Drag & drop blocks (block handles), drag & drop files/images `C D O N` (file drop only; no block handles)
+- [~] **P0** Keyboard shortcuts + shortcut help dialog `C D O` (no shortcut help dialog)
+- [~] **P1** Floating formatting toolbar + fixed toolbar option `C D` (bubble menu only)
 - [ ] **P1** Find & replace in page `C`
-- [ ] **P1** Word count / reading time `C`
-- [ ] **P1** Autosave + offline-tolerant editing (queue updates while disconnected) `C D`
-- [ ] **P1** Spellcheck (browser) + optional server-side grammar/AI assist `C`
+- [x] **P1** Word count / reading time `C`
+- [x] **P1** Autosave + offline-tolerant editing (queue updates while disconnected) `C D`
+- [~] **P1** Spellcheck (browser) + optional server-side grammar/AI assist `C` (browser spellcheck only)
 - [ ] **P2** Raw source view (Markdown / storage) for power users `X`
 - [ ] **P2** Wiki-syntax editor mode (XWiki/Confluence wiki markup) for power users `X`
 - [ ] **P2** Accessibility: full keyboard operation, ARIA, screen-reader announcements in collab `C`
 
 #### 4.4.2 Text & inline
-- [ ] **P0** Headings H1–H6, paragraph, bold, italic, underline, strikethrough, inline code, sub/superscript `C D X O`
-- [ ] **P0** Links (URL, page link with search picker, anchor link, attachment link, email) `C D X O`
-- [ ] **P0** @mentions of users (with notification) and pages `C D O`
+- [x] **P0** Headings H1–H6, paragraph, bold, italic, underline, strikethrough, inline code, sub/superscript `C D X O`
+- [~] **P0** Links (URL, page link with search picker, anchor link, attachment link, email) `C D X O` (URL prompt only; no page picker)
+- [~] **P0** @mentions of users (with notification) and pages `C D O` (users only; no page mentions)
 - [ ] **P0** Emoji (picker, `:shortcode:` autocomplete, custom emoji P2) `C D O`
-- [ ] **P1** Text color & highlight color (limited, theme-aware palette) `C D`
-- [ ] **P1** Date / time inline node (localized rendering, timezone aware) `C`
-- [ ] **P1** Status lozenges (colored labels inline) `C`
+- [~] **P1** Text color & highlight color (limited, theme-aware palette) `C D` (highlight toggle only; no color picker)
+- [x] **P1** Date / time inline node (localized rendering, timezone aware) `C`
+- [x] **P1** Status lozenges (colored labels inline) `C`
 - [ ] **P1** Inline smart links (unfurl title/icon via oEmbed/OpenGraph) `C D`
-- [ ] **P1** Hard line break, horizontal rule `C D`
-- [ ] **P1** Text alignment, indentation `C D`
-- [ ] **P1** Inline math (KaTeX) `D O`
+- [x] **P1** Hard line break, horizontal rule `C D`
+- [~] **P1** Text alignment, indentation `C D` (alignment via shortcuts only; no indent)
+- [x] **P1** Inline math (KaTeX) `D O`
 - [ ] **P2** Glossary terms / definitions (hover to see the definition; "AI definitions") `C`
 - [ ] **P2** Footnotes `O`
 - [ ] **P3** Inline comments on images
 
 #### 4.4.3 Blocks
-- [ ] **P0** Bullet, numbered, nested lists `C D X O B`
-- [ ] **P0** Task / checklist items (assignee via @mention, due date via date node) `C D O`
-- [ ] **P0** Code blocks with syntax highlighting, language picker, line numbers, wrap, copy button `C D X O B`
-- [ ] **P0** Blockquote `C D O`
-- [ ] **P0** Callouts / panels: info, note, tip/success, warning, error, custom (emoji + color) `C D X O`
-- [ ] **P0** Tables (see §4.4.4) `C D X O B`
-- [ ] **P0** Images (see §4.4.5) `C D X O B`
-- [ ] **P1** Expand / collapse (toggle) blocks `C D O`
-- [ ] **P1** Layouts / columns (2–3 columns, sidebars) `C D`
-- [ ] **P1** Decisions block (decision list) `C`
-- [ ] **P1** Block math (KaTeX / LaTeX) `D O X`
-- [ ] **P1** Mermaid, PlantUML (server-side render, sandboxed) `D X`
+- [x] **P0** Bullet, numbered, nested lists `C D X O B`
+- [x] **P0** Task / checklist items (assignee via @mention, due date via date node) `C D O`
+- [~] **P0** Code blocks with syntax highlighting, language picker, line numbers, wrap, copy button `C D X O B` (no line numbers or wrap toggle)
+- [x] **P0** Blockquote `C D O`
+- [~] **P0** Callouts / panels: info, note, tip/success, warning, error, custom (emoji + color) `C D X O` (no custom emoji/color picker)
+- [~] **P0** Tables (see §4.4.4) `C D X O B` (no row/column controls)
+- [~] **P0** Images (see §4.4.5) `C D X O B` (no resize/align/caption UI)
+- [x] **P1** Expand / collapse (toggle) blocks `C D O`
+- [~] **P1** Layouts / columns (2–3 columns, sidebars) `C D` (two-column insert only)
+- [~] **P1** Decisions block (decision list) `C` (imported only; no insert UI)
+- [x] **P1** Block math (KaTeX / LaTeX) `D O X`
+- [~] **P1** Mermaid, PlantUML (server-side render, sandboxed) `D X` (Mermaid client-side only; no PlantUML render)
 - [ ] **P1** Draw.io diagrams (embedded editor, stored as attachment + SVG preview) `D X C(app)`
 - [ ] **P1** Excalidraw sketches `D`
-- [ ] **P1** File / attachment block with inline preview (PDF, Office, video, audio) `C D`
-- [ ] **P1** Embeds: YouTube, Vimeo, Loom, Figma, Miro, Google Docs/Sheets/Slides, Airtable, Typeform, GitHub gist, iframe allowlist `C D O`
-- [ ] **P1** Anchors / table of contents block `C X`
+- [~] **P1** File / attachment block with inline preview (PDF, Office, video, audio) `C D` (PDF/image preview only)
+- [~] **P1** Embeds: YouTube, Vimeo, Loom, Figma, Miro, Google Docs/Sheets/Slides, Airtable, Typeform, GitHub gist, iframe allowlist `C D O` (no Airtable/Typeform/gist)
+- [x] **P1** Anchors / table of contents block `C X`
 - [ ] **P1** Placeholder text (in templates) `C`
 - [ ] **P2** Synced blocks / excerpts: author once, reuse in many pages; edits propagate `C D`
-- [ ] **P2** Transclusion (include another page or section) `C X`
+- [~] **P2** Transclusion (include another page or section) `C X` (plain-text preview; from import only)
 - [ ] **P2** Video / audio upload with streaming (HTTP range) and poster frame `C`
 - [ ] **P2** Charts from table data `C(macro)`
 - [ ] **P3** Interactive / form blocks (polls, surveys, voting) `C(apps)`
 - [ ] **P3** Slides / presentation mode for a page `C`
 
 #### 4.4.4 Tables
-- [ ] **P0** Insert / delete rows & columns, header row / column, resize columns `C D X O`
+- [~] **P0** Insert / delete rows & columns, header row / column, resize columns `C D X O` (insert + column resize only)
 - [ ] **P1** Merge / split cells, cell background color, cell alignment `C D`
 - [ ] **P1** Numbered rows, sort by column (view-time), sticky header `C`
 - [ ] **P1** Table width modes (fixed / wide / full) `C`
@@ -304,7 +306,7 @@
 - [ ] **P2** Large table performance (1,000+ rows) `C`
 
 #### 4.4.5 Images & media
-- [ ] **P0** Upload, paste, drag & drop, URL images `C D X O B`
+- [~] **P0** Upload, paste, drag & drop, URL images `C D X O B` (no insert-by-URL)
 - [ ] **P0** Resize, align (left/center/right/wrap), caption, alt text `C D`
 - [ ] **P1** Lightbox / zoom, image border `C D`
 - [ ] **P1** Image annotation (arrows, boxes, text) `C`
@@ -316,83 +318,83 @@
 > Purpose: imported Confluence content keeps working, and users find familiar building blocks.
 > Order comes from **observed real-world frequency** in the two analyzed exports (§6.2).
 
-- [ ] **P0** `info` / `note` / `tip` / `warning` / `panel` → callout
-- [ ] **P0** `code` / `noformat` → code block
-- [ ] **P0** `expand` → toggle block
-- [ ] **P0** `toc` → table-of-contents block (min/max level, style, exclude regex, printable)
-- [ ] **P0** `anchor` → anchor node
-- [ ] **P0** `view-file`, `viewpdf`, `viewdoc`, `viewppt`, `viewxls` → file preview block
-- [ ] **P0** `status` → status lozenge
-- [ ] **P1** `children` (child pages list: depth, sort, reverse, style, first N) → dynamic children block
-- [ ] **P1** `pagetree` / `pagetreesearch` → dynamic tree block
+- [x] **P0** `info` / `note` / `tip` / `warning` / `panel` → callout
+- [x] **P0** `code` / `noformat` → code block
+- [x] **P0** `expand` → toggle block
+- [~] **P0** `toc` → table-of-contents block (min/max level, style, exclude regex, printable) (min/max level only)
+- [x] **P0** `anchor` → anchor node
+- [x] **P0** `view-file`, `viewpdf`, `viewdoc`, `viewppt`, `viewxls` → file preview block
+- [x] **P0** `status` → status lozenge
+- [~] **P1** `children` (child pages list: depth, sort, reverse, style, first N) → dynamic children block (sort/style params ignored)
+- [~] **P1** `pagetree` / `pagetreesearch` → dynamic tree block (rendered as child list; no search)
 - [ ] **P1** `attachments` (list + upload) → attachments block
-- [ ] **P1** `include` (include page) → transclusion block
-- [ ] **P1** `excerpt` / `excerpt-include` → synced block / named excerpt
-- [ ] **P1** `details` + `detailssummary` (page properties + report) → page properties block + "properties report" query table
+- [~] **P1** `include` (include page) → transclusion block (plain-text excerpt preview)
+- [~] **P1** `excerpt` / `excerpt-include` → synced block / named excerpt (excerpt inlined; include shows page start)
+- [~] **P1** `details` + `detailssummary` (page properties + report) → page properties block + "properties report" query table (details kept as table; no report)
 - [ ] **P1** `contentbylabel` (incl. CQL parameter) → label query block
 - [ ] **P1** `recently-updated` → recent changes block
-- [ ] **P1** `widget` / `iframe` / `multimedia` → embed block (with allowlist)
+- [x] **P1** `widget` / `iframe` / `multimedia` → embed block (with allowlist)
 - [ ] **P1** `livesearch` → search box block
 - [ ] **P1** `tasks-report-macro` → task report block (by space, assignee, label, status, due)
 - [ ] **P1** `decisionreport` → decisions report block
 - [ ] **P1** `create-from-template` → "create from template" button block
 - [ ] **P1** `content-report-table` / blueprint index pages → query table block
-- [ ] **P1** `jira` / `jiraissues` / Jira chart → issue tracker embed (Jira, GitHub, GitLab, Linear)
-- [ ] **P1** `unmigrated-wiki-markup` → convert wiki markup; keep the original as a fallback
-- [ ] **P1** `section` / `column` (legacy layouts) → layout block
+- [~] **P1** `jira` / `jiraissues` / Jira chart → issue tracker embed (Jira, GitHub, GitLab, Linear) (issue key kept as text; no live embed)
+- [~] **P1** `unmigrated-wiki-markup` → convert wiki markup; keep the original as a fallback (converted; original not kept)
+- [x] **P1** `section` / `column` (legacy layouts) → layout block
 - [ ] **P2** `blog-posts`, `contributors`, `contributors-summary`, `profile`, `userlister`, `popular-labels`, `related-labels`, `listlabels`, `navmap`, `index`, `spaces`, `space-details`, `favpages`, `gallery`, `chart`, `roadmap`, `team-calendar`, `html` (admin opt-in, sanitized)
-- [ ] **P2** Third-party app macros: `drawio`, `gliffy` (→ draw.io conversion), `mathblock`/`mathinline`, `plantuml`, `mermaid-cloud`
-- [ ] **P1** **Unknown macro fallback:** preserve the raw macro (name, params, body) as an inert "legacy macro" block, render a
+- [~] **P2** Third-party app macros: `drawio`, `gliffy` (→ draw.io conversion), `mathblock`/`mathinline`, `plantuml`, `mermaid-cloud` (math/mermaid native; drawio PNG preview)
+- [x] **P1** **Unknown macro fallback:** preserve the raw macro (name, params, body) as an inert "legacy macro" block, render a
       placeholder, list it in the import report, and let admins map it to a native block later
 - [ ] **P2** Macro mapping admin UI: map unknown macro name → native block or plugin
 
 ### 4.5 Real-time collaboration
-- [ ] **P0** Multi-user co-editing via Yjs protocol over WebSocket (`yrs` server); conflict-free merges `C D X O`
-- [ ] **P0** Presence: avatars of current viewers/editors, live cursors and selections with names/colors `C D O`
-- [ ] **P0** Persistence: append Yjs updates, compact to snapshots, bounded memory per document `C D`
-- [ ] **P0** Auth on connect + per-message permission re-check (revocation kicks the user out of the doc) `C D`
-- [ ] **P0** Reconnect / resume with state vectors; offline edits merged on reconnect `C D`
+- [x] **P0** Multi-user co-editing via Yjs protocol over WebSocket (`yrs` server); conflict-free merges `C D X O`
+- [x] **P0** Presence: avatars of current viewers/editors, live cursors and selections with names/colors `C D O`
+- [x] **P0** Persistence: append Yjs updates, compact to snapshots, bounded memory per document `C D`
+- [x] **P0** Auth on connect + per-message permission re-check (revocation kicks the user out of the doc) `C D`
+- [x] **P0** Reconnect / resume with state vectors; offline edits merged on reconnect `C D`
 - [ ] **P1** "Who changed what" attribution during a session (colored authorship view) `C`
 - [ ] **P1** Collaborative drafts: unpublished changes visible to co-editors only; publish creates a version `C`
-- [ ] **P1** Live docs: changes are live without publish; versions created by time/edit heuristics `C`
+- [x] **P1** Live docs: changes are live without publish; versions created by time/edit heuristics `C`
 - [ ] **P1** Follow a collaborator (jump to their cursor) `C`
 - [ ] **P2** Collaboration on comments, titles and page properties (not only body)
-- [ ] **P2** Multi-node collab: document-affinity routing, failover, Redis/NATS awareness relay
+- [x] **P2** Multi-node collab: document-affinity routing, failover, Redis/NATS awareness relay
 - [ ] **P2** Large-document performance (≥ 1 MB docs, 50 concurrent editors) with load tests
 
 ### 4.6 Drafts, versions & history
-- [ ] **P0** Version on publish (or periodic for live docs) with author, timestamp, optional message `C D X O B`
-- [ ] **P0** Version list, view any version, restore version (creates a new version) `C D X O B`
-- [ ] **P1** Visual diff between any two versions (inline + side-by-side, block-aware) `C X B`
+- [x] **P0** Version on publish (or periodic for live docs) with author, timestamp, optional message `C D X O B`
+- [x] **P0** Version list, view any version, restore version (creates a new version) `C D X O B`
+- [~] **P1** Visual diff between any two versions (inline + side-by-side, block-aware) `C X B` (paragraph diff vs previous version only)
 - [ ] **P1** "What changed since my last visit" highlighting `C`
 - [ ] **P1** Minor edit flag (no notifications) `C X`
 - [ ] **P1** Personal unpublished drafts (new pages not yet published) and a drafts list `C D`
 - [ ] **P1** Scheduled publishing `C(apps)`
-- [ ] **P1** Attachment versioning (upload a new version of the same file name) `C X`
+- [~] **P1** Attachment versioning (upload a new version of the same file name) `C X` (versions stored; no history UI)
 - [ ] **P2** Version retention rules (keep N versions / X days; per space) `C DC`
 - [ ] **P2** Version history for page properties, labels, permissions (audit-backed)
 - [ ] **P2** Delete specific versions (admin, for sensitive data) `C X`
 
 ### 4.7 Comments, reactions, mentions, tasks
-- [ ] **P0** Page (footer) comments with threads and replies `C D X O B`
-- [ ] **P0** Inline comments anchored to a text range (Yjs relative positions; survive edits) `C D O`
-- [ ] **P0** Resolve / reopen inline comments; show resolved comments `C D O`
-- [ ] **P0** Edit / delete own comments; admins can moderate `C D X`
-- [ ] **P1** Rich comments (formatting, mentions, emoji, images, code) `C D O`
+- [x] **P0** Page (footer) comments with threads and replies `C D X O B`
+- [x] **P0** Inline comments anchored to a text range (Yjs relative positions; survive edits) `C D O`
+- [x] **P0** Resolve / reopen inline comments; show resolved comments `C D O`
+- [~] **P0** Edit / delete own comments; admins can moderate `C D X` (no comment edit UI)
+- [~] **P1** Rich comments (formatting, mentions, emoji, images, code) `C D O` (Markdown text only; no mentions/images)
 - [ ] **P1** Reactions (emoji) on pages and comments `C O`
 - [ ] **P1** Page likes / "helpful" signal `C X`
-- [ ] **P1** Comment sorting and filtering (open / resolved / mine) `C`
-- [ ] **P1** Tasks: assign via mention, due dates, "my tasks" view across spaces, reminders `C`
-- [ ] **P1** Comment notifications + reply via email `C DC`
-- [ ] **P2** Comment permissions separate from edit (commenter role) `C X`
+- [~] **P1** Comment sorting and filtering (open / resolved / mine) `C` (resolved toggle only)
+- [~] **P1** Tasks: assign via mention, due dates, "my tasks" view across spaces, reminders `C` (no reminders)
+- [~] **P1** Comment notifications + reply via email `C DC` (in-app only; no email)
+- [x] **P2** Comment permissions separate from edit (commenter role) `C X`
 - [ ] **P2** Suggestions / suggested edits (track-changes mode) `N(GDocs-like)`
 - [ ] **P3** Annotations on attachments (PDF comments)
 
 ### 4.8 Templates & blueprints
-- [ ] **P1** Page templates: global and per space; create from template; template picker with preview `C D X O B`
-- [ ] **P1** Built-in template gallery (meeting notes, decision log, retrospective, how-to, troubleshooting, product
-      requirements, project plan, runbook, incident postmortem, onboarding, architecture/arc42, ADR, OKRs) `C`
-- [ ] **P1** Template variables / placeholders (prompt for values on create) `C X`
+- [~] **P1** Page templates: global and per space; create from template; template picker with preview `C D X O B` (no preview; workspace templates API only)
+- [~] **P1** Built-in template gallery (meeting notes, decision log, retrospective, how-to, troubleshooting, product
+      requirements, project plan, runbook, incident postmortem, onboarding, architecture/arc42, ADR, OKRs) `C` (6 built-ins so far)
+- [~] **P1** Template variables / placeholders (prompt for values on create) `C X` ({date} only; no prompts)
 - [ ] **P1** Blueprints: template + index page + labels + naming rule (e.g. meeting notes auto-dated under a parent) `C`
 - [ ] **P1** Default template per space / per parent (child pages inherit a template) `C X`
 - [ ] **P2** Space templates (full page structure) `C X`
@@ -400,7 +402,7 @@
 - [ ] **P2** AI-generated templates from a prompt `C`
 
 ### 4.9 Structured content: labels, properties, databases
-- [ ] **P1** Labels/tags on pages, blog posts and attachments; label autocomplete; label pages (all content with label X) `C X O B`
+- [~] **P1** Labels/tags on pages, blog posts and attachments; label autocomplete; label pages (all content with label X) `C X O B` (pages only; no autocomplete)
 - [ ] **P1** Page properties (typed key/value: text, number, date, user, select, URL, page link) shown in a properties panel `C X N`
 - [ ] **P1** Properties report: query table across pages (filter by space, label, property) `C`
 - [ ] **P2** **Databases** `C D N X`
@@ -419,7 +421,7 @@
 ### 4.10 Whiteboards & diagrams
 - [ ] **P1** Draw.io integration (self-hosted draw.io editor in an iframe; store `.drawio` + SVG) `D X C(app)`
 - [ ] **P1** Excalidraw block `D`
-- [ ] **P1** Mermaid / PlantUML text diagrams `D X`
+- [~] **P1** Mermaid / PlantUML text diagrams `D X` (Mermaid client-side only)
 - [ ] **P2** Native infinite-canvas whiteboards: sticky notes, shapes, connectors, text, frames, images, pen `C`
   - [ ] Real-time multi-user (Yjs)
   - [ ] Templates (retro, brainstorming, journey map, SWOT, kanban)
@@ -430,15 +432,15 @@
 - [ ] **P3** Gliffy → draw.io converter (import)
 
 ### 4.11 Search & discovery
-- [ ] **P0** Full-text search across pages, titles, comments, labels with permission filtering `C D X O B`
-- [ ] **P0** Quick search (as-you-type, title-weighted, recent items first) `C D O`
-- [ ] **P0** Filters: space, type, author/contributor, label, date modified `C X`
-- [ ] **P1** Attachment content search (PDF, DOCX, XLSX, PPTX, TXT, CSV, ODT) `C D X`
-- [ ] **P1** Highlighted snippets, typo tolerance, stemming per language, CJK tokenization `C X`
-- [ ] **P1** Search within a space (scoped) and within a page (Ctrl+F style) `C`
+- [~] **P0** Full-text search across pages, titles, comments, labels with permission filtering `C D X O B` (comments not indexed)
+- [x] **P0** Quick search (as-you-type, title-weighted, recent items first) `C D O`
+- [~] **P0** Filters: space, type, author/contributor, label, date modified `C X` (space filter only)
+- [x] **P1** Attachment content search (PDF, DOCX, XLSX, PPTX, TXT, CSV, ODT) `C D X`
+- [~] **P1** Highlighted snippets, typo tolerance, stemming per language, CJK tokenization `C X` (snippets only)
+- [x] **P1** Search within a space (scoped) and within a page (Ctrl+F style) `C`
 - [ ] **P1** Query language (CQL-like: `space = ENG AND label = runbook AND lastModified > now("-30d")`) for macros/API `C`
 - [ ] **P1** Saved searches `X`
-- [ ] **P1** Incremental indexing via the job queue; full reindex CLI `X`
+- [x] **P1** Incremental indexing via the job queue; full reindex CLI `X`
 - [ ] **P2** Semantic / hybrid search (BM25 + vectors, reciprocal rank fusion) `C D`
 - [ ] **P2** Search analytics (top queries, zero-result queries) `C`
 - [ ] **P2** Federated search across connected tools (GitHub, Drive, Slack) `C(Rovo)`
@@ -448,15 +450,15 @@
 ### 4.12 Permissions, sharing & access control
 > Must be at least as expressive as Confluence (global → space → page restrictions) and safe by default.
 
-- [ ] **P0** Global/workspace roles: owner, admin, member, guest, (anonymous) `C D X B`
-- [ ] **P0** Space roles: admin, editor, commenter, viewer (+ custom roles in P2) `C D`
-- [ ] **P0** Groups (local) and group-based grants `C D X B`
-- [ ] **P0** Page-level restrictions: restrict view and/or edit to users/groups; **inherited by descendants** `C D X`
-- [ ] **P0** Permission checks enforced in API, collab WebSocket, search, exports, AI, notifications, webhooks (single authz crate, no bypass paths)
+- [x] **P0** Global/workspace roles: owner, admin, member, guest, (anonymous) `C D X B`
+- [x] **P0** Space roles: admin, editor, commenter, viewer (+ custom roles in P2) `C D`
+- [x] **P0** Groups (local) and group-based grants `C D X B`
+- [x] **P0** Page-level restrictions: restrict view and/or edit to users/groups; **inherited by descendants** `C D X`
+- [x] **P0** Permission checks enforced in API, collab WebSocket, search, exports, AI, notifications, webhooks (single authz crate, no bypass paths)
 - [ ] **P1** Granular space permissions (Confluence-compatible set): view, add/delete pages, add/delete blog, add/delete comments, add/delete attachments, set page restrictions, export, admin, archive, delete own content `C DC`
-- [ ] **P1** Anonymous / public access per space (read-only) `C X B O`
+- [x] **P1** Anonymous / public access per space (read-only) `C X B O`
 - [ ] **P1** Public share links for a single page (with optional expiry, password, subtree inclusion, disable globally) `C D O`
-- [ ] **P1** Guest users limited to specific spaces `C`
+- [x] **P1** Guest users limited to specific spaces `C`
 - [ ] **P1** Request access flow (request → owner approves) `C`
 - [ ] **P1** "Inspect permissions": why can user X see/edit page Y? `C`
 - [ ] **P1** Effective permission cache with invalidation (fast tree rendering for 100k pages)
@@ -468,37 +470,37 @@
 - [ ] **P3** ABAC policies via `cedar-policy` (attributes like department, location)
 
 ### 4.13 Authentication & identity
-- [ ] **P0** Local accounts: email + password (argon2id), email verification, password reset `D X B O`
-- [ ] **P0** Sessions: secure cookies, CSRF protection, session list + revoke, idle/absolute timeouts
+- [~] **P0** Local accounts: email + password (argon2id), email verification, password reset `D X B O` (no e-mail verification or reset flow)
+- [~] **P0** Sessions: secure cookies, CSRF protection, session list + revoke, idle/absolute timeouts (no session list/revoke or idle timeout)
 - [ ] **P0** Invitations (email link), invite-only or open sign-up with domain restriction `C D O`
-- [ ] **P1** OIDC (Google, Microsoft Entra ID, Okta, Keycloak, Authentik, GitLab) `C D X B O`
-- [ ] **P1** SAML 2.0 SSO `C D X B`
-- [ ] **P1** LDAP / Active Directory (bind auth + group sync) `DC D X B`
+- [x] **P1** OIDC (Google, Microsoft Entra ID, Okta, Keycloak, Authentik, GitLab) `C D X B O`
+- [x] **P1** SAML 2.0 SSO `C D X B`
+- [x] **P1** LDAP / Active Directory (bind auth + group sync) `DC D X B`
 - [ ] **P1** MFA: TOTP, WebAuthn/passkeys, recovery codes; enforce per workspace/group `C D`
-- [ ] **P1** Personal API tokens (scoped, expiring) and OAuth2 apps (authorization code + PKCE) `C D X O B`
-- [ ] **P1** User profiles (avatar, title, department, timezone, language, bio) and people directory `C X`
+- [~] **P1** Personal API tokens (scoped, expiring) and OAuth2 apps (authorization code + PKCE) `C D X O B` (unscoped tokens; no OAuth2 apps)
+- [~] **P1** User profiles (avatar, title, department, timezone, language, bio) and people directory `C X` (name/password only; no directory)
 - [ ] **P2** SCIM 2.0 provisioning (users + groups) `C D`
-- [ ] **P2** JIT provisioning + group mapping from IdP claims `C D`
+- [x] **P2** JIT provisioning + group mapping from IdP claims `C D`
 - [ ] **P2** Service accounts / bot users `C`
-- [ ] **P2** User deactivation keeps content attributed; anonymization (GDPR right to be forgotten) `C`
+- [~] **P2** User deactivation keeps content attributed; anonymization (GDPR right to be forgotten) `C` (deactivation only; no anonymization)
 - [ ] **P2** Login policies: IP allowlists, session duration, device trust `C(Guard)`
 
 ### 4.14 Navigation, home & personalization
-- [ ] **P0** Home dashboard: recent pages, starred, drafts, tasks assigned to me `C D O`
-- [ ] **P0** Recently viewed / recently edited `C D O`
-- [ ] **P1** Starred/favorite pages and spaces `C D O`
+- [~] **P0** Home dashboard: recent pages, starred, drafts, tasks assigned to me `C D O` (no drafts; tasks on separate page)
+- [x] **P0** Recently viewed / recently edited `C D O`
+- [~] **P1** Starred/favorite pages and spaces `C D O` (pages only)
 - [ ] **P1** Activity feed (following people/spaces; popular in my org) `C X`
 - [ ] **P1** "For you" / popular pages `C`
-- [ ] **P1** Command palette (Ctrl/Cmd+K): jump to page/space/action `C O`
-- [ ] **P1** Dark mode, theme switching, high-contrast `C D O`
+- [~] **P1** Command palette (Ctrl/Cmd+K): jump to page/space/action `C O` (page search only; no actions)
+- [~] **P1** Dark mode, theme switching, high-contrast `C D O` (no high-contrast theme)
 - [ ] **P1** UI localization (i18n; ≥ EN, DE, FR, ES, PT, IT, NL, PL, JA, ZH, KO); RTL support (AR, HE) `C D X`
 - [ ] **P2** Customizable home per workspace (announcements, featured spaces) `C X`
 - [ ] **P2** Sidebar customization per user (pinned items) `C`
 
 ### 4.15 Notifications & watching
-- [ ] **P0** In-app notification center (mentions, comments, replies, shares, task assignments) `C D O`
+- [x] **P0** In-app notification center (mentions, comments, replies, shares, task assignments) `C D O`
 - [ ] **P1** Email notifications with batching / digest (immediate, hourly, daily) `C DC X O`
-- [ ] **P1** Watch page / page subtree / space / blog; auto-watch on create/edit `C X`
+- [~] **P1** Watch page / page subtree / space / blog; auto-watch on create/edit `C X` (pages only; auto-watch on create)
 - [ ] **P1** Notification preferences per channel and event type `C`
 - [ ] **P1** Slack / Microsoft Teams / Mattermost notifications (per user and per space channel) `C O`
 - [ ] **P2** Web push notifications (PWA) `C`
@@ -506,8 +508,8 @@
 - [ ] **P2** Content review reminders (page owner must re-verify every N days) `D(EE)`
 
 ### 4.16 Content lifecycle & governance
-- [ ] **P1** Trash, restore, permanent delete `C D X`
-- [ ] **P1** Archive pages/spaces `C`
+- [~] **P1** Trash, restore, permanent delete `C D X` (no permanent delete)
+- [~] **P1** Archive pages/spaces `C` (space archive via API only)
 - [ ] **P1** Page verification: request review, approve, "verified" badge with expiry `D(EE) C`
 - [ ] **P2** Approval workflows (draft → review → approved → published; multiple approvers; per space) `C(apps e.g. Comala) X(change requests)`
 - [ ] **P2** XWiki-style change requests (propose changes, review, merge) `X`
@@ -518,7 +520,7 @@
 - [ ] **P2** Broken-link report and orphaned-page report per space `X`
 
 ### 4.17 Analytics & insights
-- [ ] **P1** Page views count and unique viewers ("who viewed", privacy-configurable) `C`
+- [~] **P1** Page views count and unique viewers ("who viewed", privacy-configurable) `C` (counts only; no viewer list)
 - [ ] **P2** Page insights: views over time, readers, engagement, time on page `C`
 - [ ] **P2** Space and workspace analytics (most viewed, most active users, top contributors) `C`
 - [ ] **P2** Search analytics `C`
@@ -527,12 +529,12 @@
 ### 4.18 Import (migration)
 > The Confluence importer is the flagship feature. See §6 for the verification run on real exports and the requirements derived from it.
 
-- [ ] **P0** **Confluence space export, classic XML** (`entities.xml` + `attachments/<containerId>/<attachmentId>/<version>`; Server/DC and older Cloud) `D X`
-- [ ] **P0** **Confluence Cloud CSV space export** (`exportFormat=csv`: `spaces.csv`, `content.csv`, `bodycontent.csv`, users …; used by current Cloud exports) **new, verify all files**
+- [x] **P0** **Confluence space export, classic XML** (`entities.xml` + `attachments/<containerId>/<attachmentId>/<version>`; Server/DC and older Cloud) `D X`
+- [x] **P0** **Confluence Cloud CSV space export** (`exportFormat=csv`: `spaces.csv`, `content.csv`, `bodycontent.csv`, users …; used by current Cloud exports) **new, verify all files**
 - [ ] **P1** Confluence HTML export (fallback when XML/CSV isn't available) `D`
-- [ ] **P1** Confluence site / full backup import (multiple spaces, users, groups, global permissions) `X`
+- [~] **P1** Confluence site / full backup import (multiple spaces, users, groups, global permissions) `X` (multi-space + users; no global permissions)
 - [ ] **P1** Confluence REST API live migration (pull spaces directly with an API token: no export size limits, incremental re-sync) `X(pro)`
-- [ ] **P0** Markdown / Markdown-zip (Obsidian vault with wikilinks, front matter) `D O`
+- [~] **P0** Markdown / Markdown-zip (Obsidian vault with wikilinks, front matter) `D O` (API only; no import UI)
 - [ ] **P1** HTML files / zip `D`
 - [ ] **P1** Notion export (Markdown + CSV databases, HTML) `D O`
 - [ ] **P1** DOCX (Word) import as page(s); split by heading `D X`
@@ -541,14 +543,14 @@
 - [ ] **P2** MediaWiki XML dump `X`
 - [ ] **P2** XWiki XAR export
 - [ ] **P2** Docmost, Outline (JSON export), BookStack (API), Wiki.js (DB / git), DokuWiki, SharePoint pages, GitHub wiki, Quip `X(MediaWiki,Dokuwiki)`
-- [ ] **P1** Import job UI: upload (resumable, multi-GB), dry-run analysis report, mapping (users, spaces, macros), progress, cancel, retry, final report with warnings per page
-- [ ] **P1** Re-runnable & incremental imports (stable source-id mapping; update instead of duplicate)
+- [~] **P1** Import job UI: upload (resumable, multi-GB), dry-run analysis report, mapping (users, spaces, macros), progress, cancel, retry, final report with warnings per page (no resumable upload, mapping, cancel or retry)
+- [~] **P1** Re-runnable & incremental imports (stable source-id mapping; update instead of duplicate) (source-id mapping kept; re-import duplicates)
 
 ### 4.19 Export, print & publishing
-- [ ] **P1** Export page / subtree to PDF (headers/footers, TOC, page numbers, cover page, custom CSS/template) `C X B`
+- [~] **P1** Export page / subtree to PDF (headers/footers, TOC, page numbers, cover page, custom CSS/template) `C X B` (browser print-to-PDF only)
 - [ ] **P1** Export to Word (DOCX) `C X B`
-- [ ] **P1** Export to Markdown / HTML (zip with attachments) `D O B`
-- [ ] **P1** Print-friendly view `C X B`
+- [~] **P1** Export to Markdown / HTML (zip with attachments) `D O B` (single page only; no zip/attachments)
+- [x] **P1** Print-friendly view `C X B`
 - [ ] **P1** Native space export/backup format (JSON + blobs, versioned) for move/restore between instances `C X`
 - [ ] **P2** Export to Confluence-compatible format (reverse migration, an anti-lock-in promise)
 - [ ] **P2** Scheduled exports to S3/Git (docs-as-code mirror)
@@ -559,8 +561,8 @@
 - [ ] **P1** Smart links / unfurling via oEmbed + OpenGraph, with provider plugins `C D O`
 - [ ] **P1** Issue trackers: Jira (issue macro, create issue from selection, issue status lozenge), GitHub, GitLab, Linear `C`
 - [ ] **P1** Slack / Microsoft Teams / Mattermost: link unfurl, notifications, search from chat `C O`
-- [ ] **P1** Diagrams: draw.io, Excalidraw, Mermaid, PlantUML (server-side, sandboxed) `D X`
-- [ ] **P1** Embeds: Figma, Miro, Loom, Google Drive/Docs/Sheets, Airtable, Typeform, YouTube, Vimeo `D C`
+- [~] **P1** Diagrams: draw.io, Excalidraw, Mermaid, PlantUML (server-side, sandboxed) `D X` (Mermaid client-side only)
+- [~] **P1** Embeds: Figma, Miro, Loom, Google Drive/Docs/Sheets, Airtable, Typeform, YouTube, Vimeo `D C` (no Airtable/Typeform)
 - [ ] **P2** Calendar (team calendars; ICS feed; Google/Outlook sync) `C X`
 - [ ] **P2** Email-to-page (mail in a space; create page/blog/comment) `DC X`
 - [ ] **P2** Office documents: view/edit via Collabora/OnlyOffice (WOPI) `X`
@@ -568,11 +570,11 @@
 - [ ] **P2** Browser extension (clip web page, quick search)
 
 ### 4.21 Extensibility & developer platform
-- [ ] **P0** REST API (OpenAPI 3.1 spec, generated; versioned `/api/v1`) covering all entities `C D X O B`
-- [ ] **P1** API keys, OAuth2 apps, scopes, rate limits, pagination (cursor), ETags / conditional requests `C`
+- [~] **P0** REST API (OpenAPI 3.1 spec, generated; versioned `/api/v1`) covering all entities `C D X O B` (REST under /api; no OpenAPI, unversioned)
+- [~] **P1** API keys, OAuth2 apps, scopes, rate limits, pagination (cursor), ETags / conditional requests `C` (API tokens only)
 - [ ] **P1** Webhooks (page created/updated/deleted/moved, comment, space, user; HMAC-signed, retries, delivery log) `C B O`
-- [ ] **P1** Built-in MCP server (search, read page, create/update page, comment) honoring permissions `D C`
-- [ ] **P1** CLI (`wikicraft`) and SDKs (TypeScript, Python, Rust) generated from OpenAPI
+- [x] **P1** Built-in MCP server (search, read page, create/update page, comment) honoring permissions `D C`
+- [~] **P1** CLI (`wikicraft`) and SDKs (TypeScript, Python, Rust) generated from OpenAPI (server admin CLI only; no SDKs)
 - [ ] **P2** Plugin system based on WASM (sandboxed, capability-scoped):
   - [ ] Custom blocks/macros (server render + client UI bundle)
   - [ ] Event hooks (before/after save, on publish)
@@ -604,37 +606,37 @@
 - [ ] **P3** AI-assisted translation that keeps variants in sync
 
 ### 4.24 Mobile, offline & accessibility
-- [ ] **P1** Responsive web UI usable on phones (read, comment, light edit) `C D O`
+- [x] **P1** Responsive web UI usable on phones (read, comment, light edit) `C D O`
 - [ ] **P2** PWA: installable, push notifications, offline reading of starred pages
 - [ ] **P3** Native mobile apps (iOS/Android) `C`
 - [ ] **P1** WCAG 2.2 AA compliance target; automated axe checks in CI `C`
 
 ### 4.25 Administration
-- [ ] **P0** Admin console: users (invite, deactivate, reset MFA, change role), groups, spaces overview `C D X B`
+- [~] **P0** Admin console: users (invite, deactivate, reset MFA, change role), groups, spaces overview `C D X B` (no invites, MFA reset or spaces overview)
 - [ ] **P0** Email (SMTP) settings with a test send `D X B`
-- [ ] **P0** Storage settings (local / S3) and usage `D`
+- [~] **P0** Storage settings (local / S3) and usage `D` (env config only; usage in admin stats)
 - [ ] **P1** Branding: logo, colors, login page, custom CSS (scoped), custom HTML header/footer (admin opt-in) `C X B`
 - [ ] **P1** Global announcement banner `C`
 - [ ] **P1** Feature toggles (disable public links, disable exports, disable AI, disable personal spaces) `D`
-- [ ] **P1** Global templates & default space permissions `C`
-- [ ] **P1** Attachment limits (max size, allowed/blocked types), quota per space/workspace `C X`
-- [ ] **P1** System info / health page (version, DB, queue depth, index status) `X DC`
-- [ ] **P1** Background job dashboard (imports, reindex, exports) with retry/cancel
-- [ ] **P2** Audit log viewer with filters + export + SIEM streaming (syslog, webhook, Splunk HEC) `C D(EE) X`
+- [~] **P1** Global templates & default space permissions `C` (global templates via API only)
+- [~] **P1** Attachment limits (max size, allowed/blocked types), quota per space/workspace `C X` (max upload size via env only)
+- [~] **P1** System info / health page (version, DB, queue depth, index status) `X DC` (health endpoint + admin stats only)
+- [~] **P1** Background job dashboard (imports, reindex, exports) with retry/cancel (job list only; no retry/cancel)
+- [~] **P2** Audit log viewer with filters + export + SIEM streaming (syslog, webhook, Splunk HEC) `C D(EE) X` (basic viewer; no filter UI, export, SIEM)
 - [ ] **P2** License/edition management (open-core enterprise key)
 - [ ] **P2** Maintenance / read-only mode `DC`
-- [ ] **P2** Usage reporting (active users, storage, growth)
+- [~] **P2** Usage reporting (active users, storage, growth) (current counts only; no growth)
 
 ### 4.26 Security & compliance
-- [ ] **P0** OWASP ASVS L2 baseline; threat model per feature (import, uploads, embeds, plugins, AI)
-- [ ] **P0** Strict HTML sanitization (`ammonia`) for all rendered/imported content; CSP with nonces; no inline user JS
-- [ ] **P0** Upload safety: content sniffing, `Content-Disposition: attachment` for risky types, serve user files from a separate origin/subdomain, SVG sanitization
-- [ ] **P0** Rate limiting and brute-force protection on auth; account lockout policies
-- [ ] **P0** Secure secrets handling (env/files, never in DB in plaintext); TLS everywhere; HSTS
+- [~] **P0** OWASP ASVS L2 baseline; threat model per feature (import, uploads, embeds, plugins, AI) (internal security review; no formal ASVS)
+- [~] **P0** Strict HTML sanitization (`ammonia`) for all rendered/imported content; CSP with nonces; no inline user JS (escaping renderer; no app-wide CSP)
+- [~] **P0** Upload safety: content sniffing, `Content-Disposition: attachment` for risky types, serve user files from a separate origin/subdomain, SVG sanitization (no separate user-content origin)
+- [x] **P0** Rate limiting and brute-force protection on auth; account lockout policies
+- [~] **P0** Secure secrets handling (env/files, never in DB in plaintext); TLS everywhere; HSTS (no HSTS; TLS at proxy)
 - [ ] **P1** Antivirus scanning hook (ClamAV) for uploads `X`
-- [ ] **P1** Iframe/embed allowlist; SSRF protection for link unfurling (block private IP ranges, DNS rebinding)
-- [ ] **P1** Import hardening: zip-slip, zip bombs, XML entity expansion disabled, per-file and total size limits, timeouts
-- [ ] **P1** Audit log of security-relevant events (logins, permission changes, exports, admin actions) `C D(EE) X B`
+- [~] **P1** Iframe/embed allowlist; SSRF protection for link unfurling (block private IP ranges, DNS rebinding) (embed allowlist; unfurling not built)
+- [~] **P1** Import hardening: zip-slip, zip bombs, XML entity expansion disabled, per-file and total size limits, timeouts (Confluence zip entry caps incomplete)
+- [~] **P1** Audit log of security-relevant events (logins, permission changes, exports, admin actions) `C D(EE) X B` (exports not audited)
 - [ ] **P2** Encryption at rest for blobs (SSE-S3/KMS) and DB (deployment guidance); BYOK for SaaS `C`
 - [ ] **P2** Data residency (region pinning) for SaaS `C`
 - [ ] **P2** GDPR tooling: data export per user, deletion/anonymization, DPA-ready docs `C`
@@ -643,28 +645,28 @@
 - [ ] **P3** FedRAMP / BSI C5 / air-gapped hardened profile `D`
 
 ### 4.27 Deployment & operations
-- [ ] **P0** Single static binary (musl) + embedded frontend + embedded migrations
-- [ ] **P0** Docker image (distroless, non-root), `docker-compose.yml` (app + Postgres + optional MinIO) `D X B O`
-- [ ] **P0** Zero-downtime-friendly migrations (expand/contract), automatic on start (opt-out)
-- [ ] **P0** Health/readiness endpoints, structured JSON logs
-- [ ] **P1** Helm chart / Kubernetes manifests; horizontal scaling docs
+- [~] **P0** Single static binary (musl) + embedded frontend + embedded migrations (frontend not embedded; glibc build)
+- [x] **P0** Docker image (distroless, non-root), `docker-compose.yml` (app + Postgres + optional MinIO) `D X B O`
+- [x] **P0** Zero-downtime-friendly migrations (expand/contract), automatic on start (opt-out)
+- [x] **P0** Health/readiness endpoints, structured JSON logs
+- [x] **P1** Helm chart / Kubernetes manifests; horizontal scaling docs
 - [ ] **P1** Backup & restore CLI (DB dump + blob sync, consistent point-in-time) + documented RPO/RTO `DC X`
-- [ ] **P1** Prometheus metrics, OpenTelemetry traces, Grafana dashboards
-- [ ] **P1** Air-gapped install (offline bundle, no phone-home, telemetry opt-in only) `D DC`
-- [ ] **P2** HA reference architecture (multi-node API/collab, Postgres HA, S3) `DC`
+- [~] **P1** Prometheus metrics, OpenTelemetry traces, Grafana dashboards (Prometheus only; no OTel/Grafana)
+- [~] **P1** Air-gapped install (offline bundle, no phone-home, telemetry opt-in only) `D DC` (no phone-home; no offline bundle)
+- [x] **P2** HA reference architecture (multi-node API/collab, Postgres HA, S3) `DC`
 - [ ] **P2** CDN for static assets & public pages `DC`
 - [ ] **P2** Upgrade assistant / pre-upgrade checks
 - [ ] **P1** Performance budgets: page open p95 < 300 ms server time; search p95 < 200 ms; idle RSS < 150 MB; 1k concurrent editors per collab node (to validate)
 
 ### 4.28 Quality & documentation
-- [ ] **P0** CI: fmt, clippy (pedantic for core crates), nextest, sqlx offline check, frontend lint/typecheck/test
-- [ ] **P0** Integration tests with `testcontainers` (Postgres, MinIO)
+- [~] **P0** CI: fmt, clippy (pedantic for core crates), nextest, sqlx offline check, frontend lint/typecheck/test (fmt/clippy/tests/typecheck; no nextest or frontend lint)
+- [~] **P0** Integration tests with `testcontainers` (Postgres, MinIO) (local Postgres/MinIO, not testcontainers)
 - [ ] **P0** Snapshot tests (`insta`) for doc-model conversions and importers (golden fixtures, §6.4)
 - [ ] **P1** Property tests (`proptest`) for the tree ops, permission inheritance and CRDT convergence
 - [ ] **P1** E2E with Playwright (multi-browser co-editing scenarios)
 - [ ] **P1** Load tests (collab WebSocket fan-out, search, page tree)
 - [ ] **P1** Fuzzing (`cargo-fuzz`) for importers, Markdown/HTML parsers, upload handling
-- [ ] **P0** User docs, admin docs, API docs (generated), migration guide "Leaving Confluence DC"
+- [~] **P0** User docs, admin docs, API docs (generated), migration guide "Leaving Confluence DC" (README only)
 - [ ] **P1** Public demo instance; seed data generator
 
 ---
