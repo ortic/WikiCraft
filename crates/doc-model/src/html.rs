@@ -172,7 +172,8 @@ impl Renderer<'_> {
                 let _ = write!(self.out, "<span class=\"mention\" data-id=\"{}\">@{}</span>", escape(n.attr_str("id").unwrap_or("")), escape(label));
             }
             nodes::STATUS => {
-                let color = n.attr_str("color").unwrap_or("grey");
+                // attribute values never go into markup unchecked
+                let color = n.attr_str("color").filter(|c| matches!(*c, "grey" | "blue" | "green" | "yellow" | "red" | "purple")).unwrap_or("grey");
                 let _ = write!(self.out, "<span class=\"status status-{color}\">{}</span>", escape(n.attr_str("text").unwrap_or("")));
             }
             nodes::DATE => {
@@ -308,6 +309,27 @@ fn wrap_mark(m: &Mark, inner: String) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn hostile_attributes_stay_inert() {
+        let evil = "x\"><img src=x onerror=alert(1)>";
+        let doc = Node::doc(vec![Node::paragraph(vec![
+            Node::new(nodes::STATUS).attr("text", "ok").attr("color", evil),
+            Node::new(nodes::MENTION).attr("id", evil).attr("label", evil),
+            Node::new(nodes::DATE).attr("date", evil),
+            Node::new(nodes::EMOTICON).attr("name", evil),
+        ])]);
+        let mut callout = Node::new(nodes::CALLOUT).attr("type", evil);
+        callout.content = vec![Node::paragraph(vec![Node::text("x")])];
+        let mut code = Node::new(nodes::CODE_BLOCK).attr("language", evil);
+        code.content = vec![Node::text("x")];
+        let mut all = doc.clone();
+        all.content.push(callout);
+        all.content.push(code);
+        let html = render(&all, &HtmlOptions { heading_ids: true });
+        assert!(!html.contains("<img src=x"), "{html}");
+        assert!(html.contains("status status-grey"));
+    }
 
     #[test]
     fn escapes_and_blocks_js_urls() {
