@@ -39,8 +39,10 @@ impl AppState {
             sqlx::postgres::PgPoolOptions::new().max_connections(20).acquire_timeout(std::time::Duration::from_secs(10)).connect(&config.database_url).await?;
         sqlx::migrate!("./migrations").run(&db).await?;
         let blobs = BlobStore::new(&config).await?;
-        let search = SearchIndex::open(&config.index_dir(), db.clone())?;
-        let state = AppState { inner: Arc::new(Inner { shutting_down: Default::default(), metrics: Default::default(), db, config, blobs, search, rooms: Rooms::default() }) };
+        let search = SearchIndex::open(&config, db.clone())?;
+        let state = AppState {
+            inner: Arc::new(Inner { shutting_down: Default::default(), metrics: Default::default(), db, config, blobs, search, rooms: Rooms::default() }),
+        };
         Ok(state)
     }
 }

@@ -48,6 +48,7 @@ pub async fn spawn_with(tweak: impl FnOnce(&mut Config)) -> TestApp {
         oidc_auto_create: true,
         disable_password_login: false,
         log_format: "text".into(),
+        search: "tantivy".into(),
         metrics_token: None,
     };
     tweak(&mut config);

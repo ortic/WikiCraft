@@ -78,5 +78,8 @@ pub async fn ready(State(state): State<AppState>) -> (axum::http::StatusCode, Js
     let db_ok = sqlx::query_scalar::<_, i32>("SELECT 1").fetch_one(&state.db).await.is_ok();
     let shutting_down = state.shutting_down.load(std::sync::atomic::Ordering::SeqCst);
     let ok = db_ok && !shutting_down;
-    (if ok { axum::http::StatusCode::OK } else { axum::http::StatusCode::SERVICE_UNAVAILABLE }, Json(json!({ "ready": ok, "database": db_ok, "shuttingDown": shutting_down })))
+    (
+        if ok { axum::http::StatusCode::OK } else { axum::http::StatusCode::SERVICE_UNAVAILABLE },
+        Json(json!({ "ready": ok, "database": db_ok, "shuttingDown": shutting_down })),
+    )
 }

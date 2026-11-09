@@ -89,7 +89,7 @@ pub async fn search(State(state): State<AppState>, MaybeUser(user): MaybeUser, Q
     }
     let ids: Vec<Uuid> = spaces.iter().map(|(s, _)| s.id).collect();
     let limit = q.limit.unwrap_or(20).clamp(1, 100);
-    let mut hits = state.search.search(&q.q, &ids, limit * 2).map_err(ApiError::Internal)?;
+    let mut hits = state.search.search(&q.q, &ids, limit * 2).await.map_err(ApiError::Internal)?;
     // the index may lag behind moves/deletes: use the database's current space and state
     let hit_ids: Vec<Uuid> = hits.iter().map(|h| h.page_id).collect();
     let current: std::collections::HashMap<Uuid, Uuid> =

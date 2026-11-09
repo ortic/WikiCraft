@@ -42,7 +42,12 @@ pub fn extract(doc: &Node) -> Vec<TaskEntry> {
                 }
             });
         }
-        out.push(TaskEntry { text: first.map(text::inline_text).unwrap_or_default().trim().to_string(), done: n.attr_bool("checked").unwrap_or(false), assignee, due });
+        out.push(TaskEntry {
+            text: first.map(text::inline_text).unwrap_or_default().trim().to_string(),
+            done: n.attr_bool("checked").unwrap_or(false),
+            assignee,
+            due,
+        });
     });
     out
 }

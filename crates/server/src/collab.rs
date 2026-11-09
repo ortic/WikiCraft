@@ -263,10 +263,10 @@ pub async fn persist_with(state: &AppState, room: &Room, auto_version: bool) -> 
         return Err(e.into());
     }
     state.search.enqueue(room.page_id);
-    if let Ok(mut conn) = state.db.acquire().await {
-        if let Err(e) = crate::routes::tasks::index_page(&mut conn, room.page_id, &pm).await {
-            tracing::warn!("task indexing failed: {e}");
-        }
+    if let Ok(mut conn) = state.db.acquire().await
+        && let Err(e) = crate::routes::tasks::index_page(&mut conn, room.page_id, &pm).await
+    {
+        tracing::warn!("task indexing failed: {e}");
     }
     if let Err(e) = crate::routes::notifications::notify_page_mentions(state, room.page_id, &pm, editor).await {
         tracing::warn!("mention notifications failed: {e:#}");

@@ -16,17 +16,31 @@ use tantivy::{Index, IndexReader, IndexWriter, ReloadPolicy, TantivyDocument, Te
 use tokio::sync::mpsc;
 use uuid::Uuid;
 
+/// Search over pages. Backends:
+/// * `tantivy` (default): embedded index on local disk — fastest, single node.
+/// * `postgres`: full-text index in the database (`pages.search_vec`) — shared by all replicas,
+///   no extra infrastructure; use it when running more than one instance.
 #[derive(Clone)]
 pub struct SearchIndex {
     inner: Arc<Inner>,
 }
 
 struct Inner {
+    backend: Backend,
+    db: PgPool,
+    tx: mpsc::UnboundedSender<Uuid>,
+}
+
+enum Backend {
+    Tantivy(Box<Tantivy>),
+    Postgres,
+}
+
+struct Tantivy {
     index: Index,
     reader: IndexReader,
     writer: Mutex<IndexWriter>,
     f: Fields,
-    tx: mpsc::UnboundedSender<Uuid>,
 }
 
 #[derive(Clone, Copy)]
@@ -59,8 +73,8 @@ struct IndexRow {
     attachments: Option<String>,
 }
 
-impl SearchIndex {
-    pub fn open(dir: &Path, db: PgPool) -> anyhow::Result<Self> {
+impl Tantivy {
+    fn open(dir: &Path) -> anyhow::Result<Self> {
         std::fs::create_dir_all(dir)?;
         let mut sb = Schema::builder();
         let id = sb.add_text_field("id", STRING | STORED);
@@ -73,7 +87,6 @@ impl SearchIndex {
         let index = match Index::open_or_create(mmap, schema.clone()) {
             Ok(i) => i,
             Err(e) => {
-                // schema changed between versions: rebuild from scratch
                 tracing::warn!("search index incompatible ({e}); recreating");
                 std::fs::remove_dir_all(dir)?;
                 std::fs::create_dir_all(dir)?;
@@ -82,10 +95,41 @@ impl SearchIndex {
         };
         let writer = index.writer(64 * 1024 * 1024)?;
         let reader = index.reader_builder().reload_policy(ReloadPolicy::OnCommitWithDelay).try_into()?;
+        Ok(Tantivy { index, reader, writer: Mutex::new(writer), f: Fields { id, space, title, body, labels } })
+    }
+}
+
+impl SearchIndex {
+    pub fn open(config: &crate::config::Config, db: PgPool) -> anyhow::Result<Self> {
+        let backend = match config.search.as_str() {
+            "postgres" => Backend::Postgres,
+            "tantivy" | "" => Backend::Tantivy(Box::new(Tantivy::open(&config.index_dir())?)),
+            other => anyhow::bail!("unknown search backend {other:?} (use tantivy or postgres)"),
+        };
         let (tx, rx) = mpsc::unbounded_channel();
-        let s = SearchIndex { inner: Arc::new(Inner { index, reader, writer: Mutex::new(writer), f: Fields { id, space, title, body, labels }, tx }) };
-        tokio::spawn(s.clone().worker(rx, db));
+        let s = SearchIndex { inner: Arc::new(Inner { backend, db: db.clone(), tx }) };
+        tokio::spawn(s.clone().worker(rx, db.clone()));
+        if matches!(s.inner.backend, Backend::Postgres) {
+            // pages written while no indexer ran (fresh migration, crashed replica)
+            let s2 = s.clone();
+            tokio::spawn(async move {
+                if let Ok(ids) =
+                    sqlx::query_scalar::<_, Uuid>("SELECT id FROM pages WHERE search_vec IS NULL AND deleted_at IS NULL").fetch_all(&s2.inner.db).await
+                {
+                    for chunk in ids.chunks(500) {
+                        let _ = s2.index_batch(&s2.inner.db, chunk.to_vec()).await;
+                    }
+                }
+            });
+        }
         Ok(s)
+    }
+
+    pub fn backend_name(&self) -> &'static str {
+        match self.inner.backend {
+            Backend::Tantivy(_) => "tantivy",
+            Backend::Postgres => "postgres",
+        }
     }
 
     /// Queues a page for (re)indexing.
@@ -112,6 +156,27 @@ impl SearchIndex {
     }
 
     async fn index_batch(&self, db: &PgPool, ids: Vec<Uuid>) -> anyhow::Result<()> {
+        match &self.inner.backend {
+            Backend::Postgres => {
+                // weighted: title (A) > labels (B) > body + attachment text (C); 'simple' config = language agnostic
+                sqlx::query(
+                    "UPDATE pages p SET search_vec =
+                        setweight(to_tsvector('simple', p.title), 'A') ||
+                        setweight(to_tsvector('simple', coalesce((SELECT string_agg(name, ' ') FROM labels l WHERE l.page_id = p.id), '')), 'B') ||
+                        setweight(to_tsvector('simple', left(p.text_content || ' ' || coalesce((SELECT string_agg(filename || ' ' || coalesce(left(text_content, 20000), ''), ' ')
+                            FROM attachments a WHERE a.page_id = p.id AND a.deleted_at IS NULL), ''), 300000)), 'C')
+                     WHERE p.id = ANY($1)",
+                )
+                .bind(&ids)
+                .execute(db)
+                .await?;
+                Ok(())
+            }
+            Backend::Tantivy(_) => self.tantivy_index_batch(db, ids).await,
+        }
+    }
+
+    async fn tantivy_index_batch(&self, db: &PgPool, ids: Vec<Uuid>) -> anyhow::Result<()> {
         let rows = sqlx::query_as::<_, IndexRow>(
             "SELECT p.id, p.space_id, p.title, p.text_content, p.deleted_at IS NOT NULL AS deleted,
                     (SELECT string_agg(name, ' ') FROM labels l WHERE l.page_id = p.id) AS labels,
@@ -121,10 +186,11 @@ impl SearchIndex {
         .bind(&ids)
         .fetch_all(db)
         .await?;
-        let f = self.inner.f;
         let this = self.clone();
         tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
-            let mut w = this.inner.writer.lock().map_err(|_| anyhow::anyhow!("writer poisoned"))?;
+            let Backend::Tantivy(t) = &this.inner.backend else { return Ok(()) };
+            let f = t.f;
+            let mut w = t.writer.lock().map_err(|_| anyhow::anyhow!("writer poisoned"))?;
             for id in &ids {
                 w.delete_term(Term::from_field_text(f.id, &id.to_string()));
             }
@@ -154,10 +220,11 @@ impl SearchIndex {
 
     /// Rebuilds the whole index from the database.
     pub async fn reindex_all(&self, db: &PgPool) -> anyhow::Result<usize> {
-        {
+        if matches!(self.inner.backend, Backend::Tantivy(_)) {
             let this = self.clone();
             tokio::task::spawn_blocking(move || -> anyhow::Result<()> {
-                let mut w = this.inner.writer.lock().map_err(|_| anyhow::anyhow!("writer poisoned"))?;
+                let Backend::Tantivy(t) = &this.inner.backend else { return Ok(()) };
+                let mut w = t.writer.lock().map_err(|_| anyhow::anyhow!("writer poisoned"))?;
                 w.delete_all_documents()?;
                 w.commit()?;
                 Ok(())
@@ -172,50 +239,117 @@ impl SearchIndex {
     }
 
     /// Searches pages in the given spaces. Returns up to `limit` hits.
-    pub fn search(&self, q: &str, spaces: &[Uuid], limit: usize) -> anyhow::Result<Vec<Hit>> {
+    pub async fn search(&self, q: &str, spaces: &[Uuid], limit: usize) -> anyhow::Result<Vec<Hit>> {
         if spaces.is_empty() || q.trim().is_empty() {
             return Ok(vec![]);
         }
-        let f = self.inner.f;
-        let searcher = self.inner.reader.searcher();
-        let mut parser = QueryParser::for_index(&self.inner.index, vec![f.title, f.body, f.labels]);
-        parser.set_field_boost(f.title, 4.0);
-        parser.set_field_boost(f.labels, 2.0);
-        parser.set_conjunction_by_default();
-        let (text_query, _errors) = parser.parse_query_lenient(q);
-        // prefix match on the last word for search-as-you-type
-        let last = q.split_whitespace().last().unwrap_or("").to_lowercase();
-        let mut text_clauses: Vec<(Occur, Box<dyn Query>)> = vec![(Occur::Should, text_query)];
-        if last.chars().count() >= 2 && last.chars().all(char::is_alphanumeric) {
-            let prefix = tantivy::query::PhrasePrefixQuery::new(vec![Term::from_field_text(f.title, &last)]);
-            text_clauses.push((Occur::Should, Box::new(prefix)));
+        match &self.inner.backend {
+            Backend::Tantivy(t) => tantivy_search(t, q, spaces, limit),
+            Backend::Postgres => postgres_search(&self.inner.db, q, spaces, limit).await,
         }
-        let space_clauses: Vec<(Occur, Box<dyn Query>)> = spaces
-            .iter()
-            .map(|s| (Occur::Should, Box::new(TermQuery::new(Term::from_field_text(f.space, &s.to_string()), IndexRecordOption::Basic)) as Box<dyn Query>))
-            .collect();
-        let query =
-            BooleanQuery::new(vec![(Occur::Must, Box::new(BooleanQuery::new(text_clauses))), (Occur::Must, Box::new(BooleanQuery::new(space_clauses)))]);
-        let top = searcher.search(&query, &TopDocs::with_limit(limit).order_by_score())?;
-        let mut snippets = SnippetGenerator::create(&searcher, &query, f.body)?;
-        snippets.set_max_num_chars(220);
-        let mut hits = Vec::with_capacity(top.len());
-        for (score, addr) in top {
-            let d: TantivyDocument = searcher.doc(addr)?;
-            let get = |field: Field| d.get_first(field).and_then(|v| v.as_str()).unwrap_or("").to_string();
-            let snippet = snippets.snippet_from_doc(&d);
-            let mut html = snippet.to_html();
-            if html.is_empty() {
-                html = wikicraft_doc_model::html::escape(&get(f.body).chars().take(200).collect::<String>());
-            }
-            hits.push(Hit {
-                page_id: get(f.id).parse().unwrap_or_default(),
-                space_id: get(f.space).parse().unwrap_or_default(),
-                title: get(f.title),
-                snippet: html,
-                score,
-            });
+    }
+}
+
+/// Words of the query reduced to letters/digits (safe to splice into `to_tsquery`).
+fn tsquery_prefix(q: &str) -> String {
+    let words: Vec<String> =
+        q.split_whitespace().map(|w| w.chars().filter(|c| c.is_alphanumeric()).collect::<String>().to_lowercase()).filter(|w| !w.is_empty()).collect();
+    match words.split_last() {
+        Some((last, rest)) => {
+            let mut parts: Vec<String> = rest.to_vec();
+            parts.push(format!("{last}:*"));
+            parts.join(" & ")
         }
-        Ok(hits)
+        None => String::new(),
+    }
+}
+
+#[derive(sqlx::FromRow)]
+struct PgHit {
+    id: Uuid,
+    space_id: Uuid,
+    title: String,
+    headline: String,
+    rank: f32,
+}
+
+async fn postgres_search(db: &PgPool, q: &str, spaces: &[Uuid], limit: usize) -> anyhow::Result<Vec<Hit>> {
+    let prefix = tsquery_prefix(q);
+    // the user query (websearch syntax: "phrases", OR, -exclude) OR the same words with prefix
+    // matching on the last one (search-as-you-type)
+    let rows = sqlx::query_as::<_, PgHit>(
+        "WITH q AS (SELECT websearch_to_tsquery('simple', $1) || CASE WHEN $2 = '' THEN ''::tsquery ELSE to_tsquery('simple', $2) END AS query)
+         SELECT p.id, p.space_id, p.title, ts_rank_cd(p.search_vec, q.query)::real AS rank,
+                ts_headline('simple', left(p.text_content, 100000), q.query, 'StartSel=' || chr(2) || ', StopSel=' || chr(3) || ', MaxFragments=1, MaxWords=32, MinWords=12') AS headline
+         FROM pages p, q
+         WHERE p.space_id = ANY($3) AND p.deleted_at IS NULL AND p.search_vec @@ q.query
+         ORDER BY rank DESC, p.updated_at DESC LIMIT $4",
+    )
+    .bind(q)
+    .bind(&prefix)
+    .bind(spaces)
+    .bind(limit as i64)
+    .fetch_all(db)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|r| {
+            // escape first, then turn the control-char markers into <b> (never trust page text as HTML)
+            let snippet = wikicraft_doc_model::html::escape(&r.headline).replace('\u{2}', "<b>").replace('\u{3}', "</b>");
+            Hit { page_id: r.id, space_id: r.space_id, title: r.title, snippet, score: r.rank }
+        })
+        .collect())
+}
+
+fn tantivy_search(t: &Tantivy, q: &str, spaces: &[Uuid], limit: usize) -> anyhow::Result<Vec<Hit>> {
+    let f = t.f;
+    let searcher = t.reader.searcher();
+    let mut parser = QueryParser::for_index(&t.index, vec![f.title, f.body, f.labels]);
+    parser.set_field_boost(f.title, 4.0);
+    parser.set_field_boost(f.labels, 2.0);
+    parser.set_conjunction_by_default();
+    let (text_query, _errors) = parser.parse_query_lenient(q);
+    // prefix match on the last word for search-as-you-type
+    let last = q.split_whitespace().last().unwrap_or("").to_lowercase();
+    let mut text_clauses: Vec<(Occur, Box<dyn Query>)> = vec![(Occur::Should, text_query)];
+    if last.chars().count() >= 2 && last.chars().all(char::is_alphanumeric) {
+        let prefix = tantivy::query::PhrasePrefixQuery::new(vec![Term::from_field_text(f.title, &last)]);
+        text_clauses.push((Occur::Should, Box::new(prefix)));
+    }
+    let space_clauses: Vec<(Occur, Box<dyn Query>)> = spaces
+        .iter()
+        .map(|s| (Occur::Should, Box::new(TermQuery::new(Term::from_field_text(f.space, &s.to_string()), IndexRecordOption::Basic)) as Box<dyn Query>))
+        .collect();
+    let query = BooleanQuery::new(vec![(Occur::Must, Box::new(BooleanQuery::new(text_clauses))), (Occur::Must, Box::new(BooleanQuery::new(space_clauses)))]);
+    let top = searcher.search(&query, &TopDocs::with_limit(limit).order_by_score())?;
+    let mut snippets = SnippetGenerator::create(&searcher, &query, f.body)?;
+    snippets.set_max_num_chars(220);
+    let mut hits = Vec::with_capacity(top.len());
+    for (score, addr) in top {
+        let d: TantivyDocument = searcher.doc(addr)?;
+        let get = |field: Field| d.get_first(field).and_then(|v| v.as_str()).unwrap_or("").to_string();
+        let snippet = snippets.snippet_from_doc(&d);
+        let mut html = snippet.to_html();
+        if html.is_empty() {
+            html = wikicraft_doc_model::html::escape(&get(f.body).chars().take(200).collect::<String>());
+        }
+        hits.push(Hit {
+            page_id: get(f.id).parse().unwrap_or_default(),
+            space_id: get(f.space).parse().unwrap_or_default(),
+            title: get(f.title),
+            snippet: html,
+            score,
+        });
+    }
+    Ok(hits)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn tsquery_prefix_is_sanitized() {
+        assert_eq!(super::tsquery_prefix("Release pro"), "release & pro:*");
+        assert_eq!(super::tsquery_prefix("a'); DROP TABLE x; --"), "a & drop & table & x:*");
+        assert_eq!(super::tsquery_prefix("   "), "");
     }
 }

@@ -107,8 +107,14 @@ async fn body_limits_and_public_spaces() {
     let owner = app.setup().await;
     // a 20 MiB JSON body is rejected before it's buffered into a handler
     let big = "x".repeat(20 * 1024 * 1024);
-    let r = owner.post(app.url("/auth/login")).json(&json!({"email": big, "password": "x"})).send().await.unwrap();
-    assert_eq!(r.status(), 413);
+    // the server may answer 413 before the client finished uploading (the client then sees a
+    // broken pipe) — both mean the body was refused
+    match owner.post(app.url("/auth/login")).json(&json!({"email": big, "password": "x"})).send().await {
+        Ok(r) => assert_eq!(r.status(), 413),
+        Err(e) => assert!(e.is_request() || e.is_body(), "{e}"),
+    }
+    let (st, _) = app.get(&owner, "/health").await;
+    assert_eq!(st, 200);
     // only workspace admins can make a space public
     let (member, _) = app.user(&owner, "sam@acme.test", "member").await;
     app.post(&member, "/spaces", json!({"key": "SAM", "name": "Sam"})).await;

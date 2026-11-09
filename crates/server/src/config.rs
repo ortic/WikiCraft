@@ -66,6 +66,10 @@ pub struct Config {
     #[arg(long, env = "WIKICRAFT_OIDC_AUTO_CREATE", default_value_t = true, action = clap::ArgAction::Set)]
     pub oidc_auto_create: bool,
 
+    /// Search backend: `tantivy` (embedded, single node) or `postgres` (shared by all replicas).
+    #[arg(long, env = "WIKICRAFT_SEARCH", default_value = "tantivy")]
+    pub search: String,
+
     /// Log format: `text` (human readable) or `json` (one JSON object per line, for log shippers).
     #[arg(long, env = "WIKICRAFT_LOG_FORMAT", default_value = "text")]
     pub log_format: String,
