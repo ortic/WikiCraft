@@ -58,6 +58,14 @@ pub struct Config {
     #[arg(long, env = "WIKICRAFT_SESSION_DAYS", default_value_t = 30)]
     pub session_days: i64,
 
+    /// External sign-in providers as a JSON list (OIDC, GitHub, LDAP, SAML; see README).
+    #[arg(long, env = "WIKICRAFT_AUTH_PROVIDERS", hide_env_values = true)]
+    pub auth_providers: Option<String>,
+
+    /// File with the provider list (JSON), e.g. a mounted Kubernetes secret.
+    #[arg(long, env = "WIKICRAFT_AUTH_PROVIDERS_FILE")]
+    pub auth_providers_file: Option<PathBuf>,
+
     /// OpenID Connect issuer URL (enables SSO), e.g. https://keycloak.example.com/realms/acme
     #[arg(long, env = "WIKICRAFT_OIDC_ISSUER")]
     pub oidc_issuer: Option<String>,

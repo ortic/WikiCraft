@@ -21,6 +21,8 @@ pub struct Inner {
     pub node_id: uuid::Uuid,
     /// collaboration relay to other replicas (`WIKICRAFT_CLUSTER=postgres`)
     pub relay: Option<crate::cluster::Relay>,
+    /// configured external sign-in providers
+    pub providers: Vec<crate::sso::Provider>,
     pub db: PgPool,
     pub config: Config,
     pub blobs: BlobStore,
@@ -44,6 +46,7 @@ impl AppState {
         sqlx::migrate!("./migrations").run(&db).await?;
         let blobs = BlobStore::new(&config).await?;
         let search = SearchIndex::open(&config, db.clone())?;
+        let providers = crate::sso::load(&config)?;
         let relay = match config.cluster.as_str() {
             "postgres" => Some(crate::cluster::Relay::new()),
             "none" | "" => None,
@@ -55,6 +58,7 @@ impl AppState {
                 metrics: Default::default(),
                 node_id: uuid::Uuid::new_v4(),
                 relay,
+                providers,
                 db,
                 config,
                 blobs,

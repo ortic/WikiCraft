@@ -119,11 +119,50 @@ All settings are flags or environment variables:
 | `WIKICRAFT_MAX_UPLOAD_MB` | `2048` | max upload (attachments, imports) |
 | `WIKICRAFT_SECURE_COOKIES` | `false` | set `true` behind HTTPS |
 | `WIKICRAFT_SESSION_DAYS` | `30` | session lifetime |
-| `WIKICRAFT_OIDC_ISSUER` | — | OpenID Connect issuer URL (enables SSO) |
-| `WIKICRAFT_OIDC_CLIENT_ID` / `WIKICRAFT_OIDC_CLIENT_SECRET` | — | OIDC client; redirect URI is `{BASE_URL}/api/auth/oidc/callback` |
-| `WIKICRAFT_OIDC_NAME` | `Single sign-on` | label of the SSO button |
-| `WIKICRAFT_OIDC_AUTO_CREATE` | `true` | create accounts for unknown SSO users |
-| `WIKICRAFT_DISABLE_PASSWORD_LOGIN` | `false` | SSO-only login |
+| `WIKICRAFT_AUTH_PROVIDERS` / `_FILE` | — | sign-in providers (JSON list), see below |
+| `WIKICRAFT_GOOGLE_CLIENT_ID` / `_SECRET` / `_ALLOWED_DOMAINS` | — | "Continue with Google" shortcut |
+| `WIKICRAFT_MICROSOFT_CLIENT_ID` / `_SECRET` / `_TENANT` / `_ALLOWED_DOMAINS` | — | "Continue with Microsoft" (Entra ID) shortcut |
+| `WIKICRAFT_OIDC_ISSUER` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_NAME` / `_AUTO_CREATE` | — | single generic OIDC provider (redirect URI `{BASE_URL}/api/auth/oidc/callback`) |
+| `WIKICRAFT_DISABLE_PASSWORD_LOGIN` | `false` | turn off local passwords (SSO / LDAP only) |
+
+### Sign-in: SSO, LDAP / Active Directory, SAML
+
+Local accounts (e-mail + password) work out of the box. Any number of external providers can be
+added; the login page shows a button per provider, and LDAP accounts use the normal password form
+("E-mail or username"). `WIKICRAFT_AUTH_PROVIDERS` (or a mounted file via
+`WIKICRAFT_AUTH_PROVIDERS_FILE`) takes a JSON list:
+
+```json
+[
+  {"type": "oidc", "id": "microsoft", "preset": "microsoft", "tenant": "<tenant-id>",
+   "clientId": "…", "clientSecret": "…", "groupsClaim": "groups", "syncGroups": true},
+  {"type": "oidc", "id": "google", "preset": "google", "clientId": "…", "clientSecret": "…",
+   "allowedDomains": ["acme.com"]},
+  {"type": "oidc", "id": "keycloak", "name": "Acme SSO", "issuer": "https://sso.acme.com/realms/acme",
+   "clientId": "wikicraft", "clientSecret": "…"},
+  {"type": "github", "id": "github", "clientId": "…", "clientSecret": "…", "allowedOrgs": ["acme"]},
+  {"type": "ldap", "id": "ad", "name": "ACME directory", "url": "ldaps://dc1.acme.local",
+   "bindDn": "CN=wikicraft,OU=Service,DC=acme,DC=local", "bindPassword": "…",
+   "baseDn": "DC=acme,DC=local", "syncGroups": true},
+  {"type": "saml", "id": "okta", "name": "Okta", "idpMetadataUrl": "https://acme.okta.com/app/…/sso/saml/metadata"}
+]
+```
+
+| Type | Covers | Notes |
+|---|---|---|
+| `oidc` | Microsoft Entra ID (`preset: microsoft` + `tenant`), Google (`preset: google`), GitLab (`preset: gitlab`), Okta, Keycloak, Authentik, Auth0, Zitadel, … (`issuer`) | authorization code + PKCE + nonce; redirect URI `{BASE_URL}/api/auth/sso/{id}/callback` |
+| `github` | GitHub and GitHub Enterprise (`apiUrl`, `webUrl`) | verified primary e-mail; `allowedOrgs` restricts sign-in to org members |
+| `ldap` | OpenLDAP, Active Directory, FreeIPA, lldap, … | search with a service account (`bindDn`), then bind as the user; `startTls`; default filter matches `uid`, `mail`, `sAMAccountName`, `userPrincipalName` (`userFilter` to override, `{username}` is escaped) |
+| `saml` | Okta, Entra ID, ADFS, Keycloak, Shibboleth, OneLogin, … | build feature `saml` (on in the Docker image); SP metadata at `{BASE_URL}/api/auth/sso/{id}/metadata`, ACS `{BASE_URL}/api/auth/sso/{id}/acs`; signed responses only (no SHA-1), SP-initiated only |
+
+Common options: `name` (button label), `allowedDomains` (only these e-mail domains),
+`autoCreate` (create accounts on first login; default on for private providers and for public
+ones restricted by `allowedDomains` / `allowedOrgs`, off for unrestricted Google/GitHub), `defaultRole` (`member` /
+`guest`), `syncGroups` (mirror the provider's groups into WikiCraft groups of the same name).
+
+Accounts are linked by the provider's stable subject id; on first login an existing account with
+the same verified e-mail (including authors imported from Confluence) is claimed. Deactivated
+users can't sign in through any provider.
 
 ## Architecture
 

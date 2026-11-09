@@ -14,6 +14,6 @@ pub mod importer;
 pub mod jobs;
 pub mod mcp;
 pub mod metrics;
-pub mod oidc;
 pub mod routes;
 pub mod search;
+pub mod sso;

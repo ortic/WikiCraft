@@ -46,6 +46,8 @@ pub async fn spawn_with(tweak: impl FnOnce(&mut Config)) -> TestApp {
         max_upload_mb: 512,
         secure_cookies: false,
         session_days: 30,
+        auth_providers: None,
+        auth_providers_file: None,
         oidc_issuer: None,
         oidc_client_id: None,
         oidc_client_secret: None,

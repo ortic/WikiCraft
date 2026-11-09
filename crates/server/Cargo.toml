@@ -14,9 +14,11 @@ clap = { version = "4.6.7", features = ["derive", "env"] }
 dashmap = "6.2.1"
 futures = "0.3.34"
 hex = "0.4.3"
+ldap3 = { version = "0.12.1", default-features = false, features = ["tls-rustls-ring"] }
 mime_guess = "2.0.5"
 object_store = { version = "0.14.2", features = ["aws"] }
 openidconnect = "4.1.0"
+samael = { version = "0.0.22", optional = true }
 pdf-extract = "0.12.1"
 quick-xml = "0.42"
 rand = "0.10.3"
@@ -46,6 +48,11 @@ base64 = "0.23.1"
 reqwest = { version = "0.13.5", default-features = false, features = ["json", "cookies", "multipart"] }
 tokio-tungstenite = "0.30.0"
 zip = "9.5.0"
+
+[features]
+default = []
+# SAML 2.0 single sign-on (needs libxml2 + xmlsec1 development packages at build time)
+saml = ["dep:samael"]
 
 [lints]
 workspace = true

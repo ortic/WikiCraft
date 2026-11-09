@@ -26,9 +26,12 @@ pub fn router(state: AppState) -> Router {
         .route("/setup", get(auth::setup_status).post(auth::setup))
         .route("/auth/login", post(auth::login))
         .route("/auth/logout", post(auth::logout))
-        .route("/auth/oidc", get(crate::oidc::info))
-        .route("/auth/oidc/login", get(crate::oidc::login))
-        .route("/auth/oidc/callback", get(crate::oidc::callback))
+        .route("/auth/providers", get(crate::sso::list))
+        .route("/auth/sso/{id}/login", get(crate::sso::oidc::sso_login))
+        .route("/auth/sso/{id}/callback", get(crate::sso::oidc::sso_callback))
+        .route("/auth/oidc", get(crate::sso::oidc::legacy_info))
+        .route("/auth/oidc/login", get(crate::sso::oidc::legacy_login))
+        .route("/auth/oidc/callback", get(crate::sso::oidc::legacy_callback))
         .route("/me", get(auth::me))
         .route("/me/tokens", get(auth::list_tokens).post(auth::create_token))
         .route("/me/tokens/{id}", delete(auth::delete_token))
@@ -119,7 +122,7 @@ pub fn router(state: AppState) -> Router {
         .route("/wiki/x/{tiny}", get(legacy::tiny));
 
     Router::new()
-        .nest("/api", api)
+        .nest("/api", saml_routes(api))
         .merge(legacy)
         .fallback_service(spa)
         .layer(tower_http::compression::CompressionLayer::new())
@@ -145,4 +148,15 @@ pub fn router(state: AppState) -> Router {
             axum::http::HeaderValue::from_static("SAMEORIGIN"),
         ))
         .with_state(state)
+}
+
+/// SAML endpoints (assertion consumer service + SP metadata) when built with `--features saml`.
+#[cfg(feature = "saml")]
+fn saml_routes(api: Router<AppState>) -> Router<AppState> {
+    api.route("/auth/sso/{id}/acs", post(crate::sso::saml::acs)).route("/auth/sso/{id}/metadata", get(crate::sso::saml::metadata))
+}
+
+#[cfg(not(feature = "saml"))]
+fn saml_routes(api: Router<AppState>) -> Router<AppState> {
+    api
 }

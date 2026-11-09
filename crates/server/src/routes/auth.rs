@@ -93,10 +93,14 @@ pub struct LoginRequest {
 }
 
 pub async fn login(State(state): State<AppState>, headers: HeaderMap, Json(req): Json<LoginRequest>) -> ApiResult<Response> {
-    if state.config.disable_password_login {
+    // `disable_password_login` turns off local passwords; directory (LDAP) accounts still sign in here
+    let has_directory = state.providers.iter().any(|p| matches!(p, crate::sso::Provider::Ldap(_)));
+    if state.config.disable_password_login && !has_directory {
         return Err(ApiError::BadRequest("password login is disabled; use single sign-on".into()));
     }
     let email = req.email.trim().to_lowercase();
+    let req_email_raw = req.email.clone();
+    let req_password_raw = req.password.clone();
     if !crate::auth::login_allowed(&state, &email).await {
         return Err(ApiError::BadRequest("too many failed attempts, try again in 15 minutes".into()));
     }
@@ -106,10 +110,19 @@ pub async fn login(State(state): State<AppState>, headers: HeaderMap, Json(req):
     static DUMMY: tokio::sync::OnceCell<String> = tokio::sync::OnceCell::const_new();
     let dummy = DUMMY.get_or_try_init(|| hash_password("wikicraft-timing-dummy".into())).await?.clone();
     let (ok, user) = match row {
-        Some((id, ws, Some(hash), status)) if status == "active" => (verify_password(req.password, hash).await, Some((id, ws))),
+        Some((id, ws, Some(hash), status)) if status == "active" && !state.config.disable_password_login => (verify_password(req.password, hash).await, Some((id, ws))),
         _ => {
             let _ = verify_password(req.password, dummy).await;
             (false, None)
+        }
+    };
+    // directory accounts (LDAP / Active Directory)
+    let (ok, user) = if ok {
+        (ok, user)
+    } else {
+        match ldap_login(&state, &req_email_raw, &req_password_raw).await? {
+            Some((id, ws)) => (true, Some((id, ws))),
+            None => (false, user),
         }
     };
     match (ok, user) {
@@ -199,4 +212,26 @@ pub async fn load_user(state: &AppState, ws: Uuid, id: Uuid) -> ApiResult<User> 
         .fetch_optional(&state.db)
         .await?
         .ok_or(ApiError::NotFound("user"))
+}
+
+/// Tries the configured LDAP providers; returns (user id, workspace) on success.
+async fn ldap_login(state: &AppState, username: &str, password: &str) -> ApiResult<Option<(Uuid, Uuid)>> {
+    for p in state.providers.iter() {
+        let crate::sso::Provider::Ldap(c) = p else { continue };
+        match crate::sso::ldap::authenticate(c, username, password).await {
+            Ok(Some(ext)) => {
+                return match crate::sso::sign_in(state, p, ext).await {
+                    Ok(id) => {
+                        let ws: Uuid = sqlx::query_scalar("SELECT workspace_id FROM users WHERE id = $1").bind(id).fetch_one(&state.db).await?;
+                        Ok(Some((id, ws)))
+                    }
+                    Err(crate::sso::SignInError::Denied(m)) => Err(ApiError::BadRequest(m)),
+                    Err(crate::sso::SignInError::Other(e)) => Err(ApiError::Internal(e)),
+                };
+            }
+            Ok(None) => {}
+            Err(e) => tracing::warn!(provider = %c.common.id, "LDAP login failed: {e:#}"),
+        }
+    }
+    Ok(None)
 }

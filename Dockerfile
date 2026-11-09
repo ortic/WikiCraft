@@ -9,17 +9,20 @@ RUN npm run build
 
 # ---- backend ----
 FROM rust:1.96-bookworm AS server
+# SAML support (`--build-arg FEATURES=saml`, the default) links libxmlsec1 for XML signatures
+ARG FEATURES=saml
+RUN if [ -n "$FEATURES" ]; then apt-get update && apt-get install -y --no-install-recommends libxml2-dev libxmlsec1-dev libclang-dev clang pkg-config && rm -rf /var/lib/apt/lists/*; fi
 WORKDIR /src
 COPY Cargo.toml Cargo.lock ./
 COPY crates ./crates
 RUN --mount=type=cache,target=/usr/local/cargo/registry \
     --mount=type=cache,target=/src/target \
-    cargo build --release -p wikicraft && cp target/release/wikicraft /wikicraft
+    cargo build --release -p wikicraft --features "$FEATURES" && cp target/release/wikicraft /wikicraft
 
 # ---- runtime ----
 FROM debian:bookworm-slim
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/* \
-    && useradd --system --uid 10001 --home /data wikicraft && mkdir -p /data && chown wikicraft /data
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates libxml2 libxmlsec1 libxmlsec1-openssl && rm -rf /var/lib/apt/lists/* \
+    && useradd --system --uid 10001 --home /data wikicraft && mkdir -p /data/blobs /data/uploads /data/index && chown -R wikicraft /data
 COPY --from=server /wikicraft /usr/local/bin/wikicraft
 COPY --from=web /web/dist /srv/wikicraft/web
 USER wikicraft
@@ -28,6 +31,6 @@ ENV WIKICRAFT_BIND=0.0.0.0:8787 \
     WIKICRAFT_STATIC_DIR=/srv/wikicraft/web
 EXPOSE 8787
 VOLUME ["/data"]
-HEALTHCHECK --interval=30s --timeout=3s CMD ["/bin/sh", "-c", "exec 3<>/dev/tcp/127.0.0.1/8787 && printf 'GET /api/health HTTP/1.0\\r\\n\\r\\n' >&3 && grep -q '\"ok\"' <&3"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=20s CMD ["wikicraft", "healthcheck"]
 ENTRYPOINT ["wikicraft"]
 CMD ["serve"]
