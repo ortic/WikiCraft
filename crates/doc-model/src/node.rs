@@ -117,6 +117,17 @@ pub mod marks {
 /// recursion limit is 128, so stored documents must stay well below 64 levels.
 pub const MAX_DEPTH: usize = 40;
 
+/// Deepest indentation of a paragraph or heading.
+pub const MAX_INDENT: i64 = 8;
+
+/// A paragraph's or heading's indentation level (`indent` attribute, 0 to [`MAX_INDENT`]).
+pub fn indent_level(n: &Node) -> i64 {
+    if n.kind != nodes::PARAGRAPH && n.kind != nodes::HEADING {
+        return 0;
+    }
+    n.attr_i64("indent").unwrap_or(0).clamp(0, MAX_INDENT)
+}
+
 /// Inline node types (live inside paragraphs/headings next to text).
 pub fn is_inline(kind: &str) -> bool {
     matches!(

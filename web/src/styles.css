@@ -885,3 +885,12 @@ button.page-prop-key-btn:hover, button.page-prop-key-btn:focus-visible { backgro
 }
 .report-filter { border: 1px solid var(--border); border-radius: var(--radius); padding: 10px; margin: 6px 0 10px; background: var(--bg-soft); display: grid; gap: 8px; }
 .report-filter .field { display: grid; gap: 3px; margin: 0; font-size: 13px; }
+/* indented paragraphs and headings (30px per level) */
+[data-indent="1"] { margin-left: 30px; }
+[data-indent="2"] { margin-left: 60px; }
+[data-indent="3"] { margin-left: 90px; }
+[data-indent="4"] { margin-left: 120px; }
+[data-indent="5"] { margin-left: 150px; }
+[data-indent="6"] { margin-left: 180px; }
+[data-indent="7"] { margin-left: 210px; }
+[data-indent="8"] { margin-left: 240px; }

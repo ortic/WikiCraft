@@ -3,7 +3,7 @@
 
 import { useState } from 'react'
 import type { Editor } from '@tiptap/react'
-import { AlignCenter, AlignLeft, AlignRight, Baseline, Ban } from 'lucide-react'
+import { AlignCenter, AlignLeft, AlignRight, Baseline, Ban, IndentDecrease, IndentIncrease } from 'lucide-react'
 
 export const TEXT_COLORS: [string, string][] = [
   ['Grey', '#6b7280'],
@@ -38,8 +38,8 @@ export default function TextStyleMenu({ editor }: { editor: Editor }) {
       <button
         onMouseDown={keep}
         className={`icon-btn ${open || current || editor.isActive('highlight') ? 'active' : ''}`}
-        title="Text colour, highlight and alignment"
-        aria-label="Text colour, highlight and alignment"
+        title="Text colour, highlight, alignment and indentation"
+        aria-label="Text colour, highlight, alignment and indentation"
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
@@ -95,6 +95,12 @@ export default function TextStyleMenu({ editor }: { editor: Editor }) {
                 <Icon size={14} />
               </button>
             ))}
+            <button onMouseDown={keep} className="swatch" title="Indent (Ctrl+])" aria-label="Indent" onClick={() => editor.chain().focus().indent().run()}>
+              <IndentIncrease size={14} />
+            </button>
+            <button onMouseDown={keep} className="swatch" title="Outdent (Ctrl+[)" aria-label="Outdent" onClick={() => editor.chain().focus().outdent().run()}>
+              <IndentDecrease size={14} />
+            </button>
           </div>
         </div>
       )}

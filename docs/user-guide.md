@@ -43,6 +43,8 @@ jump to where they are.
 - The handle left of a block moves the block; the link icon next to it copies a **link to that
   block**. Opening such a link scrolls to the block and highlights it.
 - `Ctrl F` / `Ctrl H` find and replace within the page.
+- **Tab** at the start of a paragraph or heading indents it (or `Ctrl ]`); **Shift Tab** (or
+  `Ctrl [`) takes it back. The selection menu's text style button has indent buttons too.
 
 **Diagrams:** `/drawing` opens a sketchpad (Excalidraw); `/draw.io diagram` opens draw.io for
 flowcharts, architecture and network diagrams. Readers see a picture of it; editors click it to

@@ -450,6 +450,11 @@ impl Renderer<'_> {
         out
     }
 
+    /// The context's indentation plus the block's own levels (half an inch each).
+    fn own_indent(ctx: Ctx, n: &Node) -> Ctx {
+        Ctx { indent: ctx.indent + 720 * wikicraft_doc_model::node::indent_level(n) as i32, ..ctx }
+    }
+
     fn indented(p: Paragraph, ctx: Ctx) -> Paragraph {
         if ctx.indent > 0 { p.indent(Some(ctx.indent), None, None, None) } else { p }
     }
@@ -457,14 +462,14 @@ impl Renderer<'_> {
     fn block(&mut self, n: &Node, ctx: Ctx, out: &mut Vec<Block>) {
         match n.kind.as_str() {
             nodes::PARAGRAPH => {
-                let p = Self::indented(self.aligned(Paragraph::new(), n), ctx);
+                let p = Self::indented(self.aligned(Paragraph::new(), n), Self::own_indent(ctx, n));
                 self.paragraph(n, p, ctx, out);
             }
             nodes::HEADING => {
                 let lvl = n.attr_i64("level").unwrap_or(1).clamp(1, 6);
                 let name = self.headings.get(self.heading_idx).and_then(|h| self.anchors.get(&h.2)).cloned();
                 self.heading_idx += 1;
-                let mut p = Self::indented(self.aligned(Paragraph::new().style(&format!("Heading{lvl}")).keep_next(true), n), ctx);
+                let mut p = Self::indented(self.aligned(Paragraph::new().style(&format!("Heading{lvl}")).keep_next(true), n), Self::own_indent(ctx, n));
                 let bm = name.map(|name| (self.bookmark(), name));
                 if let Some((id, name)) = &bm {
                     p = p.add_bookmark_start(*id, name);

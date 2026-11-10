@@ -312,6 +312,22 @@ struct Conv<'a> {
     stats: &'a mut Stats,
 }
 
+/// Indentation from Confluence's `style="margin-left: 30.0px;"` (30px per level).
+fn indent_of(el: &Element) -> Option<i64> {
+    let v = style_prop(el, "margin-left")?.trim().to_ascii_lowercase();
+    let px = if let Some(n) = v.strip_suffix("px") {
+        n.trim().parse::<f64>().ok()?
+    } else if let Some(n) = v.strip_suffix("pt") {
+        n.trim().parse::<f64>().ok()? * 4.0 / 3.0
+    } else if let Some(n) = v.strip_suffix("em") {
+        n.trim().parse::<f64>().ok()? * 16.0
+    } else {
+        return None;
+    };
+    let level = (px / 30.0).round() as i64;
+    (level > 0).then_some(level.min(wikicraft_doc_model::node::MAX_INDENT))
+}
+
 fn style_prop<'s>(el: &'s Element, prop: &str) -> Option<&'s str> {
     let style = el.attr("style")?;
     style.split(';').find_map(|decl| {
@@ -428,13 +444,20 @@ impl Conv<'_> {
                 if let Some(a) = style_prop(el, "text-align").filter(|a| matches!(*a, "left" | "center" | "right" | "justify")) {
                     tpl = tpl.attr("textAlign", a);
                 }
+                if let Some(i) = indent_of(el) {
+                    tpl = tpl.attr("indent", i);
+                }
                 let c = self.children(&el.children, marks, pre);
                 split_text_block(tpl, c)
             }
             "h1" | "h2" | "h3" | "h4" | "h5" | "h6" => {
                 let level: u8 = name[1..].parse().unwrap_or(1);
+                let mut tpl = Node::heading(level, vec![]);
+                if let Some(i) = indent_of(el) {
+                    tpl = tpl.attr("indent", i);
+                }
                 let c = self.children(&el.children, marks, pre);
-                split_text_block(Node::heading(level, vec![]), c)
+                split_text_block(tpl, c)
             }
             "ul" | "ol" => {
                 let items: Vec<Node> = el
@@ -1261,6 +1284,16 @@ mod tests {
         // an emoji a Cloud user typed is their content and stays text; unknown names are dropped
         let text: String = p.content.iter().filter_map(|n| n.text.clone()).collect();
         assert!(text.contains('\u{1F680}') && !text.contains("unknown"), "{text}");
+    }
+
+    #[test]
+    fn indentation_from_margins() {
+        let (doc, _) = conv(
+            r#"<p style="margin-left: 30.0px;">one</p><p style="margin-left: 60px; text-align: center">two</p><h2 style="margin-left: 1.875em;">h</h2><p style="margin-left: 5px;">none</p><p style="margin-left: 900px;">max</p>"#,
+        );
+        let ind: Vec<Option<i64>> = doc.content.iter().map(|n| n.attr_i64("indent")).collect();
+        assert_eq!(ind, vec![Some(1), Some(2), Some(1), None, Some(8)]);
+        assert_eq!(doc.content[1].attr_str("textAlign"), Some("center"));
     }
 
     #[test]

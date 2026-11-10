@@ -150,7 +150,9 @@ async fn word_export_round_trips() {
             {"type": "tableRow", "content": [
                 {"type": "tableCell", "content": [p(json!([t("Sat")]))]},
                 {"type": "tableCell", "content": [p(json!([t("Sun")]))]}]}]},
-        p(json!([t("See "), {"type": "text", "text": "the docs", "marks": [{"type": "link", "attrs": {"href": "https://example.com/docs"}}, {"type": "italic"}]}]))
+        p(json!([t("See "), {"type": "text", "text": "the docs", "marks": [{"type": "link", "attrs": {"href": "https://example.com/docs"}}, {"type": "italic"}]}])),
+        {"type": "heading", "attrs": {"level": 3, "indent": 1}, "content": [t("Indented heading")]},
+        {"type": "paragraph", "attrs": {"indent": 2, "textAlign": "right"}, "content": [t("Indented twice")]}
     ]});
     let (st, _) = app.put(&owner, &format!("/pages/{pg}/content"), json!({"content": doc})).await;
     assert_eq!(st, 200);
@@ -177,4 +179,8 @@ async fn word_export_round_trips() {
     let link = find(&back, "text").into_iter().find(|t| t["text"] == "the docs").cloned().unwrap();
     let marks: Vec<&str> = link["marks"].as_array().unwrap().iter().map(|m| m["type"].as_str().unwrap()).collect();
     assert!(marks.contains(&"link") && marks.contains(&"italic"), "{link}");
+    let indented = find(&back, "paragraph").into_iter().find(|p| text(p) == "Indented twice").cloned().unwrap();
+    assert_eq!(indented["attrs"]["indent"], 2, "{indented}");
+    assert_eq!(indented["attrs"]["textAlign"], "right");
+    assert!(find(&back, "heading").iter().any(|h| text(h) == "Indented heading" && h["attrs"]["indent"] == 1), "{back}");
 }

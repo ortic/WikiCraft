@@ -370,7 +370,7 @@ test('text colour from the selection menu and a three-column layout', async ({ b
   await page.keyboard.press('Home')
   await page.keyboard.press('Shift+End')
   await expect.poll(() => page.evaluate(() => String(window.getSelection()))).toBe('Ship the release today')
-  await page.getByRole('button', { name: 'Text colour, highlight and alignment' }).click()
+  await page.getByRole('button', { name: 'Text colour, highlight, alignment and indentation' }).click()
   await page.getByRole('button', { name: 'Text colour Red' }).click()
   await expect(editor.locator('span[style*="color"]')).toHaveText('Ship the release today')
   await page.keyboard.press('End')
@@ -383,6 +383,14 @@ test('text colour from the selection menu and a three-column layout', async ({ b
   await expect
     .poll(async () => page.evaluate(async (pid) => JSON.stringify((await (await fetch(`/api/pages/${pid}`)).json()).content), id), { timeout: 15_000 })
     .toMatch(/#d14343[\s\S]*three_equal|three_equal[\s\S]*#d14343/)
+  // Tab at the start of a paragraph indents it (even right after Home)
+  await editor.getByText('Ship the release today').click()
+  await page.keyboard.press('Home')
+  await page.keyboard.press('Tab')
+  await expect(editor.locator('p[data-indent="1"]')).toContainText('Ship the release today')
+  await expect
+    .poll(async () => page.evaluate(async (pid) => JSON.stringify((await (await fetch(`/api/pages/${pid}`)).json()).content), id), { timeout: 15_000 })
+    .toMatch(/"indent":1\},"content":\[\{"marks":\[[^\]]*\],"text":"Ship the release today"/)
   await ctx.close()
 })
 

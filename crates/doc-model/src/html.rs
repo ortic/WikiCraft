@@ -95,11 +95,17 @@ impl Renderer<'_> {
         self.out.push_str(close);
     }
 
+    /// `style` for a paragraph or heading: alignment and indentation (30px per level).
     fn text_align(n: &Node) -> String {
-        match n.attr_str("textAlign") {
-            Some(a @ ("left" | "center" | "right" | "justify")) => format!(" style=\"text-align:{a}\""),
-            _ => String::new(),
+        let mut style = String::new();
+        if let Some(a @ ("left" | "center" | "right" | "justify")) = n.attr_str("textAlign") {
+            style.push_str(&format!("text-align:{a};"));
         }
+        let indent = crate::node::indent_level(n);
+        if indent > 0 {
+            style.push_str(&format!("margin-left:{}px;", indent * 30));
+        }
+        if style.is_empty() { style } else { format!(" style=\"{}\"", style.trim_end_matches(';')) }
     }
 
     fn node(&mut self, n: &Node) {
@@ -392,6 +398,15 @@ mod tests {
         assert!(html.contains("<p id=\"block-par12345\" style=\"text-align:center\">x</p>"), "{html}");
         assert!(html.contains("<hr id=\"block-hr123456\">"), "{html}");
         assert!(html.contains("<p>bad</p>"), "invalid ids are dropped: {html}");
+        let indented = Node::doc(vec![
+            Node::paragraph(vec![Node::text("a")]).attr("indent", 2).attr("textAlign", "center"),
+            Node::heading(3, vec![Node::text("b")]).attr("indent", 99),
+            Node::paragraph(vec![Node::text("c")]).attr("indent", -1),
+        ]);
+        let out = render(&indented, &HtmlOptions::default());
+        assert!(out.contains("<p style=\"text-align:center;margin-left:60px\">a</p>"), "{out}");
+        assert!(out.contains("<h3 style=\"margin-left:240px\">b</h3>"), "capped at 8 levels: {out}");
+        assert!(out.contains("<p>c</p>"), "{out}");
         assert!(html.contains("<ul id=\"block-lst12345\"><li id=\"block-itm12345\"><p id=\"block-inr12345\">i</p></li></ul>"), "{html}");
         assert!(!render(&doc, &HtmlOptions::default()).contains("block-"), "only with anchors on");
     }

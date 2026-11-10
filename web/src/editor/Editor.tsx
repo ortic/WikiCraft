@@ -19,6 +19,7 @@ import { Details, DetailsSummary, DetailsContent } from '@tiptap/extension-detai
 import { Mathematics } from '@tiptap/extension-mathematics'
 import Mention from '@tiptap/extension-mention'
 import TextAlign from '@tiptap/extension-text-align'
+import { Indent } from './Indent'
 import Subscript from '@tiptap/extension-subscript'
 import Superscript from '@tiptap/extension-superscript'
 import { common, createLowlight } from 'lowlight'
@@ -205,6 +206,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
         Color,
         Highlight.configure({ multicolor: true }),
         TextAlign.configure({ types: ['heading', 'paragraph'] }),
+        Indent,
         Subscript,
         Superscript,
         Details.configure({ persist: true, HTMLAttributes: { class: 'details' } }),

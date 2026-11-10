@@ -264,7 +264,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** Status lozenges (colored labels inline) `C`
 - [x] **P1** Inline smart links (unfurl title/icon via oEmbed/OpenGraph) `C D` — link cards from OpenGraph / <title> (server-side fetch with SSRF guards, 1-day cache); no site icons yet
 - [x] **P1** Hard line break, horizontal rule `C D`
-- [~] **P1** Text alignment, indentation `C D` — alignment in the selection menu and by shortcut; no indentation yet
+- [x] **P1** Text alignment, indentation `C D` — alignment in the selection menu and by shortcut; paragraphs and headings indent up to 8 levels (30px each): Tab at the start of a paragraph / Ctrl+], Shift+Tab / Ctrl+[, or the selection menu (Tab elsewhere still leaves the editor, lists and tables keep their Tab). Confluence `margin-left` and Word `w:ind` import as levels; HTML and Word exports keep them
 - [x] **P1** Inline math (KaTeX) `D O`
 - [ ] **P2** Glossary terms / definitions (hover to see the definition; "AI definitions") `C`
 - [ ] **P2** Footnotes `O`

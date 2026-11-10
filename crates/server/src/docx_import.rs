@@ -373,6 +373,13 @@ impl Reader<'_> {
             _ => None,
         });
         let outline: Option<u8> = ppr.and_then(|x| x.kid("outlineLvl")).and_then(|o| o.at("val")).and_then(|v| v.parse().ok()).or(style.outline);
+        // left indentation in half inches (720 twips) = indentation levels
+        let indent: i64 = ppr
+            .and_then(|x| x.kid("ind"))
+            .and_then(|i| i.at("left").or_else(|| i.at("start")))
+            .and_then(|v| v.parse::<f64>().ok())
+            .map(|tw| ((tw / 720.0).round() as i64).clamp(0, wikicraft_doc_model::node::MAX_INDENT))
+            .unwrap_or(0);
 
         if name == "title" {
             if self.title.is_none() && !self.started {
@@ -385,6 +392,9 @@ impl Reader<'_> {
             let mut h = Node::heading(level.min(6), strip_marks(content, &[marks::BOLD]));
             if let Some(a) = align {
                 h = h.attr("textAlign", a);
+            }
+            if indent > 0 {
+                h = h.attr("indent", indent);
             }
             return Some(Para::Block(h));
         }
@@ -443,6 +453,9 @@ impl Reader<'_> {
         let mut node = Node::paragraph(content);
         if let Some(a) = align {
             node = node.attr("textAlign", a);
+        }
+        if indent > 0 {
+            node = node.attr("indent", indent);
         }
         Some(Para::Block(node))
     }
