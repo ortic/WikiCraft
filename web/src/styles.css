@@ -578,3 +578,9 @@ a.menu-item { color: inherit; text-decoration: none; }
 .code-gutter > span { display: block; }
 .ProseMirror pre.wrap, .ProseMirror pre.wrap > code { white-space: pre-wrap; overflow-wrap: anywhere; }
 .code-toolbar button.on { background: #4f46e5; border-color: #6366f1; color: #fff; }
+/* block drag handle (left of the hovered block) */
+.drag-handle { display: flex; align-items: center; justify-content: center; width: 20px; height: 24px; border-radius: 5px; color: var(--text-faint); cursor: grab; transition: background .1s, color .1s; }
+.drag-handle:hover { background: var(--bg-hover); color: var(--text-soft); }
+.drag-handle:active { cursor: grabbing; }
+.ProseMirror .ProseMirror-selectednode, .ProseMirror .ProseMirror-selectednoderange { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; border-radius: 4px; }
+@media (max-width: 860px) { .drag-handle { display: none; } }

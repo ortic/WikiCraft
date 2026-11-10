@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useEditor, EditorContent, ReactNodeViewRenderer, type Editor as TEditor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
+import DragHandle from '@tiptap/extension-drag-handle-react'
 import StarterKit from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCaret from '@tiptap/extension-collaboration-caret'
@@ -22,7 +23,7 @@ import { common, createLowlight } from 'lowlight'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
 import 'katex/dist/katex.min.css'
-import { Bold, Italic, Underline, Strikethrough, Code, Link as LinkIcon, Highlighter, MessageSquarePlus, Heading2, List } from 'lucide-react'
+import { Bold, Italic, Underline, Strikethrough, Code, Link as LinkIcon, Highlighter, MessageSquarePlus, Heading2, List, GripVertical } from 'lucide-react'
 import { api, initials, userColor, type Attachment, type User } from '../api'
 import { AttachmentNode, Anchor, Callout, ChildPages, Column, Columns, CommentMark, DateNode, DecisionItem, DecisionList, Embed, Emoticon, Include, Macro, Status, Toc } from './nodes'
 import { EmoticonSuggest, PageLinkSuggest, SlashCommand, mentionSuggestion, slashItems } from './suggest'
@@ -344,6 +345,12 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
         </BubbleMenu>
       )}
       {editor && editor.isEditable && <TableMenu editor={editor} />}
+      {/* drag blocks (and list items) to move them; click to select the block */}
+      {editor && editor.isEditable && (
+        <DragHandle editor={editor} className="drag-handle" nested>
+          <GripVertical size={15} />
+        </DragHandle>
+      )}
       <EditorContent editor={editor} />
       {/* clicking the empty space below the document puts the cursor at the end */}
       <div

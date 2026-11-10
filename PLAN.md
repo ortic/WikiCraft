@@ -198,7 +198,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 ### 4.2 Spaces
 - [~] **P0** Create / edit / delete spaces (name, key, description, icon/emoji, cover) `C D X O B` (no cover image)
 - [x] **P0** Space home / overview page `C D X`
-- [ ] **P0** Personal spaces per user `C D`
+- [x] **P0** Personal spaces per user `C D`
 - [~] **P1** Space directory with search, categories, filters (team, personal, archived, starred) `C X` (name/key filter only)
 - [ ] **P1** Space categories / tags `C`
 - [x] **P1** Space archive (read-only, hidden from search by default) and restore `C`
@@ -243,7 +243,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Markdown shortcuts (`#`, `-`, `1.`, `>`, ```` ``` ````, `**`, `[]`, `---`) `C D O`
 - [x] **P0** Undo/redo (collaboration-aware, per user) `C D`
 - [x] **P0** Copy/paste from Word, Google Docs, web pages, Excel/Sheets (to tables), Markdown text, images from clipboard `C D O`
-- [~] **P0** Drag & drop blocks (block handles), drag & drop files/images `C D O N` (file drop only; no block handles)
+- [x] **P0** Drag & drop blocks (block handles), drag & drop files/images `C D O N`
 - [x] **P0** Keyboard shortcuts + shortcut help dialog `C D O`
 - [~] **P1** Floating formatting toolbar + fixed toolbar option `C D` (bubble menu only)
 - [x] **P1** Find & replace in page `C`
