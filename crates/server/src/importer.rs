@@ -676,6 +676,7 @@ async fn import_page(
 ) -> anyhow::Result<()> {
     let mut doc = tokio::task::block_in_place(|| planner.convert(&pg.source_id, stats));
     rewrite(&mut doc, links, rs);
+    wikicraft_doc_model::blocks::ensure_ids(&mut doc);
     let kind = match pg.kind {
         NodeKind::Folder => "folder",
         NodeKind::BlogPost => "blog",

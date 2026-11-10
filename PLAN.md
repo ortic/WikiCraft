@@ -3,7 +3,7 @@
 > A self-hostable, fast, open knowledge base / team wiki with a **Rust backend**: aiming for Confluence-level
 > functionality, first-class Confluence migration, and a modern real-time editor.
 >
-> Status: planning · Last updated: 2026-11-09
+> Status: in development (see WORKLOG.md) · Last updated: 2026-11-10
 
 ---
 
@@ -175,7 +175,7 @@
 - [ ] **P0** Canonical format = versioned ProseMirror JSON schema (like Confluence's ADF), with a `schema_version` and forward migrations — partial: ProseMirror JSON is the canonical stored format (`doc-model`) / no `schema_version` field, no forward migrations
 - [x] **P0** Live state in Yjs (`yrs`); a published version is a frozen ProseMirror JSON snapshot — live mode only: versions are snapshots taken when the last editor leaves, every 10 min, or explicitly; no separate publish step
 - [ ] **P0** Derived renditions cached per version: sanitized HTML, plain text (search), Markdown (export / AI) — partial: HTML, Markdown and plain-text renderers exist (`doc-model`); plain text is stored for the current page / HTML and Markdown are rendered on demand, nothing is cached per version
-- [ ] **P0** Stable block IDs on every block (needed for deep links, inline comments, synced blocks, AI citations)
+- [x] **P0** Stable block IDs on every block (needed for deep links, inline comments, synced blocks, AI citations) — `blockId` attribute on 24 block types (list shared by `doc-model/assets/block_types.json` and the editor's UniqueID config); the server assigns ids on create / import / restore and to older pages when they are first opened (Yjs attribute changes, not counted as an edit); content replaced through the API keeps the ids of unchanged blocks; "copy link to block" (drag handle, hover button for readers), `#block-<id>` deep links with highlight; `id="block-…"` anchors in shared pages and HTML exports. Not yet used by inline comments or AI citations
 - [ ] **P1** "Extension node" envelope for macros: `{type: "macro", name, params, body?, fallback_html}`, so unknown or imported
       macros survive round-trips (lesson from the Confluence `ac:adf-extension` + `ac:adf-fallback` design)
 - [ ] **P1** Server-side rendering of documents to HTML in Rust (for public pages, exports, email, SEO), with no JS required

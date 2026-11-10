@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useLocation, useNavigate } from 'react-router-dom'
 import { useEditor, EditorContent, ReactNodeViewRenderer, type Editor as TEditor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import DragHandle from '@tiptap/extension-drag-handle-react'
@@ -23,7 +23,8 @@ import { common, createLowlight } from 'lowlight'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
 import 'katex/dist/katex.min.css'
-import { Bold, Italic, Underline, Strikethrough, Code, Link as LinkIcon, Highlighter, MessageSquarePlus, Heading2, List, GripVertical } from 'lucide-react'
+import { Bold, Italic, Underline, Strikethrough, Code, Link as LinkIcon, Link2, Highlighter, MessageSquarePlus, Heading2, List, GripVertical } from 'lucide-react'
+import type { Node as PMNode } from '@tiptap/pm/model'
 import { api, initials, userColor, type Attachment, type User } from '../api'
 import { AttachmentNode, Anchor, Callout, ChildPages, Column, Columns, CommentMark, DateNode, DecisionItem, DecisionList, Embed, Emoticon, Include, InstructionalText, Macro, Status, Toc } from './nodes'
 import { EmoticonSuggest, PageLinkSuggest, SlashCommand, mentionSuggestion, slashItems } from './suggest'
@@ -33,6 +34,8 @@ import { TableMenu } from './TableMenu'
 import { FindBar, FindReplace, findKey } from './FindReplace'
 import { HeadingIds } from './HeadingIds'
 import { Drawing } from './Drawing'
+import { BLOCK_ID_ATTR, BlockIds, blockAt, blockHash, revealAnchor } from './BlockIds'
+import { useToast } from '../ui'
 
 const lowlight = createLowlight(common)
 
@@ -227,6 +230,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
         CommentMark,
         FindReplace,
         HeadingIds,
+        BlockIds,
         SlashCommand.configure({ items: slashItems((e) => pickFiles('image/*').then((f) => upload(e, f, true)), (e) => pickFiles('*/*').then((f) => upload(e, f, false))) }),
       ],
       editorProps: {
@@ -337,6 +341,40 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
     return () => window.removeEventListener('keydown', onKey)
   }, [editor])
 
+  // `#block-<id>` / `#heading` in the URL: scroll to it once the document is there
+  const { hash } = useLocation()
+  useEffect(() => {
+    if (!synced || !hash || !editor) return
+    const t = setTimeout(() => revealAnchor(editor.view, hash), 60)
+    return () => clearTimeout(t)
+  }, [synced, hash, editor])
+
+  // copy a link to a block: the drag handle (editing) or a hover button (reading)
+  const toast = useToast()
+  const copyBlockLink = (blockId: string) => {
+    const url = `${location.origin}/pages/${pageId}${blockHash(blockId)}`
+    navigator.clipboard.writeText(url).then(
+      () => toast('Link to this block copied'),
+      () => window.prompt('Link to this block', url),
+    )
+  }
+  const [handleNode, setHandleNode] = useState<PMNode | null>(null)
+  const handleBlockId = (handleNode?.attrs[BLOCK_ID_ATTR] as string | null | undefined) ?? null
+  const [hoverBlock, setHoverBlock] = useState<{ id: string; top: number; left: number } | null>(null)
+  const onMouseMove = (e: React.MouseEvent) => {
+    const root = container.current
+    if (!root || !editor || editor.isEditable || !synced) return
+    if ((e.target as HTMLElement).closest('.block-link-float')) return
+    const view = editor.view
+    const hit = view.dom.contains(e.target as Node) ? blockAt(view, e.clientX, e.clientY) : null
+    const dom = hit ? view.nodeDOM(hit.pos) : null
+    if (!hit || !(dom instanceof HTMLElement)) return setHoverBlock(null)
+    const r = root.getBoundingClientRect()
+    const top = dom.getBoundingClientRect().top - r.top
+    const left = view.dom.getBoundingClientRect().left - r.left - 30
+    setHoverBlock((b) => (b && b.id === hit.id && b.top === top && b.left === left ? b : { id: hit.id, top, left }))
+  }
+
   // in-app navigation for internal links; inline comment clicks
   const onClick = (e: React.MouseEvent) => {
     const target = e.target as HTMLElement
@@ -348,7 +386,9 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
     if (editor?.isEditable && !(e.metaKey || e.ctrlKey)) return // editing: Ctrl/Cmd+click follows links
     e.preventDefault()
     if (href.startsWith('/') && !href.startsWith('/api/')) navigate(href)
-    else if (href.startsWith('#')) document.getElementById(href.slice(1))?.scrollIntoView({ behavior: 'smooth' })
+    else if (href.startsWith('#')) {
+      if (editor && revealAnchor(editor.view, href)) history.replaceState(history.state, '', href)
+    }
     else window.open(href, '_blank', 'noopener,noreferrer')
   }
 
@@ -371,7 +411,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
   }
 
   return (
-    <div onClick={onClick} ref={container}>
+    <div onClick={onClick} ref={container} onMouseMove={onMouseMove} onMouseLeave={() => setHoverBlock(null)} className="editor-root">
       {find && editor && <FindBar key={`${find.replace}-${find.initial}`} editor={editor} withReplace={find.replace} initial={find.initial} onClose={() => setFind(null)} />}
       {!synced && (
         <div className="row faint" style={{ padding: '12px 0' }}>
@@ -405,9 +445,42 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
       {editor && editor.isEditable && <TableMenu editor={editor} />}
       {/* drag blocks (and list items) to move them; click to select the block */}
       {editor && editor.isEditable && (
-        <DragHandle editor={editor} className="drag-handle" nested>
-          <GripVertical size={15} />
+        <DragHandle editor={editor} className="drag-handle" nested onNodeChange={({ node }) => setHandleNode(node)}>
+          {handleBlockId && (
+            <button
+              type="button"
+              className="block-link"
+              title="Copy link to this block"
+              aria-label="Copy link to this block"
+              draggable={false}
+              onMouseDown={(e) => e.stopPropagation()}
+              onClick={(e) => {
+                e.stopPropagation()
+                copyBlockLink(handleBlockId)
+              }}
+            >
+              <Link2 size={13} />
+            </button>
+          )}
+          <span className="drag-grip">
+            <GripVertical size={15} />
+          </span>
         </DragHandle>
+      )}
+      {editor && !editor.isEditable && hoverBlock && (
+        <button
+          type="button"
+          className="block-link block-link-float"
+          style={{ top: hoverBlock.top, left: hoverBlock.left }}
+          title="Copy link to this block"
+          aria-label="Copy link to this block"
+          onClick={(e) => {
+            e.stopPropagation()
+            copyBlockLink(hoverBlock.id)
+          }}
+        >
+          <Link2 size={13} />
+        </button>
       )}
       <EditorContent editor={editor} />
       {/* clicking the empty space below the document puts the cursor at the end */}

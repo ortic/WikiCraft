@@ -100,6 +100,33 @@ test('owner creates a space and a page with rich content', async ({ browser }) =
   await ctx.close()
 })
 
+test('a link to a block opens the page at that block', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState, permissions: ['clipboard-read', 'clipboard-write'] })
+  const page = await ctx.newPage()
+  await page.goto(pageUrl)
+  const editor = page.locator('.ProseMirror[contenteditable="true"]')
+  await expect(editor).toBeVisible({ timeout: 20_000 })
+  // every stored block has an id, the callout too
+  const callout = await page.evaluate(async (id) => {
+    const p = await (await fetch(`/api/pages/${id}`)).json()
+    const find = (n: { type: string; attrs?: Record<string, unknown>; content?: unknown[] }): string | null =>
+      n.type === 'callout' ? (n.attrs?.blockId as string) : (n.content ?? []).map((c) => find(c as never)).find(Boolean) ?? null
+    return find(p.content)
+  }, pageId)
+  expect(callout).toMatch(/^[a-z][a-z0-9]{7}$/)
+  // the drag handle's link button copies the block's link
+  await editor.getByText('Dates are estimates.').hover()
+  await page.locator('.drag-handle .block-link').click()
+  await expect(page.locator('.toast')).toHaveText('Link to this block copied')
+  const copied = await page.evaluate(() => navigator.clipboard.readText())
+  expect(copied).toMatch(new RegExp(`/pages/${pageId}#block-[a-z0-9]{8}$`))
+  // opening it scrolls to the block and highlights it
+  const other = await ctx.newPage()
+  await other.goto(`${pageUrl}#block-${callout}`)
+  await expect(other.locator('.ProseMirror .block-flash')).toContainText('Dates are estimates.', { timeout: 20_000 })
+  await ctx.close()
+})
+
 test('two people edit the same page live', async ({ browser }) => {
   const ownerCtx = await browser.newContext({ storageState: ownerState })
   const owner = await ownerCtx.newPage()

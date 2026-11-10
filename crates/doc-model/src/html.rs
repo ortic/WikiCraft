@@ -12,7 +12,8 @@ use crate::text::{headings, slugify};
 /// Options influencing link/asset URLs in the rendered HTML.
 #[derive(Debug, Clone, Default)]
 pub struct HtmlOptions {
-    /// Add `id` attributes to headings (for anchors and TOC).
+    /// Add `id` attributes to headings (for anchors and TOC) and blocks (`block-<blockId>`, for
+    /// links to a block).
     pub heading_ids: bool,
 }
 
@@ -102,6 +103,36 @@ impl Renderer<'_> {
     }
 
     fn node(&mut self, n: &Node) {
+        let start = self.out.len();
+        self.node_inner(n);
+        if self.opts.heading_ids {
+            self.block_anchor(n, start);
+        }
+    }
+
+    /// Puts `id="block-<blockId>"` on the first tag of a block rendered from `start` (headings
+    /// keep their slug id and get an empty anchor instead).
+    fn block_anchor(&mut self, n: &Node, start: usize) {
+        if !crate::blocks::is_block_type(&n.kind) {
+            return;
+        }
+        let Some(id) = n.attr_str(crate::blocks::ATTR).filter(|id| crate::blocks::is_valid_id(id)) else { return };
+        let out = &self.out[start..];
+        if !out.starts_with('<') || !out[1..].starts_with(|c: char| c.is_ascii_alphabetic()) {
+            return;
+        }
+        let Some(end) = out.find('>') else { return };
+        let tag = &out[..end];
+        let anchor = format!("block-{}", escape(id));
+        if tag.contains(" id=\"") {
+            self.out.insert_str(start + end + 1, &format!("<a id=\"{anchor}\" class=\"block-anchor\"></a>"));
+        } else {
+            let name_end = tag.find([' ', '/']).unwrap_or(end);
+            self.out.insert_str(start + name_end, &format!(" id=\"{anchor}\""));
+        }
+    }
+
+    fn node_inner(&mut self, n: &Node) {
         match n.kind.as_str() {
             nodes::TEXT => self.text(n),
             nodes::PARAGRAPH => {
@@ -320,6 +351,26 @@ fn wrap_mark(m: &Mark, inner: String) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn blocks_get_anchor_ids() {
+        let doc = Node::doc(vec![
+            Node::heading(2, vec![Node::text("Intro")]).attr("blockId", "hdg12345"),
+            Node::paragraph(vec![Node::text("x")]).attr("blockId", "par12345").attr("textAlign", "center"),
+            Node::new(nodes::HORIZONTAL_RULE).attr("blockId", "hr123456"),
+            Node::paragraph(vec![Node::text("bad")]).attr("blockId", "a\"><script>"),
+            Node::new(nodes::BULLET_LIST).attr("blockId", "lst12345").with_content(vec![
+                Node::new(nodes::LIST_ITEM).attr("blockId", "itm12345").with_content(vec![Node::paragraph(vec![Node::text("i")]).attr("blockId", "inr12345")]),
+            ]),
+        ]);
+        let html = render(&doc, &HtmlOptions { heading_ids: true });
+        assert!(html.starts_with("<h2 id=\"intro\"><a id=\"block-hdg12345\" class=\"block-anchor\"></a>Intro</h2>"), "{html}");
+        assert!(html.contains("<p id=\"block-par12345\" style=\"text-align:center\">x</p>"), "{html}");
+        assert!(html.contains("<hr id=\"block-hr123456\">"), "{html}");
+        assert!(html.contains("<p>bad</p>"), "invalid ids are dropped: {html}");
+        assert!(html.contains("<ul id=\"block-lst12345\"><li id=\"block-itm12345\"><p id=\"block-inr12345\">i</p></li></ul>"), "{html}");
+        assert!(!render(&doc, &HtmlOptions::default()).contains("block-"), "only with anchors on");
+    }
 
     #[test]
     fn callout_custom_icon() {

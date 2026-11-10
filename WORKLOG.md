@@ -76,6 +76,12 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   doc model (`fa33950`: 9 properties, 7 Markdown export bugs fixed, 2 left documented under an ignored property).
 - GitHub Actions stopped starting jobs at ~04:49 UTC: "recent account payments have failed or your spending limit
   needs to be increased" (billing setting on the GitHub account). Later commits were verified locally only.
+- Morning (2026-11-10, after the PC restart): verified the merged state `fee1481` (166 Rust tests, 11 e2e tests
+  green). Integration tests never dropped their databases (728 left, 7.5 GB): names now carry a timestamp and the
+  first test of each binary drops those older than two hours. Stable block ids (P0): `blockId` on every block,
+  assigned by the editor (Tiptap UniqueID) and by the server (create, import, restore, and old pages when first
+  opened, without counting as an edit), kept for unchanged blocks when content is replaced via the API; copy link to
+  a block, `#block-<id>` deep links, anchors in shared pages and exports.
 - Note: running the whole test suite saturates this WSL machine (load ~100); a parallel demo server then hits DB
   pool timeouts, and the mail test's 4-second wait can flake. Both pass when the machine is idle.
 

@@ -838,6 +838,7 @@ pub async fn run_restore(state: &AppState, job_id: Uuid, actor: Uuid, archive: &
     for pg in &m.pages {
         let mut doc = Node::from_json(&pg.content).unwrap_or_else(|_| Node::empty_doc());
         remap_content(&mut doc, &page_ids, &att_ids, &comment_ids);
+        wikicraft_doc_model::blocks::ensure_ids(&mut doc);
         let id = page_ids[&pg.id];
         sqlx::query("UPDATE pages SET content = $2, text_content = $3 WHERE id = $1")
             .bind(id)

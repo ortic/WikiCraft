@@ -1,6 +1,7 @@
 //! WikiCraft document model: ProseMirror-compatible JSON documents and conversions
 //! (Yjs/y-prosemirror, Markdown, HTML, plain text).
 
+pub mod blocks;
 pub mod html;
 pub mod icons;
 pub mod markdown;

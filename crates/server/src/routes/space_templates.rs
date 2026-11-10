@@ -134,7 +134,8 @@ fn with_children(mut doc: Node) -> Node {
 /// Fills a fresh space: the home page's content and the page tree under it.
 pub async fn apply(state: &AppState, id: &str, ws: Uuid, space: Uuid, home: Uuid, actor: Uuid) -> ApiResult<usize> {
     let Some(bp) = BLUEPRINTS.iter().find(|b| b.id == id) else { return Ok(0) };
-    let home_doc = with_children(markdown::markdown_to_pm(bp.home).doc);
+    let mut home_doc = with_children(markdown::markdown_to_pm(bp.home).doc);
+    wikicraft_doc_model::blocks::ensure_ids(&mut home_doc);
     sqlx::query("UPDATE pages SET content = $2, text_content = $3 WHERE id = $1")
         .bind(home)
         .bind(home_doc.to_json())

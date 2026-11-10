@@ -1,0 +1,30 @@
+{
+  "comment": "Block node types that carry a stable id (attribute `blockId`), shared by crates/doc-model (blocks.rs) and the web editor (web/src/editor/BlockIds.ts). Keep both sides on this one list: a type the server doesn't know would get ids from the first editor who opens the page.",
+  "attribute": "blockId",
+  "types": [
+    "paragraph",
+    "heading",
+    "blockquote",
+    "codeBlock",
+    "bulletList",
+    "orderedList",
+    "listItem",
+    "taskList",
+    "taskItem",
+    "table",
+    "horizontalRule",
+    "details",
+    "callout",
+    "decisionList",
+    "decisionItem",
+    "columns",
+    "toc",
+    "childPages",
+    "include",
+    "embed",
+    "attachment",
+    "drawing",
+    "blockMath",
+    "macro"
+  ]
+}

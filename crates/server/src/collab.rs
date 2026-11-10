@@ -20,7 +20,7 @@ use dashmap::DashMap;
 use futures::{SinkExt, StreamExt};
 use tokio::sync::{broadcast, mpsc};
 use uuid::Uuid;
-use wikicraft_doc_model::{Node, text, ydoc};
+use wikicraft_doc_model::{Node, blocks, text, ydoc};
 use yrs::block::ClientID;
 use yrs::sync::awareness::AwarenessUpdateEntry;
 use yrs::sync::{AwarenessUpdate, Message, SyncMessage};
@@ -152,10 +152,13 @@ impl Room {
     }
 
     /// Replaces the document content (REST edits, version restore) and broadcasts the change.
+    /// Blocks that didn't change keep their ids (see [`blocks::adopt_ids`]).
     pub fn replace_content(&self, pm: &Node, editor: Option<Uuid>) {
         let update = self.with_doc(|doc| {
+            let mut pm = pm.clone();
+            blocks::adopt_ids(&ydoc::doc_to_pm(doc), &mut pm);
             let before: StateVector = doc.transact().state_vector();
-            ydoc::write_pm(doc, pm);
+            ydoc::write_pm(doc, &pm);
             doc.transact().encode_state_as_update_v1(&before)
         });
         self.publish(crate::cluster::KIND_DOC, &update);
@@ -235,7 +238,7 @@ impl Rooms {
         let row: Option<(Option<Vec<u8>>, serde_json::Value)> =
             sqlx::query_as("SELECT ydoc, content FROM pages WHERE id = $1 AND deleted_at IS NULL").bind(page_id).fetch_optional(&state.db).await?;
         let Some((ystate, content)) = row else { return Err(ApiError::NotFound("page")) };
-        let doc = ydoc::new_doc();
+        let mut doc = ydoc::new_doc();
         match ystate {
             Some(bytes) if !bytes.is_empty() => {
                 ydoc::apply_update(&doc, &bytes).map_err(|e| ApiError::Internal(anyhow::anyhow!("corrupt ydoc for {page_id}: {e}")))?
@@ -244,11 +247,13 @@ impl Rooms {
                 // first collaborative open: seed Yjs from the stored ProseMirror JSON on the server,
                 // and claim it in the database — if another replica (or task) seeded first, use
                 // theirs, otherwise both seeds would merge into duplicated content
-                let pm = Node::from_json(&content).unwrap_or_else(|_| Node::empty_doc());
+                let mut pm = Node::from_json(&content).unwrap_or_else(|_| Node::empty_doc());
+                blocks::ensure_ids(&mut pm);
                 ydoc::write_pm(&doc, &pm);
-                let claimed = sqlx::query("UPDATE pages SET ydoc = $1 WHERE id = $2 AND ydoc IS NULL")
+                let claimed = sqlx::query("UPDATE pages SET ydoc = $1, content = $3 WHERE id = $2 AND ydoc IS NULL")
                     .bind(ydoc::encode_state(&doc))
                     .bind(page_id)
+                    .bind(pm.to_json())
                     .execute(&state.db)
                     .await?;
                 if claimed.rows_affected() == 0 {
@@ -257,13 +262,17 @@ impl Rooms {
                     if let Some(b) = theirs {
                         ydoc::apply_update(&fresh, &b).map_err(|e| ApiError::Internal(anyhow::anyhow!("corrupt ydoc for {page_id}: {e}")))?;
                     }
-                    let room = Arc::new(Room::new(page_id, fresh, state.relay.as_ref().map(|r| r.tx.clone())));
-                    return Ok(self.map.entry(page_id).or_insert(room).clone());
+                    doc = fresh;
                 }
             }
         }
+        let ids = assign_block_ids(state, page_id, &doc).await?;
         let room = Arc::new(Room::new(page_id, doc, state.relay.as_ref().map(|r| r.tx.clone())));
         let room = self.map.entry(page_id).or_insert(room).clone();
+        if let Some(update) = ids {
+            // live rooms on other replicas (and their clients) get the ids too
+            room.publish(crate::cluster::KIND_DOC, &update);
+        }
         Ok(room)
     }
 
@@ -284,6 +293,36 @@ impl Rooms {
     pub fn all(&self) -> Vec<Arc<Room>> {
         self.map.iter().map(|r| r.clone()).collect()
     }
+}
+
+/// Gives the blocks of a page that predates block ids their ids, as soon as the page is opened
+/// (before the first client syncs, so editors don't assign them, which would count as an edit).
+/// Stores the result without touching `updated_at` / `updated_by` or creating a version. Returns
+/// the Yjs update to relay, if anything changed.
+async fn assign_block_ids(state: &AppState, page_id: Uuid, doc: &yrs::Doc) -> ApiResult<Option<Vec<u8>>> {
+    if !blocks::ydoc_needs_ids(doc) {
+        return Ok(None);
+    }
+    let mut tx = state.db.begin().await?;
+    // merge what was stored meanwhile (another replica's save) under the row lock, so this write
+    // can't drop it
+    let stored: Option<Option<Vec<u8>>> = sqlx::query_scalar("SELECT ydoc FROM pages WHERE id = $1 FOR UPDATE").bind(page_id).fetch_optional(&mut *tx).await?;
+    if let Some(Some(bytes)) = stored {
+        ydoc::apply_update(doc, &bytes).map_err(|e| ApiError::Internal(anyhow::anyhow!("corrupt ydoc for {page_id}: {e}")))?;
+    }
+    let before = doc.transact().state_vector();
+    if !blocks::ensure_ydoc_ids(doc) {
+        return Ok(None);
+    }
+    let update = doc.transact().encode_state_as_update_v1(&before);
+    sqlx::query("UPDATE pages SET ydoc = $2, content = $3 WHERE id = $1 AND deleted_at IS NULL")
+        .bind(page_id)
+        .bind(ydoc::encode_state(doc))
+        .bind(ydoc::doc_to_pm(doc).to_json())
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(Some(update))
 }
 
 /// Persists a room's state to the database; derives ProseMirror JSON and plain text.

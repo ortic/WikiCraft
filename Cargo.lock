@@ -6241,6 +6241,7 @@ name = "wikicraft-doc-model"
 version = "0.1.0"
 dependencies = [
  "comrak",
+ "fastrand",
  "insta",
  "pretty_assertions",
  "proptest",

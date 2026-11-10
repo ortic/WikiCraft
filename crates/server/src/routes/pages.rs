@@ -30,7 +30,8 @@ pub struct NewPage {
 }
 
 /// Inserts a page (and its first version). Returns the id.
-pub async fn insert_page<'e, E: PgExecutor<'e> + Copy>(db: E, p: NewPage) -> ApiResult<Uuid> {
+pub async fn insert_page<'e, E: PgExecutor<'e> + Copy>(db: E, mut p: NewPage) -> ApiResult<Uuid> {
+    wikicraft_doc_model::blocks::ensure_ids(&mut p.content);
     let plain = text::plain_text(&p.content);
     let content = p.content.to_json();
     sqlx::query(
