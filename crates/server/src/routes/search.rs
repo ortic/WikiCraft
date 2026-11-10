@@ -372,3 +372,36 @@ pub async fn delete_search(State(state): State<AppState>, CurrentUser(user): Cur
     sqlx::query("DELETE FROM saved_searches WHERE id = $1 AND user_id = $2").bind(id).bind(user.id).execute(&state.db).await?;
     Ok(axum::http::StatusCode::NO_CONTENT)
 }
+
+#[derive(Deserialize)]
+pub struct LabelSuggestQuery {
+    q: Option<String>,
+}
+
+/// `GET /labels?q=` — label names for autocomplete: the most used ones starting with `q`,
+/// counted over the pages the caller can see (labels of restricted pages don't leak).
+pub async fn suggest_labels(State(state): State<AppState>, MaybeUser(user): MaybeUser, Query(q): Query<LabelSuggestQuery>) -> ApiResult<Json<Vec<Value>>> {
+    let p = Principal::load(&state, user).await?;
+    let ws = workspace_of(&state, &p).await?;
+    let prefix: String = q.q.unwrap_or_default().trim().to_lowercase().chars().filter(|c| !matches!(c, '%' | '_' | '\\')).take(60).collect();
+    let rows: Vec<(String, Uuid, Uuid)> = sqlx::query_as(
+        "SELECT l.name, p.id, p.space_id FROM labels l JOIN pages p ON p.id = l.page_id
+          WHERE p.workspace_id = $1 AND p.deleted_at IS NULL AND l.name LIKE $2 ORDER BY l.name LIMIT 3000",
+    )
+    .bind(ws)
+    .bind(format!("{prefix}%"))
+    .fetch_all(&state.db)
+    .await?;
+    let spaces = visible_spaces(&state, &p).await?;
+    let pairs: Vec<(Uuid, Uuid)> = rows.iter().map(|r| (r.1, r.2)).collect();
+    let visible = filter_visible(&state, &p, &spaces, &pairs).await?;
+    let mut counts: HashMap<String, i64> = HashMap::new();
+    for (name, id, _) in rows {
+        if visible.contains(&id) {
+            *counts.entry(name).or_default() += 1;
+        }
+    }
+    let mut out: Vec<(String, i64)> = counts.into_iter().collect();
+    out.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
+    Ok(Json(out.into_iter().take(10).map(|(name, count)| json!({"name": name, "count": count})).collect()))
+}

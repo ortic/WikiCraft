@@ -52,7 +52,8 @@ After you've been away, a banner offers *what changed since your last visit*.
 ## Comments and tasks
 
 - Select text and choose the comment icon for an **inline comment**, or comment on the whole
-  page at the bottom. Reply, @mention, like, resolve and reopen.
+  page in the comments panel. Reply, @mention, like, resolve and reopen; filter by open, resolved
+  or your own threads.
 - In a task list, `@`-mention someone to assign the task and add a date for the due date.
 
 ## Watching and notifications
@@ -80,9 +81,11 @@ space as a browsable HTML site, a Markdown folder tree or a full backup.
 - **Owner**: who to ask about a page.
 - **Verify** a page to mark it as accurate (optionally until a date); readers see when it was last
   verified, and you can ask someone to review it.
-- **Archive** pages that are done but worth keeping; they leave the page tree but stay readable
-  (Space settings → Archived).
-- **Labels** group pages across spaces; click a label for all its pages.
+- **Archive** pages that are done but worth keeping; they leave the page tree and search but stay
+  readable (Space settings → Archived).
+- **Labels** group pages across spaces (suggestions show the labels already in use); click a
+  label for all its pages.
+- **Status** (page menu → *Set status…*): rough draft, in progress, ready for review, or your own.
 
 ## Your profile
 

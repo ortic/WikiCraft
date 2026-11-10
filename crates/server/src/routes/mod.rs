@@ -139,6 +139,7 @@ pub fn router(state: AppState) -> Router {
         .route("/space-templates", get(space_templates::list))
         .route("/markdown", post(pages::markdown_to_doc))
         .route("/unfurl", get(unfurl::unfurl))
+        .route("/labels", get(search::suggest_labels))
         .route("/labels/{name}", get(search::by_label))
         .route("/pages/{id}/access/{who}", get(inspect::explain))
         .route("/pages/{id}/like", put(likes::like_page).delete(likes::unlike_page))

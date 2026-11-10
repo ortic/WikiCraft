@@ -1,11 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate, FileText, BadgeCheck, UserCheck, Archive, RotateCcw, UserCog } from 'lucide-react'
+import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate, FileText, BadgeCheck, UserCheck, Archive, RotateCcw, UserCog, CircleDot } from 'lucide-react'
 import { NoAccess, OwnerDialog, RequestReviewDialog, VerificationBadge, VerifyDialog } from '../components/Verification'
 import { ApiError, api, formatDate, type Page, type Space } from '../api'
 import { PageDecor } from '../components/PageDecor'
-import { ErrorBox, Spinner, useFeatures, useMe, useToast } from '../ui'
+import { ErrorBox, Modal, Spinner, useFeatures, useMe, useToast } from '../ui'
+import { PageStatus } from '../components/PageStatus'
 import Editor, { PresenceAvatars, type Presence } from '../editor/Editor'
 import CommentsPanel from '../components/CommentsPanel'
 import AttachmentsPanel from '../components/AttachmentsPanel'
@@ -28,6 +29,8 @@ export default function PageView() {
   const [panel, setPanel] = useState<Panel>(null)
   const [presence, setPresence] = useState<Presence[]>([])
   const [menu, setMenu] = useState(false)
+  const [statusOpen, setStatusOpen] = useState(false)
+  const [copyOpen, setCopyOpen] = useState(false)
   const [restrictions, setRestrictions] = useState(false)
   const [share, setShare] = useState(false)
   const [verifyOpen, setVerifyOpen] = useState(false)
@@ -44,6 +47,12 @@ export default function PageView() {
   const [words, setWords] = useState(0)
   const [title, setTitle] = useState('')
   const [labelInput, setLabelInput] = useState<string | null>(null)
+  const labelSuggest = useQuery({
+    queryKey: ['label-suggest', labelInput?.trim().toLowerCase()],
+    queryFn: () => api.get<{ name: string; count: number }[]>(`/labels?q=${encodeURIComponent(labelInput?.trim() ?? '')}`),
+    enabled: labelInput !== null,
+    staleTime: 30_000,
+  })
   const titleRef = useRef<HTMLTextAreaElement>(null)
 
   useEffect(() => {
@@ -128,11 +137,9 @@ export default function PageView() {
     qc.invalidateQueries({ queryKey: ['tree'] })
     toast('Restored from the archive')
   }
-  const copy = async () => {
+  const copy = () => {
     setMenu(false)
-    const r = await api.post<{ id: string }>(`/pages/${p.id}/copy`, { includeChildren: false })
-    qc.invalidateQueries({ queryKey: ['tree', p.spaceKey] })
-    nav(`/pages/${r.id}`)
+    setCopyOpen(true)
   }
   const toggleWatch = async () => {
     setMenu(false)
@@ -230,6 +237,11 @@ export default function PageView() {
                   </div>
                 )}
                 {(canEdit || user) && <div className="menu-sep" />}
+                {canEdit && (
+                  <div className="menu-item" onClick={() => { setMenu(false); setStatusOpen(true) }}>
+                    <CircleDot size={15} /> Set status…
+                  </div>
+                )}
                 {canEdit && (
                   <div className="menu-item" onClick={() => { setMenu(false); setVerifyOpen(true) }}>
                     <BadgeCheck size={15} /> Verify page…
@@ -337,7 +349,7 @@ export default function PageView() {
               </>
             )}
             <VerificationBadge pageId={p.id} onClick={canEdit ? () => setVerifyOpen(true) : undefined} />
-            {p.pageStatus && <span className="badge">{p.pageStatus}</span>}
+            <PageStatus pageId={p.id} status={p.pageStatus} canEdit={canEdit} open={statusOpen} onOpenChange={setStatusOpen} />
             {!canEdit && <span className="badge">Read only</span>}
           </div>
           {p.access.archivedPage && (
@@ -405,12 +417,24 @@ export default function PageView() {
                   + Add label
                 </button>
               ) : (
+                <>
                 <input
                   className="input"
                   style={{ width: 160, height: 26 }}
                   autoFocus
+                  list="label-suggestions"
+                  aria-label="New label"
                   value={labelInput}
-                  onChange={(e) => setLabelInput(e.target.value)}
+                  onChange={async (e) => {
+                    const v = e.target.value
+                    // picked from the suggestions: add it right away
+                    if ((e.nativeEvent as InputEvent).inputType === 'insertReplacementText' || (!(e.nativeEvent as InputEvent).inputType && labelSuggest.data?.some((l) => l.name === v))) {
+                      await saveLabels([...p.labels, v])
+                      setLabelInput('')
+                      return
+                    }
+                    setLabelInput(v)
+                  }}
                   onBlur={() => setLabelInput(null)}
                   onKeyDown={async (e) => {
                     if (e.key === 'Enter' && labelInput.trim()) {
@@ -421,6 +445,14 @@ export default function PageView() {
                   }}
                   placeholder="label name"
                 />
+                <datalist id="label-suggestions">
+                  {labelSuggest.data
+                    ?.filter((l) => !p.labels.includes(l.name))
+                    .map((l) => (
+                      <option key={l.name} value={l.name}>{l.count === 1 ? '1 page' : `${l.count} pages`}</option>
+                    ))}
+                </datalist>
+                </>
               ))}
           </div>
         </div>
@@ -439,7 +471,54 @@ export default function PageView() {
       {verifyOpen && <VerifyDialog pageId={p.id} onClose={() => setVerifyOpen(false)} />}
       {reviewOpen && <RequestReviewDialog pageId={p.id} onClose={() => setReviewOpen(false)} />}
       {ownerOpen && <OwnerDialog pageId={p.id} current={(p as Page & { ownerName?: string }).ownerName ?? null} onClose={() => setOwnerOpen(false)} />}
+      {copyOpen && <CopyPageDialog page={p} onClose={() => setCopyOpen(false)} />}
       {share && <ShareDialog pageId={p.id} title={p.title} restricted={!!p.restricted} onClose={() => setShare(false)} />}
     </div>
+  )
+}
+
+/** Copy a page, optionally with the pages below it (restricted ones you can't see stay behind). */
+function CopyPageDialog({ page, onClose }: { page: Page; onClose: () => void }) {
+  const qc = useQueryClient()
+  const nav = useNavigate()
+  const toast = useToast()
+  const [title, setTitle] = useState(`Copy of ${page.title}`)
+  const [children, setChildren] = useState(false)
+  const [busy, setBusy] = useState(false)
+  const kids = useQuery({ queryKey: ['children', page.id, 1], queryFn: () => api.get<unknown[]>(`/pages/${page.id}/children?depth=1`) })
+  const submit = async () => {
+    setBusy(true)
+    try {
+      const r = await api.post<{ id: string }>(`/pages/${page.id}/copy`, { title: title.trim() || undefined, includeChildren: children })
+      qc.invalidateQueries({ queryKey: ['tree', page.spaceKey] })
+      onClose()
+      nav(`/pages/${r.id}`)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Copy failed')
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal
+      title="Copy page"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? 'Copying…' : 'Copy'}</button>
+        </>
+      }
+    >
+      <div className="field">
+        <label htmlFor="copy-title">Title</label>
+        <input id="copy-title" className="input" autoFocus value={title} maxLength={255} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
+      </div>
+      {(kids.data?.length ?? 0) > 0 && (
+        <label className="row small">
+          <input type="checkbox" checked={children} onChange={(e) => setChildren(e.target.checked)} /> Include the {kids.data!.length === 1 ? 'child page' : `${kids.data!.length} child pages`} and everything below
+        </label>
+      )}
+      <p className="faint small" style={{ marginBottom: 0 }}>The copy keeps labels and restrictions and lands next to this page.</p>
+    </Modal>
   )
 }

@@ -3510,6 +3510,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /labels:
+    get:
+      tags:
+      - Discovery
+      summary: 'Label names for autocomplete: the most used ones starting with q, over pages the caller can see'
+      operationId: get_labels
+      parameters:
+      - name: q
+        in: query
+        required: false
+        description: prefix
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    name: *id001
+                    count: *id005
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /labels/{name}:
     get:
       tags:

@@ -172,7 +172,7 @@ function Composer({ placeholder, onSubmit, autoFocus, onCancel, initial, submitL
 export default function CommentsPanel({ page, focus, pending, onPendingDone, onClose }: { page: Page; focus: string | null; pending: { text: string; apply: (id: string) => void } | null; onPendingDone: () => void; onClose: () => void }) {
   const qc = useQueryClient()
   const me = useMe()
-  const [showResolved, setShowResolved] = useState(false)
+  const [filter, setFilter] = useState<'open' | 'resolved' | 'mine' | 'all'>('open')
   const [replyTo, setReplyTo] = useState<string | null>(null)
   const [editing, setEditing] = useState<string | null>(null)
   const comments = useQuery({ queryKey: ['comments', page.id], queryFn: () => api.get<Comment[]>(`/pages/${page.id}/comments`) })
@@ -189,8 +189,16 @@ export default function CommentsPanel({ page, focus, pending, onPendingDone, onC
   }
   const roots = (comments.data ?? []).filter((c) => !c.parentId)
   const replies = (id: string) => (comments.data ?? []).filter((c) => c.parentId === id)
-  const visible = roots.filter((c) => showResolved || !c.resolvedAt)
+  const myId = me.data?.user?.id
+  // threads I started or replied to
+  const involved = (c: Comment) => !!myId && (c.authorId === myId || replies(c.id).some((r) => r.authorId === myId))
+  const visible = roots.filter((c) => (filter === 'open' ? !c.resolvedAt : filter === 'resolved' ? !!c.resolvedAt : filter === 'mine' ? involved(c) : true))
   const resolvedCount = roots.filter((c) => c.resolvedAt).length
+  // a resolved comment someone clicked (inline mark, notification) must be visible
+  useEffect(() => {
+    const root = roots.find((c) => c.id === focus || replies(c.id).some((r) => r.id === focus))
+    if (root?.resolvedAt && filter === 'open') setFilter('all')
+  }, [focus, comments.data])
 
   const item = (c: Comment, isReply = false) => {
     const mine = c.authorId === me.data?.user?.id
@@ -319,12 +327,24 @@ export default function CommentsPanel({ page, focus, pending, onPendingDone, onC
           <Composer placeholder="Add a comment…" onSubmit={async (t) => { await post(t) }} />
         </div>
       )}
+      {roots.length > 0 && (
+        <div className="comment-filter" role="radiogroup" aria-label="Show comments">
+          {([
+            ['open', `Open (${roots.length - resolvedCount})`],
+            ['resolved', `Resolved (${resolvedCount})`],
+            ...(myId ? [['mine', 'Mine']] : []),
+            ['all', 'All'],
+          ] as [typeof filter, string][]).map(([k, label]) => (
+            <button key={k} type="button" role="radio" aria-checked={filter === k} className={`chip ${filter === k ? 'active' : ''}`} onClick={() => setFilter(k)}>
+              {label}
+            </button>
+          ))}
+        </div>
+      )}
       {visible.map((c) => item(c))}
-      {comments.data && visible.length === 0 && <div className="empty">No comments yet.</div>}
-      {resolvedCount > 0 && (
-        <button className="btn btn-ghost btn-sm" onClick={() => setShowResolved((s) => !s)}>
-          {showResolved ? 'Hide' : 'Show'} {resolvedCount} resolved
-        </button>
+      {comments.data && roots.length === 0 && <div className="empty">No comments yet.</div>}
+      {comments.data && roots.length > 0 && visible.length === 0 && (
+        <div className="empty">{filter === 'open' ? 'All comments are resolved.' : filter === 'resolved' ? 'Nothing resolved yet.' : 'No comments here.'}</div>
       )}
     </aside>
   )

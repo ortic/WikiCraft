@@ -227,9 +227,9 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** Page width setting (fixed / full width) `C D`
 - [x] **P1** Breadcrumbs `C D X O B`
 - [~] **P1** Permanent links (`/p/<id>`) + human URLs (`/s/<space>/<slug>`); redirects after rename/move `C X` (id permalinks + Confluence redirects; no slug URLs)
-- [~] **P1** Copy page (with or without children, attachments, labels, permissions) `C X D` (no attachments; UI copies single page only)
+- [~] **P1** Copy page (with or without children, attachments, labels, permissions) `C X D` (copy dialog: title, with child pages; labels and restrictions copied; attachments not copied yet)
 - [x] **P1** Page owner (distinct from creator) and ownership transfer `C`
-- [~] **P1** Page status lozenge (Rough draft / In progress / Ready for review / Verified / custom) `C` (API + badge only; no picker)
+- [x] **P1** Page status lozenge (Rough draft / In progress / Ready for review / Verified / custom) `C` — picker on the lozenge and in the page menu (Rough draft, In progress, Ready for review, custom text); "Verified" is the separate page verification
 - [x] **P1** Archive page / subtree `C`
 - [~] **P1** Trash with restore and purge (per space; retention period) `C D X` (no purge or retention period)
 - [x] **P1** Duplicate titles allowed (Cloud allows them; the importer must handle both) `C`
@@ -383,7 +383,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P1** Rich comments (formatting, mentions, emoji, images, code) `C D O` (Markdown + @mentions; no images)
 - [~] **P1** Reactions (emoji) on pages and comments `C O` (likes on pages and comments; no emoji by design)
 - [x] **P1** Page likes / "helpful" signal `C X`
-- [~] **P1** Comment sorting and filtering (open / resolved / mine) `C` (resolved toggle only)
+- [x] **P1** Comment sorting and filtering (open / resolved / mine) `C` — Open / Resolved / Mine (threads you started or replied to) / All, with counts; a clicked resolved comment switches the filter
 - [~] **P1** Tasks: assign via mention, due dates, "my tasks" view across spaces, reminders `C` (My tasks page done; no reminders)
 - [~] **P1** Comment notifications + reply via email `C DC` (e-mail digest; no reply by e-mail)
 - [x] **P2** Comment permissions separate from edit (commenter role) `C X`
@@ -402,7 +402,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P2** AI-generated templates from a prompt `C`
 
 ### 4.9 Structured content: labels, properties, databases
-- [~] **P1** Labels/tags on pages, blog posts and attachments; label autocomplete; label pages (all content with label X) `C X O B` (pages only; no autocomplete)
+- [~] **P1** Labels/tags on pages, blog posts and attachments; label autocomplete; label pages (all content with label X) `C X O B` (pages and blog posts; autocomplete by usage over the pages you can see, `GET /labels?q=`; not on attachments)
 - [ ] **P1** Page properties (typed key/value: text, number, date, user, select, URL, page link) shown in a properties panel `C X N`
 - [~] **P1** Properties report: query table across pages (filter by space, label, property) `C` (space + label filters; no property filters)
 - [ ] **P2** **Databases** `C D N X`

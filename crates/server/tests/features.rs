@@ -165,6 +165,17 @@ async fn popular_pages() {
     assert!(!titles.contains(&"Secret page"));
     assert_eq!(list[0]["viewers"], 2);
     assert_eq!(list[0]["views"], 3);
+
+    // label suggestions: most used first, counted over visible pages only
+    app.put(&owner, &format!("/pages/{hot}/labels"), json!({"labels": ["runbook", "release"]})).await;
+    app.put(&owner, &format!("/pages/{warm}/labels"), json!({"labels": ["runbook"]})).await;
+    app.put(&owner, &format!("/pages/{secret}/labels"), json!({"labels": ["reorg-2027", "runbook"]})).await;
+    let (_, mine) = app.get(&owner, "/labels?q=r").await;
+    assert_eq!(mine, json!([{"name": "runbook", "count": 3}, {"name": "release", "count": 1}, {"name": "reorg-2027", "count": 1}]));
+    let (_, theirs) = app.get(&member, "/labels?q=R").await;
+    assert_eq!(theirs, json!([{"name": "runbook", "count": 2}, {"name": "release", "count": 1}]), "the restricted page's label stays hidden");
+    let (_, none) = app.get(&member, "/labels?q=%25").await;
+    assert_eq!(none.as_array().unwrap().len(), 2, "a % is no wildcard: {none}");
 }
 
 #[tokio::test(flavor = "multi_thread")]
