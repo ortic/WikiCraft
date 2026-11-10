@@ -28,6 +28,7 @@ pub fn spawn_worker(state: &AppState) {
         let mut tick = tokio::time::interval(Duration::from_secs(2));
         let mut last_purge: Option<std::time::Instant> = None;
         let mut last_schedule: Option<std::time::Instant> = None;
+        let mut last_reminders: Option<std::time::Instant> = None;
         loop {
             tick.tick().await;
             if state.shutting_down.load(std::sync::atomic::Ordering::SeqCst) {
@@ -46,6 +47,15 @@ pub fn spawn_worker(state: &AppState) {
                     Ok(0) => {}
                     Ok(n) => tracing::info!(pages = n, "published scheduled drafts"),
                     Err(e) => tracing::warn!("scheduled publishing failed: {e:#}"),
+                }
+            }
+            // tasks due today, every 5 minutes
+            if last_reminders.is_none_or(|t| t.elapsed() > Duration::from_secs(300)) {
+                last_reminders = Some(std::time::Instant::now());
+                match crate::routes::tasks::remind_due_tasks(&state).await {
+                    Ok(0) => {}
+                    Ok(n) => tracing::info!(reminders = n, "reminded people of tasks due"),
+                    Err(e) => tracing::warn!("task reminders failed: {e}"),
                 }
             }
             // trash past its retention period, every 10 minutes

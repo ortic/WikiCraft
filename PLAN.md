@@ -384,7 +384,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P1** Reactions (emoji) on pages and comments `C O` (likes on pages and comments; no emoji by design)
 - [x] **P1** Page likes / "helpful" signal `C X`
 - [x] **P1** Comment sorting and filtering (open / resolved / mine) `C` — Open / Resolved / Mine (threads you started or replied to) / All, with counts; a clicked resolved comment switches the filter
-- [~] **P1** Tasks: assign via mention, due dates, "my tasks" view across spaces, reminders `C` (My tasks page done; no reminders)
+- [x] **P1** Tasks: assign via mention, due dates, "my tasks" view across spaces, reminders `C` — My tasks; reminders on the due date from 8:00 in the assignee's time zone (bell + e-mail digest, mutable), once per task and date, nothing retroactive for long-overdue tasks
 - [~] **P1** Comment notifications + reply via email `C DC` (e-mail digest; no reply by e-mail)
 - [x] **P2** Comment permissions separate from edit (commenter role) `C X`
 - [ ] **P2** Suggestions / suggested edits (track-changes mode) `N(GDocs-like)`

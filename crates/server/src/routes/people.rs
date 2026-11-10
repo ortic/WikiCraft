@@ -150,7 +150,8 @@ pub async fn update_mine(State(state): State<AppState>, CurrentUser(user): Curre
     let bio = field(req.bio, "bio", 2000)?;
     let timezone = field(req.timezone, "timezone", 64)?;
     if let Some(Some(tz)) = &timezone {
-        let ok = tz == "UTC" || (tz.contains('/') && tz.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '/' | '_' | '-' | '+')));
+        // a name the database knows (reminders are scheduled in it)
+        let ok: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_timezone_names WHERE name = $1)").bind(tz).fetch_one(&state.db).await?;
         if !ok {
             return Err(ApiError::bad("timezone must be an IANA time zone name such as Europe/Zurich"));
         }

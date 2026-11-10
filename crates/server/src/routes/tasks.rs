@@ -141,6 +141,39 @@ pub async fn toggle(State(state): State<AppState>, CurrentUser(user): CurrentUse
     Ok(Json(json!({ "done": done })))
 }
 
+/// Reminds people of their open tasks on the due date, from 8:00 in their time zone (profile;
+/// UTC otherwise), as a `task_due` notification (also e-mailed like other notifications).
+/// Each task reminds once per due date; tasks due before yesterday are not reminded of
+/// retroactively. Returns how many reminders went out.
+pub async fn remind_due_tasks(state: &AppState) -> sqlx::Result<u64> {
+    let r = sqlx::query(
+        "WITH due AS (
+            SELECT t.page_id, t.text, t.due, t.assignee_id
+              FROM tasks t
+              JOIN users u ON u.id = t.assignee_id
+              JOIN pages p ON p.id = t.page_id
+              LEFT JOIN pg_timezone_names z ON z.name = u.timezone
+             WHERE NOT t.done AND t.due IS NOT NULL AND u.status = 'active'
+               AND p.deleted_at IS NULL AND p.archived_at IS NULL AND NOT p.draft
+               AND t.due <= (now() AT TIME ZONE COALESCE(z.name, 'UTC'))::date
+               AND t.due >= (now() AT TIME ZONE COALESCE(z.name, 'UTC'))::date - 1
+               AND (t.due < (now() AT TIME ZONE COALESCE(z.name, 'UTC'))::date OR extract(hour FROM now() AT TIME ZONE COALESCE(z.name, 'UTC')) >= 8)
+         ), fresh AS (
+            INSERT INTO task_reminders (page_id, user_id, due, task_key)
+            SELECT DISTINCT page_id, assignee_id, due, md5(text) FROM due
+            ON CONFLICT DO NOTHING
+            RETURNING page_id, user_id, due, task_key
+         )
+         INSERT INTO notifications (id, user_id, kind, page_id, actor_id, data)
+         SELECT gen_random_uuid(), f.user_id, 'task_due', f.page_id, NULL, jsonb_build_object('text', left(min(d.text), 300), 'due', f.due)
+           FROM fresh f JOIN due d ON d.page_id = f.page_id AND d.assignee_id = f.user_id AND d.due = f.due AND md5(d.text) = f.task_key
+          GROUP BY f.user_id, f.page_id, f.due, f.task_key",
+    )
+    .execute(&state.db)
+    .await?;
+    Ok(r.rows_affected())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

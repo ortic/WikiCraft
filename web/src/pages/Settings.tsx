@@ -152,6 +152,7 @@ function EmailPreferences() {
     mention: 'Mentions in comments',
     page_mention: 'Mentions on pages',
     page_created: 'New pages in spaces I watch',
+    task_due: 'My tasks on their due date',
     page_updated: 'Updates to pages and spaces I watch',
     like: 'Likes',
     share: 'Pages shared with me',

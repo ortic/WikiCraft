@@ -10,7 +10,7 @@ interface Notification {
   pageId: string | null
   pageTitle: string | null
   actorName: string | null
-  data: { excerpt?: string; version?: number; commentId?: string }
+  data: { excerpt?: string; version?: number; commentId?: string; text?: string; due?: string }
   createdAt: string
   readAt: string | null
 }
@@ -34,6 +34,8 @@ function describe(n: Notification): string {
       return `${who} created ${n.pageTitle}`
     case 'page_updated':
       return `${who} updated ${n.pageTitle}${n.data.version ? ` (v${n.data.version})` : ''}`
+    case 'task_due':
+      return `Your task is due: “${n.data.text ?? ''}” on ${n.pageTitle}`
     default:
       return `${who} · ${n.pageTitle ?? ''}`
   }

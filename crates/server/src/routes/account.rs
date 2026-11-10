@@ -455,7 +455,7 @@ pub struct Preferences {
 
 /// The notification kinds people can mute.
 pub const NOTIFICATION_KINDS: &[&str] =
-    &["comment", "reply", "mention", "page_mention", "page_updated", "like", "share", "verification_request", "access_request"];
+    &["comment", "reply", "mention", "page_mention", "page_updated", "like", "share", "verification_request", "access_request", "task_due"];
 
 /// `GET /api/me/preferences`
 pub async fn get_preferences(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Value>> {

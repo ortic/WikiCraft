@@ -434,7 +434,7 @@ async fn feature_switches() {
     let (_, f) = app.get(&member, "/features").await;
     assert_eq!(
         f,
-        json!({"publicLinks": true, "exports": true, "ai": false, "personalSpaces": true, "viewerList": false}),
+        json!({"publicLinks": true, "exports": true, "ai": false, "personalSpaces": true, "viewerList": false, "drawioUrl": "https://embed.diagrams.net"}),
         "on by default (the viewer list off); ai needs a key"
     );
     assert_eq!(app.get(&member, &export).await.0, 200);
@@ -450,7 +450,7 @@ async fn feature_switches() {
     assert_eq!(st, 200, "{s}");
     assert_eq!(
         s,
-        json!({"publicLinks": true, "exports": false, "ai": true, "personalSpaces": false, "trashRetentionDays": 0, "viewerList": false, "requireTwoFactor": "off"})
+        json!({"publicLinks": true, "exports": false, "ai": true, "personalSpaces": false, "trashRetentionDays": 0, "viewerList": false, "requireTwoFactor": "off", "drawioUrl": "https://embed.diagrams.net"})
     );
 
     // ... can't be downloaded after it; members can't export any more, admins still can
@@ -962,4 +962,48 @@ async fn drawio_setting() {
     app.put(&owner, "/admin/settings", json!({"drawioUrl": ""})).await;
     let (_, f) = app.get(&owner, "/features").await;
     assert!(f["drawioUrl"].is_null(), "off");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn task_reminders_on_the_due_date() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    app.post(&owner, "/spaces", json!({"key": "TSK", "name": "Tasks"})).await;
+    let (bob, bob_id) = app.user(&owner, "bob@acme.test", "member").await;
+    let (st, _) = app.put(&bob, "/me/profile", json!({"timezone": "Mars/Olympus"})).await;
+    assert_eq!(st, 400, "time zones the database doesn't know are refused");
+    // a time zone where it's past 8 in the morning right now, so today's tasks are due
+    let tz: String = sqlx::query_scalar(
+        "SELECT name FROM pg_timezone_names WHERE name LIKE '%/%' AND extract(hour FROM now() AT TIME ZONE name) BETWEEN 9 AND 22 ORDER BY name LIMIT 1",
+    )
+    .fetch_one(&app.state.db)
+    .await
+    .unwrap();
+    let (st, _) = app.put(&bob, "/me/profile", json!({"timezone": tz})).await;
+    assert_eq!(st, 200);
+    let today: String = sqlx::query_scalar("SELECT ((now() AT TIME ZONE $1)::date)::text").bind(&tz).fetch_one(&app.state.db).await.unwrap();
+    let task = |text: &str, due: &str, done: bool| {
+        json!({"type": "taskItem", "attrs": {"checked": done}, "content": [{"type": "paragraph", "content": [
+            {"type": "text", "text": format!("{text} ")}, {"type": "mention", "attrs": {"id": bob_id, "label": "bob"}}, {"type": "date", "attrs": {"date": due}}
+        ]}]})
+    };
+    let doc = json!({"type": "doc", "content": [{"type": "taskList", "content": [
+        task("Send the invoice", &today, false),
+        task("Already done", &today, true),
+        task("Next month", "2099-01-01", false),
+        task("Long overdue", "2020-01-01", false),
+    ]}]});
+    app.post(&owner, "/pages", json!({"spaceKey": "TSK", "title": "Billing", "content": doc})).await;
+
+    assert_eq!(wikicraft::routes::tasks::remind_due_tasks(&app.state).await.unwrap(), 1, "only the open task due today");
+    assert_eq!(wikicraft::routes::tasks::remind_due_tasks(&app.state).await.unwrap(), 0, "once per task and due date");
+    let (_, n) = app.get(&bob, "/notifications").await;
+    let due: Vec<&serde_json::Value> = n["items"].as_array().unwrap().iter().filter(|i| i["kind"] == "task_due").collect();
+    assert_eq!(due.len(), 1);
+    assert_eq!(due[0]["data"]["text"], "Send the invoice");
+    assert_eq!(due[0]["pageTitle"], "Billing");
+    // muted: not listed
+    app.put(&bob, "/me/preferences", json!({"muted": ["task_due"]})).await;
+    let (_, n) = app.get(&bob, "/notifications").await;
+    assert!(n["items"].as_array().unwrap().iter().all(|i| i["kind"] != "task_due"));
 }
