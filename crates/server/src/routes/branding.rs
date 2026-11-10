@@ -30,20 +30,104 @@ fn logo_type(data: &[u8]) -> Option<&'static str> {
 }
 
 #[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
 pub struct WorkspaceUpdate {
-    name: String,
+    name: Option<String>,
+    /// `#rrggbb`, or "" for the built-in colour
+    accent_color: Option<String>,
+    /// one of [`DATE_FORMATS`]
+    date_format: Option<String>,
+    /// IANA name used for people without their own time zone; "" = their browser's
+    time_zone: Option<String>,
 }
 
-/// `PUT /api/admin/workspace` `{name}` — renames the workspace (admins).
+/// How dates are written: the reader's browser locale, or a fixed pattern.
+pub const DATE_FORMATS: &[&str] = &["auto", "yyyy-mm-dd", "dd.mm.yyyy", "dd/mm/yyyy", "mm/dd/yyyy", "d mmm yyyy"];
+
+/// `#rrggbb` (lower-cased), or None.
+fn clean_color(s: &str) -> Option<String> {
+    let s = s.trim();
+    (s.len() == 7 && s.starts_with('#') && s[1..].chars().all(|c| c.is_ascii_hexdigit())).then(|| s.to_ascii_lowercase())
+}
+
+/// `PUT /api/admin/workspace` `{name?, accentColor?, dateFormat?, timeZone?}` — renames the
+/// workspace and sets its look and date conventions (admins).
 pub async fn rename(State(state): State<AppState>, CurrentUser(admin): CurrentUser, Json(req): Json<WorkspaceUpdate>) -> ApiResult<Json<Value>> {
     require_admin(&admin)?;
-    let name = req.name.split_whitespace().collect::<Vec<_>>().join(" ");
-    if name.is_empty() || name.chars().count() > 80 {
-        return Err(ApiError::bad("the workspace name needs 1 to 80 characters"));
+    let ws = admin.workspace_id;
+    let mut changed = serde_json::Map::new();
+    if let Some(name) = &req.name {
+        let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
+        if name.is_empty() || name.chars().count() > 80 {
+            return Err(ApiError::bad("the workspace name needs 1 to 80 characters"));
+        }
+        sqlx::query("UPDATE workspaces SET name = $2 WHERE id = $1").bind(ws).bind(&name).execute(&state.db).await?;
+        audit::log(&state, ws, Some(admin.id), "workspace.renamed", None, None, json!({ "name": name })).await;
     }
-    sqlx::query("UPDATE workspaces SET name = $2 WHERE id = $1").bind(admin.workspace_id).bind(&name).execute(&state.db).await?;
-    audit::log(&state, admin.workspace_id, Some(admin.id), "workspace.renamed", None, None, json!({ "name": name })).await;
-    Ok(Json(json!({ "name": name })))
+    if let Some(c) = &req.accent_color {
+        let c = if c.trim().is_empty() { String::new() } else { clean_color(c).ok_or_else(|| ApiError::bad("accentColor must look like #1f6feb"))? };
+        changed.insert("accentColor".into(), json!(c));
+    }
+    if let Some(f) = &req.date_format {
+        if !DATE_FORMATS.contains(&f.as_str()) {
+            return Err(ApiError::bad(format!("dateFormat must be one of {}", DATE_FORMATS.join(", "))));
+        }
+        changed.insert("dateFormat".into(), json!(f));
+    }
+    if let Some(tz) = &req.time_zone {
+        let tz = tz.trim();
+        if !tz.is_empty() {
+            let ok: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM pg_timezone_names WHERE name = $1)").bind(tz).fetch_one(&state.db).await?;
+            if !ok || tz.len() > 64 {
+                return Err(ApiError::bad("timeZone must be an IANA time zone name such as Europe/Zurich"));
+            }
+        }
+        changed.insert("timeZone".into(), json!(tz));
+    }
+    if !changed.is_empty() {
+        sqlx::query("UPDATE workspaces SET settings = settings || $2 WHERE id = $1").bind(ws).bind(Value::Object(changed.clone())).execute(&state.db).await?;
+        audit::log(&state, ws, Some(admin.id), "workspace.settings", None, None, Value::Object(changed)).await;
+    }
+    let mut out = look(&state, ws).await?;
+    let name: String = sqlx::query_scalar("SELECT name FROM workspaces WHERE id = $1").bind(ws).fetch_one(&state.db).await?;
+    out.insert("name".into(), json!(name));
+    Ok(Json(Value::Object(out)))
+}
+
+/// Writes a calendar day the way the workspace wants dates written (server-rendered tables and
+/// exports; "auto" gives `5 Mar 2026`).
+pub fn format_day(format: &str, d: chrono::NaiveDate) -> String {
+    let pattern = match format {
+        "yyyy-mm-dd" => "%Y-%m-%d",
+        "dd.mm.yyyy" => "%d.%m.%Y",
+        "dd/mm/yyyy" => "%d/%m/%Y",
+        "mm/dd/yyyy" => "%m/%d/%Y",
+        _ => "%-d %b %Y",
+    };
+    d.format(pattern).to_string()
+}
+
+/// The workspace's date format (see [`DATE_FORMATS`]).
+pub async fn date_format(state: &AppState, ws: Uuid) -> ApiResult<String> {
+    let f: Option<String> =
+        sqlx::query_scalar("SELECT settings->>'dateFormat' FROM workspaces WHERE id = $1").bind(ws).fetch_optional(&state.db).await?.flatten();
+    Ok(f.unwrap_or_else(|| "auto".into()))
+}
+
+/// The workspace's look and date conventions as the client applies them (`accentColor`,
+/// `dateFormat`, `timeZone`; unset ones are null).
+pub async fn look(state: &AppState, ws: Uuid) -> ApiResult<serde_json::Map<String, Value>> {
+    let (color, format, tz): (Option<String>, Option<String>, Option<String>) =
+        sqlx::query_as("SELECT NULLIF(settings->>'accentColor', ''), settings->>'dateFormat', NULLIF(settings->>'timeZone', '') FROM workspaces WHERE id = $1")
+            .bind(ws)
+            .fetch_optional(&state.db)
+            .await?
+            .unwrap_or_default();
+    let mut out = serde_json::Map::new();
+    out.insert("accentColor".into(), json!(color));
+    out.insert("dateFormat".into(), json!(format.unwrap_or_else(|| "auto".into())));
+    out.insert("timeZone".into(), json!(tz));
+    Ok(out)
 }
 
 /// `POST /api/admin/workspace/logo` (multipart `file`): PNG, JPEG or WebP up to 1 MB.
@@ -100,4 +184,18 @@ pub async fn logo(State(state): State<AppState>, MaybeUser(user): MaybeUser) -> 
     let kind = ["image/png", "image/jpeg", "image/webp"].into_iter().find(|k| *k == kind).ok_or(ApiError::NotFound("logo"))?;
     let data = state.blobs.get(&key).await.map_err(ApiError::Internal)?;
     Ok(([(header::CONTENT_TYPE, kind), (header::CACHE_CONTROL, "public, max-age=300"), (header::X_CONTENT_TYPE_OPTIONS, "nosniff")], data).into_response())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn days_in_each_format() {
+        let d = chrono::NaiveDate::from_ymd_opt(2026, 3, 5).unwrap();
+        let shown: Vec<String> = DATE_FORMATS.iter().map(|f| format_day(f, d)).collect();
+        assert_eq!(shown, ["5 Mar 2026", "2026-03-05", "05.03.2026", "05/03/2026", "03/05/2026", "5 Mar 2026"]);
+        assert_eq!(clean_color("#AbCdEf").as_deref(), Some("#abcdef"));
+        assert_eq!(clean_color("#abc"), None);
+    }
 }

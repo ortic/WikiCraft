@@ -224,6 +224,8 @@ export function ProfileFields({ userId }: { userId: string }) {
               const saved = await api.put<Profile>('/me/profile', form)
               qc.setQueryData(['person', userId], saved)
               qc.invalidateQueries({ queryKey: ['people'] })
+              // dates follow the new time zone
+              qc.invalidateQueries({ queryKey: ['me'] })
               toast('Profile saved')
             } catch (e) {
               toast(e instanceof Error ? e.message : 'Could not save')

@@ -91,7 +91,7 @@ code, pre { font-family: var(--mono); }
 .btn { display: inline-flex; align-items: center; gap: 6px; height: 32px; padding: 0 12px; border-radius: 6px; border: 1px solid var(--border-strong); background: var(--bg); cursor: pointer; white-space: nowrap; font-weight: 500; }
 .btn:hover { background: var(--bg-hover); }
 .btn:disabled { opacity: .55; cursor: default; }
-.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.btn-primary { background: var(--accent); border-color: var(--accent); color: var(--on-accent, #fff); }
 .btn-primary:hover { background: color-mix(in srgb, var(--accent) 88%, black); }
 .btn-ghost { border-color: transparent; background: transparent; }
 .btn-ghost:hover { background: var(--bg-hover); }

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
 import { Activity, FileText, ListChecks, MessageSquare, PencilLine, Plus, Star, TrendingUp, FilePlus2 } from 'lucide-react'
-import { api, formatDate, type PageListItem, type Space } from '../api'
+import { api, formatDate, formatDateTime, type PageListItem, type Space } from '../api'
 import { Avatar, SpaceIcon, useMe } from '../ui'
 import CreateSpaceDialog from '../components/CreateSpaceDialog'
 
@@ -182,7 +182,7 @@ export default function Home() {
             />
           )}
           {tab === 'starred' && <PageList items={favs.data} empty="Star pages to find them quickly." timeLabel={(p) => formatDate(p.updatedAt)} />}
-          {tab === 'drafts' && <PageList items={drafts.data} empty="No unpublished drafts." timeLabel={(p) => (p.publishAt ? `publishes ${new Date(p.publishAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}` : `edited ${formatDate(p.updatedAt)}`)} />}
+          {tab === 'drafts' && <PageList items={drafts.data} empty="No unpublished drafts." timeLabel={(p) => (p.publishAt ? `publishes ${formatDateTime(p.publishAt)}` : `edited ${formatDate(p.updatedAt)}`)} />}
         </>
       )}
       {create && <CreateSpaceDialog onClose={() => setCreate(false)} />}

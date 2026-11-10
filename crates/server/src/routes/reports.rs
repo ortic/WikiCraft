@@ -500,7 +500,13 @@ pub async fn snapshot(
     let num = |keys: &[&str], default: i64| keys.iter().find_map(|k| get(k).and_then(|v| v.trim().parse::<i64>().ok())).unwrap_or(default);
     let (labels, spaces, all) = query_spec(params, space_key);
     let link = |id: Uuid| Some(format!("{base}/pages/{id}"));
-    let date = |d: chrono::DateTime<chrono::Utc>| d.format("%-d %b %Y").to_string();
+    // dates as the workspace writes them
+    let ws: Option<Uuid> = sqlx::query_scalar("SELECT workspace_id FROM pages WHERE id = $1").bind(page_id).fetch_optional(&state.db).await?;
+    let fmt = match ws {
+        Some(ws) => crate::routes::branding::date_format(state, ws).await?,
+        None => "auto".into(),
+    };
+    let date = |d: chrono::DateTime<chrono::Utc>| crate::routes::branding::format_day(&fmt, d.date_naive());
     let snap = match name {
         "contentbylabel" | "recently-updated" => {
             let recent = name == "recently-updated";
@@ -648,7 +654,7 @@ pub async fn snapshot(
                             ((if t.done { "Yes" } else { "No" }).to_string(), None),
                             (t.text, None),
                             (t.assignee_name.unwrap_or_default(), None),
-                            (t.due.map(|d| d.format("%-d %b %Y").to_string()).unwrap_or_default(), None),
+                            (t.due.map(|d| crate::routes::branding::format_day(&fmt, d)).unwrap_or_default(), None),
                             (t.page_title, link(t.page_id)),
                         ];
                         row.into_iter().skip(usize::from(status == "open")).collect()

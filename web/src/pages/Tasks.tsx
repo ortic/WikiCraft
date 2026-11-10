@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import { CalendarDays, ListChecks } from 'lucide-react'
-import { api } from '../api'
+import { api, formatDateOnly } from '../api'
 import { Spinner } from '../ui'
 
 type Task = { pageId: string; idx: number; text: string; done: boolean; due: string | null; pageTitle: string; spaceKey: string; spaceName: string }
@@ -15,8 +15,7 @@ const STATUSES = [
 
 function dueLabel(due: string) {
   const today = new Date().toISOString().slice(0, 10)
-  const d = new Date(due + 'T00:00:00')
-  const text = d.toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: due.slice(0, 4) === today.slice(0, 4) ? undefined : 'numeric' })
+  const text = formatDateOnly(due, { omitYear: due.slice(0, 4) === today.slice(0, 4) })
   return { text, overdue: due < today, today: due === today }
 }
 

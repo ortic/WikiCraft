@@ -1,8 +1,8 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Upload, FileSearch, CheckCircle2, XCircle, UserPlus, Users, Activity, Database, RefreshCw, Mail, Send, Globe, Megaphone, Building2, Ban, RotateCcw, Paperclip, Server } from 'lucide-react'
-import { api, formatBytes, formatDate, type Job } from '../api'
+import { Upload, FileSearch, CheckCircle2, XCircle, UserPlus, Users, Activity, Database, RefreshCw, Mail, Send, Globe, Megaphone, Building2, Ban, RotateCcw, Paperclip, Server, Palette } from 'lucide-react'
+import { api, formatBytes, formatDate, formatDay, type Job } from '../api'
 import { Avatar, Modal, Spinner, useMe, useToast, type Features } from '../ui'
 import AdminWebhooks from './AdminWebhooks'
 import AdminSpaces from './AdminSpaces'
@@ -79,6 +79,7 @@ function Overview() {
         </Link>
       </div>
       <BrandingSettings />
+      <LookSettings />
       <WorkspaceSettings />
       <AttachmentSettings />
       <AnnouncementSettings />
@@ -168,6 +169,77 @@ function BrandingSettings() {
           )}
         </div>
         <p className="faint small" style={{ margin: '6px 0 0' }}>PNG, JPEG or WebP up to 1 MB, about 26 px high in the header. Shown with the workspace name on every page, the sign-in page and shared pages.</p>
+      </div>
+    </div>
+  )
+}
+
+const DATE_FORMATS: [string, string][] = [
+  ['auto', 'Reader’s language'],
+  ['yyyy-mm-dd', 'YYYY-MM-DD'],
+  ['dd.mm.yyyy', 'DD.MM.YYYY'],
+  ['dd/mm/yyyy', 'DD/MM/YYYY'],
+  ['mm/dd/yyyy', 'MM/DD/YYYY'],
+  ['d mmm yyyy', 'D Mon YYYY'],
+]
+
+/** Admin → Overview: accent colour, how dates are written and the default time zone. */
+function LookSettings() {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const me = useMe()
+  const ws = me.data?.workspace
+  const zones = (() => {
+    try {
+      return (Intl as unknown as { supportedValuesOf?: (k: string) => string[] }).supportedValuesOf?.('timeZone') ?? []
+    } catch {
+      return []
+    }
+  })()
+  const [color, setColor] = useState<string | null>(null)
+  if (!ws) return null
+  const save = async (body: Record<string, string>, message: string) => {
+    try {
+      await api.put('/admin/workspace', body)
+      await qc.invalidateQueries({ queryKey: ['me'] })
+      toast(message)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not save')
+    }
+  }
+  const current = ws.accentColor ?? ''
+  const shown = color ?? current
+  const sample = new Date(Date.UTC(new Date().getUTCFullYear(), 2, 5, 12))
+  return (
+    <div className="card" style={{ marginTop: 24, maxWidth: 720 }}>
+      <h3 style={{ marginTop: 0 }} className="row"><Palette size={17} /> Look and dates</h3>
+      <div className="field">
+        <label htmlFor="ws-accent">Accent colour</label>
+        <div className="row" style={{ flexWrap: 'wrap' }}>
+          <input type="color" aria-label="Pick a colour" value={/^#[0-9a-f]{6}$/i.test(shown) ? shown : '#4f46e5'} onChange={(e) => setColor(e.target.value)} style={{ width: 40, height: 32, padding: 2, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg)' }} />
+          <input id="ws-accent" className="input" style={{ maxWidth: 120, fontFamily: 'var(--mono)' }} placeholder="#4f46e5" value={shown} maxLength={7} onChange={(e) => setColor(e.target.value)} />
+          <button className="btn" disabled={shown === current || !/^#[0-9a-f]{6}$/i.test(shown)} onClick={() => save({ accentColor: shown }, 'Accent colour saved').then(() => setColor(null))}>Save</button>
+          {current && <button className="btn" onClick={() => save({ accentColor: '' }, 'Back to the built-in colour').then(() => setColor(null))}>Use the built-in colour</button>}
+        </div>
+        <p className="faint small" style={{ margin: '6px 0 0' }}>Buttons, links and highlights. Darkened or lightened where needed so text stays readable in the light and dark themes; the high-contrast theme keeps its own colours.</p>
+      </div>
+      <div className="row" style={{ gap: 16, flexWrap: 'wrap', alignItems: 'flex-start' }}>
+        <div className="field" style={{ marginBottom: 0 }}>
+          <label htmlFor="ws-datefmt">Date format</label>
+          <select id="ws-datefmt" className="input" value={ws.dateFormat ?? 'auto'} onChange={(e) => save({ dateFormat: e.target.value }, 'Date format saved')}>
+            {DATE_FORMATS.map(([v, label]) => <option key={v} value={v}>{label}</option>)}
+          </select>
+          <p className="faint small" style={{ margin: '6px 0 0' }}>For example {formatDay(sample)}. Recent changes still read “3 h ago”.</p>
+        </div>
+        <div className="field" style={{ marginBottom: 0 }}>
+          <label htmlFor="ws-tz">Default time zone</label>
+          <select id="ws-tz" className="input" value={ws.timeZone ?? ''} onChange={(e) => save({ timeZone: e.target.value }, 'Time zone saved')}>
+            <option value="">Each reader’s browser</option>
+            {ws.timeZone && !zones.includes(ws.timeZone) && <option value={ws.timeZone}>{ws.timeZone}</option>}
+            {zones.map((z) => <option key={z} value={z}>{z}</option>)}
+          </select>
+          <p className="faint small" style={{ margin: '6px 0 0' }}>For people who haven’t set their own in their profile; also when due-task reminders go out.</p>
+        </div>
       </div>
     </div>
   )

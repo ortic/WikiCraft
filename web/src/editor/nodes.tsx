@@ -7,7 +7,7 @@ import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, type ReactNode
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { FileText, Paperclip, ListTree, Hash, Puzzle, Link2, Download, Settings2 } from 'lucide-react'
-import { api, type Page, type PmNode } from '../api'
+import { api, formatDateOnly, type Page, type PmNode } from '../api'
 import { Emoticon as EmoticonIcon, LineIcon, SYMBOL_COLORS, SymbolPicker, parseSymbol } from '../icons'
 import { LIVE_MACROS, LiveMacro } from './MacroView'
 import { useEditable } from './useEditable'
@@ -153,8 +153,7 @@ export const InstructionalText = Node.create({
 
 function DateView({ node, updateAttributes, editor }: ReactNodeViewProps) {
   const raw = (node.attrs.date as string) || ''
-  const d = new Date(raw)
-  const label = isNaN(d.getTime()) ? raw : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+  const label = formatDateOnly(raw)
   const edit = () => {
     if (!editor.isEditable) return
     const v = window.prompt('Date (YYYY-MM-DD)', raw.slice(0, 10))

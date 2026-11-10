@@ -2,7 +2,8 @@ import { useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import SecuritySettings from './components/SecuritySettings'
-import { api } from './api'
+import { api, setDateConventions } from './api'
+import { applyAccent, applyFavicon } from './look'
 import { ToastProvider, useMe, Spinner } from './ui'
 import Layout from './components/Layout'
 import { AcceptInvite, ForgotPassword, Login, ResetPassword, Setup, Signup } from './pages/Auth'
@@ -33,6 +34,10 @@ export default function App() {
     )
   }
   if (setup.data?.needsSetup) return <Setup />
+  // the workspace's look and date conventions (idempotent; before anything renders a date)
+  setDateConventions(me.data?.workspace?.dateFormat, me.data?.timeZone || me.data?.workspace?.timeZone)
+  applyAccent(me.data?.workspace?.accentColor)
+  applyFavicon(me.data?.workspace?.logoVersion)
   const user = me.data?.user
   // anonymous visitors may read public spaces; everything else needs a login
   const publicPath = loc.pathname.startsWith('/pages/') || loc.pathname.startsWith('/spaces/')

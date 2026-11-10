@@ -72,7 +72,19 @@ export interface User {
 
 export interface Me {
   user: User | null
-  workspace: { id: string; name: string; logoVersion?: string | null } | null
+  workspace: {
+    id: string
+    name: string
+    logoVersion?: string | null
+    /** `#rrggbb` (Admin → Overview → Look), null = the built-in colour */
+    accentColor?: string | null
+    /** `auto` or a pattern such as `dd.mm.yyyy` */
+    dateFormat?: string
+    /** IANA name for people without their own time zone */
+    timeZone?: string | null
+  } | null
+  /** the signed-in person's own time zone (profile) */
+  timeZone?: string | null
   /** the workspace requires two-factor authentication and it isn't set up yet */
   mustSetUpTwoFactor?: boolean
 }
@@ -272,17 +284,62 @@ export interface Job {
   retryable?: boolean
 }
 
+// How dates are written: the workspace's format (Admin → Overview → Look) in the reader's time
+// zone (profile, else the workspace's, else the browser's). Set once /me has loaded.
+let dateFormat = 'auto'
+let timeZone: string | undefined
+
+export function setDateConventions(format?: string | null, tz?: string | null) {
+  dateFormat = format || 'auto'
+  timeZone = tz || undefined
+  try {
+    new Intl.DateTimeFormat(undefined, { timeZone })
+  } catch {
+    timeZone = undefined
+  }
+}
+
+/** The time zone dates are shown in (undefined = the browser's). */
+export function displayTimeZone(): string | undefined {
+  return timeZone
+}
+
+/** A calendar day in the workspace's format. `zoned: false` for date-only values, which must
+ *  not move a day when the reader's time zone is behind UTC. */
+export function formatDay(d: Date, opts: { zoned?: boolean; omitYear?: boolean } = {}): string {
+  const tz = opts.zoned === false ? 'UTC' : timeZone
+  if (dateFormat === 'auto' || dateFormat === 'd mmm yyyy') {
+    const locale = dateFormat === 'auto' ? undefined : 'en-GB'
+    return d.toLocaleDateString(locale, { timeZone: tz, year: opts.omitYear ? undefined : 'numeric', month: 'short', day: 'numeric' })
+  }
+  const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d).map((p) => [p.type, p.value]))
+  return dateFormat.replace('yyyy', parts.year).replace('mm', parts.month).replace('dd', parts.day)
+}
+
+/** A date-only value (`YYYY-MM-DD`, or anything `Date` parses) as a calendar day. */
+export function formatDateOnly(value: string, opts: { omitYear?: boolean } = {}): string {
+  const d = /^\d{4}-\d{2}-\d{2}$/.test(value) ? new Date(`${value}T00:00:00Z`) : new Date(value)
+  if (isNaN(d.getTime())) return value
+  return formatDay(d, { zoned: !/^\d{4}-\d{2}-\d{2}$/.test(value), omitYear: opts.omitYear })
+}
+
+/** Day and time, e.g. for scheduled publishing. */
+export function formatDateTime(iso: string | Date): string {
+  const d = typeof iso === 'string' ? new Date(iso) : iso
+  return `${formatDay(d)}, ${d.toLocaleTimeString(undefined, { timeZone, hour: '2-digit', minute: '2-digit' })}`
+}
+
 export function formatDate(iso: string | null | undefined): string {
   if (!iso) return ''
   const d = new Date(iso)
   const diff = (Date.now() - d.getTime()) / 1000
   // future dates (due dates, expiries) are always absolute
-  if (diff < -60) return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+  if (diff < -60) return formatDay(d)
   if (diff < 60) return 'just now'
   if (diff < 3600) return `${Math.floor(diff / 60)} min ago`
   if (diff < 86400) return `${Math.floor(diff / 3600)} h ago`
   if (diff < 86400 * 7) return `${Math.floor(diff / 86400)} d ago`
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })
+  return formatDay(d)
 }
 
 export function formatBytes(n: number): string {

@@ -3,7 +3,7 @@
 
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { api } from '../api'
+import { api, formatDateOnly } from '../api'
 import { Avatar, Spinner } from '../ui'
 
 interface Viewer {
@@ -21,7 +21,7 @@ function when(day: string): string {
   if (days <= 0) return 'today'
   if (days === 1) return 'yesterday'
   if (days < 30) return `${days} days ago`
-  return d.toLocaleDateString()
+  return formatDateOnly(day)
 }
 
 export function PageViews({ pageId, views, viewers, canSeeWho }: { pageId: string; views: number; viewers: number; canSeeWho: boolean }) {

@@ -1066,6 +1066,51 @@ async fn task_reminders_on_the_due_date() {
     assert!(n["items"].as_array().unwrap().iter().all(|i| i["kind"] != "task_due"));
 }
 
+#[tokio::test]
+async fn workspace_look_and_dates() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (bob, bob_id) = app.user(&owner, "look@acme.test", "member").await;
+    let (_, me) = app.get(&bob, "/me").await;
+    assert!(me["workspace"]["accentColor"].is_null());
+    assert_eq!(me["workspace"]["dateFormat"], "auto");
+    assert!(me["workspace"]["timeZone"].is_null() && me["timeZone"].is_null());
+
+    assert_eq!(app.put(&bob, "/admin/workspace", json!({"accentColor": "#123456"})).await.0, 403);
+    for bad in [json!({"accentColor": "red"}), json!({"accentColor": "#12345g"}), json!({"dateFormat": "yy/mm"}), json!({"timeZone": "Mars/Olympus"})] {
+        assert_eq!(app.put(&owner, "/admin/workspace", bad.clone()).await.0, 400, "{bad}");
+    }
+    let (st, w) = app.put(&owner, "/admin/workspace", json!({"accentColor": " #0E7C66 ", "dateFormat": "dd.mm.yyyy", "timeZone": "Europe/Zurich"})).await;
+    assert_eq!(st, 200);
+    assert_eq!(w, json!({"name": "Acme", "accentColor": "#0e7c66", "dateFormat": "dd.mm.yyyy", "timeZone": "Europe/Zurich"}));
+    let (_, me) = app.get(&bob, "/me").await;
+    assert_eq!((me["workspace"]["accentColor"].as_str(), me["workspace"]["timeZone"].as_str()), (Some("#0e7c66"), Some("Europe/Zurich")));
+    // a person's own time zone is reported next to the workspace's
+    app.put(&bob, "/me/profile", json!({"timezone": "Asia/Tokyo"})).await;
+    assert_eq!(app.get(&bob, "/me").await.1["timeZone"], "Asia/Tokyo");
+    // "" goes back to the defaults; the name alone leaves them alone
+    let (_, w) = app.put(&owner, "/admin/workspace", json!({"accentColor": "", "timeZone": ""})).await;
+    assert!(w["accentColor"].is_null() && w["timeZone"].is_null());
+    assert_eq!(app.put(&owner, "/admin/workspace", json!({"name": "Acme"})).await.1["dateFormat"], "dd.mm.yyyy");
+
+    // due-task reminders use the workspace's time zone for people without their own
+    app.put(&bob, "/me/profile", json!({"timezone": ""})).await;
+    let tz: String = sqlx::query_scalar(
+        "SELECT name FROM pg_timezone_names WHERE name LIKE '%/%' AND extract(hour FROM now() AT TIME ZONE name) BETWEEN 9 AND 22 ORDER BY name LIMIT 1",
+    )
+    .fetch_one(&app.state.db)
+    .await
+    .unwrap();
+    app.put(&owner, "/admin/workspace", json!({"timeZone": tz})).await;
+    let today: String = sqlx::query_scalar("SELECT ((now() AT TIME ZONE $1)::date)::text").bind(&tz).fetch_one(&app.state.db).await.unwrap();
+    app.post(&owner, "/spaces", json!({"key": "LK", "name": "Look"})).await;
+    let doc = json!({"type": "doc", "content": [{"type": "taskList", "content": [{"type": "taskItem", "attrs": {"checked": false}, "content": [{"type": "paragraph", "content": [
+        {"type": "text", "text": "Ship it "}, {"type": "mention", "attrs": {"id": bob_id, "label": "bob"}}, {"type": "date", "attrs": {"date": today}}
+    ]}]}]}]});
+    app.post(&owner, "/pages", json!({"spaceKey": "LK", "title": "Plan", "content": doc})).await;
+    assert_eq!(wikicraft::routes::tasks::remind_due_tasks(&app.state).await.unwrap(), 1);
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn blog_atom_feed() {
     let app = common::spawn().await;

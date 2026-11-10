@@ -141,8 +141,8 @@ pub async fn toggle(State(state): State<AppState>, CurrentUser(user): CurrentUse
     Ok(Json(json!({ "done": done })))
 }
 
-/// Reminds people of their open tasks on the due date, from 8:00 in their time zone (profile;
-/// UTC otherwise), as a `task_due` notification (also e-mailed like other notifications).
+/// Reminds people of their open tasks on the due date, from 8:00 in their time zone (profile,
+/// else the workspace's; UTC otherwise), as a `task_due` notification (also e-mailed like other notifications).
 /// Each task reminds once per due date; tasks due before yesterday are not reminded of
 /// retroactively. Returns how many reminders went out.
 pub async fn remind_due_tasks(state: &AppState) -> sqlx::Result<u64> {
@@ -152,7 +152,8 @@ pub async fn remind_due_tasks(state: &AppState) -> sqlx::Result<u64> {
               FROM tasks t
               JOIN users u ON u.id = t.assignee_id
               JOIN pages p ON p.id = t.page_id
-              LEFT JOIN pg_timezone_names z ON z.name = u.timezone
+              JOIN workspaces w ON w.id = u.workspace_id
+              LEFT JOIN pg_timezone_names z ON z.name = COALESCE(u.timezone, NULLIF(w.settings->>'timeZone', ''))
              WHERE NOT t.done AND t.due IS NOT NULL AND u.status = 'active'
                AND p.deleted_at IS NULL AND p.archived_at IS NULL AND NOT p.draft
                AND t.due <= (now() AT TIME ZONE COALESCE(z.name, 'UTC'))::date

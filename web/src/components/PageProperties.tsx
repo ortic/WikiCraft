@@ -2,7 +2,7 @@ import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { AlignLeft, Calendar, CircleDot, FileText, Hash, Link2, Plus, Trash2, User, X } from 'lucide-react'
-import { api, type Page, type PageProperty, type PropertyType, type SearchHit } from '../api'
+import { api, formatDateOnly, type Page, type PageProperty, type PropertyType, type SearchHit } from '../api'
 import { Avatar, useToast } from '../ui'
 
 export const PROPERTY_TYPES: { type: PropertyType; label: string; icon: ComponentType<{ size?: number; className?: string }> }[] = [
@@ -53,8 +53,7 @@ export function PropertyValue({ prop }: { prop: Pick<PageProperty, 'type' | 'val
     case 'number':
       return <span>{typeof v === 'number' ? v.toLocaleString() : String(v)}</span>
     case 'date': {
-      const d = new Date(`${v}T00:00:00`)
-      return <time dateTime={String(v)}>{isNaN(d.getTime()) ? String(v) : d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}</time>
+      return <time dateTime={String(v)}>{formatDateOnly(String(v))}</time>
     }
     case 'user':
       return prop.label ? (

@@ -59,6 +59,11 @@ else is configured afterwards:
 - *Administration → Overview*: workspace name and logo, announcement banner, sharing and feature
   switches (public links, exports, *Ask the wiki*, personal spaces, who viewed a page), how long
   trashed pages are kept, e-mail status and a test message, usage numbers.
+- *Administration → Overview → Look and dates*: an accent colour for buttons, links and
+  highlights (adjusted per theme so text stays readable), how dates are written (each reader's
+  language, or a fixed pattern such as `DD.MM.YYYY`, also in exported report tables) and the
+  default time zone for people who haven't set their own (it also decides when due-task
+  reminders go out).
 - *Administration → Overview → Attachments*: the largest file people may upload (up to the
   server's `WIKICRAFT_MAX_UPLOAD_MB`), blocked file types or a list of the only allowed ones, and
   storage limits per space and for the whole wiki (all versions of a file count; deleting

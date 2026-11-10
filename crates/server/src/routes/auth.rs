@@ -162,13 +162,25 @@ pub async fn me(
         Some(u) => sqlx::query_as("SELECT id, name FROM workspaces WHERE id = $1").bind(u.workspace_id).fetch_optional(&state.db).await?,
         None => sqlx::query_as("SELECT id, name FROM workspaces ORDER BY created_at LIMIT 1").fetch_optional(&state.db).await?,
     };
-    let logo = match &ws {
-        Some((id, _)) => crate::routes::branding::logo_version(&state, *id).await?,
+    let workspace = match &ws {
+        Some((id, name)) => {
+            let mut w = crate::routes::branding::look(&state, *id).await?;
+            w.insert("id".into(), json!(id));
+            w.insert("name".into(), json!(name));
+            w.insert("logoVersion".into(), json!(crate::routes::branding::logo_version(&state, *id).await?));
+            Some(Value::Object(w))
+        }
+        None => None,
+    };
+    // the reader's own time zone (profile) wins over the workspace's
+    let time_zone: Option<String> = match &user {
+        Some(u) => sqlx::query_scalar("SELECT timezone FROM users WHERE id = $1").bind(u.id).fetch_optional(&state.db).await?.flatten(),
         None => None,
     };
     Ok(Json(json!({
         "user": user,
-        "workspace": ws.map(|(id, name)| json!({"id": id, "name": name, "logoVersion": logo})),
+        "workspace": workspace,
+        "timeZone": time_zone,
         // the workspace requires two-factor authentication and this person hasn't set it up
         "mustSetUpTwoFactor": enroll.is_some(),
     })))

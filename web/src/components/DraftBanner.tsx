@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { CalendarClock } from 'lucide-react'
-import { api } from '../api'
+import { api, formatDateTime } from '../api'
 import { useToast } from '../ui'
 
 /** A date-time as the `datetime-local` input wants it: local time, no seconds. */
@@ -29,7 +29,7 @@ export default function DraftBanner({ page, onPublish }: { page: { id: string; k
       await api.put(`/pages/${page.id}/publish-schedule`, { at: at.toISOString() })
       setEditing(false)
       refresh()
-      toast(`This ${what} publishes itself on ${at.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}`)
+      toast(`This ${what} publishes itself on ${formatDateTime(at)}`)
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Could not schedule it')
     }
@@ -44,7 +44,7 @@ export default function DraftBanner({ page, onPublish }: { page: { id: string; k
       <b>Draft</b>
       {scheduled ? (
         <span className="row" style={{ gap: 6 }}>
-          <CalendarClock size={15} /> Publishes itself on {scheduled.toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}. Until then only you see it.
+          <CalendarClock size={15} /> Publishes itself on {formatDateTime(scheduled)}. Until then only you see it.
         </span>
       ) : (
         <span>Only you can see this {what} and the pages below it. Publish it when it's ready.</span>
