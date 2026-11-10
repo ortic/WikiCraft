@@ -33,6 +33,19 @@ import { FindBar, FindReplace, findKey } from './FindReplace'
 
 const lowlight = createLowlight(common)
 
+/** Plain text that is probably Markdown: block syntax on some line, or inline emphasis/links. */
+export function looksLikeMarkdown(text: string): boolean {
+  if (!text.trim() || text.length > 1_000_000) return false
+  const blocks = /^(#{1,6} \S|[-*+] \S|\d+[.)] \S|> \S|```|\|.+\|\s*$|- \[[ xX]\] )/m.test(text)
+  const inline = /\*\*[^*\n]+\*\*|__[^_\n]+__|\[[^\]\n]+\]\([^)\s]+\)|`[^`\n]+`/.test(text)
+  return text.includes('\n') ? blocks || inline : inline
+}
+
+/** HTML with real structure (Word, Google Docs, web pages); editors like VS Code only send styled divs. */
+function hasRichHtml(html: string): boolean {
+  return /<(h[1-6]|ul|ol|li|table|p|strong|b|em|i|a|pre|blockquote|img)\b/i.test(html)
+}
+
 const withBackground = <T extends typeof TableCell>(ext: T) =>
   ext.extend({
     addAttributes() {
@@ -171,6 +184,18 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
           const files = Array.from(event.clipboardData?.files ?? [])
           if (files.length && editorRef.current) {
             upload(editorRef.current, files, true)
+            return true
+          }
+          // Markdown text (from a .md file, a chat, a terminal) becomes formatted content
+          const ed = editorRef.current
+          const text = event.clipboardData?.getData('text/plain') ?? ''
+          const html = event.clipboardData?.getData('text/html') ?? ''
+          if (ed && looksLikeMarkdown(text) && !hasRichHtml(html) && !ed.isActive('codeBlock')) {
+            event.preventDefault()
+            api
+              .post<{ content: { content?: unknown[] } }>('/markdown', { markdown: text })
+              .then((r) => ed.chain().focus().insertContent((r.content.content ?? []) as never).run())
+              .catch(() => ed.chain().focus().insertContent(text).run())
             return true
           }
           return false

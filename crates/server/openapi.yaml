@@ -3038,6 +3038,37 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /markdown:
+    post:
+      tags:
+      - Pages
+      summary: Convert Markdown to document content (paste)
+      operationId: post_markdown
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                markdown: *id001
+              required:
+              - markdown
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  content: *id006
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /labels/{name}:
     get:
       tags:

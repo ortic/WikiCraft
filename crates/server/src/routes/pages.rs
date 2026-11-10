@@ -1127,3 +1127,17 @@ async fn export_docx(state: &AppState, p: &Principal, id: Uuid, title: String, d
     .map_err(ApiError::Internal)?;
     Ok(bytes)
 }
+
+#[derive(Deserialize)]
+pub struct MarkdownReq {
+    markdown: String,
+}
+
+/// `POST /api/markdown`: Markdown → document content (used when pasting Markdown text).
+pub async fn markdown_to_doc(CurrentUser(_user): CurrentUser, Json(req): Json<MarkdownReq>) -> ApiResult<Json<Value>> {
+    if req.markdown.len() > 1_000_000 {
+        return Err(ApiError::bad("Markdown larger than 1 MB"));
+    }
+    let doc = tokio::task::spawn_blocking(move || markdown::markdown_to_pm(&req.markdown).doc).await.map_err(|e| ApiError::Internal(e.into()))?;
+    Ok(Json(json!({ "content": doc })))
+}

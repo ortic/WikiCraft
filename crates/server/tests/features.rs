@@ -196,3 +196,14 @@ async fn search_filters_and_comments() {
     sqlx::query("UPDATE pages SET updated_at = now() - interval '30 days' WHERE id = $1::uuid").bind(&b).execute(&app.state.db).await.unwrap();
     assert_eq!(hits("zircon&days=7".into()).await, vec!["Gateway timeouts"]);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn markdown_conversion_for_paste() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (st, r) = app.post(&owner, "/markdown", json!({"markdown": "## Title\n\n- [ ] task\n\n| a | b |\n|---|---|\n| 1 | 2 |\n"})).await;
+    assert_eq!(st, 200);
+    let kinds: Vec<&str> = r["content"]["content"].as_array().unwrap().iter().map(|n| n["type"].as_str().unwrap()).collect();
+    assert_eq!(kinds, vec!["heading", "taskList", "table"]);
+    assert_ne!(app.post(&common::client(), "/markdown", json!({"markdown": "x"})).await.0, 200, "signed-in only");
+}
