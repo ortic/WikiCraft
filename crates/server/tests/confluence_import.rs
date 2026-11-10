@@ -56,7 +56,17 @@ async fn imports_classic_xml_export() {
 
     // tree + history + attachments are reachable through the API
     let (_, tree) = app.get(&c, "/spaces/DV21/tree").await;
-    assert_eq!(tree["nodes"].as_array().unwrap().len(), 45);
+    // archived Confluence pages go to the archive: they and their children leave the tree
+    let archived: i64 = sqlx::query_scalar(
+        "WITH RECURSIVE gone AS (SELECT p.id FROM pages p JOIN spaces s ON s.id = p.space_id WHERE s.key = 'DV21' AND p.archived_at IS NOT NULL
+                                 UNION SELECT p.id FROM pages p JOIN gone g ON p.parent_id = g.id)
+         SELECT count(*) FROM gone",
+    )
+    .fetch_one(&app.state.db)
+    .await
+    .unwrap();
+    eprintln!("archived pages (with children): {archived}");
+    assert_eq!(tree["nodes"].as_array().unwrap().len() as i64, 45 - archived);
     let home = tree["homePageId"].as_str().unwrap();
     let (_, home_page) = app.get(&c, &format!("/pages/{home}")).await;
     assert_eq!(home_page["title"], "v2.1 ModelOp Center Documentation Hub");

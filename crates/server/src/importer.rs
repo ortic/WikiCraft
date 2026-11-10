@@ -687,8 +687,10 @@ async fn import_page(
     let updated_by = user_of(&pg.updated_by).or(created_by);
     let status = if pg.status == wikicraft_confluence::model::ContentStatus::Archived { "archived" } else { "current" };
     sqlx::query(
-        "INSERT INTO pages (id, workspace_id, space_id, parent_id, kind, title, position, content, text_content, ydoc, version, status, page_status, created_by, created_at, updated_by, updated_at, source_ref)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, COALESCE($15, now()), $16, COALESCE($17, now()), $18)",
+        // archived Confluence pages land in the archive (Space settings → Archived), not in the tree
+        "INSERT INTO pages (id, workspace_id, space_id, parent_id, kind, title, position, content, text_content, ydoc, version, status, page_status, created_by, created_at, updated_by, updated_at, source_ref, archived_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, COALESCE($15, now()), $16, COALESCE($17, now()), $18,
+                 CASE WHEN $12 = 'archived' THEN COALESCE($17, now()) END)",
     )
     .bind(id)
     .bind(ws)
