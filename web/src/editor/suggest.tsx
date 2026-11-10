@@ -8,7 +8,7 @@ import { EMOTICONS, Emoticon } from '../icons'
 import { forwardRef, useEffect, useImperativeHandle, useState, type ReactNode } from 'react'
 import {
   Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Quote, Code2, Minus, Table, Info, AlertTriangle, CheckCircle2, XCircle, ChevronRight,
-  Hash, ListTree, CalendarDays, Tag, Sigma, Image as ImageIcon, Link2, Columns2, Paperclip, StickyNote, FileText, FilePlus2, PenTool,
+  UserRound, Hash, ListTree, CalendarDays, Tag, Sigma, Image as ImageIcon, Link2, Columns2, Paperclip, StickyNote, FileText, FilePlus2, PenTool,
   MessageSquareDashed, Milestone,
 } from 'lucide-react'
 import { api } from '../api'
@@ -200,25 +200,45 @@ interface UserHit {
   name: string
 }
 
-/** Mention suggestion config (users of the workspace). */
-export const mentionSuggestion: Omit<SuggestionOptions<MenuItem>, 'editor'> = {
-  char: '@',
-  items: async ({ query }) => {
-    const users = await api.get<UserHit[]>(`/users?q=${encodeURIComponent(query)}`).catch(() => [])
-    return users.slice(0, 8).map((u) => ({
-      title: u.name,
-      command: (editor: Editor, range: Range) => editor.chain().focus().deleteRange(range).insertContent([{ type: 'mention', attrs: { id: u.id, label: u.name } }, { type: 'text', text: ' ' }]).run(),
-    }))
-  },
-  command: ({ editor, range, props }) => props.command(editor, range),
-  render: popupRenderer<MenuItem>(),
-}
-
 interface SearchHit {
   pageId: string
   title: string
   spaceKey: string
   spaceName: string
+}
+
+/** `@` → people (a mention, which notifies them) and, from two letters on, pages (a link). */
+export const mentionSuggestion: Omit<SuggestionOptions<MenuItem>, 'editor'> = {
+  char: '@',
+  items: async ({ query }) => {
+    const q = query.trim()
+    const [users, pages] = await Promise.all([
+      api.get<UserHit[]>(`/users?q=${encodeURIComponent(q)}`).catch(() => [] as UserHit[]),
+      q.length >= 2 ? api.get<SearchHit[]>(`/search?q=${encodeURIComponent(q)}`).catch(() => [] as SearchHit[]) : Promise.resolve([] as SearchHit[]),
+    ])
+    const people: MenuItem[] = users.slice(0, pages.length ? 5 : 8).map((u) => ({
+      title: u.name,
+      group: pages.length ? 'People' : undefined,
+      icon: <UserRound size={16} />,
+      command: (editor: Editor, range: Range) => editor.chain().focus().deleteRange(range).insertContent([{ type: 'mention', attrs: { id: u.id, label: u.name } }, { type: 'text', text: ' ' }]).run(),
+    }))
+    const linked: MenuItem[] = pages.slice(0, 5).map((h) => ({
+      title: h.title,
+      description: h.spaceName,
+      group: 'Pages',
+      icon: <FileText size={16} />,
+      command: (editor: Editor, range: Range) =>
+        editor
+          .chain()
+          .focus()
+          .deleteRange(range)
+          .insertContent([{ type: 'text', text: h.title, marks: [{ type: 'link', attrs: { href: `/pages/${h.pageId}` } }] }, { type: 'text', text: ' ' }])
+          .run(),
+    }))
+    return [...people, ...linked]
+  },
+  command: ({ editor, range, props }) => props.command(editor, range),
+  render: popupRenderer<MenuItem>(),
 }
 
 /** `[[` → search pages and insert a link (or create the page). */
