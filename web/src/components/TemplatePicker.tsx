@@ -15,6 +15,8 @@ interface Template {
   spaceKey: string | null
   /** `{{variables}}` asked for when a page is created from the template */
   variables?: string[]
+  /** blueprints: the index page new pages go under (unless created below a page) */
+  filedUnder?: string | null
 }
 
 /** "Create" dialog: blank page or one of the templates. */
@@ -173,7 +175,7 @@ export default function TemplatePicker({ spaceKey, parentId, onClose }: { spaceK
       <div className="grid-cards">
         {card('blank', <FilePlus2 size={22} />, 'Blank page', 'Start from scratch', () => create())}
         {card('link', <Link2 size={22} />, 'Link to a website', 'A page-tree item that opens an external page', () => void createLink())}
-        {ordered.map((t) => card(t.id, <SymbolTile value={parseSymbol(t.icon) ? t.icon : 'document:slate'} size={30} />, t.name, t.description, () => choose(t), t.id === def ? 'space default' : t.builtin ? undefined : t.spaceKey ? 'space' : 'workspace', () => setPreview(t)))}
+        {ordered.map((t) => card(t.id, <SymbolTile value={parseSymbol(t.icon) ? t.icon : 'document:slate'} size={30} />, t.name, !parentId && t.filedUnder ? `${t.description ?? ''} · goes under “${t.filedUnder}”` : t.description, () => choose(t), t.id === def ? 'space default' : t.builtin ? undefined : t.spaceKey ? 'space' : 'workspace', () => setPreview(t)))}
       </div>
     </Modal>
   )

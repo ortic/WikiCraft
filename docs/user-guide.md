@@ -54,6 +54,11 @@ size.
 retrospective, runbook, product requirements …), plus your space's own templates. Grey
 instructional text in a template disappears when you start typing there.
 
+Meeting notes, decisions, retrospectives, postmortems, status reports, how-tos, runbooks and
+requirements made from *Create* go under an index page of their kind (for example *Meeting notes*,
+made the first time, listing them newest first) and get a matching label; create them below a page
+to put them there instead.
+
 Templates can ask questions: write `{{Customer}}` (any name in double braces) in the page you save
 as a template, and *Create* asks for the customer before making the page, then puts the answer
 everywhere `{{Customer}}` appears, with its formatting. What you leave empty stays as a grey hint

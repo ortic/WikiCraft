@@ -95,3 +95,36 @@ async fn template_variables_are_asked_for_and_filled_in() {
     assert_eq!(para[4]["text"], ", region .");
     assert_eq!(page["content"]["content"][1]["content"][0]["text"], "Hello {{ user.name }}");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn blueprints_file_pages_under_an_index_page() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    app.post(&owner, "/spaces", json!({"key": "BP", "name": "Blueprints"})).await;
+    let (_, list) = app.get(&owner, "/templates?spaceKey=BP").await;
+    let notes = list.as_array().unwrap().iter().find(|t| t["id"] == "builtin:meeting-notes").unwrap();
+    assert_eq!(notes["filedUnder"], "Meeting notes");
+
+    let create = |body: serde_json::Value| {
+        let (app, owner) = (&app, &owner);
+        async move { app.post(owner, "/pages", body).await.1 }
+    };
+    let first = create(json!({"spaceKey": "BP", "templateId": "builtin:meeting-notes"})).await;
+    let second = create(json!({"spaceKey": "BP", "templateId": "builtin:meeting-notes"})).await;
+    let index = first["parentId"].as_str().expect("filed under the index page").to_string();
+    assert_eq!(second["parentId"], index.as_str(), "one index page per space");
+    let (_, idx) = app.get(&owner, &format!("/pages/{index}")).await;
+    assert_eq!(idx["title"], "Meeting notes");
+    assert!(idx["parentId"].is_null());
+    assert!(idx["content"].to_string().contains("childPages"), "it lists its pages");
+    let (_, page) = app.get(&owner, &format!("/pages/{}", first["id"].as_str().unwrap())).await;
+    assert!(page["labels"].as_array().unwrap().iter().any(|l| l == "meeting-notes"), "{}", page["labels"]);
+
+    // a parent picked by the person wins; templates that aren't blueprints stay where they're made
+    let (_, home) = app.get(&owner, "/spaces/BP").await;
+    let home_id = home["homePageId"].as_str().unwrap();
+    let below = create(json!({"spaceKey": "BP", "templateId": "builtin:meeting-notes", "parentId": home_id})).await;
+    assert_eq!(below["parentId"], home_id);
+    let okrs = create(json!({"spaceKey": "BP", "templateId": "builtin:okrs"})).await;
+    assert!(okrs["parentId"].is_null());
+}

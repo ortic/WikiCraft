@@ -122,6 +122,30 @@ const BUILTINS: &[Builtin] = &[
     },
 ];
 
+/// What makes a built-in template a blueprint: pages made from it (from the Create button, not
+/// below a page someone picked) are filed under an index page that lists them, newest first,
+/// and get labels, so meeting notes don't pile up at the top of the space.
+pub struct Blueprint {
+    pub index_title: &'static str,
+    pub intro: &'static str,
+    pub labels: &'static [&'static str],
+}
+
+pub fn blueprint(template_id: &str) -> Option<Blueprint> {
+    let (index_title, intro, labels): (&'static str, &'static str, &'static [&'static str]) = match template_id {
+        "builtin:meeting-notes" => ("Meeting notes", "Notes from our meetings, newest first.", &["meeting-notes"]),
+        "builtin:decision" => ("Decisions", "The decisions we made and why, newest first.", &["decision"]),
+        "builtin:retrospective" => ("Retrospectives", "What went well and what we'll change, newest first.", &["retrospective"]),
+        "builtin:postmortem" => ("Postmortems", "Incident reviews, newest first.", &["postmortem", "incident"]),
+        "builtin:status-report" => ("Status reports", "Status reports, newest first.", &["status-report"]),
+        "builtin:how-to" => ("How-to articles", "Step-by-step guides.", &["how-to"]),
+        "builtin:runbook" => ("Runbooks", "What to do when something needs fixing.", &["runbook"]),
+        "builtin:requirements" => ("Product requirements", "Requirements documents.", &["requirements"]),
+        _ => return None,
+    };
+    Some(Blueprint { index_title, intro, labels })
+}
+
 fn builtin_doc(b: &Builtin) -> Node {
     let mut doc = markdown::markdown_to_pm(&fill(b.markdown)).doc;
     wikicraft_doc_model::node::expand_placeholders(&mut doc);
@@ -143,6 +167,8 @@ pub struct TemplateItem {
     space_key: Option<String>,
     /// `{{variables}}` the template asks for when a page is created from it
     variables: Vec<String>,
+    /// blueprints: the index page new pages are filed under
+    filed_under: Option<&'static str>,
 }
 
 #[derive(Deserialize)]
@@ -168,6 +194,7 @@ pub async fn list(State(state): State<AppState>, CurrentUser(user): CurrentUser,
             builtin: true,
             space_key: None,
             variables: template::variables(Some(b.title), &builtin_doc(b)),
+            filed_under: blueprint(b.id).map(|bp| bp.index_title),
         })
         .collect();
     type Row = (Uuid, String, Option<String>, Option<String>, Option<String>, Option<String>, Value);
@@ -187,6 +214,7 @@ pub async fn list(State(state): State<AppState>, CurrentUser(user): CurrentUser,
         builtin: false,
         space_key,
         variables: Node::from_json(&content).map(|doc| template::variables(title.as_deref(), &doc)).unwrap_or_default(),
+        filed_under: None,
     }));
     Ok(Json(out))
 }

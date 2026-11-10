@@ -180,6 +180,16 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
         req
     };
     let mut template_title = None;
+    // blueprints file their pages under an index page (unless a parent was picked)
+    let blueprint = req
+        .template_id
+        .as_deref()
+        .filter(|_| req.parent_id.is_none() && kind == "page" && req.content.is_none() && req.markdown.is_none())
+        .and_then(crate::routes::templates::blueprint);
+    let parent_id = match &blueprint {
+        Some(bp) => blueprint_index(&state, &p, &space, &user, bp).await?,
+        None => req.parent_id,
+    };
     // pages start from the space's default template unless asked for something else
     let template = req.template_id.clone().or_else(|| if req.blank || kind != "page" { None } else { space.default_template.clone() });
     let content = match (req.content, req.markdown, &template) {
@@ -204,7 +214,7 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
         .or(template_title.map(|t| t.trim().to_string()).filter(|t| !t.is_empty()))
         .or(link_title)
         .unwrap_or_else(|| "Untitled".into());
-    let position = next_position(&state, space.id, req.parent_id).await?;
+    let position = next_position(&state, space.id, parent_id).await?;
     let doc = content.clone();
     let draft = req.draft && matches!(kind.as_str(), "page" | "blog");
     let id = insert_page(
@@ -213,7 +223,7 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
             id: new_id(),
             workspace_id: user.workspace_id,
             space_id: space.id,
-            parent_id: req.parent_id,
+            parent_id,
             kind,
             title,
             content,
@@ -225,6 +235,9 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
         },
     )
     .await?;
+    for l in blueprint.iter().flat_map(|bp| bp.labels) {
+        sqlx::query("INSERT INTO labels (page_id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING").bind(id).bind(l).execute(&state.db).await?;
+    }
     state.search.enqueue(id);
     sqlx::query("INSERT INTO watches (user_id, page_id) VALUES ($1, $2) ON CONFLICT DO NOTHING").bind(user.id).bind(id).execute(&state.db).await?;
     // content created through the API: index its tasks and notify mentioned people right away
@@ -232,7 +245,56 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
     if !draft {
         announce_new_page(&state, id, &doc, user.id).await;
     }
-    Ok((StatusCode::CREATED, Json(json!({ "id": id }))))
+    Ok((StatusCode::CREATED, Json(json!({ "id": id, "parentId": parent_id }))))
+}
+
+/// The index page a blueprint files its pages under: the space's top-level page with that title
+/// if the person can see it, else a new one listing its children newest first. None (top level)
+/// when the person may see the index but not edit below it.
+async fn blueprint_index(
+    state: &AppState,
+    p: &Principal,
+    space: &crate::routes::spaces::SpaceRow,
+    user: &crate::auth::User,
+    bp: &crate::routes::templates::Blueprint,
+) -> ApiResult<Option<Uuid>> {
+    let existing: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT id FROM pages WHERE space_id = $1 AND parent_id IS NULL AND lower(title) = lower($2) AND kind = 'page'
+            AND deleted_at IS NULL AND archived_at IS NULL AND NOT draft ORDER BY created_at",
+    )
+    .bind(space.id)
+    .bind(bp.index_title)
+    .fetch_all(&state.db)
+    .await?;
+    for id in &existing {
+        if require_page(state, p, *id, Need::Edit).await.is_ok() {
+            return Ok(Some(*id));
+        }
+    }
+    if !existing.is_empty() {
+        return Ok(None);
+    }
+    let content = Node::doc(vec![Node::paragraph(vec![Node::text(bp.intro)]), Node::new(wikicraft_doc_model::nodes::CHILD_PAGES).attr("reverse", true)]);
+    let id = insert_page(
+        &state.db,
+        NewPage {
+            id: new_id(),
+            workspace_id: user.workspace_id,
+            space_id: space.id,
+            parent_id: None,
+            kind: "page".into(),
+            title: bp.index_title.into(),
+            content,
+            position: next_position(state, space.id, None).await?,
+            created_by: Some(user.id),
+            created_at: None,
+            source_ref: None,
+            draft: false,
+        },
+    )
+    .await?;
+    state.search.enqueue(id);
+    Ok(Some(id))
 }
 
 /// Mentions, watchers and webhooks learn about a page once others can see it: at creation, or
