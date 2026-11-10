@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { NodeViewWrapper, type ReactNodeViewProps } from '@tiptap/react'
-import { AlignCenter, AlignLeft, AlignRight, Captions, Download, ExternalLink, Maximize2, Trash2, Type, X, ZoomIn } from 'lucide-react'
+import { AlignCenter, AlignLeft, AlignRight, Captions, Download, ExternalLink, Maximize2, Trash2, Type, WrapText, X, ZoomIn } from 'lucide-react'
 
 /** Full-screen view of an image (click in read mode, double-click while editing). */
 export function Lightbox({ src, alt, caption, onClose }: { src: string; alt: string | null; caption: string | null; onClose: () => void }) {
@@ -106,6 +106,8 @@ export function ImageView({ node, updateAttributes, deleteNode, selected, editor
               {btn('Align left', align === 'left', () => update({ align: 'left' }), <AlignLeft size={15} />)}
               {btn('Center', align === 'center', () => update({ align: 'center' }), <AlignCenter size={15} />)}
               {btn('Align right', align === 'right', () => update({ align: 'right' }), <AlignRight size={15} />)}
+              {btn('Float left, text wraps around', align === 'wrap-left', () => update({ align: 'wrap-left' }), <WrapText size={15} />)}
+              {btn('Float right, text wraps around', align === 'wrap-right', () => update({ align: 'wrap-right' }), <WrapText size={15} style={{ transform: 'scaleX(-1)' }} />)}
               <span className="sep" />
               {btn('Caption', !!caption || captionOpen, () => setCaptionOpen(true), <Captions size={15} />)}
               {btn(alt ? `Alt text: ${alt}` : 'Add alt text', !!alt, editAlt, <Type size={15} />)}

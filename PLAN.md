@@ -307,7 +307,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 
 #### 4.4.5 Images & media
 - [x] **P0** Upload, paste, drag & drop, URL images `C D X O B`
-- [~] **P0** Resize, align (left/center/right/wrap), caption, alt text `C D` (no text wrap)
+- [x] **P0** Resize, align (left/center/right/wrap), caption, alt text `C D`
 - [~] **P1** Lightbox / zoom, image border `C D` (lightbox; no borders)
 - [ ] **P1** Image annotation (arrows, boxes, text) `C`
 - [ ] **P1** Responsive thumbnails & WebP/AVIF renditions generated server-side `C`

@@ -254,7 +254,7 @@ impl Renderer<'_> {
             let _ = write!(extra, " title=\"{}\"", escape(t));
         }
         let img = format!("<img src=\"{}\" alt=\"{}\"{extra} loading=\"lazy\">", escape(src), escape(alt));
-        let align = n.attr_str("align").filter(|a| matches!(*a, "left" | "center" | "right"));
+        let align = n.attr_str("align").filter(|a| matches!(*a, "left" | "center" | "right" | "wrap-left" | "wrap-right"));
         let caption = n.attr_str("caption").filter(|c| !c.trim().is_empty());
         if align.is_none() && caption.is_none() {
             self.out.push_str(&img);
