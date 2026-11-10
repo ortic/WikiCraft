@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useCanonicalSpaceKey } from '../useCanonicalKey'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Archive, Trash2, RotateCcw, Users, X } from 'lucide-react'
-import { api, formatDate, type Space } from '../api'
+import { api, formatDate, type Shortcut, type Space } from '../api'
 import { SymbolPicker } from '../icons'
 import ExportPanel from '../components/ExportPanel'
 import { ErrorBox, SpaceIcon, Spinner, useFeatures, useToast } from '../ui'
@@ -110,6 +110,7 @@ function Details({ space }: { space: Space }) {
         {key !== space.key && <div className="faint small">Pages keep their links: URLs with {space.key} redirect to {key || '…'}.</div>}
       </div>
       <button className="btn btn-primary" onClick={save}>Save</button>
+      <Shortcuts space={space} />
       {!space.personalOwnerId && <SpaceOwner space={space} />}
       {!space.personalOwnerId && <CopySpace space={space} />}
       <div className="card danger-zone" style={{ marginTop: 28 }}>
@@ -126,6 +127,48 @@ function Details({ space }: { space: Space }) {
         >
           Archive space
         </button>
+      </div>
+    </div>
+  )
+}
+
+/** Links pinned to the space sidebar. */
+function Shortcuts({ space }: { space: Space }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [rows, setRows] = useState<Shortcut[] | null>(null)
+  const list = rows ?? space.shortcuts ?? []
+  const set = (i: number, k: keyof Shortcut, v: string) => setRows(list.map((r, j) => (j === i ? { ...r, [k]: v } : r)))
+  const save = async () => {
+    try {
+      await api.patch(`/spaces/${space.key}`, { shortcuts: list.filter((r) => r.title.trim() || r.url.trim()) })
+      qc.invalidateQueries({ queryKey: ['space'] })
+      qc.invalidateQueries({ queryKey: ['spaces'] })
+      setRows(null)
+      toast('Shortcuts saved')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not save')
+    }
+  }
+  return (
+    <div className="card" style={{ marginTop: 28 }}>
+      <b>Sidebar shortcuts</b>
+      <p className="muted small" style={{ margin: '4px 0 10px' }}>
+        Links under the space name in the sidebar: a web address (https://…) or a path in this wiki (/pages/…, /labels/…). The page menu can add the current page.
+      </p>
+      {list.map((r, i) => (
+        <div key={i} className="row" style={{ gap: 6, marginBottom: 6 }}>
+          <input className="input" style={{ flex: '1 1 140px' }} aria-label={`Title of shortcut ${i + 1}`} placeholder="Title" maxLength={80} value={r.title} onChange={(e) => set(i, 'title', e.target.value)} />
+          <input className="input" style={{ flex: '2 1 200px' }} aria-label={`Link of shortcut ${i + 1}`} placeholder="https://… or /pages/…" value={r.url} onChange={(e) => set(i, 'url', e.target.value)} />
+          <button className="icon-btn" title="Remove" aria-label={`Remove shortcut ${i + 1}`} onClick={() => setRows(list.filter((_, j) => j !== i))}>
+            <X size={14} />
+          </button>
+        </div>
+      ))}
+      <div className="row" style={{ gap: 6 }}>
+        {list.length < 20 && <button className="btn btn-sm" onClick={() => setRows([...list, { title: '', url: '' }])}>Add shortcut</button>}
+        <span className="spacer" />
+        <button className="btn btn-primary btn-sm" disabled={!rows} onClick={save}>Save</button>
       </div>
     </div>
   )

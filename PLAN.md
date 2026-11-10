@@ -202,7 +202,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P1** Space directory with search, categories, filters (team, personal, archived, starred) `C X` (name/key filter, categories, starred filter and starred first; archived spaces in Admin → Spaces; no personal-space filter)
 - [x] **P1** Space categories / tags `C` — one category per space (Space settings → Details); the space directory groups and filters by it
 - [x] **P1** Space archive (read-only, hidden from search by default) and restore `C`
-- [~] **P1** Space sidebar: page tree, shortcuts/links, blog, whiteboards, databases, custom sections `C` (page tree + blog only)
+- [~] **P1** Space sidebar: page tree, shortcuts/links, blog, whiteboards, databases, custom sections `C` (page tree, blog, and shortcuts: space admins pin web addresses or wiki paths in Space settings or from the page menu; kept by space copies and backups. No whiteboards/databases/custom sections)
 - [ ] **P1** Space-level look & feel: theme, colors, header image, sidebar config `C X`
 - [x] **P1** Space templates (create a space prefilled with a page structure) `C X`
 - [x] **P1** Space permissions screen (users × groups × anonymous × guests matrix) `C DC X B`

@@ -108,6 +108,9 @@ pub struct BackupSpace {
     pub icon: Option<String>,
     pub default_role: String,
     pub home_page_id: Option<Uuid>,
+    /// sidebar links `[{title, url}]`
+    #[serde(default)]
+    pub shortcuts: Value,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -200,8 +203,11 @@ pub async fn run_export(state: &AppState, job_id: Uuid, actor: Uuid, input: &Val
     if role == Role::None || (format == Format::Backup && role < Role::Admin) {
         anyhow::bail!("you don't have permission to export this space");
     }
-    let (key, name, description, icon, default_role, home): (String, String, Option<String>, Option<String>, String, Option<Uuid>) =
-        sqlx::query_as("SELECT key, name, description, icon, default_role, home_page_id FROM spaces WHERE id = $1").bind(space_id).fetch_one(&state.db).await?;
+    let (key, name, description, icon, default_role, home, shortcuts): (String, String, Option<String>, Option<String>, String, Option<Uuid>, Value) =
+        sqlx::query_as("SELECT key, name, description, icon, default_role, home_page_id, shortcuts FROM spaces WHERE id = $1")
+            .bind(space_id)
+            .fetch_one(&state.db)
+            .await?;
 
     let rows = sqlx::query_as::<_, PageRow>(
         "SELECT p.id, p.parent_id, p.kind, p.title, p.icon, p.position, p.content, p.page_status, p.full_width, p.created_at, p.updated_at,
@@ -318,7 +324,7 @@ pub async fn run_export(state: &AppState, job_id: Uuid, actor: Uuid, input: &Val
                     format: BACKUP_FORMAT.into(),
                     version: 1,
                     exported_at: stamp,
-                    space: BackupSpace { key: key.clone(), name: name.clone(), description: description.clone(), icon: icon.clone(), default_role: default_role.clone(), home_page_id: home },
+                    space: BackupSpace { key: key.clone(), name: name.clone(), description: description.clone(), icon: icon.clone(), default_role: default_role.clone(), home_page_id: home, shortcuts: shortcuts.clone() },
                     pages: pages
                         .iter()
                         .map(|pg| BackupPage {
@@ -918,6 +924,14 @@ pub async fn run_restore(state: &AppState, job_id: Uuid, actor: Uuid, archive: &
         restore_properties(state, user.workspace_id, page_ids[&pg.id], &pg.properties, &page_ids).await?;
         if i % 100 == 0 {
             progress(state, job_id, json!({"phase": "pages", "done": i, "total": m.pages.len()})).await?;
+        }
+    }
+    // sidebar shortcuts, pointing at the restored pages
+    if let Value::Array(list) = &m.space.shortcuts {
+        let list: Vec<crate::routes::spaces::Shortcut> = list.iter().filter_map(|v| serde_json::from_value(v.clone()).ok()).collect();
+        if let Ok(clean) = crate::routes::spaces::clean_shortcuts(list.into_iter().take(20).collect()) {
+            let remapped: Value = serde_json::from_str(&crate::routes::pages::remap_uuids(&clean.to_string(), &page_ids)).unwrap_or(json!([]));
+            sqlx::query("UPDATE spaces SET shortcuts = $2 WHERE id = $1").bind(space.id).bind(remapped).execute(&state.db).await?;
         }
     }
     if let Some(home) = m.space.home_page_id.and_then(|h| page_ids.get(&h)) {

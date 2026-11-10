@@ -77,6 +77,13 @@ components:
           - string
           - 'null'
           description: single space only
+        shortcuts:
+          type: array
+          items:
+            type: object
+            properties:
+              title: *id001
+              url: *id001
         description:
           type:
           - string
@@ -1903,7 +1910,8 @@ paths:
     patch:
       tags:
       - Spaces
-      summary: Update key (old key keeps working), name, description, icon, category, default role, anonymous access
+      summary: Update key (old key keeps working), name, description, icon, category, default role, anonymous access, default
+        template, sidebar shortcuts ([{title, url}], up to 20; url = https://… or a /path in this wiki)
       operationId: patch_spaces_key
       parameters:
       - name: key

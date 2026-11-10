@@ -373,6 +373,22 @@ async fn copying_a_whole_space() {
     assert_eq!(st, 201, "{tpl}");
     let tpl = tpl["id"].as_str().unwrap().to_string();
     app.patch(&owner, "/spaces/SRC", json!({"defaultTemplate": tpl})).await;
+    // sidebar shortcuts: web addresses or wiki paths, checked
+    for bad in [json!([{"title": "x", "url": "javascript:alert(1)"}]), json!([{"title": "", "url": "/pages"}]), json!([{"title": "x", "url": "//evil.test"}])] {
+        assert_eq!(app.patch(&owner, "/spaces/SRC", json!({ "shortcuts": bad })).await.0, 400, "{bad}");
+    }
+    let too_many: Vec<Value> = (0..21).map(|i| json!({"title": format!("L{i}"), "url": "/spaces"})).collect();
+    assert_eq!(app.patch(&owner, "/spaces/SRC", json!({ "shortcuts": too_many })).await.0, 400);
+    assert_eq!(app.patch(&rita, "/spaces/SRC", json!({"shortcuts": []})).await.0, 403, "space admins only");
+    let (st, s) = app
+        .patch(
+            &owner,
+            "/spaces/SRC",
+            json!({"shortcuts": [{"title": "  Setup  guide ", "url": format!("/pages/{setup}")}, {"title": "Status page", "url": "https://status.acme.test"}]}),
+        )
+        .await;
+    assert_eq!(st, 200, "{s}");
+    assert_eq!(s["shortcuts"][0], json!({"title": "Setup guide", "url": format!("/pages/{setup}")}));
 
     // only space admins copy a space
     assert_eq!(app.post(&rita, "/spaces/SRC/copy", json!({"key": "DST", "name": "Copy"})).await.0, 403);
@@ -412,4 +428,9 @@ async fn copying_a_whole_space() {
     let copied_tpl = templates.as_array().unwrap().iter().find(|t| t["name"] == "Ops checklist").cloned().unwrap();
     assert_ne!(copied_tpl["id"], tpl.as_str());
     assert_eq!(d["defaultTemplate"], copied_tpl["id"]);
+    assert_eq!(
+        d["shortcuts"],
+        json!([{"title": "Setup guide", "url": format!("/pages/{new_setup}")}, {"title": "Status page", "url": "https://status.acme.test"}]),
+        "shortcuts follow the copied pages"
+    );
 }

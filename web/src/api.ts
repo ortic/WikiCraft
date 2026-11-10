@@ -97,6 +97,14 @@ export interface Space {
   ownerId?: string | null
   ownerName?: string | null
   personalOwnerId?: string | null
+  /** links pinned to the space sidebar */
+  shortcuts?: Shortcut[]
+}
+
+export interface Shortcut {
+  title: string
+  /** a web address or a path in this wiki */
+  url: string
 }
 
 export interface TreeNode {

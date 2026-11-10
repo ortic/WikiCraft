@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Search, Home as HomeIcon, LayoutGrid, Star, Settings, Plus, LogOut, Moon, Shield, Menu, Trash2, UserCog, Newspaper, ListChecks, Download, Info, TriangleAlert, CircleCheck, X, Keyboard, FolderPlus, Users } from 'lucide-react'
+import { Search, Home as HomeIcon, LayoutGrid, Star, Settings, Plus, LogOut, Moon, Shield, Menu, Trash2, UserCog, Newspaper, ListChecks, Download, Info, TriangleAlert, CircleCheck, X, Keyboard, FolderPlus, Users, Link2, ExternalLink } from 'lucide-react'
 import ShortcutsDialog from './ShortcutsDialog'
 import { api, type Page, type Space } from '../api'
 import { Avatar, Logo, SpaceIcon, useFeatures, useMe } from '../ui'
@@ -213,6 +213,21 @@ export default function Layout() {
             <NavLink to={`/spaces/${current.key}/blog`} className="nav-item" style={{ marginTop: 4 }}>
               <Newspaper size={15} /> Blog
             </NavLink>
+            {!!current.shortcuts?.length && (
+              <nav aria-label="Space shortcuts" className="space-shortcuts">
+                {current.shortcuts.map((s, i) =>
+                  s.url.startsWith('/') ? (
+                    <NavLink key={i} to={s.url} end className="nav-item">
+                      <Link2 size={15} /> <span className="ellipsis">{s.title}</span>
+                    </NavLink>
+                  ) : (
+                    <a key={i} href={s.url} target="_blank" rel="noopener noreferrer" className="nav-item" title={s.url}>
+                      <ExternalLink size={15} /> <span className="ellipsis">{s.title}</span>
+                    </a>
+                  ),
+                )}
+              </nav>
+            )}
             <SpaceTree space={current} />
             {current.role === 'admin' && (
               <NavLink to={`/spaces/${current.key}/settings`} className={({ isActive }) => `nav-item${isActive && !['trash', 'export'].includes(new URLSearchParams(loc.search).get('tab') ?? '') ? ' active' : ''}`} style={{ marginTop: 8 }}>

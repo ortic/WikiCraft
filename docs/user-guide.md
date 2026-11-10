@@ -177,7 +177,9 @@ space as a browsable HTML site, a Markdown folder tree or a full backup.
 
 Space admins manage a space in *Space settings → Details*: name, icon, description, category,
 key, the template new pages start from, and its **owner**, the person responsible for it (hand
-it over with *Change owner…*; the new owner becomes a space admin). **Copy space…** makes a new
+it over with *Change owner…*; the new owner becomes a space admin). **Sidebar shortcuts** pin links (a web address or a page,
+label or search of this wiki) under the space name in the sidebar; the page menu's *Add to space
+shortcuts* adds the page you're on. **Copy space…** makes a new
 space with the published pages you can see, the settings, templates and (optionally) the
 people of this one; links between its pages point at the copies. **Archive space** makes it
 read-only and takes it out of search; workspace admins can restore it.

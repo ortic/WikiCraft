@@ -2,7 +2,7 @@ use axum::Json;
 use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
-use serde_json::json;
+use serde_json::{Value, json};
 use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
@@ -37,9 +37,12 @@ pub struct SpaceRow {
     /// the person responsible for the space
     #[sqlx(default)]
     pub owner_id: Option<Uuid>,
+    /// sidebar links: `[{title, url}]`
+    #[sqlx(default)]
+    pub shortcuts: Value,
 }
 
-pub const SPACE_COLUMNS: &str = "id, workspace_id, key, name, description, icon, home_page_id, default_role, anonymous_access, personal_owner_id, created_at, updated_at, archived_at, default_template, category, owner_id";
+pub const SPACE_COLUMNS: &str = "id, workspace_id, key, name, description, icon, home_page_id, default_role, anonymous_access, personal_owner_id, created_at, updated_at, archived_at, default_template, category, owner_id, shortcuts";
 
 impl SpaceRow {
     pub fn access_row(&self) -> SpaceAccessRow {
@@ -347,6 +350,14 @@ pub async fn copy(
     .bind(&news)
     .execute(&state.db)
     .await?;
+    // sidebar shortcuts, pointing at the copied pages
+    let page_map: std::collections::HashMap<Uuid, Uuid> = copied.iter().copied().collect();
+    let shortcuts: Value = serde_json::from_str(&crate::routes::pages::remap_uuids(&src.shortcuts.to_string(), &page_map)).unwrap_or(Value::Array(vec![]));
+    sqlx::query("UPDATE spaces SET shortcuts = $2 WHERE id = $1")
+        .bind(space.id)
+        .bind(if shortcuts.is_array() { shortcuts } else { json!([]) })
+        .execute(&state.db)
+        .await?;
     let home = src.home_page_id.and_then(|h| copied.iter().find(|(s, _)| *s == h).map(|(_, n)| *n));
     sqlx::query("UPDATE spaces SET home_page_id = $2 WHERE id = $1").bind(space.id).bind(home).execute(&state.db).await?;
     audit::log(
@@ -531,6 +542,37 @@ pub struct UpdateSpace {
     default_template: Option<String>,
     /// directory category, "" for none
     category: Option<String>,
+    /// sidebar links (replaces the list)
+    shortcuts: Option<Vec<Shortcut>>,
+}
+
+#[derive(Deserialize, Serialize, Clone)]
+pub struct Shortcut {
+    pub title: String,
+    pub url: String,
+}
+
+/// Checks sidebar links: a title and a web address (http/https) or a path in this wiki.
+pub fn clean_shortcuts(list: Vec<Shortcut>) -> ApiResult<Value> {
+    if list.len() > 20 {
+        return Err(ApiError::bad("at most 20 shortcuts"));
+    }
+    let mut out = Vec::new();
+    for s in list {
+        let title = s.title.split_whitespace().collect::<Vec<_>>().join(" ");
+        let url = s.url.trim().to_string();
+        if title.is_empty() || title.chars().count() > 80 {
+            return Err(ApiError::bad("a shortcut needs a title of up to 80 characters"));
+        }
+        let lower = url.to_lowercase();
+        let web = (lower.starts_with("https://") || lower.starts_with("http://")) && url.len() <= 2000;
+        let internal = url.starts_with('/') && !url.starts_with("//") && !url.contains('\\') && url.len() <= 500;
+        if !(web || internal) || url.chars().any(|c| c.is_whitespace() || c.is_control()) {
+            return Err(ApiError::bad(format!("“{title}”: the link must be a web address (https://…) or a path in this wiki (/pages/…)")));
+        }
+        out.push(json!({ "title": title, "url": url }));
+    }
+    Ok(Value::Array(out))
 }
 
 /// Gives a space a new key and keeps the old one as an alias.
@@ -600,6 +642,10 @@ pub async fn update(
         Some(k) => Some(validate_key(k)?).filter(|k| *k != space.key),
         None => None,
     };
+    if let Some(list) = req.shortcuts {
+        let list = clean_shortcuts(list)?;
+        sqlx::query("UPDATE spaces SET shortcuts = $2 WHERE id = $1").bind(space.id).bind(list).execute(&state.db).await?;
+    }
     if let Some(k) = &new_key {
         rename_key(&state, user.workspace_id, space.id, &space.key, k).await?;
         audit::log(&state, user.workspace_id, Some(user.id), "space.rename_key", Some("space"), Some(space.id), json!({"from": space.key, "to": k})).await;

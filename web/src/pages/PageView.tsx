@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate, FileText, BadgeCheck, UserCheck, Archive, RotateCcw, UserCog, CircleDot, FolderInput, ListPlus } from 'lucide-react'
+import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate, FileText, BadgeCheck, UserCheck, Archive, RotateCcw, UserCog, CircleDot, FolderInput, ListPlus, Pin } from 'lucide-react'
 import { NoAccess, OwnerDialog, RequestReviewDialog, VerificationBadge, VerifyDialog } from '../components/Verification'
 import { ApiError, api, formatDate, type Page, type Space } from '../api'
 import { PageDecor } from '../components/PageDecor'
@@ -299,6 +299,24 @@ export default function PageView() {
                 {canEdit && (
                   <div className="menu-item" onClick={saveAsTemplate}>
                     <LayoutTemplate size={15} /> Save as template
+                  </div>
+                )}
+                {space.data?.role === 'admin' && !(space.data.shortcuts ?? []).some((s) => s.url === `/pages/${p.id}`) && (space.data.shortcuts?.length ?? 0) < 20 && (
+                  <div
+                    className="menu-item"
+                    onClick={async () => {
+                      setMenu(false)
+                      try {
+                        await api.patch(`/spaces/${p.spaceKey}`, { shortcuts: [...(space.data?.shortcuts ?? []), { title: p.title.slice(0, 80) || 'Untitled', url: `/pages/${p.id}` }] })
+                        qc.invalidateQueries({ queryKey: ['space'] })
+                        qc.invalidateQueries({ queryKey: ['spaces'] })
+                        toast('Added to the space shortcuts in the sidebar')
+                      } catch (e) {
+                        toast(e instanceof Error ? e.message : 'Could not add the shortcut')
+                      }
+                    }}
+                  >
+                    <Pin size={15} /> Add to space shortcuts
                   </div>
                 )}
                 {canEdit && p.kind !== 'blog' && (
