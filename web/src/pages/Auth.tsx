@@ -30,20 +30,20 @@ export function Setup() {
         <h1>Welcome to WikiCraft</h1>
         <p className="muted" style={{ marginTop: 0 }}>Create your workspace and the first admin account.</p>
         <div className="field">
-          <label>Workspace name</label>
-          <input className="input" required value={form.workspaceName} onChange={set('workspaceName')} placeholder="Acme Inc." autoFocus />
+          <label htmlFor="setup-workspace">Workspace name</label>
+          <input id="setup-workspace" className="input" required value={form.workspaceName} onChange={set('workspaceName')} placeholder="Acme Inc." autoFocus />
         </div>
         <div className="field">
-          <label>Your name</label>
-          <input className="input" required value={form.name} onChange={set('name')} />
+          <label htmlFor="setup-name">Your name</label>
+          <input id="setup-name" className="input" required value={form.name} onChange={set('name')} />
         </div>
         <div className="field">
-          <label>E-mail</label>
-          <input className="input" type="email" required value={form.email} onChange={set('email')} />
+          <label htmlFor="setup-email">E-mail</label>
+          <input id="setup-email" className="input" type="email" required value={form.email} onChange={set('email')} />
         </div>
         <div className="field">
-          <label>Password</label>
-          <input className="input" type="password" required minLength={8} value={form.password} onChange={set('password')} />
+          <label htmlFor="setup-password">Password</label>
+          <input id="setup-password" className="input" type="password" required minLength={8} value={form.password} onChange={set('password')} />
         </div>
         {error && <p className="error-text">{error}</p>}
         <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', height: 38 }} disabled={busy}>
@@ -123,8 +123,8 @@ export function Login() {
           <h1>Two-factor sign-in</h1>
           <p className="muted" style={{ marginTop: 0 }}>Enter the 6-digit code from your authenticator app, or one of your recovery codes.</p>
           <div className="field">
-            <label>Code</label>
-            <input className="input otp-input" inputMode="numeric" autoComplete="one-time-code" required value={code} onChange={(e) => setCode(e.target.value)} autoFocus placeholder="123 456" />
+            <label htmlFor="login-code">Code</label>
+            <input id="login-code" className="input otp-input" inputMode="numeric" autoComplete="one-time-code" required value={code} onChange={(e) => setCode(e.target.value)} autoFocus placeholder="123 456" />
           </div>
           {error && <p className="error-text">{error}</p>}
           <button className="btn btn-primary" style={wide} disabled={busy}>Verify</button>
@@ -155,17 +155,17 @@ export function Login() {
         {showForm && (
           <>
             <div className="field">
-              <label>{directory.length > 0 ? 'E-mail or username' : 'E-mail'}</label>
-              <input className="input" type={directory.length > 0 ? 'text' : 'email'} autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+              <label htmlFor="login-email">{directory.length > 0 ? 'E-mail or username' : 'E-mail'}</label>
+              <input id="login-email" className="input" type={directory.length > 0 ? 'text' : 'email'} autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
             </div>
             <div className="field">
-              <label className="row">
-                Password
+              <div className="row">
+                <label htmlFor="login-password">Password</label>
                 {info.data?.passwordReset && (
                   <a className="small" style={{ marginLeft: 'auto', fontWeight: 400 }} href="/forgot-password">Forgot password?</a>
                 )}
-              </label>
-              <input className="input" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
+              </div>
+              <input id="login-password" className="input" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
             </div>
           </>
         )}
@@ -227,8 +227,8 @@ export function Signup() {
               Use your work e-mail{domains.length ? ` (${domains.map((d) => '@' + d).join(', ')})` : ''}. We'll send you a link to confirm it.
             </p>
             <div className="field">
-              <label>E-mail</label>
-              <input className="input" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+              <label htmlFor="auth-email">E-mail</label>
+              <input id="auth-email" className="input" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
             </div>
             {error && <p className="error-text">{error}</p>}
             <button className="btn btn-primary" style={wideBtn} disabled={busy}>Send confirmation link</button>
@@ -270,8 +270,8 @@ export function ForgotPassword() {
           <>
             <p className="muted" style={{ marginTop: 0 }}>Enter your e-mail and we'll send you a link to choose a new password.</p>
             <div className="field">
-              <label>E-mail</label>
-              <input className="input" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+              <label htmlFor="auth-email">E-mail</label>
+              <input id="auth-email" className="input" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
             </div>
             {error && <p className="error-text">{error}</p>}
             <button className="btn btn-primary" style={wideBtn} disabled={busy}>Send reset link</button>
@@ -309,12 +309,12 @@ export function ResetPassword() {
         <h1>Choose a new password</h1>
         <p className="muted" style={{ marginTop: 0 }}>You'll be signed out everywhere else.</p>
         <div className="field">
-          <label>New password</label>
-          <input className="input" type="password" autoComplete="new-password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
+          <label htmlFor="reset-password">New password</label>
+          <input id="reset-password" className="input" type="password" autoComplete="new-password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
         </div>
         <div className="field">
-          <label>Repeat password</label>
-          <input className="input" type="password" autoComplete="new-password" minLength={8} required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
+          <label htmlFor="reset-confirm">Repeat password</label>
+          <input id="reset-confirm" className="input" type="password" autoComplete="new-password" minLength={8} required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
         </div>
         {error && <p className="error-text">{error}</p>}
         <button className="btn btn-primary" style={wideBtn} disabled={busy}>Save and sign in</button>
@@ -370,12 +370,12 @@ export function AcceptInvite() {
             {info.data.passwordLogin && (
               <>
                 <div className="field">
-                  <label>Your name</label>
-                  <input className="input" required value={name ?? info.data.name} onChange={(e) => setName(e.target.value)} autoFocus />
+                  <label htmlFor="invite-name">Your name</label>
+                  <input id="invite-name" className="input" required value={name ?? info.data.name} onChange={(e) => setName(e.target.value)} autoFocus />
                 </div>
                 <div className="field">
-                  <label>Choose a password</label>
-                  <input className="input" type="password" autoComplete="new-password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} />
+                  <label htmlFor="invite-password">Choose a password</label>
+                  <input id="invite-password" className="input" type="password" autoComplete="new-password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} />
                 </div>
                 {error && <p className="error-text">{error}</p>}
                 <button className="btn btn-primary" style={wideBtn} disabled={busy}>Create my account</button>

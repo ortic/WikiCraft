@@ -8,7 +8,8 @@
   --border-strong: #d4d4dc;
   --text: #1d1d22;
   --text-soft: #5b5b66;
-  --text-faint: #8d8d98;
+  /* text tokens keep at least 4.5:1 against --bg, --bg-soft, --bg-sidebar and --bg-hover (WCAG AA) */
+  --text-faint: #6b6b76;
   --accent: #4f46e5;
   --accent-soft: #eef0ff;
   --accent-text: #3730a3;
@@ -31,7 +32,7 @@
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme='light']) {
     --bg: #17171c; --bg-soft: #1e1e24; --bg-sidebar: #1b1b21; --bg-hover: #26262e; --bg-active: #2c2c4a;
-    --border: #2d2d36; --border-strong: #3c3c47; --text: #ececf1; --text-soft: #a8a8b5; --text-faint: #75757f;
+    --border: #2d2d36; --border-strong: #3c3c47; --text: #ececf1; --text-soft: #a8a8b5; --text-faint: #8d8d98;
     --accent: #818cf8; --accent-soft: #24244a; --accent-text: #c7d2fe;
     --c-info-bg: #172036; --c-note-bg: #231b38; --c-success-bg: #13261b; --c-warning-bg: #2b2112; --c-error-bg: #2d1717;
     --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.4);
@@ -40,7 +41,7 @@
 }
 :root[data-theme='dark'] {
   --bg: #17171c; --bg-soft: #1e1e24; --bg-sidebar: #1b1b21; --bg-hover: #26262e; --bg-active: #2c2c4a;
-  --border: #2d2d36; --border-strong: #3c3c47; --text: #ececf1; --text-soft: #a8a8b5; --text-faint: #75757f;
+  --border: #2d2d36; --border-strong: #3c3c47; --text: #ececf1; --text-soft: #a8a8b5; --text-faint: #8d8d98;
   --accent: #818cf8; --accent-soft: #24244a; --accent-text: #c7d2fe;
   --c-info-bg: #172036; --c-note-bg: #231b38; --c-success-bg: #13261b; --c-warning-bg: #2b2112; --c-error-bg: #2d1717;
   --shadow: 0 1px 2px rgb(0 0 0 / 0.3), 0 8px 24px rgb(0 0 0 / 0.4);
@@ -52,6 +53,8 @@ html, body, #root { height: 100%; }
 body { margin: 0; background: var(--bg); color: var(--text); font: 14px/1.5 var(--font); -webkit-font-smoothing: antialiased; }
 a { color: var(--accent); text-decoration: none; }
 a:hover { text-decoration: underline; }
+/* links inside running text are underlined, not told apart by color alone (WCAG 1.4.1) */
+p a:not([class]) { text-decoration: underline; text-underline-offset: 2px; }
 button, input, select, textarea { font: inherit; color: inherit; }
 h1, h2, h3 { line-height: 1.25; }
 code, pre { font-family: var(--mono); }

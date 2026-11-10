@@ -40,9 +40,9 @@ export default function Settings() {
 
       <div className="card" style={{ marginBottom: 16 }}>
         <h3 style={{ marginTop: 0 }}>Profile</h3>
-        <div className="field"><label>Name</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
-        <div className="field"><label>E-mail</label><input className="input" value={user.email ?? ''} disabled /></div>
-        <div className="field"><label>New password (optional)</label><input className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="at least 8 characters" /></div>
+        <div className="field"><label htmlFor="profile-name">Name</label><input id="profile-name" className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
+        <div className="field"><label htmlFor="profile-email">E-mail</label><input id="profile-email" className="input" value={user.email ?? ''} disabled /></div>
+        <div className="field"><label htmlFor="profile-password">New password (optional)</label><input id="profile-password" className="input" type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="at least 8 characters" /></div>
         <button
           className="btn btn-primary"
           onClick={async () => {
@@ -165,7 +165,7 @@ function EmailPreferences() {
         Notifications you haven't seen in WikiCraft after a couple of minutes are e-mailed to you as one summary.
         {!p.mailEnabled && ' (E-mail is not configured on this server yet.)'}
       </p>
-      <select className="select" style={{ maxWidth: 420 }} value={p.emailNotifications} onChange={(e) => set(e.target.value)}>
+      <select className="select" style={{ maxWidth: 420 }} value={p.emailNotifications} onChange={(e) => set(e.target.value)} aria-label="E-mail notifications">
         <option value="important">Mentions, comments and replies (recommended)</option>
         <option value="all">Everything, including updates to pages I watch</option>
         <option value="none">Don't e-mail me</option>

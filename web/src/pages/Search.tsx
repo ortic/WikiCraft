@@ -108,7 +108,7 @@ export default function SearchPage() {
         }}
       >
         <input className="input" style={{ maxWidth: 520, height: 40, fontSize: 15 }} value={input} onChange={(e) => setInput(e.target.value)} placeholder="Search…" autoFocus />
-        <select className="select" style={{ width: 200, height: 40 }} value={space} onChange={(e) => setParam('space', e.target.value)}>
+        <select className="select" style={{ width: 200, height: 40 }} value={space} onChange={(e) => setParam('space', e.target.value)} aria-label="Space">
           <option value="">All spaces</option>
           {spaces.data?.map((s) => (
             <option key={s.key} value={s.key}>

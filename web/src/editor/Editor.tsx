@@ -230,6 +230,8 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
         SlashCommand.configure({ items: slashItems((e) => pickFiles('image/*').then((f) => upload(e, f, true)), (e) => pickFiles('*/*').then((f) => upload(e, f, false))) }),
       ],
       editorProps: {
+        // the editable area is a role=textbox: give it a name for screen readers
+        attributes: { 'aria-label': 'Page content' },
         handlePaste: (_view, event) => {
           const files = Array.from(event.clipboardData?.files ?? [])
           if (files.length && editorRef.current) {
