@@ -2,18 +2,27 @@ import { createContext, useContext, useEffect, useState, type ReactNode } from '
 import { SymbolTile, parseSymbol } from './icons'
 import { useQuery } from '@tanstack/react-query'
 import { X } from 'lucide-react'
-import { api, initials, userColor, type Me } from './api'
+import { api, initials, userColor, setMaxFileMb, type Me } from './api'
 
 export function useMe() {
   return useQuery({ queryKey: ['me'], queryFn: () => api.get<Me>('/me'), staleTime: 60_000 })
 }
 
-export type Features = { publicLinks: boolean; exports: boolean; ai: boolean; personalSpaces: boolean; viewerList?: boolean; drawioUrl?: string | null }
+export type Features = { publicLinks: boolean; exports: boolean; ai: boolean; personalSpaces: boolean; viewerList?: boolean; drawioUrl?: string | null; maxFileMb?: number }
 
 /** Workspace switches as they apply to the signed-in person (Admin → Overview). Undefined while
  *  loading or when signed out: callers treat that as "on" (the server enforces them anyway). */
 export function useFeatures(): Partial<Features> {
-  const q = useQuery({ queryKey: ['features'], queryFn: () => api.get<Features>('/features'), staleTime: 300_000, retry: false })
+  const q = useQuery({
+    queryKey: ['features'],
+    queryFn: async () => {
+      const f = await api.get<Features>('/features')
+      setMaxFileMb(f.maxFileMb)
+      return f
+    },
+    staleTime: 300_000,
+    retry: false,
+  })
   return q.data ?? {}
 }
 

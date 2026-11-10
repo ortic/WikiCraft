@@ -434,7 +434,7 @@ async fn feature_switches() {
     let (_, f) = app.get(&member, "/features").await;
     assert_eq!(
         f,
-        json!({"publicLinks": true, "exports": true, "ai": false, "personalSpaces": true, "viewerList": false, "drawioUrl": "https://embed.diagrams.net"}),
+        json!({"publicLinks": true, "exports": true, "ai": false, "personalSpaces": true, "viewerList": false, "drawioUrl": "https://embed.diagrams.net", "maxFileMb": 512}),
         "on by default (the viewer list off); ai needs a key"
     );
     assert_eq!(app.get(&member, &export).await.0, 200);
@@ -450,7 +450,9 @@ async fn feature_switches() {
     assert_eq!(st, 200, "{s}");
     assert_eq!(
         s,
-        json!({"publicLinks": true, "exports": false, "ai": true, "personalSpaces": false, "trashRetentionDays": 0, "viewerList": false, "requireTwoFactor": "off", "drawioUrl": "https://embed.diagrams.net"})
+        json!({"publicLinks": true, "exports": false, "ai": true, "personalSpaces": false, "trashRetentionDays": 0, "viewerList": false, "requireTwoFactor": "off", "drawioUrl": "https://embed.diagrams.net",
+            "attachments": {"maxFileMb": 512, "blockedTypes": [], "allowedTypes": [], "spaceQuotaMb": 0, "workspaceQuotaMb": 0},
+            "serverMaxUploadMb": 512, "attachmentStorageBytes": 0})
     );
 
     // ... can't be downloaded after it; members can't export any more, admins still can
@@ -1080,4 +1082,73 @@ async fn copying_pages_to_another_space_with_their_attachments() {
     // only into spaces you may write in
     let (st, _) = app.post(&bob, &format!("/pages/{page}/copy"), json!({"spaceKey": "DST"})).await;
     assert_eq!(st, 403);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn attachment_size_type_and_storage_rules() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, _) = app.user(&owner, "mia@acme.test", "member").await;
+    app.post(&owner, "/spaces", json!({"key": "AT", "name": "Attachments", "defaultRole": "editor"})).await;
+    let (_, page) = app.post(&owner, "/pages", json!({"spaceKey": "AT", "title": "Files"})).await;
+    let page = page["id"].as_str().unwrap().to_string();
+    let upload = |c: &reqwest::Client, name: &str, size: usize| {
+        let form = reqwest::multipart::Form::new().part("file", reqwest::multipart::Part::bytes(vec![b'x'; size]).file_name(name.to_string()));
+        c.post(app.url(&format!("/pages/{page}/attachments"))).multipart(form).send()
+    };
+    const MB: usize = 1024 * 1024;
+
+    // only admins set the rules; values are checked
+    assert_eq!(app.put(&member, "/admin/settings", json!({"attachments": {"maxFileMb": 1}})).await.0, 403);
+    for bad in [json!({"maxFileMb": 513}), json!({"blockedTypes": ["e x e"]}), json!({"spaceQuotaMb": -1}), json!({"colour": 1})] {
+        assert_eq!(app.put(&owner, "/admin/settings", json!({ "attachments": bad })).await.0, 400, "{bad}");
+    }
+    let (st, s) = app.put(&owner, "/admin/settings", json!({"attachments": {"maxFileMb": 1, "blockedTypes": ".EXE, bat", "spaceQuotaMb": 2}})).await;
+    assert_eq!(st, 200, "{s}");
+    assert_eq!(s["attachments"], json!({"maxFileMb": 1, "blockedTypes": ["exe", "bat"], "allowedTypes": [], "spaceQuotaMb": 2, "workspaceQuotaMb": 0}));
+    assert_eq!(app.get(&member, "/features").await.1["maxFileMb"], 1);
+
+    // size and type
+    let r = upload(&member, "big.pdf", MB + 1).await.unwrap();
+    assert_eq!(r.status(), 400);
+    assert!(r.text().await.unwrap().contains("larger than 1 MB"));
+    let r = upload(&member, "setup.EXE", 10).await.unwrap();
+    assert_eq!(r.status(), 400);
+    assert!(r.text().await.unwrap().contains(".exe files can't be uploaded"));
+    // storage per space counts every version
+    assert_eq!(upload(&member, "a.pdf", MB).await.unwrap().status(), 201);
+    assert_eq!(upload(&member, "a.pdf", MB - 10).await.unwrap().status(), 201, "a new version of a.pdf");
+    let r = upload(&member, "b.pdf", 20).await.unwrap();
+    assert_eq!(r.status(), 400);
+    assert!(r.text().await.unwrap().contains("this space is full"));
+    let (_, spaces) = app.get(&owner, "/admin/spaces").await;
+    let at = spaces.as_array().unwrap().iter().find(|s| s["key"] == "AT").unwrap();
+    assert_eq!(at["storageBytes"], (2 * MB - 10) as u64);
+    // a wiki-wide limit too; an allow-list replaces the block-list's job
+    app.put(&owner, "/admin/settings", json!({"attachments": {"spaceQuotaMb": 0, "workspaceQuotaMb": 3, "allowedTypes": ["pdf", "png"]}})).await;
+    let r = upload(&member, "notes.txt", 5).await.unwrap();
+    assert_eq!(r.status(), 400);
+    assert!(r.text().await.unwrap().contains("only these file types can be uploaded here: pdf, png"));
+    assert_eq!(upload(&member, "c.png", MB).await.unwrap().status(), 201);
+    let r = upload(&member, "d.png", MB).await.unwrap();
+    assert_eq!(r.status(), 400);
+    assert!(r.text().await.unwrap().contains("the wiki is full"));
+    let (_, s) = app.get(&owner, "/admin/settings").await;
+    assert_eq!(s["attachmentStorageBytes"], (3 * MB - 10) as u64);
+
+    // imports keep the rules: refused files stay out and are reported
+    let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let o = zip::write::SimpleFileOptions::default();
+    use std::io::Write;
+    w.start_file("Guide.md", o).unwrap();
+    w.write_all(b"# Guide\n\n![shot](shot.gif)\n").unwrap();
+    w.start_file("shot.gif", o).unwrap();
+    w.write_all(b"GIF89a").unwrap();
+    let zip = w.finish().unwrap().into_inner();
+    let form = reqwest::multipart::Form::new().text("spaceKey", "AT").part("file", reqwest::multipart::Part::bytes(zip).file_name("guide.zip"));
+    let r = member.post(app.url("/imports/markdown")).multipart(form).send().await.unwrap();
+    assert_eq!(r.status(), 201);
+    let res: Value = r.json().await.unwrap();
+    assert_eq!(res["attachments"], 0);
+    assert!(res["skippedFiles"][0].as_str().unwrap().contains("shot.gif"), "{res}");
 }

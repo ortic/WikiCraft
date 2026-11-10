@@ -688,6 +688,7 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
 
     // second pass: images and linked files → attachments, wiki links → page links
     let mut attachments = 0;
+    let mut skipped_files: Vec<String> = Vec::new();
     let find_asset = |joined: &str, decoded: &str| -> Option<(String, Bytes)> {
         assets
             .get_key_value(joined)
@@ -725,6 +726,14 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
                 Some(a) => *a,
                 None => {
                     let fname = names.get(&key).cloned().unwrap_or_else(|| decoded.rsplit('/').next().unwrap_or(&decoded).to_string());
+                    // the wiki's upload rules apply: files they refuse stay out (and are reported)
+                    let clean = crate::routes::attachments::clean_filename(&fname);
+                    if let Err(e) = crate::routes::attachments::check_upload(state, user.workspace_id, space.id, &clean, data.len() as u64).await {
+                        if skipped_files.len() < 50 {
+                            skipped_files.push(e.to_string());
+                        }
+                        continue;
+                    }
                     let a = crate::routes::attachments::store_attachment(state, user.workspace_id, id, Some(user.id), &fname, data, None, None).await?;
                     attachments += 1;
                     stored.insert(key, a);
@@ -782,7 +791,7 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
     for id in folder_pages.values() {
         state.search.enqueue(*id);
     }
-    Ok(json!({ "pages": created, "attachments": attachments }))
+    Ok(json!({ "pages": created, "attachments": attachments, "skippedFiles": skipped_files }))
 }
 
 /// A relative reference to a file of the import (not a URL, absolute path, anchor or `data:`).

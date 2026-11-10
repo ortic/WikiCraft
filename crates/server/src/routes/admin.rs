@@ -109,7 +109,8 @@ pub async fn spaces(State(state): State<AppState>, CurrentUser(user): CurrentUse
             "SELECT s.id, s.key, s.name, s.icon, s.default_role, s.anonymous_access, s.archived_at,
                     (SELECT count(*) FROM pages p WHERE p.space_id = s.id AND p.deleted_at IS NULL) AS pages,
                     (SELECT count(*) FROM attachments a JOIN pages p ON p.id = a.page_id WHERE p.space_id = s.id AND a.deleted_at IS NULL) AS attachments,
-                    (SELECT COALESCE(sum(a.size), 0)::bigint FROM attachments a JOIN pages p ON p.id = a.page_id WHERE p.space_id = s.id AND a.deleted_at IS NULL) AS storage_bytes,
+                    (SELECT COALESCE(sum(av.size), 0)::bigint FROM attachment_versions av JOIN attachments a ON a.id = av.attachment_id JOIN pages p ON p.id = a.page_id
+                      WHERE p.space_id = s.id AND a.deleted_at IS NULL) AS storage_bytes,
                     (SELECT max(p.updated_at) FROM pages p WHERE p.space_id = s.id) AS last_updated,
                     s.personal_owner_id IS NOT NULL AS personal
              FROM spaces s WHERE s.workspace_id = $1 ORDER BY s.archived_at IS NOT NULL, lower(s.name)",

@@ -896,3 +896,5 @@ button.page-prop-key-btn:hover, button.page-prop-key-btn:focus-visible { backgro
 [data-indent="8"] { margin-left: 240px; }
 /* text for screen readers only */
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
+.attachment-rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0 14px; }
+.attachment-rules .field { display: flex; flex-direction: column; gap: 3px; }

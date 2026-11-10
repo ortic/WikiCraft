@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Upload, FileSearch, CheckCircle2, XCircle, UserPlus, Users, Activity, Database, RefreshCw, Mail, Send, Globe, Megaphone, Building2, Ban, RotateCcw } from 'lucide-react'
+import { Upload, FileSearch, CheckCircle2, XCircle, UserPlus, Users, Activity, Database, RefreshCw, Mail, Send, Globe, Megaphone, Building2, Ban, RotateCcw, Paperclip } from 'lucide-react'
 import { api, formatBytes, formatDate, type Job } from '../api'
 import { Avatar, Modal, Spinner, useMe, useToast, type Features } from '../ui'
 import AdminWebhooks from './AdminWebhooks'
@@ -80,6 +80,7 @@ function Overview() {
       </div>
       <BrandingSettings />
       <WorkspaceSettings />
+      <AttachmentSettings />
       <AnnouncementSettings />
       <MailStatus />
     </div>
@@ -174,6 +175,88 @@ function BrandingSettings() {
 type Announcement = { text: string; level: 'info' | 'warning' | 'success'; id: string }
 
 /** Admin → Overview: the banner everyone sees at the top of the wiki. */
+interface AttachmentRules {
+  maxFileMb: number
+  blockedTypes: string[]
+  allowedTypes: string[]
+  spaceQuotaMb: number
+  workspaceQuotaMb: number
+}
+
+/** Admin → Overview: largest file, file types and storage limits for attachments. */
+function AttachmentSettings() {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const settings = useQuery({
+    queryKey: ['admin-settings'],
+    queryFn: () => api.get<{ attachments: AttachmentRules; serverMaxUploadMb: number; attachmentStorageBytes: number }>('/admin/settings'),
+  })
+  const [form, setForm] = useState<{ maxFileMb: string; blockedTypes: string; allowedTypes: string; spaceQuotaMb: string; workspaceQuotaMb: string } | null>(null)
+  const s = settings.data
+  if (!s?.attachments) return null
+  const a = s.attachments
+  const f = form ?? {
+    maxFileMb: String(a.maxFileMb),
+    blockedTypes: a.blockedTypes.join(', '),
+    allowedTypes: a.allowedTypes.join(', '),
+    spaceQuotaMb: String(a.spaceQuotaMb),
+    workspaceQuotaMb: String(a.workspaceQuotaMb),
+  }
+  const set = (k: keyof typeof f) => (e: { target: { value: string } }) => setForm({ ...f, [k]: e.target.value })
+  const save = async () => {
+    const n = (v: string) => Math.max(0, Math.round(Number(v) || 0))
+    try {
+      await api.put('/admin/settings', {
+        attachments: { maxFileMb: Math.min(n(f.maxFileMb), s.serverMaxUploadMb), blockedTypes: f.blockedTypes, allowedTypes: f.allowedTypes, spaceQuotaMb: n(f.spaceQuotaMb), workspaceQuotaMb: n(f.workspaceQuotaMb) },
+      })
+      qc.invalidateQueries({ queryKey: ['admin-settings'] })
+      qc.invalidateQueries({ queryKey: ['features'] })
+      setForm(null)
+      toast('Attachment rules saved')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not save')
+    }
+  }
+  return (
+    <div className="card" style={{ marginTop: 24, maxWidth: 720 }}>
+      <h3 style={{ marginTop: 0 }} className="row"><Paperclip size={17} /> Attachments</h3>
+      <p className="muted small" style={{ marginTop: 0 }}>
+        Rules for uploads and for files that come with Markdown, HTML or Notion imports. Attachments take {formatBytes(s.attachmentStorageBytes)} now, all versions counted.
+      </p>
+      <div className="attachment-rules">
+        <div className="field">
+          <label htmlFor="att-max">Largest file (MB)</label>
+          <input id="att-max" className="input" type="number" min={1} max={s.serverMaxUploadMb} value={f.maxFileMb} onChange={set('maxFileMb')} />
+          <span className="faint small">At most {s.serverMaxUploadMb} MB, the server's limit.</span>
+        </div>
+        <div className="field">
+          <label htmlFor="att-space">Storage per space (MB)</label>
+          <input id="att-space" className="input" type="number" min={0} value={f.spaceQuotaMb} onChange={set('spaceQuotaMb')} />
+          <span className="faint small">0 = no limit. Admin → Spaces shows what each space uses.</span>
+        </div>
+        <div className="field">
+          <label htmlFor="att-ws">Storage for the whole wiki (MB)</label>
+          <input id="att-ws" className="input" type="number" min={0} value={f.workspaceQuotaMb} onChange={set('workspaceQuotaMb')} />
+          <span className="faint small">0 = no limit.</span>
+        </div>
+      </div>
+      <div className="field">
+        <label htmlFor="att-blocked">Blocked file types</label>
+        <input id="att-blocked" className="input" placeholder="exe, bat, cmd, msi" value={f.blockedTypes} onChange={set('blockedTypes')} />
+      </div>
+      <div className="field">
+        <label htmlFor="att-allowed">Only these file types</label>
+        <input id="att-allowed" className="input" placeholder="Empty: every type that isn't blocked" value={f.allowedTypes} onChange={set('allowedTypes')} />
+      </div>
+      <div className="row">
+        <span className="faint small">File types are extensions, separated by commas. Imports by admins (Confluence, backups) aren't limited.</span>
+        <span className="spacer" />
+        <button className="btn btn-primary" disabled={!form} onClick={save}>Save</button>
+      </div>
+    </div>
+  )
+}
+
 function AnnouncementSettings() {
   const qc = useQueryClient()
   const toast = useToast()
@@ -1044,7 +1127,7 @@ function MarkdownImport() {
   const [selected, setSelected] = useState<File | null>(null)
   const [space, setSpace] = useState('')
   const [busy, setBusy] = useState(false)
-  const [result, setResult] = useState<{ pages: number; attachments: number; space: string } | null>(null)
+  const [result, setResult] = useState<{ pages: number; attachments: number; skippedFiles?: string[]; space: string } | null>(null)
   const start = async () => {
     if (!selected || !space) return
     setBusy(true)
@@ -1053,7 +1136,7 @@ function MarkdownImport() {
       const form = new FormData()
       form.append('spaceKey', space)
       form.append('file', selected)
-      const r = await api.upload<{ pages: number; attachments: number }>('/imports/markdown', form)
+      const r = await api.upload<{ pages: number; attachments: number; skippedFiles?: string[] }>('/imports/markdown', form)
       setResult({ ...r, space })
       setSelected(null)
     } catch (e) {
@@ -1086,6 +1169,12 @@ function MarkdownImport() {
           <CheckCircle2 size={15} color="var(--success)" style={{ verticalAlign: -2 }} /> Imported {result.pages} pages and {result.attachments} attachments into{' '}
           <Link to={`/spaces/${result.space}`}>{result.space}</Link>.
         </p>
+      )}
+      {!!result?.skippedFiles?.length && (
+        <div className="small" style={{ marginTop: 6 }}>
+          <span className="muted">Left out by the attachment rules:</span>
+          <ul style={{ margin: '4px 0 0' }}>{result.skippedFiles.map((f) => <li key={f}>{f}</li>)}</ul>
+        </div>
       )}
     </div>
   )

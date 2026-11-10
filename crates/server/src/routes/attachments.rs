@@ -39,6 +39,122 @@ pub async fn list(State(state): State<AppState>, MaybeUser(user): MaybeUser, Pat
     ))
 }
 
+/// Upload rules an admin set (Administration → Overview → Attachments).
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UploadPolicy {
+    /// largest file in MB (never above the server's `WIKICRAFT_MAX_UPLOAD_MB`)
+    pub max_file_mb: u64,
+    /// file extensions that can't be uploaded
+    pub blocked_types: Vec<String>,
+    /// when not empty, only these extensions can be uploaded
+    pub allowed_types: Vec<String>,
+    /// attachment storage per space in MB, all versions counted (0 = no limit)
+    pub space_quota_mb: u64,
+    /// attachment storage of the whole wiki in MB (0 = no limit)
+    pub workspace_quota_mb: u64,
+}
+
+const MB: u64 = 1024 * 1024;
+
+pub async fn upload_policy(state: &AppState, ws: Uuid) -> ApiResult<UploadPolicy> {
+    let s: Option<serde_json::Value> = sqlx::query_scalar("SELECT settings FROM workspaces WHERE id = $1").bind(ws).fetch_optional(&state.db).await?;
+    let s = s.unwrap_or_default();
+    let cap = state.config.max_upload_mb;
+    let list = |k: &str| -> Vec<String> {
+        s.get(k).and_then(|v| v.as_array()).map(|a| a.iter().filter_map(|x| x.as_str().map(String::from)).collect()).unwrap_or_default()
+    };
+    Ok(UploadPolicy {
+        max_file_mb: s.get("attachmentMaxMb").and_then(|v| v.as_u64()).filter(|m| *m > 0).map(|m| m.min(cap)).unwrap_or(cap),
+        blocked_types: list("attachmentBlockedTypes"),
+        allowed_types: list("attachmentAllowedTypes"),
+        space_quota_mb: s.get("spaceQuotaMb").and_then(|v| v.as_u64()).unwrap_or(0),
+        workspace_quota_mb: s.get("workspaceQuotaMb").and_then(|v| v.as_u64()).unwrap_or(0),
+    })
+}
+
+/// A file name's extension, lower case without the dot ("" for none).
+pub fn extension(filename: &str) -> String {
+    filename.rsplit_once('.').map(|(stem, ext)| if stem.is_empty() { "" } else { ext }).unwrap_or("").to_lowercase()
+}
+
+/// Normalises a list of file types an admin typed (`.EXE, pdf` → `exe`, `pdf`).
+pub fn clean_types(v: &serde_json::Value) -> Result<Vec<String>, String> {
+    let raw: Vec<String> = match v {
+        serde_json::Value::String(s) => s.split([',', ' ', ';']).map(String::from).collect(),
+        serde_json::Value::Array(a) => a.iter().map(|x| x.as_str().map(String::from).ok_or("file types must be text")).collect::<Result<_, _>>()?,
+        serde_json::Value::Null => vec![],
+        _ => return Err("file types must be a list like [\"exe\", \"bat\"]".into()),
+    };
+    let mut out: Vec<String> = Vec::new();
+    for t in raw {
+        let t = t.trim().trim_start_matches('*').trim_start_matches('.').to_lowercase();
+        if t.is_empty() {
+            continue;
+        }
+        if t.len() > 16 || !t.chars().all(|c| c.is_ascii_alphanumeric()) {
+            return Err(format!("\"{t}\" isn't a file extension"));
+        }
+        if !out.contains(&t) {
+            out.push(t);
+        }
+    }
+    if out.len() > 200 {
+        return Err("at most 200 file types".into());
+    }
+    Ok(out)
+}
+
+/// Attachment storage of a space (or, with `None`, the whole workspace), all versions counted.
+pub async fn storage_used(state: &AppState, ws: Uuid, space: Option<Uuid>) -> ApiResult<u64> {
+    let used: i64 = sqlx::query_scalar(
+        "SELECT COALESCE(sum(av.size), 0)::bigint FROM attachment_versions av JOIN attachments a ON a.id = av.attachment_id JOIN pages p ON p.id = a.page_id
+         WHERE a.workspace_id = $1 AND a.deleted_at IS NULL AND ($2::uuid IS NULL OR p.space_id = $2)",
+    )
+    .bind(ws)
+    .bind(space)
+    .fetch_one(&state.db)
+    .await?;
+    Ok(used.max(0) as u64)
+}
+
+/// Whether a file may be uploaded to a page of `space`: size, type and storage limits.
+pub async fn check_upload(state: &AppState, ws: Uuid, space: Uuid, filename: &str, size: u64) -> ApiResult<()> {
+    let p = upload_policy(state, ws).await?;
+    if size > p.max_file_mb * MB {
+        return Err(ApiError::bad(format!("{filename} is larger than {} MB, the largest file this wiki takes", p.max_file_mb)));
+    }
+    let ext = extension(filename);
+    if !p.allowed_types.is_empty() && !p.allowed_types.contains(&ext) {
+        return Err(ApiError::bad(format!("{filename}: only these file types can be uploaded here: {}", p.allowed_types.join(", "))));
+    }
+    if p.blocked_types.contains(&ext) {
+        return Err(ApiError::bad(format!("{filename}: .{ext} files can't be uploaded here")));
+    }
+    let mb = |b: u64| b.div_ceil(MB);
+    if p.space_quota_mb > 0 {
+        let used = storage_used(state, ws, Some(space)).await?;
+        if used + size > p.space_quota_mb * MB {
+            return Err(ApiError::bad(format!(
+                "this space is full: its attachments take {} of {} MB. Delete attachments or ask an admin for more room",
+                mb(used),
+                p.space_quota_mb
+            )));
+        }
+    }
+    if p.workspace_quota_mb > 0 {
+        let used = storage_used(state, ws, None).await?;
+        if used + size > p.workspace_quota_mb * MB {
+            return Err(ApiError::bad(format!(
+                "the wiki is full: attachments take {} of {} MB. Delete attachments or ask an admin for more room",
+                mb(used),
+                p.workspace_quota_mb
+            )));
+        }
+    }
+    Ok(())
+}
+
 /// Sanitizes a client-supplied file name (no paths, control chars or leading dots).
 pub fn clean_filename(name: &str) -> String {
     let base = name.rsplit(['/', '\\']).next().unwrap_or(name);
@@ -142,11 +258,12 @@ pub async fn upload(
     mut mp: Multipart,
 ) -> ApiResult<(StatusCode, Json<Vec<AttachmentRow>>)> {
     let p = Principal::load(&state, Some(user.clone())).await?;
-    require_page(&state, &p, page_id, Need::Edit).await?;
+    let (_, space) = require_page(&state, &p, page_id, Need::Edit).await?;
     let mut ids = Vec::new();
     while let Some(field) = mp.next_field().await.map_err(|e| ApiError::bad(format!("multipart: {e}")))? {
         let Some(name) = field.file_name().map(String::from) else { continue };
         let data = field.bytes().await.map_err(|e| ApiError::bad(format!("upload failed: {e}")))?;
+        check_upload(&state, user.workspace_id, space, &clean_filename(&name), data.len() as u64).await?;
         ids.push(store_attachment(&state, user.workspace_id, page_id, Some(user.id), &name, data, None, None).await?);
     }
     if ids.is_empty() {

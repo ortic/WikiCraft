@@ -4986,6 +4986,9 @@ paths:
                 properties:
                   pages: *id005
                   attachments: *id005
+                  skippedFiles:
+                    type: array
+                    items: *id001
         4XX:
           description: Error
           content:
@@ -5265,7 +5268,8 @@ paths:
     get:
       tags:
       - Admin
-      summary: Workspace switches (public links, exports, Ask the wiki, personal spaces) and the trash retention period
+      summary: Workspace switches (public links, exports, Ask the wiki, personal spaces), the trash retention period and the
+        attachment rules
       operationId: get_admin_settings
       responses:
         '200':
@@ -5293,6 +5297,32 @@ paths:
                     - admins
                     - everyone
                     description: who must set up two-factor authentication before using the wiki
+                  attachments:
+                    type: object
+                    properties:
+                      maxFileMb:
+                        type: integer
+                        description: largest file in MB (0 = the server's WIKICRAFT_MAX_UPLOAD_MB)
+                      blockedTypes:
+                        description: file extensions that can't be uploaded (list or comma-separated)
+                      allowedTypes:
+                        description: when not empty, only these extensions
+                      spaceQuotaMb:
+                        type: integer
+                        description: attachment storage per space, all versions (0 = no limit)
+                      workspaceQuotaMb:
+                        type: integer
+                        description: attachment storage of the wiki (0 = no limit)
+                  serverMaxUploadMb:
+                    type: integer
+                    readOnly: true
+                  attachmentStorageBytes:
+                    type: integer
+                    readOnly: true
+                  maxFileMb:
+                    type: integer
+                    readOnly: true
+                    description: '/features: the largest file the caller may upload'
         4XX:
           description: Error
           content:

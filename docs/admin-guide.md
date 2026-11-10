@@ -59,6 +59,11 @@ else is configured afterwards:
 - *Administration → Overview*: workspace name and logo, announcement banner, sharing and feature
   switches (public links, exports, *Ask the wiki*, personal spaces, who viewed a page), how long
   trashed pages are kept, e-mail status and a test message, usage numbers.
+- *Administration → Overview → Attachments*: the largest file people may upload (up to the
+  server's `WIKICRAFT_MAX_UPLOAD_MB`), blocked file types or a list of the only allowed ones, and
+  storage limits per space and for the whole wiki (all versions of a file count; deleting
+  attachments frees room). They apply to uploads and to the files in Markdown, HTML and Notion
+  imports; Confluence imports and backup restores by admins aren't limited.
 - *Administration → Users / Groups*: people and groups.
 - *Administration → Import*: Confluence, Word, Markdown, HTML, Notion and Obsidian imports, space
   backups, and the recent jobs (imports, restores, exports). **Cancel** stops a queued job at once

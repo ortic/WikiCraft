@@ -29,13 +29,31 @@ async function request<T>(method: string, path: string, body?: unknown): Promise
   return data as T
 }
 
+/** Largest attachment the wiki takes (from /features), to refuse big files before uploading them. */
+let maxFileMb: number | null = null
+export function setMaxFileMb(mb: number | null | undefined) {
+  maxFileMb = mb && mb > 0 ? mb : null
+}
+
+function checkFiles(form: FormData, path: string) {
+  if (!maxFileMb || !/\/attachments$/.test(path)) return
+  for (const v of form.values()) {
+    if (v instanceof File && v.size > maxFileMb * 1024 * 1024) {
+      throw new ApiError(400, 'bad_request', `${v.name} is larger than ${maxFileMb} MB, the largest file this wiki takes`)
+    }
+  }
+}
+
 export const api = {
   get: <T>(p: string) => request<T>('GET', p),
   post: <T>(p: string, b?: unknown) => request<T>('POST', p, b ?? {}),
   put: <T>(p: string, b?: unknown) => request<T>('PUT', p, b ?? {}),
   patch: <T>(p: string, b?: unknown) => request<T>('PATCH', p, b ?? {}),
   del: <T>(p: string, b?: unknown) => request<T>('DELETE', p, b),
-  upload: <T>(p: string, form: FormData) => request<T>('POST', p, form),
+  upload: async <T>(p: string, form: FormData) => {
+    checkFiles(form, p)
+    return request<T>('POST', p, form)
+  },
 }
 
 // ---- types (mirror the server's camelCase JSON) ----

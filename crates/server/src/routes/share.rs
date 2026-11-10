@@ -191,6 +191,9 @@ pub async fn get_settings(State(state): State<AppState>, CurrentUser(user): Curr
         sqlx::query_scalar("SELECT settings->>'requireTwoFactor' FROM workspaces WHERE id = $1").bind(user.workspace_id).fetch_one(&state.db).await?;
     out.insert("requireTwoFactor".into(), json!(mfa.unwrap_or_else(|| "off".into())));
     out.insert("drawioUrl".into(), json!(drawio_url(&state, user.workspace_id).await?));
+    out.insert("attachments".into(), json!(crate::routes::attachments::upload_policy(&state, user.workspace_id).await?));
+    out.insert("serverMaxUploadMb".into(), json!(state.config.max_upload_mb));
+    out.insert("attachmentStorageBytes".into(), json!(crate::routes::attachments::storage_used(&state, user.workspace_id, None).await?));
     Ok(Json(Value::Object(out)))
 }
 
@@ -247,6 +250,40 @@ pub async fn put_settings(
             audit::log(&state, user.workspace_id, Some(user.id), "workspace.settings", None, None, json!({ "drawioUrl": url })).await;
             continue;
         }
+        if key == "attachments" {
+            // upload rules: {maxFileMb, blockedTypes, allowedTypes, spaceQuotaMb, workspaceQuotaMb}, each optional
+            let o = v.as_object().ok_or_else(|| ApiError::bad("attachments must be an object"))?;
+            let mut set = serde_json::Map::new();
+            for (k, val) in o {
+                match k.as_str() {
+                    "maxFileMb" => {
+                        let cap = state.config.max_upload_mb;
+                        let mb = val
+                            .as_u64()
+                            .filter(|m| *m <= cap)
+                            .ok_or_else(|| ApiError::bad(format!("maxFileMb must be 0 (the server's limit) to {cap} (WIKICRAFT_MAX_UPLOAD_MB)")))?;
+                        set.insert("attachmentMaxMb".into(), json!(mb));
+                    }
+                    "blockedTypes" | "allowedTypes" => {
+                        let types = crate::routes::attachments::clean_types(val).map_err(ApiError::bad)?;
+                        set.insert(if k == "blockedTypes" { "attachmentBlockedTypes" } else { "attachmentAllowedTypes" }.into(), json!(types));
+                    }
+                    "spaceQuotaMb" | "workspaceQuotaMb" => {
+                        let mb =
+                            val.as_u64().filter(|m| *m <= 100_000_000).ok_or_else(|| ApiError::bad(format!("{k} must be 0 (no limit) or a number of MB")))?;
+                        set.insert(k.clone(), json!(mb));
+                    }
+                    other => return Err(ApiError::bad(format!("unknown attachment setting {other}"))),
+                }
+            }
+            sqlx::query("UPDATE workspaces SET settings = settings || $2 WHERE id = $1")
+                .bind(user.workspace_id)
+                .bind(Value::Object(set.clone()))
+                .execute(&state.db)
+                .await?;
+            audit::log(&state, user.workspace_id, Some(user.id), "workspace.settings", None, None, json!({ "attachments": set })).await;
+            continue;
+        }
         if key == "viewerList" {
             let on = v.as_bool().ok_or_else(|| ApiError::bad("viewerList must be true or false"))?;
             sqlx::query("UPDATE workspaces SET settings = settings || jsonb_build_object('viewerList', $2::boolean) WHERE id = $1")
@@ -297,6 +334,8 @@ pub async fn features(State(state): State<AppState>, CurrentUser(user): CurrentU
     }
     f.insert("viewerList".into(), Value::Bool(viewer_list_on(&state, user.workspace_id).await?));
     f.insert("drawioUrl".into(), json!(drawio_url(&state, user.workspace_id).await?));
+    let policy = crate::routes::attachments::upload_policy(&state, user.workspace_id).await?;
+    f.insert("maxFileMb".into(), json!(policy.max_file_mb));
     Ok(Json(Value::Object(f)))
 }
 
