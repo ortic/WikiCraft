@@ -1,7 +1,20 @@
-import { useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { NodeViewWrapper, type ReactNodeViewProps } from '@tiptap/react'
-import { AlignCenter, AlignLeft, AlignRight, Captions, Download, ExternalLink, Maximize2, Trash2, Type, WrapText, X, ZoomIn } from 'lucide-react'
+import { AlignCenter, AlignLeft, AlignRight, Captions, Download, ExternalLink, Maximize2, PenTool, Trash2, Type, WrapText, X, ZoomIn } from 'lucide-react'
+import { api, type Attachment } from '../api'
+
+const DrawingEditor = lazy(() => import('./DrawingEditor'))
+
+/** Uploaded images (relative or absolute URL on this server) can be annotated. */
+function sameOriginAttachment(src: string): boolean {
+  try {
+    const u = new URL(src, location.href)
+    return u.origin === location.origin && u.pathname.startsWith('/api/attachments/')
+  } catch {
+    return false
+  }
+}
 
 /** Full-screen view of an image (click in read mode, double-click while editing). */
 export function Lightbox({ src, alt, caption, onClose }: { src: string; alt: string | null; caption: string | null; onClose: () => void }) {
@@ -43,6 +56,18 @@ export function ImageView({ node, updateAttributes, deleteNode, selected, editor
   const [dragWidth, setDragWidth] = useState<number | null>(null)
   const [captionOpen, setCaptionOpen] = useState(false)
   const [zoom, setZoom] = useState(false)
+  const [annotate, setAnnotate] = useState(false)
+  const pageId = location.pathname.match(/\/pages\/([0-9a-f-]{36})/)?.[1]
+  // annotations are drawn over the image and saved as a new image (the original stays attached)
+  const saveAnnotated = async (_scene: string, png: Blob | null) => {
+    if (!png || !pageId) return setAnnotate(false)
+    const base = (alt || 'image').replace(/[^\w.-]+/g, '-').slice(0, 40)
+    const form = new FormData()
+    form.append('file', new File([png], `annotated-${base}-${Date.now()}.png`, { type: 'image/png' }))
+    const rows = await api.upload<Attachment[]>(`/pages/${pageId}/attachments`, form)
+    update({ src: `/api/attachments/${rows[0].id}/content` })
+    setAnnotate(false)
+  }
   const editable = editor.isEditable
   // attribute changes go through Yjs and drop the node selection: keep the image selected
   const update = (attrs: Record<string, unknown>) => {
@@ -100,6 +125,18 @@ export function ImageView({ node, updateAttributes, deleteNode, selected, editor
           onDoubleClick={editable ? () => setZoom(true) : undefined}
         />
         {zoom && <Lightbox src={src} alt={alt} caption={caption} onClose={() => setZoom(false)} />}
+        {annotate && (
+          <Suspense fallback={null}>
+            <DrawingEditor
+              initial={null}
+              image={src}
+              title="Annotate image"
+              dark={document.documentElement.dataset.theme === 'dark'}
+              onSave={saveAnnotated}
+              onClose={() => setAnnotate(false)}
+            />
+          </Suspense>
+        )}
         {editable && selected && (
           <>
             <span className="image-toolbar" contentEditable={false}>
@@ -113,6 +150,10 @@ export function ImageView({ node, updateAttributes, deleteNode, selected, editor
               {btn(alt ? `Alt text: ${alt}` : 'Add alt text', !!alt, editAlt, <Type size={15} />)}
               {btn('Original size', false, () => update({ width: null }), <Maximize2 size={15} />)}
               {btn('View larger (double-click)', false, () => setZoom(true), <ZoomIn size={15} />)}
+              {pageId && sameOriginAttachment(src) && btn('Annotate: draw arrows, boxes and text on the image', false, () => {
+                ;(document.activeElement as HTMLElement | null)?.blur?.()
+                setAnnotate(true)
+              }, <PenTool size={15} />)}
               <span className="sep" />
               {btn('Delete image', false, () => deleteNode(), <Trash2 size={15} />)}
             </span>

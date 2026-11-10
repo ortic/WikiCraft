@@ -1,14 +1,62 @@
 // The drawing editor (Excalidraw), loaded only when someone opens a drawing.
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { Excalidraw, exportToBlob, serializeAsJSON } from '@excalidraw/excalidraw'
-import type { ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
+import { Excalidraw, convertToExcalidrawElements, exportToBlob, serializeAsJSON } from '@excalidraw/excalidraw'
+import type { BinaryFileData, DataURL, ExcalidrawImperativeAPI } from '@excalidraw/excalidraw/types'
+import type { FileId } from '@excalidraw/excalidraw/element/types'
 import '@excalidraw/excalidraw/index.css'
 
 
-export default function DrawingEditor({ initial, dark, onSave, onClose }: { initial: string | null; dark: boolean; onSave: (scene: string, png: Blob | null) => Promise<void>; onClose: () => void }) {
+export default function DrawingEditor({
+  initial,
+  image,
+  title = 'Drawing',
+  dark,
+  onSave,
+  onClose,
+}: {
+  initial: string | null
+  /** annotate this image: it becomes the (locked) background of the drawing */
+  image?: string
+  title?: string
+  dark: boolean
+  onSave: (scene: string, png: Blob | null) => Promise<void>
+  onClose: () => void
+}) {
   const [api, setApi] = useState<ExcalidrawImperativeAPI | null>(null)
+  // keys must not reach the page editor underneath (it may have a block selected)
+  useEffect(() => {
+    ;(document.activeElement as HTMLElement | null)?.blur?.()
+  }, [])
+  useEffect(() => {
+    if (!api || !image) return
+    let cancelled = false
+    ;(async () => {
+      const blob = await (await fetch(image)).blob()
+      const dataURL = await new Promise<string>((resolve) => {
+        const r = new FileReader()
+        r.onload = () => resolve(r.result as string)
+        r.readAsDataURL(blob)
+      })
+      const size = await new Promise<{ w: number; h: number }>((resolve) => {
+        const img = new Image()
+        img.onload = () => resolve({ w: img.naturalWidth, h: img.naturalHeight })
+        img.src = dataURL
+      })
+      if (cancelled) return
+      const fileId = 'background' as FileId
+      const file: BinaryFileData = { id: fileId, dataURL: dataURL as DataURL, mimeType: (blob.type || 'image/png') as BinaryFileData['mimeType'], created: Date.now() }
+      api.addFiles([file])
+      const scale = Math.min(1, 1200 / size.w)
+      const [el] = convertToExcalidrawElements([{ type: 'image', fileId, x: 0, y: 0, width: size.w * scale, height: size.h * scale }])
+      api.updateScene({ elements: [{ ...el, locked: true }] })
+      api.scrollToContent(undefined, { fitToContent: true })
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [api, image])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   let initialData = undefined
@@ -45,14 +93,14 @@ export default function DrawingEditor({ initial, dark, onSave, onClose }: { init
   return createPortal(
     <div className="drawing-modal" role="dialog" aria-modal aria-label="Drawing" onKeyDown={(e) => e.stopPropagation()}>
       <div className="drawing-bar">
-        <b>Drawing</b>
+        <b>{title}</b>
         {error && <span className="error-text small">{error}</span>}
         <span className="spacer" />
         <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
         <button className="btn btn-primary" onClick={save} disabled={busy || !api}>{busy ? 'Saving…' : 'Save'}</button>
       </div>
       <div className="drawing-canvas">
-        <Excalidraw excalidrawAPI={setApi} initialData={initialData} theme={dark ? 'dark' : 'light'} UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false } }} />
+        <Excalidraw autoFocus excalidrawAPI={setApi} initialData={initialData} theme={dark ? 'dark' : 'light'} UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false } }} />
       </div>
     </div>,
     document.body,
