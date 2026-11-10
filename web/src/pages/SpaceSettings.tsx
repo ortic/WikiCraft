@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { useParams, useSearchParams } from 'react-router-dom'
+import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { useCanonicalSpaceKey } from '../useCanonicalKey'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Trash2, RotateCcw, Users, X } from 'lucide-react'
 import { api, formatDate, type Space } from '../api'
@@ -21,6 +22,7 @@ export default function SpaceSettings() {
   const [params, setParams] = useSearchParams()
   const requested = params.get('tab') ?? 'details'
   const space = useQuery({ queryKey: ['space', key], queryFn: () => api.get<Space>(`/spaces/${key}`) })
+  useCanonicalSpaceKey(key, space.data?.key)
   if (space.isLoading) return <div className="content-pad"><Spinner /></div>
   if (space.error) return <div className="content-pad"><ErrorBox error={space.error} /></div>
   const s = space.data!
@@ -53,11 +55,22 @@ function Details({ space }: { space: Space }) {
   const [name, setName] = useState(space.name)
   const [description, setDescription] = useState(space.description ?? '')
   const [icon, setIcon] = useState(space.icon ?? '')
+  const [key, setKey] = useState(space.key)
+  const nav = useNavigate()
   const save = async () => {
-    await api.patch(`/spaces/${space.key}`, { name, description, icon })
+    const newKey = key.trim().toUpperCase()
+    const renamed = newKey !== space.key
+    if (renamed && !confirm(`Change the space key from ${space.key} to ${newKey}? Links with ${space.key} keep working.`)) return
+    try {
+      await api.patch(`/spaces/${space.key}`, { name, description, icon, ...(renamed ? { key: newKey } : {}) })
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not save')
+      return
+    }
     qc.invalidateQueries({ queryKey: ['spaces'] })
-    qc.invalidateQueries({ queryKey: ['space', space.key] })
+    qc.invalidateQueries({ queryKey: ['space'] })
     toast('Saved')
+    if (renamed) nav(`/spaces/${newKey}/settings`, { replace: true })
   }
   return (
     <div style={{ maxWidth: 520 }}>
@@ -67,7 +80,11 @@ function Details({ space }: { space: Space }) {
         <SymbolPicker value={icon || null} onChange={(v) => setIcon(v ?? '')} />
       </div>
       <div className="field"><label>Description</label><textarea className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} /></div>
-      <div className="field"><label>Key</label><input className="input" value={space.key} disabled /></div>
+      <div className="field">
+        <label>Key</label>
+        <input className="input" value={key} maxLength={32} onChange={(e) => setKey(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ''))} />
+        {key !== space.key && <div className="faint small">Pages keep their links: URLs with {space.key} redirect to {key || '…'}.</div>}
+      </div>
       <button className="btn btn-primary" onClick={save}>Save</button>
       <div className="card danger-zone" style={{ marginTop: 28 }}>
         <b>Archive this space</b>

@@ -983,6 +983,8 @@ pub async fn unfavorite(State(state): State<AppState>, CurrentUser(user): Curren
 #[derive(Deserialize)]
 pub struct ExportQuery {
     format: Option<String>,
+    /// Word only: include every descendant page the reader can see
+    tree: Option<bool>,
 }
 
 /// Exports a page as Markdown, standalone HTML, Word (`docx`) or JSON.
@@ -996,7 +998,7 @@ pub async fn export(State(state): State<AppState>, MaybeUser(user): MaybeUser, P
     };
     let safe_name: String = title.chars().map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect();
     if q.format.as_deref() == Some("docx") {
-        let body = export_docx(&state, &p, id, title, doc).await?;
+        let body = export_docx(&state, &p, id, title, doc, q.tree.unwrap_or(false)).await?;
         let mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
         return Ok(([(header::CONTENT_TYPE, mime.to_string()), (header::CONTENT_DISPOSITION, format!("attachment; filename=\"{safe_name}.docx\""))], body)
             .into_response());
@@ -1016,7 +1018,17 @@ pub async fn export(State(state): State<AppState>, MaybeUser(user): MaybeUser, P
     Ok(([(header::CONTENT_TYPE, mime.to_string()), (header::CONTENT_DISPOSITION, format!("attachment; filename=\"{safe_name}.{ext}\""))], body).into_response())
 }
 
-async fn export_docx(state: &AppState, p: &Principal, id: Uuid, title: String, doc: Node) -> ApiResult<Vec<u8>> {
+/// One page of a Word export, with everything the renderer needs.
+struct DocxPage {
+    id: Uuid,
+    title: String,
+    subtitle: String,
+    doc: Node,
+    children: Vec<(String, String)>,
+    macros: Vec<Option<crate::routes::reports::Snapshot>>,
+}
+
+async fn docx_page(state: &AppState, p: &Principal, id: Uuid, title: String, doc: Node) -> ApiResult<DocxPage> {
     let (space, space_key, updated_at, updated_by): (String, String, chrono::DateTime<chrono::Utc>, Option<String>) = sqlx::query_as(
         "SELECT s.name, s.key, p.updated_at, u.name FROM pages p JOIN spaces s ON s.id = p.space_id LEFT JOIN users u ON u.id = p.updated_by WHERE p.id = $1",
     )
@@ -1053,19 +1065,62 @@ async fn export_docx(state: &AppState, p: &Principal, id: Uuid, title: String, d
         let snap = if i < 25 { crate::routes::reports::snapshot(state, p, name, params, id, &space_key, &base).await? } else { None };
         macros.push(snap);
     }
-    let images = crate::docx::load_images(state, p, &doc).await;
     let by = updated_by.map(|n| format!(" by {n}")).unwrap_or_default();
     let subtitle = format!("{space} \u{00B7} Last updated {}{by}", updated_at.format("%-d %b %Y"));
+    Ok(DocxPage { id, title, subtitle, doc, children, macros })
+}
+
+/// The page, or with `tree` the page and every descendant the reader can see (depth first,
+/// at most 200 pages), as one Word document.
+async fn export_docx(state: &AppState, p: &Principal, id: Uuid, title: String, doc: Node, tree: bool) -> ApiResult<Vec<u8>> {
+    let mut pages = vec![docx_page(state, p, id, title, doc).await?];
+    if tree {
+        let rows: Vec<(Uuid, String, Value)> = sqlx::query_as(
+            "WITH RECURSIVE t AS (
+                SELECT id, 0 AS depth, ARRAY[]::float8[] AS path, ARRAY[]::text[] AS names FROM pages WHERE id = $1
+                UNION ALL
+                SELECT c.id, t.depth + 1, t.path || c.position, t.names || lower(c.title)
+                FROM pages c JOIN t ON c.parent_id = t.id WHERE c.deleted_at IS NULL AND t.depth < 30)
+             SELECT p.id, p.title, p.content FROM t JOIN pages p ON p.id = t.id WHERE t.depth > 0 ORDER BY t.path, t.names LIMIT 400",
+        )
+        .bind(id)
+        .fetch_all(&state.db)
+        .await?;
+        for (cid, ctitle, content) in rows {
+            if pages.len() >= 200 {
+                break;
+            }
+            if require_page(state, p, cid, Need::View).await.is_err() {
+                continue;
+            }
+            let cdoc = match state.rooms.get(cid) {
+                Some(r) => r.snapshot(),
+                None => Node::from_json(&content).unwrap_or_else(|_| Node::empty_doc()),
+            };
+            pages.push(docx_page(state, p, cid, ctitle, cdoc).await?);
+        }
+    }
+    // one image map for all pages (each image checked against the reader)
+    let mut images = crate::docx::Images::new();
+    for pg in &pages {
+        images.extend(crate::docx::load_images(state, p, &pg.doc).await);
+    }
+    let base = state.config.base_url.trim_end_matches('/').to_string();
     let bytes = tokio::task::spawn_blocking(move || {
-        crate::docx::render(&crate::docx::DocxInput {
-            title: &title,
-            subtitle: Some(subtitle),
-            doc: &doc,
-            images: &images,
-            base_url: &base,
-            children: &children,
-            macros: &macros,
-        })
+        let inputs: Vec<crate::docx::DocxInput> = pages
+            .iter()
+            .map(|pg| crate::docx::DocxInput {
+                title: &pg.title,
+                subtitle: Some(pg.subtitle.clone()),
+                doc: &pg.doc,
+                images: &images,
+                base_url: &base,
+                children: &pg.children,
+                macros: &pg.macros,
+                page_id: Some(pg.id),
+            })
+            .collect();
+        crate::docx::render_many(&inputs)
     })
     .await
     .map_err(|e| ApiError::Internal(e.into()))?

@@ -354,3 +354,45 @@ async fn word_export_of_a_page() {
     let anon = common::client();
     assert_ne!(anon.get(app.url(&format!("/pages/{pg}/export?format=docx"))).send().await.unwrap().status(), 200);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn word_export_of_a_page_tree() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, _) = app.user(&owner, "tree@acme.test", "member").await;
+    let (_, sp) = app.post(&owner, "/spaces", json!({"key": "MAN", "name": "Manual"})).await;
+    let home = sp["homePageId"].as_str().unwrap().to_string();
+    let (_, root) = app.post(&owner, "/pages", json!({"spaceKey": "MAN", "parentId": home, "title": "Handbook"})).await;
+    let root = root["id"].as_str().unwrap().to_string();
+    let (_, a) = app.post(&owner, "/pages", json!({"spaceKey": "MAN", "parentId": root, "title": "Chapter A"})).await;
+    let a = a["id"].as_str().unwrap().to_string();
+    let (_, a1) = app.post(&owner, "/pages", json!({"spaceKey": "MAN", "parentId": a, "title": "Section A1", "markdown": "Deep content."})).await;
+    let a1 = a1["id"].as_str().unwrap().to_string();
+    let (_, b) = app.post(&owner, "/pages", json!({"spaceKey": "MAN", "parentId": root, "title": "Chapter B", "markdown": "B text"})).await;
+    let b = b["id"].as_str().unwrap().to_string();
+    // the root links to section A1; chapter B is restricted to the owner
+    let (st, _) = app.put(&owner, &format!("/pages/{root}/content"), json!({"markdown": format!("Start with [the details](/pages/{a1}).")})).await;
+    assert_eq!(st, 200);
+    let (_, me) = app.get(&owner, "/me").await;
+    let owner_id = me["user"]["id"].as_str().unwrap().to_string();
+    app.put(&owner, &format!("/pages/{b}/restrictions"), json!({"restrictions": [{"kind": "view", "subjectType": "user", "subjectId": owner_id}]})).await;
+
+    let docx = |c: reqwest::Client, url: String| async move {
+        let r = c.get(url).send().await.unwrap();
+        assert_eq!(r.status(), 200);
+        let mut z = zip::ZipArchive::new(std::io::Cursor::new(r.bytes().await.unwrap().to_vec())).unwrap();
+        entry(&mut z, "word/document.xml")
+    };
+    let xml = docx(member.clone(), app.url(&format!("/pages/{root}/export?format=docx&tree=true"))).await;
+    let order: Vec<usize> =
+        ["Handbook", "Chapter A", "Section A1"].iter().map(|t| xml.find(&format!(">{t}<")).unwrap_or_else(|| panic!("{t} missing"))).collect();
+    assert!(order[0] < order[1] && order[1] < order[2], "depth-first order");
+    assert!(!xml.contains("Chapter B") && !xml.contains("B text"), "restricted descendants are left out");
+    assert!(xml.contains("w:pageBreakBefore"), "each page starts on a new page");
+    assert!(xml.contains("w:anchor=\"p2\""), "the link to Section A1 points inside the document");
+    // the owner gets all four; without tree only the page itself
+    let xml = docx(owner.clone(), app.url(&format!("/pages/{root}/export?format=docx&tree=true"))).await;
+    assert!(xml.contains("Chapter B") && xml.contains("B text"));
+    let xml = docx(owner.clone(), app.url(&format!("/pages/{root}/export?format=docx"))).await;
+    assert!(!xml.contains("Chapter A"));
+}

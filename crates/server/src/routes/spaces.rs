@@ -58,13 +58,17 @@ pub async fn workspace_of(state: &AppState, p: &Principal) -> ApiResult<Uuid> {
 /// Loads a space by key and the principal's role in it (404 if no access).
 pub async fn load_space(state: &AppState, p: &Principal, key: &str) -> ApiResult<(SpaceRow, Role)> {
     let ws = workspace_of(state, p).await?;
-    let space =
-        sqlx::query_as::<_, SpaceRow>(sqlx::AssertSqlSafe(format!("SELECT {SPACE_COLUMNS} FROM spaces WHERE workspace_id = $1 AND lower(key) = lower($2)")))
-            .bind(ws)
-            .bind(key)
-            .fetch_optional(&state.db)
-            .await?
-            .ok_or(ApiError::NotFound("space"))?;
+    // the current key, else a former one (renamed spaces keep their old links)
+    let space = sqlx::query_as::<_, SpaceRow>(sqlx::AssertSqlSafe(format!(
+        "SELECT {SPACE_COLUMNS} FROM spaces WHERE workspace_id = $1 AND (lower(key) = lower($2)
+            OR (NOT EXISTS (SELECT 1 FROM spaces WHERE workspace_id = $1 AND lower(key) = lower($2))
+                AND id = (SELECT space_id FROM space_key_aliases WHERE workspace_id = $1 AND lower(key) = lower($2))))"
+    )))
+    .bind(ws)
+    .bind(key)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(ApiError::NotFound("space"))?;
     let role = space_role(state, p, &space.access_row()).await?;
     if role == Role::None {
         return Err(if p.user.is_none() { ApiError::Unauthorized } else { ApiError::NotFound("space") });
@@ -138,6 +142,16 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
     let name = req.name.trim();
     if name.is_empty() {
         return Err(ApiError::bad("name is required"));
+    }
+    // a former key of another space still points there
+    let former: Option<String> =
+        sqlx::query_scalar("SELECT s.name FROM space_key_aliases a JOIN spaces s ON s.id = a.space_id WHERE a.workspace_id = $1 AND lower(a.key) = lower($2)")
+            .bind(user.workspace_id)
+            .bind(&key)
+            .fetch_optional(&state.db)
+            .await?;
+    if let Some(n) = former {
+        return Err(ApiError::Conflict(format!("the key {key} was used by the space “{n}” and still links there")));
     }
     let default_role = req.default_role.unwrap_or_else(|| "editor".into());
     validate_role(&default_role)?;
@@ -232,12 +246,42 @@ pub async fn get(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct UpdateSpace {
+    /// a new key; the old one keeps working as an alias
+    key: Option<String>,
     name: Option<String>,
     description: Option<String>,
     icon: Option<String>,
     default_role: Option<String>,
     anonymous_access: Option<bool>,
     home_page_id: Option<Uuid>,
+}
+
+/// Gives a space a new key and keeps the old one as an alias.
+async fn rename_key(state: &AppState, ws: Uuid, space: Uuid, old: &str, new: &str) -> ApiResult<()> {
+    let mut tx = state.db.begin().await?;
+    let taken: Option<String> = sqlx::query_scalar(
+        "SELECT name FROM spaces WHERE workspace_id = $1 AND lower(key) = lower($2) AND id <> $3
+         UNION ALL SELECT s.name FROM space_key_aliases a JOIN spaces s ON s.id = a.space_id WHERE a.workspace_id = $1 AND lower(a.key) = lower($2) AND a.space_id <> $3 LIMIT 1",
+    )
+    .bind(ws)
+    .bind(new)
+    .bind(space)
+    .fetch_optional(&mut *tx)
+    .await?;
+    if let Some(name) = taken {
+        return Err(ApiError::Conflict(format!("the key {new} is (or was) used by the space “{name}”")));
+    }
+    // renaming back to a former key drops that alias
+    sqlx::query("DELETE FROM space_key_aliases WHERE workspace_id = $1 AND lower(key) = lower($2)").bind(ws).bind(new).execute(&mut *tx).await?;
+    sqlx::query("UPDATE spaces SET key = $2, updated_at = now() WHERE id = $1").bind(space).bind(new).execute(&mut *tx).await?;
+    sqlx::query("INSERT INTO space_key_aliases (workspace_id, key, space_id) VALUES ($1, $2, $3) ON CONFLICT DO NOTHING")
+        .bind(ws)
+        .bind(old)
+        .bind(space)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(())
 }
 
 pub async fn update(
@@ -256,6 +300,14 @@ pub async fn update(
     }
     if req.anonymous_access == Some(true) && !space.anonymous_access && !user.is_admin() {
         return Err(ApiError::bad("only workspace admins can make a space public"));
+    }
+    let new_key = match req.key.as_deref() {
+        Some(k) => Some(validate_key(k)?).filter(|k| *k != space.key),
+        None => None,
+    };
+    if let Some(k) = &new_key {
+        rename_key(&state, user.workspace_id, space.id, &space.key, k).await?;
+        audit::log(&state, user.workspace_id, Some(user.id), "space.rename_key", Some("space"), Some(space.id), json!({"from": space.key, "to": k})).await;
     }
     let row = sqlx::query_as::<_, SpaceRow>(sqlx::AssertSqlSafe(format!(
         "UPDATE spaces SET name = COALESCE($2, name), description = COALESCE($3, description), icon = COALESCE($4, icon),

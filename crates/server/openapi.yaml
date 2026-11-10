@@ -1366,7 +1366,7 @@ paths:
     patch:
       tags:
       - Spaces
-      summary: Update name, description, icon, default role, anonymous access
+      summary: Update key (old key keeps working), name, description, icon, default role, anonymous access
       operationId: patch_spaces_key
       parameters:
       - name: key
@@ -2364,6 +2364,11 @@ paths:
         in: query
         required: false
         description: md | html | docx | json
+        schema: *id001
+      - name: tree
+        in: query
+        required: false
+        description: 'docx: true = include every descendant page you can see'
         schema: *id001
       responses:
         '200':

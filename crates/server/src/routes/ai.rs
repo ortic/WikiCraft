@@ -224,6 +224,9 @@ pub async fn ask(State(state): State<AppState>, CurrentUser(user): CurrentUser, 
         linked = linked.replace(&format!("[{n}]"), &format!("[\\[{n}\\]]({base}/pages/{id})"));
     }
     let answer_html = html::render(&markdown::markdown_to_pm(&linked).doc, &html::HtmlOptions { heading_ids: false });
+    // the pages the answer cites (all retrieved pages when it cites none)
+    let cited: Vec<Value> = sources.iter().filter(|s| answer.contains(&format!("[{}]", s["n"]))).cloned().collect();
+    let sources = if cited.is_empty() { sources } else { cited };
     Ok(Json(json!({ "answer": answer, "answerHtml": answer_html, "sources": sources, "model": model })))
 }
 

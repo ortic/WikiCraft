@@ -4,13 +4,13 @@ Autonomous build session started 2026-11-09 (user asked for ~15 h of work follow
 Since the user's request every change is committed and pushed to `origin/master` (github.com/ortic/WikiCraft). Dev Postgres: docker container `wikicraft-pg` on `127.0.0.1:55432`
 (user/pass/db = `wikicraft`). Port 5432 and 5173 are taken by other tools on this machine.
 
-## Status (2026-11-09, ~22:00 UTC)
+## Status (2026-11-10, ~00:40 UTC)
 
 | Area | State |
 |---|---|
 | `crates/doc-model` (PM JSON, Yjs ⇄ PM, Markdown, HTML, text, SVG icon set) | OK, 17 unit tests |
 | `crates/confluence` (XML + CSV reader, storage → PM, import plan) | OK, 12 unit + 2 real-export tests |
-| `crates/server` (API, authz, collab, search, SSO, mail, webhooks, export, MFA, …) | OK, ~20 unit + 18 integration test files |
+| `crates/server` (API, authz, collab, search, SSO, mail, webhooks, export, MFA, Word, AI, …) | OK, ~30 unit + 28 integration test files |
 | `web/` frontend (React 19 + Tiptap 3) | OK, verified in Chromium via Playwright |
 | Docker image (SAML on, healthcheck), compose (single + 2-replica), Kubernetes manifests | OK |
 
@@ -45,6 +45,16 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   webhooks; TOTP 2FA + session management; inspect permissions; `[[` page links, `:emoticon`, shortcuts dialog;
   Notion import + import UI; OpenAPI 3.1 spec with coverage test; idle session timeout; PLAN.md audited
   (subagent) and kept in sync.
+- Night (2026-11-09/10, user asleep): security review 2 (14 findings, all fixed); e2e Playwright suite + CI job
+  (8 tests); likes; space lifecycle (archive / delete); @mentions in comments; 12 built-in templates; page
+  icons + covers; CI disk fix; Word export (docx-rs; report macros evaluated per reader; icons rasterised with
+  resvg, SVG file access disabled) checked by rendering through LibreOffice; Word import (styles/outline levels,
+  numbering incl. LibreOffice's split numIds, merged cells, images, fields, footnotes, callout round trip; pandoc
+  + LibreOffice fixtures); find & replace (Ctrl+F/H); image lightbox; page verification + review requests +
+  report; request access; OpenSearch; Slack/Teams/Google Chat webhook formats; "changed since your last visit";
+  Ask the wiki (Claude Messages API over raw HTTP, permission-filtered retrieval, mock-API tests).
+- Note: running the whole test suite saturates this WSL machine (load ~100); a parallel demo server then hits DB
+  pool timeouts, and the mail test's 4-second wait can flake. Both pass when the machine is idle.
 
 ## Security review 2 (independent review agent, 2026-11-09 evening) — status
 1. [x] HIGH stored XSS: status colour unescaped in server-rendered HTML (public share pages, exports) → allow-list + CSP

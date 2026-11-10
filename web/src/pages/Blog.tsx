@@ -1,4 +1,5 @@
 import { Link, useNavigate, useParams } from 'react-router-dom'
+import { useCanonicalSpaceKey } from '../useCanonicalKey'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { MessageSquare, PenSquare } from 'lucide-react'
 import { api, formatDate, type Space } from '../api'
@@ -18,6 +19,7 @@ export default function Blog() {
   const nav = useNavigate()
   const qc = useQueryClient()
   const space = useQuery({ queryKey: ['space', key], queryFn: () => api.get<Space>(`/spaces/${key}`) })
+  useCanonicalSpaceKey(key, space.data?.key)
   const posts = useQuery({ queryKey: ['blog', key], queryFn: () => api.get<BlogItem[]>(`/spaces/${key}/blog`) })
   const canWrite = space.data && ['editor', 'admin'].includes(space.data.role)
   const write = async () => {

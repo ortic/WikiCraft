@@ -205,6 +205,9 @@ export default function PageView() {
                 <a className="menu-item" href={`/api/pages/${p.id}/export?format=docx`} style={{ color: 'inherit', textDecoration: 'none' }}>
                   <FileText size={15} /> Export as Word
                 </a>
+                <a className="menu-item" href={`/api/pages/${p.id}/export?format=docx&tree=true`} style={{ color: 'inherit', textDecoration: 'none' }} title="This page and all its child pages in one document">
+                  <FileText size={15} /> Export with child pages (Word)
+                </a>
                 <a className="menu-item" href={`/api/pages/${p.id}/export?format=md`} style={{ color: 'inherit', textDecoration: 'none' }}>
                   <Download size={15} /> Export as Markdown
                 </a>

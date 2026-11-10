@@ -44,3 +44,38 @@ async fn archive_is_read_only_and_delete_needs_archive_and_confirmation() {
     assert_eq!(app.get(&owner, "/spaces/OLD").await.0, 404);
     assert_eq!(app.get(&owner, &format!("/pages/{id}")).await.0, 404);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn renaming_a_space_key_keeps_old_links() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, _) = app.user(&owner, "mo@acme.test", "member").await;
+    let (_, sp) = app.post(&owner, "/spaces", json!({"key": "OPS", "name": "Operations"})).await;
+    let home = sp["homePageId"].as_str().unwrap().to_string();
+    app.post(&owner, "/spaces", json!({"key": "HR", "name": "People"})).await;
+
+    // only space admins rename; keys are validated and unique (also against former keys)
+    assert_eq!(app.patch(&member, "/spaces/OPS", json!({"key": "PLATFORM"})).await.0, 403);
+    assert_eq!(app.patch(&owner, "/spaces/OPS", json!({"key": "bad key!"})).await.0, 400);
+    assert_eq!(app.patch(&owner, "/spaces/OPS", json!({"key": "hr"})).await.0, 409);
+    let (st, s) = app.patch(&owner, "/spaces/OPS", json!({"key": "platform"})).await;
+    assert_eq!(st, 200, "{s}");
+    assert_eq!(s["key"], "PLATFORM");
+
+    // the old key still resolves (API and Confluence-style links), to the new space
+    let (st, s) = app.get(&member, "/spaces/ops").await;
+    assert_eq!(st, 200);
+    assert_eq!(s["key"], "PLATFORM");
+    let (_, p) = app.get(&member, &format!("/pages/{home}")).await;
+    assert_eq!(p["spaceKey"], "PLATFORM");
+    let (st, _) = app.post(&owner, "/pages", json!({"spaceKey": "OPS", "title": "Via the old key"})).await;
+    assert_eq!(st, 201);
+    // a new space can't take the old key; renaming back is fine
+    let (st, _) = app.post(&owner, "/spaces", json!({"key": "OPS", "name": "Impostor"})).await;
+    assert_eq!(st, 409);
+    let (st, s) = app.patch(&owner, "/spaces/PLATFORM", json!({"key": "OPS"})).await;
+    assert_eq!(st, 200);
+    assert_eq!(s["key"], "OPS");
+    let (st, s) = app.get(&member, "/spaces/platform").await;
+    assert_eq!((st, s["key"].as_str()), (200, Some("OPS")));
+}

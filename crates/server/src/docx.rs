@@ -44,6 +44,8 @@ pub struct DocxInput<'a> {
     pub children: &'a [(String, String)],
     /// evaluated report macros, one entry per `macro` node in document order
     pub macros: &'a [Option<Snapshot>],
+    /// the page itself: links to pages of the same export become links inside the document
+    pub page_id: Option<Uuid>,
 }
 
 const MAX_IMAGES: usize = 60;
@@ -242,6 +244,9 @@ struct Ctx {
 
 struct Renderer<'a> {
     input: &'a DocxInput<'a>,
+    /// section index (one per page in a page-tree export) and the bookmark of every page
+    section: usize,
+    pages: &'a HashMap<Uuid, String>,
     /// heading anchor id → bookmark name, in document order
     headings: Vec<(u8, String, String)>,
     heading_idx: usize,
@@ -258,24 +263,48 @@ const BULLET_ABS: usize = 10;
 const ORDERED_ABS: usize = 11;
 
 pub fn render(input: &DocxInput) -> anyhow::Result<Vec<u8>> {
-    let headings = text::headings(input.doc);
-    let anchors: HashMap<String, String> = headings.iter().enumerate().map(|(i, h)| (h.2.clone(), format!("h{i}"))).collect();
-    let mut r = Renderer {
-        input,
-        headings,
-        heading_idx: 0,
-        next_bookmark: 1,
-        anchors,
-        numberings: vec![Numbering::new(BULLET_NUM, BULLET_ABS)],
-        icons: HashMap::new(),
-        macro_idx: 0,
-    };
-    let ctx = Ctx { width: TEXT_WIDTH_DXA, ..Default::default() };
-    let mut blocks = vec![Block::P(Box::new(Paragraph::new().style("Title").add_run(Run::new().add_text(input.title))))];
-    if let Some(sub) = &input.subtitle {
-        blocks.push(Block::P(Box::new(Paragraph::new().line_spacing(spacing(0, 240)).add_run(Run::new().add_text(sub).size(18).color(MUTED)))));
+    render_many(std::slice::from_ref(input))
+}
+
+/// Several pages in one document (a page and its descendants), each starting on a new page.
+pub fn render_many(inputs: &[DocxInput]) -> anyhow::Result<Vec<u8>> {
+    let pages: HashMap<Uuid, String> = inputs.iter().enumerate().filter_map(|(i, d)| d.page_id.map(|id| (id, format!("p{i}")))).collect();
+    let mut blocks: Vec<Block> = Vec::new();
+    let mut numberings = vec![Numbering::new(BULLET_NUM, BULLET_ABS)];
+    let mut icons: HashMap<String, Option<DocxImage>> = HashMap::new();
+    let mut next_bookmark = 1;
+    for (section, input) in inputs.iter().enumerate() {
+        let headings = text::headings(input.doc);
+        let prefix = if section == 0 { String::new() } else { format!("s{section}") };
+        let anchors: HashMap<String, String> = headings.iter().enumerate().map(|(i, h)| (h.2.clone(), format!("{prefix}h{i}"))).collect();
+        let mut r = Renderer {
+            input,
+            section,
+            pages: &pages,
+            headings,
+            heading_idx: 0,
+            next_bookmark,
+            anchors,
+            numberings: std::mem::take(&mut numberings),
+            icons: std::mem::take(&mut icons),
+            macro_idx: 0,
+        };
+        let ctx = Ctx { width: TEXT_WIDTH_DXA, ..Default::default() };
+        let id = r.bookmark();
+        let mut title = Paragraph::new().style("Title").keep_next(true);
+        if section > 0 {
+            title = title.page_break_before(true);
+        }
+        let title = title.add_bookmark_start(id, format!("p{}", r.section)).add_run(Run::new().add_text(input.title)).add_bookmark_end(id);
+        blocks.push(Block::P(Box::new(title)));
+        if let Some(sub) = &input.subtitle {
+            blocks.push(Block::P(Box::new(Paragraph::new().line_spacing(spacing(0, 240)).add_run(Run::new().add_text(sub).size(18).color(MUTED)))));
+        }
+        blocks.extend(r.blocks(&input.doc.content, ctx));
+        numberings = std::mem::take(&mut r.numberings);
+        icons = std::mem::take(&mut r.icons);
+        next_bookmark = r.next_bookmark;
     }
-    blocks.extend(r.blocks(&input.doc.content, ctx));
 
     let mut docx = Docx::new()
         .page_size(11906, 16838)
@@ -287,7 +316,7 @@ pub fn render(input: &DocxInput) -> anyhow::Result<Vec<u8>> {
     for s in styles() {
         docx = docx.add_style(s);
     }
-    for n in std::mem::take(&mut r.numberings) {
+    for n in numberings {
         docx = docx.add_numbering(n);
     }
     for b in blocks {
@@ -371,6 +400,13 @@ impl Renderer<'_> {
 
     fn icon_run(&mut self, key: &str, svg: impl FnOnce() -> Option<String>) -> Option<Run> {
         self.icon(key, svg).map(|img| Run::new().add_image(pic(&img, ICON_PX, ICON_PX)))
+    }
+
+    /// The bookmark of a page included in this export that `href` points to.
+    fn page_bookmark(&self, href: &str) -> Option<String> {
+        let path = href.strip_prefix(self.input.base_url).unwrap_or(href);
+        let id: Uuid = path.strip_prefix("/pages/")?.split(['#', '?', '/']).next()?.parse().ok()?;
+        self.pages.get(&id).cloned()
     }
 
     fn url(&self, href: &str) -> Option<String> {
@@ -594,9 +630,11 @@ impl Renderer<'_> {
                 }
                 for (title, url) in children {
                     let p = Paragraph::new().numbering(NumberingId::new(BULLET_NUM), IndentLevel::new(ctx.depth.min(8))).line_spacing(spacing(0, 60));
-                    out.push(Block::P(Box::new(p.add_hyperlink(
-                        Hyperlink::new(url, HyperlinkType::External).add_run(Run::new().add_text(title).color(LINK_COLOR).underline("single")),
-                    ))));
+                    let link = match self.page_bookmark(url) {
+                        Some(bm) => Hyperlink::new(bm, HyperlinkType::Anchor),
+                        None => Hyperlink::new(url, HyperlinkType::External),
+                    };
+                    out.push(Block::P(Box::new(p.add_hyperlink(link.add_run(Run::new().add_text(title).color(LINK_COLOR).underline("single"))))));
                 }
             }
             nodes::INCLUDE => {
@@ -794,6 +832,10 @@ impl Renderer<'_> {
                         Some(bm) => p.add_hyperlink(Hyperlink::new(bm, HyperlinkType::Anchor).add_run(run.color(LINK_COLOR))),
                         None => p.add_run(run),
                     },
+                    Some(href) if self.page_bookmark(href).is_some() => {
+                        let bm = self.page_bookmark(href).unwrap_or_default();
+                        p.add_hyperlink(Hyperlink::new(bm, HyperlinkType::Anchor).add_run(run.color(LINK_COLOR).underline("single")))
+                    }
                     Some(href) => match self.url(href) {
                         Some(url) => p.add_hyperlink(Hyperlink::new(url, HyperlinkType::External).add_run(run.color(LINK_COLOR).underline("single"))),
                         None => p.add_run(run),
