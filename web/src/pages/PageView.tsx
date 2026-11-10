@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate, FileText, BadgeCheck, UserCheck, Archive, RotateCcw, UserCog, CircleDot } from 'lucide-react'
+import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate, FileText, BadgeCheck, UserCheck, Archive, RotateCcw, UserCog, CircleDot, FolderInput } from 'lucide-react'
 import { NoAccess, OwnerDialog, RequestReviewDialog, VerificationBadge, VerifyDialog } from '../components/Verification'
 import { ApiError, api, formatDate, type Page, type Space } from '../api'
 import { PageDecor } from '../components/PageDecor'
@@ -16,6 +16,7 @@ import RestrictionsDialog from '../components/RestrictionsDialog'
 import ShareDialog from '../components/ShareDialog'
 import MinorEditToggle from '../components/MinorEdit'
 import DraftBanner from '../components/DraftBanner'
+import PlacePicker from '../components/PlacePicker'
 
 type Panel = 'comments' | 'attachments' | null
 
@@ -35,6 +36,7 @@ export default function PageView() {
   const [menu, setMenu] = useState(false)
   const [statusOpen, setStatusOpen] = useState(false)
   const [copyOpen, setCopyOpen] = useState(false)
+  const [moveOpen, setMoveOpen] = useState(false)
   const [restrictions, setRestrictions] = useState(false)
   const [share, setShare] = useState(false)
   const [verifyOpen, setVerifyOpen] = useState(false)
@@ -296,6 +298,11 @@ export default function PageView() {
                     <Copy size={15} /> Copy page
                   </div>
                 )}
+                {p.access.admin && (
+                  <div className="menu-item" onClick={() => { setMenu(false); setMoveOpen(true) }}>
+                    <FolderInput size={15} /> Move…
+                  </div>
+                )}
                 {features.exports !== false && (<>
                 <div className="menu-sep" />
                 <div className="menu-label">Export</div>
@@ -511,6 +518,7 @@ export default function PageView() {
       {reviewOpen && <RequestReviewDialog pageId={p.id} onClose={() => setReviewOpen(false)} />}
       {ownerOpen && <OwnerDialog pageId={p.id} current={(p as Page & { ownerName?: string }).ownerName ?? null} onClose={() => setOwnerOpen(false)} />}
       {copyOpen && <CopyPageDialog page={p} onClose={() => setCopyOpen(false)} />}
+      {moveOpen && <MovePageDialog page={p} onClose={() => setMoveOpen(false)} />}
       {share && <ShareDialog pageId={p.id} title={p.title} restricted={!!p.restricted} onClose={() => setShare(false)} />}
     </div>
   )
@@ -523,13 +531,22 @@ function CopyPageDialog({ page, onClose }: { page: Page; onClose: () => void }) 
   const toast = useToast()
   const [title, setTitle] = useState(`Copy of ${page.title}`)
   const [children, setChildren] = useState(false)
+  const [attachments, setAttachments] = useState(true)
+  const [place, setPlace] = useState<{ spaceKey: string; parentId: string | null }>({ spaceKey: page.spaceKey, parentId: page.parentId })
   const [busy, setBusy] = useState(false)
   const kids = useQuery({ queryKey: ['children', page.id, 1], queryFn: () => api.get<unknown[]>(`/pages/${page.id}/children?depth=1`) })
   const submit = async () => {
     setBusy(true)
     try {
-      const r = await api.post<{ id: string }>(`/pages/${page.id}/copy`, { title: title.trim() || undefined, includeChildren: children })
+      const r = await api.post<{ id: string }>(`/pages/${page.id}/copy`, {
+        title: title.trim() || undefined,
+        includeChildren: children,
+        includeAttachments: attachments,
+        spaceKey: place.spaceKey,
+        parentId: place.parentId ?? undefined,
+      })
       qc.invalidateQueries({ queryKey: ['tree', page.spaceKey] })
+      qc.invalidateQueries({ queryKey: ['tree', place.spaceKey] })
       onClose()
       nav(`/pages/${r.id}`)
     } catch (e) {
@@ -552,12 +569,54 @@ function CopyPageDialog({ page, onClose }: { page: Page; onClose: () => void }) 
         <label htmlFor="copy-title">Title</label>
         <input id="copy-title" className="input" autoFocus value={title} maxLength={255} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
       </div>
+      <PlacePicker spaceKey={place.spaceKey} parentId={place.parentId} idPrefix="copy" onChange={(spaceKey, parentId) => setPlace({ spaceKey, parentId })} />
       {(kids.data?.length ?? 0) > 0 && (
         <label className="row small">
           <input type="checkbox" checked={children} onChange={(e) => setChildren(e.target.checked)} /> Include the {kids.data!.length === 1 ? 'child page' : `${kids.data!.length} child pages`} and everything below
         </label>
       )}
-      <p className="faint small" style={{ marginBottom: 0 }}>The copy keeps labels and restrictions and lands next to this page.</p>
+      <label className="row small">
+        <input type="checkbox" checked={attachments} onChange={(e) => setAttachments(e.target.checked)} /> Copy the attachments too
+      </label>
+      <p className="faint small" style={{ marginBottom: 0 }}>The copy keeps labels and restrictions.</p>
+    </Modal>
+  )
+}
+
+/** Moves the page (with everything below it) elsewhere in this space or to another one. */
+function MovePageDialog({ page, onClose }: { page: Page; onClose: () => void }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [place, setPlace] = useState<{ spaceKey: string; parentId: string | null }>({ spaceKey: page.spaceKey, parentId: page.parentId })
+  const [busy, setBusy] = useState(false)
+  const unchanged = place.spaceKey === page.spaceKey && place.parentId === page.parentId
+  const submit = async () => {
+    setBusy(true)
+    try {
+      await api.post(`/pages/${page.id}/move`, { spaceKey: place.spaceKey, parentId: place.parentId })
+      qc.invalidateQueries({ queryKey: ['tree', page.spaceKey] })
+      qc.invalidateQueries({ queryKey: ['tree', place.spaceKey] })
+      qc.invalidateQueries({ queryKey: ['page', page.id] })
+      toast(place.spaceKey === page.spaceKey ? 'Moved' : `Moved to ${place.spaceKey}`)
+      onClose()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Move failed')
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal
+      title="Move page"
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={busy || unchanged} onClick={submit}>{busy ? 'Moving…' : 'Move'}</button>
+        </>
+      }
+    >
+      <PlacePicker spaceKey={place.spaceKey} parentId={place.parentId} exclude={page.id} idPrefix="move" onChange={(spaceKey, parentId) => setPlace({ spaceKey, parentId })} />
+      <p className="faint small" style={{ marginBottom: 0 }}>The pages below it move too. Links to it keep working. Moving to another space needs admin rights here.</p>
     </Modal>
   )
 }

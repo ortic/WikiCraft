@@ -1038,3 +1038,46 @@ async fn blog_atom_feed() {
     assert_eq!(r.status(), 200);
     assert!(r.text().await.unwrap().contains("We shipped."));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn copying_pages_to_another_space_with_their_attachments() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    app.post(&owner, "/spaces", json!({"key": "SRC", "name": "Source"})).await;
+    app.post(&owner, "/spaces", json!({"key": "DST", "name": "Destination", "defaultRole": "viewer"})).await;
+    let (bob, _) = app.user(&owner, "bob@acme.test", "member").await;
+    let (_, page) = app.post(&owner, "/pages", json!({"spaceKey": "SRC", "title": "Diagram page", "blank": true})).await;
+    let page = page["id"].as_str().unwrap().to_string();
+    let form = reqwest::multipart::Form::new().part("file", reqwest::multipart::Part::bytes(b"\x89PNG\r\n\x1a\nfake".to_vec()).file_name("arch.png"));
+    let up: serde_json::Value = owner.post(app.url(&format!("/pages/{page}/attachments"))).multipart(form).send().await.unwrap().json().await.unwrap();
+    let att = up[0]["id"].as_str().unwrap().to_string();
+    let content =
+        json!({"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "image", "attrs": {"src": format!("/api/attachments/{att}/content")}}]}]});
+    app.put(&owner, &format!("/pages/{page}/content"), json!({ "content": content })).await;
+    app.post(&owner, "/pages", json!({"spaceKey": "SRC", "title": "Child", "parentId": page, "blank": true})).await;
+
+    // into another space: the copy has its own attachment, sharing the stored file
+    let (st, copy) = app.post(&owner, &format!("/pages/{page}/copy"), json!({"spaceKey": "DST", "includeChildren": true})).await;
+    assert_eq!(st, 201, "{copy}");
+    assert_eq!(copy["copied"], 2);
+    let copy_id = copy["id"].as_str().unwrap();
+    let (_, c) = app.get(&owner, &format!("/pages/{copy_id}")).await;
+    assert_eq!((c["spaceKey"].as_str(), c["parentId"].is_null()), (Some("DST"), true));
+    let (_, atts) = app.get(&owner, &format!("/pages/{copy_id}/attachments")).await;
+    let new_att = atts[0]["id"].as_str().unwrap().to_string();
+    assert_ne!(new_att, att);
+    assert!(c["content"].to_string().contains(&format!("/api/attachments/{new_att}/content")), "{}", c["content"]);
+    let body = owner.get(app.url(&format!("/attachments/{new_att}/content"))).send().await.unwrap().bytes().await.unwrap();
+    assert_eq!(&body[..], b"\x89PNG\r\n\x1a\nfake");
+    let (_, kids) = app.get(&owner, &format!("/pages/{copy_id}/children")).await;
+    assert_eq!(kids[0]["title"], "Child");
+
+    // without attachments, if asked
+    let (_, bare) = app.post(&owner, &format!("/pages/{page}/copy"), json!({"includeAttachments": false})).await;
+    let (_, atts) = app.get(&owner, &format!("/pages/{}/attachments", bare["id"].as_str().unwrap())).await;
+    assert!(atts.as_array().unwrap().is_empty());
+
+    // only into spaces you may write in
+    let (st, _) = app.post(&bob, &format!("/pages/{page}/copy"), json!({"spaceKey": "DST"})).await;
+    assert_eq!(st, 403);
+}

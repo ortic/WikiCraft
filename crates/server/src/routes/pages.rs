@@ -879,6 +879,10 @@ pub struct CopyPage {
     title: Option<String>,
     #[serde(default)]
     include_children: bool,
+    /// copy into another space (its root, or below `parentId` there)
+    space_key: Option<String>,
+    /// the copies get their own attachments (sharing the stored files); default yes
+    include_attachments: Option<bool>,
 }
 
 pub async fn copy(
@@ -894,16 +898,29 @@ pub async fn copy(
         return Err(ApiError::Forbidden);
     }
     let source_parent: Option<Uuid> = sqlx::query_scalar("SELECT parent_id FROM pages WHERE id = $1").bind(id).fetch_one(&state.db).await?;
+    // where the copy goes: this space, or another one the caller may write in
+    let target_space = match &req.space_key {
+        Some(k) => {
+            let (s, r) = load_space(&state, &p, k).await?;
+            if r < Role::Editor {
+                return Err(ApiError::Forbidden);
+            }
+            s.id
+        }
+        None => space,
+    };
     let target_parent = match req.parent_id {
         Some(par) => {
             let (_, ps) = require_page(&state, &p, par, Need::Edit).await?;
-            if ps != space {
+            if ps != target_space {
                 return Err(ApiError::bad("target parent is in another space"));
             }
             Some(par)
         }
-        None => source_parent,
+        None if target_space == space => source_parent,
+        None => None,
     };
+    let with_attachments = req.include_attachments.unwrap_or(true);
     if let Some(room) = state.rooms.get(id) {
         crate::collab::persist_with(&state, &room, false).await?;
     }
@@ -920,17 +937,32 @@ pub async fn copy(
         let (title, kind, content): (String, String, Value) =
             sqlx::query_as("SELECT title, kind, content FROM pages WHERE id = $1").bind(src).fetch_one(&state.db).await?;
         let title = if i == 0 { req.title.clone().unwrap_or_else(|| format!("Copy of {title}")) } else { title };
+        // the copy's own attachments: same stored files, new records, content pointing at them
+        let attachments: Vec<(Uuid, String, String, i64, Option<String>, Option<String>)> = if with_attachments {
+            sqlx::query_as("SELECT id, filename, media_type, size, blob_key, text_content FROM attachments WHERE page_id = $1 AND deleted_at IS NULL")
+                .bind(src)
+                .fetch_all(&state.db)
+                .await?
+        } else {
+            Vec::new()
+        };
+        let renamed: Vec<(Uuid, Uuid)> = attachments.iter().map(|a| (a.0, new_id())).collect();
+        let mut json = content.to_string();
+        for (old, new) in &renamed {
+            json = json.replace(&format!("/api/attachments/{old}/"), &format!("/api/attachments/{new}/"));
+        }
+        let content: Value = serde_json::from_str(&json).unwrap_or(content);
         let new = insert_page(
             &state.db,
             NewPage {
                 id: new_id(),
                 workspace_id: user.workspace_id,
-                space_id: space,
+                space_id: target_space,
                 parent_id: parent,
                 kind,
                 title,
                 content: Node::from_json(&content).unwrap_or_else(|_| Node::empty_doc()),
-                position: next_position(&state, space, parent).await?,
+                position: next_position(&state, target_space, parent).await?,
                 created_by: Some(user.id),
                 created_at: None,
                 source_ref: None,
@@ -939,6 +971,33 @@ pub async fn copy(
         )
         .await?;
         sqlx::query("INSERT INTO labels (page_id, name) SELECT $2, name FROM labels WHERE page_id = $1").bind(src).bind(new).execute(&state.db).await?;
+        for ((_, filename, media_type, size, blob_key, text), (_, new_att)) in attachments.iter().zip(&renamed) {
+            sqlx::query(
+                "INSERT INTO attachments (id, workspace_id, page_id, filename, media_type, size, blob_key, version, text_content, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9)",
+            )
+            .bind(new_att)
+            .bind(user.workspace_id)
+            .bind(new)
+            .bind(filename)
+            .bind(media_type)
+            .bind(size)
+            .bind(blob_key)
+            .bind(text)
+            .bind(user.id)
+            .execute(&state.db)
+            .await?;
+            sqlx::query(
+                "INSERT INTO attachment_versions (id, attachment_id, version, blob_key, size, media_type, created_by) VALUES ($1, $2, 1, $3, $4, $5, $6)",
+            )
+            .bind(new_id())
+            .bind(new_att)
+            .bind(blob_key)
+            .bind(size)
+            .bind(media_type)
+            .bind(user.id)
+            .execute(&state.db)
+            .await?;
+        }
         // restrictions travel with the copy (copying must never widen access)
         sqlx::query("INSERT INTO page_restrictions (page_id, kind, subject_type, subject_id) SELECT $2, kind, subject_type, subject_id FROM page_restrictions WHERE page_id = $1")
             .bind(src)
@@ -955,7 +1014,7 @@ pub async fn copy(
         }
         i += 1;
     }
-    audit::log(&state, user.workspace_id, Some(user.id), "page.copy", Some("page"), Some(id), json!({"copied": map.len()})).await;
+    audit::log(&state, user.workspace_id, Some(user.id), "page.copy", Some("page"), Some(id), json!({"copied": map.len(), "toSpace": target_space})).await;
     Ok((StatusCode::CREATED, Json(json!({ "id": first_new, "copied": map.len() }))))
 }
 

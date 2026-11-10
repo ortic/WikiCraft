@@ -437,6 +437,27 @@ test('history compares two versions word by word, inline or side by side', async
   await ctx.close()
 })
 
+test('a page moves to another space from the page menu', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState })
+  const page = await ctx.newPage()
+  await page.goto('/')
+  const id = await page.evaluate(async () => {
+    const h = { 'content-type': 'application/json', 'x-wikicraft': '1' }
+    await fetch('/api/spaces', { method: 'POST', headers: h, body: JSON.stringify({ key: 'OPS', name: 'Operations' }) })
+    const r = await fetch('/api/pages', { method: 'POST', headers: h, body: JSON.stringify({ spaceKey: 'PRODUCT', title: 'On-call guide', markdown: 'Who to call' }) })
+    return (await r.json()).id as string
+  })
+  await page.goto(`/pages/${id}`)
+  await page.getByRole('button', { name: 'More' }).click()
+  await page.getByText('Move…').click()
+  await page.getByLabel('Space').selectOption('OPS')
+  await page.locator('.modal').getByRole('button', { name: 'Move' }).click()
+  await expect
+    .poll(async () => page.evaluate(async (pid) => (await (await fetch(`/api/pages/${pid}`)).json()).spaceKey, id), { timeout: 15_000 })
+    .toBe('OPS')
+  await ctx.close()
+})
+
 test('the high-contrast theme meets WCAG AAA contrast (7:1) on the main screens', async ({ browser }) => {
   const ctx = await browser.newContext({ storageState: ownerState })
   await ctx.addInitScript(() => localStorage.setItem('wc-theme', 'contrast'))

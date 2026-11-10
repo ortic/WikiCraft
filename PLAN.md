@@ -207,7 +207,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** Space templates (create a space prefilled with a page structure) `C X`
 - [x] **P1** Space permissions screen (users × groups × anonymous × guests matrix) `C DC X B`
 - [~] **P1** Space admins / owners, ownership transfer `C` (admin role only; no owner/transfer)
-- [~] **P1** Copy space; move pages between spaces `C X` (cross-space move via API only; no copy)
+- [~] **P1** Copy space; move pages between spaces `C X` (move and copy pages with their sub-pages and attachments to another space from the page menu; no whole-space copy yet)
 - [x] **P1** Space key rename with redirects `X`
 - [ ] **P2** Space-level announcement banner `C`
 - [ ] **P2** Space analytics (views, contributors, popular pages) `C`
