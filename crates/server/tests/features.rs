@@ -438,3 +438,19 @@ async fn feature_switches() {
     assert_eq!(app.get(&member, &export).await.0, 200);
     assert_eq!(app.post(&member, "/me/space", json!({})).await.0, 201);
 }
+
+#[tokio::test]
+async fn space_categories() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    app.post(&owner, "/spaces", json!({"key": "CAT", "name": "Platform team"})).await;
+    let (st, s) = app.patch(&owner, "/spaces/CAT", json!({"category": "  Teams "})).await;
+    assert_eq!(st, 200, "{s}");
+    assert_eq!(s["category"], "Teams");
+    let (_, list) = app.get(&owner, "/spaces").await;
+    assert_eq!(list.as_array().unwrap().iter().find(|s| s["key"] == "CAT").unwrap()["category"], "Teams");
+    assert_eq!(app.patch(&owner, "/spaces/CAT", json!({"category": "x".repeat(61)})).await.0, 400);
+    // other updates leave it alone; "" removes it
+    assert_eq!(app.patch(&owner, "/spaces/CAT", json!({"name": "Platform"})).await.1["category"], "Teams");
+    assert!(app.patch(&owner, "/spaces/CAT", json!({"category": ""})).await.1["category"].is_null());
+}

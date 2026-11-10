@@ -11,7 +11,19 @@ export default function SpacesPage() {
   const [q, setQ] = useState('')
   const [create, setCreate] = useState(false)
   const spaces = useQuery({ queryKey: ['spaces'], queryFn: () => api.get<Space[]>('/spaces') })
-  const list = (spaces.data ?? []).filter((s) => !q || s.name.toLowerCase().includes(q.toLowerCase()) || s.key.toLowerCase().includes(q.toLowerCase()))
+  const [category, setCategory] = useState<string | null>(null)
+  const all = spaces.data ?? []
+  const categories = [...new Set(all.map((s) => s.category).filter((c): c is string => !!c))].sort((a, b) => a.localeCompare(b))
+  const list = all.filter(
+    (s) =>
+      (!q || s.name.toLowerCase().includes(q.toLowerCase()) || s.key.toLowerCase().includes(q.toLowerCase())) &&
+      (category === null || (s.category ?? '') === category),
+  )
+  // grouped by category (uncategorised last) when there are categories and none is picked
+  const groups: [string | null, Space[]][] =
+    categories.length && category === null
+      ? [...categories.map((c): [string | null, Space[]] => [c, list.filter((s) => s.category === c)]), ['Other', list.filter((s) => !s.category)]]
+      : [[null, list]]
   return (
     <div className="content-pad">
       <div className="row">
@@ -23,7 +35,18 @@ export default function SpacesPage() {
           </button>
         )}
       </div>
-      <input className="input" style={{ margin: '18px 0', maxWidth: 360 }} placeholder="Filter spaces" value={q} onChange={(e) => setQ(e.target.value)} />
+      <input className="input" style={{ margin: '18px 0 10px', maxWidth: 360 }} placeholder="Filter spaces" value={q} onChange={(e) => setQ(e.target.value)} />
+      {categories.length > 0 && (
+        <div className="chips" style={{ marginBottom: 14 }}>
+          <button className={`chip${category === null ? ' active' : ''}`} onClick={() => setCategory(null)}>All</button>
+          {categories.map((c) => (
+            <button key={c} className={`chip${category === c ? ' active' : ''}`} onClick={() => setCategory(category === c ? null : c)}>{c}</button>
+          ))}
+          {all.some((s) => !s.category) && (
+            <button className={`chip${category === '' ? ' active' : ''}`} onClick={() => setCategory(category === '' ? null : '')}>Other</button>
+          )}
+        </div>
+      )}
       <table className="list">
         <thead>
           <tr>
@@ -33,8 +56,14 @@ export default function SpacesPage() {
             <th>Your role</th>
           </tr>
         </thead>
-        <tbody>
-          {list.map((s) => (
+        {groups.filter(([, rows]) => rows.length).map(([title, rows]) => (
+        <tbody key={title ?? ''}>
+          {title !== null && (
+            <tr className="list-group">
+              <td colSpan={4}>{title}</td>
+            </tr>
+          )}
+          {rows.map((s) => (
             <tr key={s.id}>
               <td>
                 <Link to={`/spaces/${s.key}`} className="row" style={{ color: 'var(--text)' }}>
@@ -48,6 +77,7 @@ export default function SpacesPage() {
             </tr>
           ))}
         </tbody>
+        ))}
       </table>
       {create && <CreateSpaceDialog onClose={() => setCreate(false)} />}
     </div>

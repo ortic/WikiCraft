@@ -16,7 +16,7 @@ anyobj = {"type": "object", "additionalProperties": True}
 schemas = {
     "Error": obj({"error": txt, "message": txt}),
     "User": obj({"id": uuid, "workspaceId": uuid, "email": {"type": ["string", "null"]}, "name": txt, "role": {"enum": ["owner", "admin", "member", "guest"]}, "status": {"enum": ["active", "invited", "deactivated", "placeholder"]}, "avatarUrl": {"type": ["string", "null"]}}),
-    "Space": obj({"id": uuid, "key": txt, "name": txt, "description": {"type": ["string", "null"]}, "icon": {"type": ["string", "null"], "description": "symbol[:color] from the WikiCraft icon set"}, "homePageId": uuid, "defaultRole": {"enum": ["none", "viewer", "commenter", "editor", "admin"]}, "anonymousAccess": boolean, "role": txt}),
+    "Space": obj({"id": uuid, "key": txt, "name": txt, "description": {"type": ["string", "null"]}, "icon": {"type": ["string", "null"], "description": "symbol[:color] from the WikiCraft icon set"}, "homePageId": uuid, "category": {"type": ["string", "null"]}, "defaultRole": {"enum": ["none", "viewer", "commenter", "editor", "admin"]}, "anonymousAccess": boolean, "role": txt}),
     "PmNode": {"type": "object", "description": "ProseMirror / Tiptap JSON node (type, attrs, content, text, marks)", "additionalProperties": True},
     "PageAccess": obj({"view": boolean, "comment": boolean, "edit": boolean, "admin": boolean}),
     "Page": obj({"id": uuid, "spaceId": uuid, "spaceKey": txt, "spaceName": txt, "parentId": {"type": ["string", "null"], "format": "uuid"}, "kind": {"enum": ["page", "folder", "blog"]}, "title": txt, "content": S("PmNode"), "version": num, "labels": arr(txt), "restricted": boolean, "createdAt": dt, "updatedAt": dt, "updatedByName": {"type": ["string", "null"]}, "breadcrumbs": arr(obj({"id": uuid, "title": txt})), "access": S("PageAccess")}),
@@ -111,7 +111,7 @@ op("/groups/{id}/members/{user_id}", "delete", "Users", "Remove a member", res=N
 op("/spaces", "get", "Spaces", "Spaces visible to the caller", res=resp(arr(S("Space"))), public=True)
 op("/spaces", "post", "Spaces", "Create a space", req=body(obj({"key": txt, "name": txt, "description": txt, "icon": txt, "defaultRole": txt}, ["key", "name"])), res=resp(S("Space"), "201", "Created"))
 op("/spaces/{key}", "get", "Spaces", "A space", res=resp(S("Space")), public=True)
-op("/spaces/{key}", "patch", "Spaces", "Update key (old key keeps working), name, description, icon, default role, anonymous access", req=body(anyobj))
+op("/spaces/{key}", "patch", "Spaces", "Update key (old key keeps working), name, description, icon, category, default role, anonymous access", req=body(anyobj))
 op("/spaces/{key}", "delete", "Spaces", "Archive a space", res=NO)
 op("/spaces/{key}/tree", "get", "Spaces", "Page tree (visible pages)", public=True)
 op("/spaces/{key}/permissions", "get", "Spaces", "Space role grants")

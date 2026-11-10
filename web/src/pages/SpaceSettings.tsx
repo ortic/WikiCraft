@@ -60,6 +60,9 @@ function Details({ space }: { space: Space }) {
   const toast = useToast()
   const [name, setName] = useState(space.name)
   const [description, setDescription] = useState(space.description ?? '')
+  const [category, setCategory] = useState(space.category ?? '')
+  const allSpaces = useQuery({ queryKey: ['spaces'], queryFn: () => api.get<Space[]>('/spaces') })
+  const categories = [...new Set((allSpaces.data ?? []).map((s) => s.category).filter((c): c is string => !!c))].sort()
   const [icon, setIcon] = useState(space.icon ?? '')
   const [key, setKey] = useState(space.key)
   const [defaultTemplate, setDefaultTemplate] = useState((space as Space & { defaultTemplate?: string | null }).defaultTemplate ?? '')
@@ -70,7 +73,7 @@ function Details({ space }: { space: Space }) {
     const renamed = newKey !== space.key
     if (renamed && !confirm(`Change the space key from ${space.key} to ${newKey}? Links with ${space.key} keep working.`)) return
     try {
-      await api.patch(`/spaces/${space.key}`, { name, description, icon, defaultTemplate, ...(renamed ? { key: newKey } : {}) })
+      await api.patch(`/spaces/${space.key}`, { name, description, icon, category, defaultTemplate, ...(renamed ? { key: newKey } : {}) })
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Could not save')
       return
@@ -88,6 +91,12 @@ function Details({ space }: { space: Space }) {
         <SymbolPicker value={icon || null} onChange={(v) => setIcon(v ?? '')} />
       </div>
       <div className="field"><label>Description</label><textarea className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} /></div>
+      <div className="field">
+        <label>Category</label>
+        <input className="input" style={{ maxWidth: 360 }} list="space-categories" value={category} maxLength={60} placeholder="e.g. Teams, Projects, Knowledge base" onChange={(e) => setCategory(e.target.value)} />
+        <datalist id="space-categories">{categories.map((c) => <option key={c} value={c} />)}</datalist>
+        <div className="faint small" style={{ marginTop: 4 }}>Groups the space in the space directory.</div>
+      </div>
       <div className="field">
         <label>New pages start from</label>
         <select className="select" style={{ maxWidth: 360 }} value={defaultTemplate} onChange={(e) => setDefaultTemplate(e.target.value)}>

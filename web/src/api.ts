@@ -63,6 +63,7 @@ export interface Space {
   name: string
   description: string | null
   icon: string | null
+  category?: string | null
   homePageId: string | null
   defaultRole: Role
   anonymousAccess: boolean

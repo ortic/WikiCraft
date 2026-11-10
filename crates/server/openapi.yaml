@@ -76,6 +76,10 @@ components:
           - 'null'
           description: symbol[:color] from the WikiCraft icon set
         homePageId: *id002
+        category:
+          type:
+          - string
+          - 'null'
         defaultRole:
           enum:
           - none
@@ -1583,7 +1587,7 @@ paths:
     patch:
       tags:
       - Spaces
-      summary: Update key (old key keeps working), name, description, icon, default role, anonymous access
+      summary: Update key (old key keeps working), name, description, icon, category, default role, anonymous access
       operationId: patch_spaces_key
       parameters:
       - name: key

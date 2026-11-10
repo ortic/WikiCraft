@@ -31,9 +31,13 @@ pub struct SpaceRow {
     /// the template new pages start from
     #[sqlx(default)]
     pub default_template: Option<String>,
+    /// directory grouping ("Teams", "Projects", …)
+    #[sqlx(default)]
+    pub category: Option<String>,
 }
 
-pub const SPACE_COLUMNS: &str = "id, workspace_id, key, name, description, icon, home_page_id, default_role, anonymous_access, personal_owner_id, created_at, updated_at, archived_at, default_template";
+pub const SPACE_COLUMNS: &str =
+    "id, workspace_id, key, name, description, icon, home_page_id, default_role, anonymous_access, personal_owner_id, created_at, updated_at, archived_at, default_template, category";
 
 impl SpaceRow {
     pub fn access_row(&self) -> SpaceAccessRow {
@@ -365,6 +369,8 @@ pub struct UpdateSpace {
     home_page_id: Option<Uuid>,
     /// template for new pages: a template id, or "" for none
     default_template: Option<String>,
+    /// directory category, "" for none
+    category: Option<String>,
 }
 
 /// Gives a space a new key and keeps the old one as an alias.
@@ -422,6 +428,13 @@ pub async fn update(
             .bind(Some(t.as_str()).filter(|t| !t.is_empty()))
             .execute(&state.db)
             .await?;
+    }
+    if let Some(c) = &req.category {
+        let c = c.split_whitespace().collect::<Vec<_>>().join(" ");
+        if c.chars().count() > 60 {
+            return Err(ApiError::bad("categories are limited to 60 characters"));
+        }
+        sqlx::query("UPDATE spaces SET category = $2 WHERE id = $1").bind(space.id).bind(Some(c).filter(|c| !c.is_empty())).execute(&state.db).await?;
     }
     let new_key = match req.key.as_deref() {
         Some(k) => Some(validate_key(k)?).filter(|k| *k != space.key),

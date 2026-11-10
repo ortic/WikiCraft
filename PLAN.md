@@ -200,7 +200,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Space home / overview page `C D X`
 - [x] **P0** Personal spaces per user `C D`
 - [~] **P1** Space directory with search, categories, filters (team, personal, archived, starred) `C X` (name/key filter only)
-- [ ] **P1** Space categories / tags `C`
+- [x] **P1** Space categories / tags `C` — one category per space (Space settings → Details); the space directory groups and filters by it
 - [x] **P1** Space archive (read-only, hidden from search by default) and restore `C`
 - [~] **P1** Space sidebar: page tree, shortcuts/links, blog, whiteboards, databases, custom sections `C` (page tree + blog only)
 - [ ] **P1** Space-level look & feel: theme, colors, header image, sidebar config `C X`

@@ -647,3 +647,10 @@ a.menu-item { color: inherit; text-decoration: none; }
 .announcement-icon { color: var(--tone); flex: none; }
 .announcement-text { flex: 1; min-width: 0; overflow-wrap: anywhere; }
 .announcement .icon-btn { flex: none; }
+
+/* filter chips (space directory categories) */
+.chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.chip { border: 1px solid var(--border); background: var(--bg); color: var(--text-soft); border-radius: 999px; padding: 3px 12px; font: inherit; font-size: 13px; cursor: pointer; }
+.chip:hover { background: var(--bg-hover); color: var(--text); }
+.chip.active { background: var(--accent-soft); border-color: transparent; color: var(--accent-text); font-weight: 600; }
+table.list tr.list-group td { padding: 18px 8px 6px; font-size: 12px; font-weight: 700; color: var(--text-soft); text-transform: uppercase; letter-spacing: .04em; background: none; }
