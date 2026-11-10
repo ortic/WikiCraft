@@ -1,0 +1,187 @@
+---
+source: crates/confluence/tests/golden.rs
+expression: "report(&doc, &stats)"
+input_file: crates/confluence/tests/golden/site_links.xml
+---
+## stats
+{
+  "bodies": 1,
+  "images": 1,
+  "macros": {
+    "smart-link": [
+      1,
+      "native"
+    ]
+  },
+  "site_links_rewritten": 5
+}
+
+## prosemirror
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "By id: "
+        },
+        {
+          "type": "text",
+          "text": "other",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "wcimport:page/200#setup"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", old style: "
+        },
+        {
+          "type": "text",
+          "text": "viewpage",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "wcimport:page/200"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", by title: "
+        },
+        {
+          "type": "text",
+          "text": "display",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "wcimport:page/200"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", not in the export: "
+        },
+        {
+          "type": "text",
+          "text": "gone",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "https://acme.atlassian.net/wiki/spaces/DOC/pages/999/Gone"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", a file: "
+        },
+        {
+          "type": "text",
+          "text": "diagram",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "wcimport:attachment/300"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", a profile: "
+        },
+        {
+          "type": "text",
+          "text": "someone",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "https://acme.atlassian.net/wiki/people/abc"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": "."
+        }
+      ]
+    },
+    {
+      "type": "embed",
+      "attrs": {
+        "url": "https://www.youtube.com/watch?v=abc"
+      }
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Inline card: "
+        },
+        {
+          "type": "text",
+          "text": "https://github.com/acme/repo",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "https://github.com/acme/repo"
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "image",
+          "attrs": {
+            "src": "wcimport:attachment/300"
+          }
+        }
+      ]
+    }
+  ]
+}
+
+## markdown
+By id: [other](wcimport:page/200#setup), old style: [viewpage](wcimport:page/200), by title: [display](wcimport:page/200), not in the export: [gone](https://acme.atlassian.net/wiki/spaces/DOC/pages/999/Gone), a file: [diagram](wcimport:attachment/300), a profile: [someone](https://acme.atlassian.net/wiki/people/abc).
+
+<https://www.youtube.com/watch?v=abc>
+
+Inline card: [https://github.com/acme/repo](https://github.com/acme/repo)
+
+![](wcimport:attachment/300)
+
+## html
+<p>By id: other, old style: viewpage, by title: display, not in the export: <a href="https://acme.atlassian.net/wiki/spaces/DOC/pages/999/Gone" rel="noopener noreferrer">gone</a>, a file: diagram, a profile: <a href="https://acme.atlassian.net/wiki/people/abc" rel="noopener noreferrer">someone</a>.</p>
+<p class="embed">
+<a href="https://www.youtube.com/watch?v=abc" rel="noopener noreferrer">https://www.youtube.com/watch?v=abc</a>
+</p>
+<p>Inline card: <a href="https://github.com/acme/repo" rel="noopener noreferrer">https://github.com/acme/repo</a>
+</p>
+<p>
+<img src="" alt="" loading="lazy">
+</p>

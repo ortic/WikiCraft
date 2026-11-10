@@ -14,6 +14,7 @@ pub mod model;
 pub mod plan;
 pub mod source;
 pub mod storage;
+pub mod urls;
 pub mod wiki;
 pub mod xml_export;
 

@@ -10,36 +10,12 @@ use std::collections::HashMap;
 
 use axum::extract::{Path, Query, State};
 use axum::response::Redirect;
-use base64::Engine;
 use uuid::Uuid;
 
 use crate::app::AppState;
 use crate::error::ApiResult;
 
-/// Decodes a Confluence tiny-link id (little-endian page id, base64 with `-`/`_` substitutions
-/// and stripped trailing `A`s/padding).
-pub fn decode_tiny(tiny: &str) -> Option<u64> {
-    let mut s: String = tiny
-        .chars()
-        .map(|c| match c {
-            '-' => '/',
-            '_' => '+',
-            c => c,
-        })
-        .collect();
-    if s.is_empty() || s.len() > 11 || !s.chars().all(|c| c.is_ascii_alphanumeric() || c == '/' || c == '+') {
-        return None;
-    }
-    while s.len() < 11 {
-        s.push('A');
-    }
-    let bytes = base64::engine::general_purpose::STANDARD_NO_PAD.decode(s.as_bytes()).ok()?;
-    let mut buf = [0u8; 8];
-    for (i, b) in bytes.iter().take(8).enumerate() {
-        buf[i] = *b;
-    }
-    Some(u64::from_le_bytes(buf))
-}
+pub use wikicraft_confluence::urls::decode_tiny;
 
 async fn workspace(state: &AppState) -> Option<Uuid> {
     sqlx::query_scalar("SELECT id FROM workspaces ORDER BY created_at LIMIT 1").fetch_optional(&state.db).await.ok().flatten()

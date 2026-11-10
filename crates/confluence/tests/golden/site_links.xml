@@ -1,0 +1,4 @@
+<p>By id: <a href="https://acme.atlassian.net/wiki/spaces/DOC/pages/200/Other+Page#OtherPage-Setup">other</a>, old style: <a href="https://acme.atlassian.net/wiki/pages/viewpage.action?pageId=200">viewpage</a>, by title: <a href="https://acme.atlassian.net/wiki/display/DOC/Other+Page">display</a>, not in the export: <a href="https://acme.atlassian.net/wiki/spaces/DOC/pages/999/Gone">gone</a>, a file: <a href="https://acme.atlassian.net/wiki/download/attachments/100/diagram.png?api=v2">diagram</a>, a profile: <a href="https://acme.atlassian.net/wiki/people/abc">someone</a>.</p>
+<p><a href="https://www.youtube.com/watch?v=abc" data-card-appearance="embed">https://www.youtube.com/watch?v=abc</a></p>
+<p>Inline card: <a href="https://github.com/acme/repo" data-card-appearance="inline">https://github.com/acme/repo</a></p>
+<p><img src="https://acme.atlassian.net/wiki/download/attachments/100/diagram.png" /></p>

@@ -185,6 +185,29 @@ pub struct Planner<'e> {
     users: HashMap<String, String>,
     /// old versions dropped as exact duplicates of another
     duplicate_versions: u64,
+    /// hosts of the Confluence site the export comes from (see [`site_hosts`])
+    site_hosts: HashSet<String>,
+}
+
+/// The export's own site, as seen in its bodies: hosts of absolute links whose page id is in the
+/// export. Exports don't name their site; title links to other sites must not be rewritten.
+fn site_hosts(export: &Export) -> HashSet<String> {
+    let mut hosts = HashSet::new();
+    for b in export.bodies.values() {
+        let mut rest = b.body.as_str();
+        while let Some(i) = rest.find("href=\"http") {
+            rest = &rest[i + 6..];
+            let Some(end) = rest.find('"') else { break };
+            let url = rest[..end].replace("&amp;", "&");
+            rest = &rest[end..];
+            if let Some((host, crate::urls::Target::PageId { id, .. } | crate::urls::Target::Tiny { id })) = crate::urls::parse(&url)
+                && export.contents.contains_key(&id)
+            {
+                hosts.insert(host);
+            }
+        }
+    }
+    hosts
 }
 
 impl<'e> Planner<'e> {
@@ -258,7 +281,8 @@ impl<'e> Planner<'e> {
                 users.entry(a.clone()).or_insert_with(|| name.clone());
             }
         }
-        Self { export, opts, space_key_by_id, titles, attachments_by_container, history, users, duplicate_versions }
+        let site_hosts = site_hosts(export);
+        Self { export, opts, space_key_by_id, titles, attachments_by_container, history, users, duplicate_versions, site_hosts }
     }
 
     pub fn space_key_of(&self, c: &Content) -> &str {
@@ -756,6 +780,9 @@ impl Resolver for Ctx<'_, '_> {
     }
     fn user_name(&self, key: &str) -> Option<String> {
         self.p.users.get(key).cloned()
+    }
+    fn site_host(&self, host: &str) -> bool {
+        self.p.site_hosts.is_empty() || self.p.site_hosts.contains(host)
     }
 }
 

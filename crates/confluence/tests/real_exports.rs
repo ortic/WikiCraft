@@ -71,6 +71,7 @@ fn run(path: &Path, label: &str) -> Option<Outcome> {
         stats.user_refs,
         stats.macros.iter().map(|(k, v)| format!("{k}={}", v.0)).collect::<Vec<_>>(),
     );
+    eprintln!("  links into the Confluence site made internal: {}", stats.site_links_rewritten);
     for e in errors.iter().take(15) {
         eprintln!("  ERROR {e}");
     }
@@ -90,6 +91,8 @@ fn lf_toip_cloud_csv_export() {
     assert!(o.stats.page_links_resolved as f64 / o.stats.page_links as f64 >= 0.78);
     assert!(o.stats.attachment_refs_resolved as f64 / o.stats.attachment_refs as f64 >= 0.98);
     assert!(o.stats.user_refs_resolved as f64 / o.stats.user_refs as f64 >= 0.99);
+    // 2,543 absolute links into lf-toip.atlassian.net: all but profiles and other spaces' pages
+    assert!(o.stats.site_links_rewritten >= 2_300, "{}", o.stats.site_links_rewritten);
 }
 
 #[test]
@@ -99,4 +102,5 @@ fn modelop_cloud_xml_export() {
     // current versions: 12/12 like the Python analyzer; old versions also link via former titles
     assert!(o.stats.page_links_resolved as f64 / o.stats.page_links as f64 >= 0.95, "{}/{}", o.stats.page_links_resolved, o.stats.page_links);
     assert_eq!(o.stats.attachment_refs_resolved, o.stats.attachment_refs);
+    assert!(o.stats.site_links_rewritten >= 400, "{}", o.stats.site_links_rewritten);
 }

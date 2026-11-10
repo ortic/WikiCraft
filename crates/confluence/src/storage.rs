@@ -36,6 +36,11 @@ pub trait Resolver {
     fn attachment(&self, container_id: &str, filename: &str) -> Option<String>;
     /// Display name for a user key / account id / username.
     fn user_name(&self, key: &str) -> Option<String>;
+    /// Whether an absolute URL's host is (likely) the Confluence site the export comes from:
+    /// title-based links (`/display/KEY/Title`) are only rewritten for those.
+    fn site_host(&self, _host: &str) -> bool {
+        true
+    }
 }
 
 /// How well a macro is supported.
@@ -69,6 +74,8 @@ pub struct Stats {
     pub layouts: u64,
     pub emoticons: u64,
     pub wiki_markup_bodies: u64,
+    /// Absolute links into the Confluence site turned into internal links.
+    pub site_links_rewritten: u64,
     /// Up to 50 samples of `title → target` for missing links.
     pub missing_link_samples: Vec<String>,
     pub missing_attachment_samples: Vec<String>,
@@ -101,6 +108,7 @@ impl Stats {
         self.layouts += o.layouts;
         self.emoticons += o.emoticons;
         self.wiki_markup_bodies += o.wiki_markup_bodies;
+        self.site_links_rewritten += o.site_links_rewritten;
         for s in &o.missing_link_samples {
             if self.missing_link_samples.len() < 50 {
                 self.missing_link_samples.push(s.clone());
@@ -269,6 +277,15 @@ fn blog_title(path: &str) -> Option<String> {
     let mut parts = path.strip_prefix('/')?.splitn(4, '/');
     let (y, m, d, title) = (parts.next()?, parts.next()?, parts.next()?, parts.next()?);
     [y, m, d].iter().all(|p| p.chars().all(|c| c.is_ascii_digit())).then(|| title.to_string())
+}
+
+/// Confluence's heading anchors are "PageTitle-HeadingText" (spaces dropped); ours are the
+/// heading's slug, so the title part goes.
+fn heading_anchor(anchor: Option<String>, title: Option<&str>) -> Option<String> {
+    let anchor = anchor?;
+    let Some(title) = title else { return Some(anchor) };
+    let squashed: String = title.chars().filter(|c| !c.is_whitespace()).collect();
+    Some(anchor.strip_prefix(&format!("{squashed}-")).map(String::from).unwrap_or(anchor))
 }
 
 pub fn placeholder_page(id: &str, anchor: Option<&str>) -> String {
@@ -491,6 +508,17 @@ impl Conv<'_> {
                     }
                     return self.children(&el.children, marks, pre);
                 }
+                // a full URL of a page / attachment of this Confluence site: an internal link
+                if let Some(internal) = self.site_link(href) {
+                    let m = add_mark(marks, Mark::link(internal));
+                    let c = self.children(&el.children, &m, pre);
+                    return if c.is_empty() { vec![Node::text_marked(href, m)] } else { c };
+                }
+                // smart links shown as a card or an embed (videos, documents): an embed block
+                if matches!(el.attr("data-card-appearance"), Some("block" | "embed")) && (href.starts_with("https://") || href.starts_with("http://")) {
+                    self.stats.macro_seen("smart-link", Support::Native);
+                    return vec![Node::new(nodes::EMBED).attr("url", href)];
+                }
                 let m = add_mark(marks, Mark::link(href));
                 let c = self.children(&el.children, &m, pre);
                 if c.is_empty() { vec![Node::text_marked(href, m)] } else { c }
@@ -498,6 +526,7 @@ impl Conv<'_> {
             "img" => {
                 self.stats.images += 1;
                 let src = el.attr("src").unwrap_or("");
+                let src = self.site_link(src).filter(|s| s.starts_with("wcimport:attachment/")).unwrap_or_else(|| src.to_string());
                 vec![Node::new(nodes::IMAGE).attr("src", src).attr("alt", el.attr("alt").map(String::from)).attr("title", el.attr("title").map(String::from))]
             }
             "time" => {
@@ -650,6 +679,32 @@ impl Conv<'_> {
             items.push(item);
         }
         Node::new(nodes::TASK_LIST).with_content(items)
+    }
+
+    /// An absolute URL into the Confluence site this export comes from, as a placeholder for
+    /// the page or attachment it points at; None when it isn't one or doesn't resolve (then
+    /// the URL stays as it is: another site, or a space that isn't migrated).
+    fn site_link(&mut self, href: &str) -> Option<String> {
+        let (host, target) = crate::urls::parse(href)?;
+        let placeholder = match target {
+            crate::urls::Target::PageId { id, title, anchor } => {
+                if !self.r.content_exists(&id) {
+                    return None;
+                }
+                placeholder_page(&id, heading_anchor(anchor, title.as_deref()).as_deref())
+            }
+            crate::urls::Target::Tiny { id } => self.r.content_exists(&id).then(|| placeholder_page(&id, None))?,
+            crate::urls::Target::Title { space, title, anchor } => {
+                if !self.r.site_host(&host) {
+                    return None;
+                }
+                let id = self.r.page(&space, &title)?;
+                placeholder_page(&id, heading_anchor(anchor, Some(&title)).as_deref())
+            }
+            crate::urls::Target::Attachment { page_id, filename } => format!("wcimport:attachment/{}", self.r.attachment(&page_id, &filename)?),
+        };
+        self.stats.site_links_rewritten += 1;
+        Some(placeholder)
     }
 
     fn resolve_page_ref(&mut self, page: &Element) -> String {

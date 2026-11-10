@@ -30,6 +30,8 @@ It works the same for Confluence Server, Data Center and Cloud exports.
 | Page restrictions (view / edit) | Page restrictions | view restrictions are inherited, as in Confluence; a restriction is never dropped silently (unknown subjects get an account) |
 | Anonymous access | **off** | reported as `anonymousAccessInConfluence`; turn it on per space if you really want it |
 | Links between pages, to attachments, to users | Rewritten | links to pages that are not in the export stay as "missing page" links and are resolved when the page arrives in a later import |
+| Full URLs of the Confluence site in page text (`…/display/KEY/Title`, `…/viewpage.action?pageId=…`, `…/spaces/KEY/pages/…`, `…/x/…`, attachment downloads) | Internal links | for pages and files that are part of the import; a Cloud site's address can't be pointed at WikiCraft, so these would otherwise break after the move. Other URLs stay as they are |
+| Smart links shown as a card or embed | Embeds | videos play in the page; inline smart links stay links |
 | Old Confluence URLs | Redirects | `/display/KEY/Title`, `/pages/viewpage.action?pageId=…`, Cloud `/wiki/spaces/KEY/pages/ID/…` and tiny links `/x/AbCd` keep working, so bookmarks and links in tickets and chats survive |
 
 ### Macros
