@@ -396,3 +396,29 @@ async fn word_export_of_a_page_tree() {
     let xml = docx(owner.clone(), app.url(&format!("/pages/{root}/export?format=docx"))).await;
     assert!(!xml.contains("Chapter A"));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn drawings_in_exports() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    app.post(&owner, "/spaces", json!({"key": "DRW", "name": "Drawings"})).await;
+    let (_, pg) = app.post(&owner, "/pages", json!({"spaceKey": "DRW", "title": "Architecture sketch"})).await;
+    let pg = pg["id"].as_str().unwrap().to_string();
+    let png = upload(&app, &owner, &pg, "drawing-abc.png", tiny_png(30, 20)).await;
+    let scene = r#"{"type":"excalidraw","elements":[{"type":"text","text":"Queue worker"}]}"#;
+    let doc = json!({"type": "doc", "content": [{"type": "drawing", "attrs": {"scene": scene, "preview": format!("/api/attachments/{png}/content?v=1")}}]});
+    assert_eq!(app.put(&owner, &format!("/pages/{pg}/content"), json!({"content": doc})).await.0, 200);
+    let html = owner.get(app.url(&format!("/pages/{pg}/export?format=html"))).send().await.unwrap().text().await.unwrap();
+    assert!(html.contains("class=\"drawing\"") && html.contains(&png), "{html}");
+    let md = owner.get(app.url(&format!("/pages/{pg}/export?format=md"))).send().await.unwrap().text().await.unwrap();
+    assert!(md.contains("![Drawing](/api/attachments/"), "{md}");
+    let r = owner.get(app.url(&format!("/pages/{pg}/export?format=docx"))).send().await.unwrap();
+    let z = zip::ZipArchive::new(std::io::Cursor::new(r.bytes().await.unwrap().to_vec())).unwrap();
+    assert!(names(&z).iter().any(|f| f.starts_with("word/media/") && !f.ends_with('/')), "the drawing is embedded");
+    // the drawing's words are searchable
+    app.eventually(|| async {
+        let (_, r) = app.get(&owner, "/search?q=worker").await;
+        (r.as_array().unwrap().len() == 1).then_some(())
+    })
+    .await;
+}

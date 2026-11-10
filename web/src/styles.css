@@ -620,3 +620,15 @@ a.menu-item { color: inherit; text-decoration: none; }
 .caret-flash .collaboration-carets__label, .caret-flash .collaboration-cursor__label { animation: caret-flash .5s ease-in-out 3; }
 @keyframes caret-flash { 50% { transform: scale(1.25); } }
 @media (prefers-reduced-motion: reduce) { .caret-flash .collaboration-carets__label { animation: none; } }
+/* drawings (Excalidraw) */
+.drawing-block { position: relative; margin: .8em 0; text-align: center; }
+.drawing-preview { max-width: 100%; border: 1px solid var(--border); border-radius: 8px; background: #fff; cursor: zoom-in; }
+.ProseMirror[contenteditable="true"] .drawing-preview { cursor: pointer; }
+.drawing-block.is-selected .drawing-preview { outline: 2px solid var(--accent); outline-offset: 2px; }
+.drawing-empty { display: flex; align-items: center; justify-content: center; gap: 8px; width: 100%; min-height: 120px; border: 1.5px dashed var(--border-strong); border-radius: 8px; background: var(--bg-soft); color: var(--text-soft); font: inherit; cursor: pointer; }
+.drawing-edit { position: absolute; top: 8px; right: 8px; opacity: 0; transition: opacity .15s; }
+.drawing-block:hover .drawing-edit, .drawing-block.is-selected .drawing-edit { opacity: 1; }
+.drawing-modal { position: fixed; inset: 0; z-index: 150; display: flex; flex-direction: column; background: var(--bg); }
+.drawing-loading { align-items: center; justify-content: center; }
+.drawing-bar { display: flex; align-items: center; gap: 8px; padding: 8px max(12px, env(safe-area-inset-right, 0px)) 8px max(12px, env(safe-area-inset-left, 0px)); border-bottom: 1px solid var(--border); }
+.drawing-canvas { flex: 1; min-height: 0; }

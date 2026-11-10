@@ -232,6 +232,11 @@ impl Renderer<'_> {
             nodes::MATH_INLINE => {
                 let _ = write!(self.out, "<span class=\"math\" data-latex=\"{0}\">{0}</span>", escape(n.attr_str("latex").unwrap_or("")));
             }
+            nodes::DRAWING => {
+                if let Some(src) = n.attr_str("preview").and_then(safe_url) {
+                    let _ = write!(self.out, "<p class=\"drawing\"><img src=\"{}\" alt=\"Drawing\" loading=\"lazy\"></p>", escape(src));
+                }
+            }
             nodes::MACRO => {
                 let name = n.attr_str("name").unwrap_or("macro");
                 let _ = write!(self.out, "<div class=\"macro\" data-macro=\"{0}\"><div class=\"macro-label\">Macro: {0}</div>", escape(name));

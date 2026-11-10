@@ -32,6 +32,7 @@ import { ImageView } from './ImageView'
 import { TableMenu } from './TableMenu'
 import { FindBar, FindReplace, findKey } from './FindReplace'
 import { HeadingIds } from './HeadingIds'
+import { Drawing } from './Drawing'
 
 const lowlight = createLowlight(common)
 
@@ -175,6 +176,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
         DecisionList,
         DecisionItem,
         Macro.configure({ pageId }),
+        Drawing.configure({ pageId }),
         PageLinkSuggest.configure({ pageId }),
         EmoticonSuggest,
         CommentMark,

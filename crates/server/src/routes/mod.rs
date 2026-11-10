@@ -35,7 +35,7 @@ use crate::app::AppState;
 
 /// Content-Security-Policy for the app (attachments set a stricter sandbox of their own).
 pub const CSP: &str = "default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob: https: http:; font-src 'self' data:; \
-                       connect-src 'self'; media-src 'self' blob: https:; frame-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'";
+                       connect-src 'self'; worker-src 'self' blob:; media-src 'self' blob: https:; frame-src 'self' https:; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'self'";
 
 pub fn router(state: AppState) -> Router {
     let max_upload = (state.config.max_upload_mb as usize).saturating_mul(1024 * 1024);

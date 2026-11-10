@@ -75,8 +75,12 @@ pub fn attachment_id(src: &str) -> Option<Uuid> {
 pub async fn load_images(state: &AppState, p: &Principal, doc: &Node, out: &mut Images) {
     let mut ids: Vec<Uuid> = Vec::new();
     doc.walk(&mut |n| {
-        if n.kind == nodes::IMAGE
-            && let Some(id) = n.attr_str("src").and_then(attachment_id)
+        let url = match n.kind.as_str() {
+            nodes::IMAGE => n.attr_str("src"),
+            nodes::DRAWING => n.attr_str("preview"),
+            _ => None,
+        };
+        if let Some(id) = url.and_then(attachment_id)
             && !ids.contains(&id)
         {
             ids.push(id);
@@ -715,6 +719,15 @@ impl Renderer<'_> {
                     .width(width as usize, WidthType::Dxa)
                     .indent(ctx.indent);
                 out.push(Block::T(Box::new(t)));
+            }
+            nodes::DRAWING => {
+                // drawn as its preview image, centred
+                if let Some(src) = n.attr_str("preview") {
+                    let img = Node::new(nodes::IMAGE).attr("src", src).attr("alt", "Drawing").attr("align", "center");
+                    let wrapper = Node::paragraph(vec![img]);
+                    let p = Self::indented(Paragraph::new(), ctx);
+                    self.paragraph(&wrapper, p, ctx, out);
+                }
             }
             nodes::MATH_BLOCK => {
                 let latex = n.attr_str("latex").unwrap_or("");

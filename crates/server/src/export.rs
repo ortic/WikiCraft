@@ -477,7 +477,7 @@ fn encode_segment(s: &str) -> String {
 }
 
 /// Node attributes that may hold a link to a page or attachment.
-const URL_ATTRS: [&str; 3] = ["href", "src", "url"];
+const URL_ATTRS: [&str; 4] = ["href", "src", "url", "preview"];
 
 fn parse_page_href(href: &str) -> Option<(Uuid, Option<&str>)> {
     let rest = href.strip_prefix("/pages/")?;

@@ -57,6 +57,7 @@ fn block_text(n: &Node, out: &mut String) {
             nodes::MATH_BLOCK => n.attr_str("latex").unwrap_or("").to_string(),
             nodes::EMBED => n.attr_str("url").unwrap_or("").to_string(),
             nodes::MACRO => n.attr_str("bodyText").unwrap_or("").to_string(),
+            nodes::DRAWING => drawing_text(n),
             _ => String::new(),
         };
         if !t.is_empty() {
@@ -138,6 +139,17 @@ pub fn word_count(doc: &Node) -> usize {
     plain_text(doc).split_whitespace().count()
 }
 
+/// The text written in a drawing (its text elements), for search.
+pub fn drawing_text(n: &Node) -> String {
+    let Some(scene) = n.attr_str("scene").and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok()) else { return String::new() };
+    scene["elements"]
+        .as_array()
+        .map(|els| {
+            els.iter().filter(|e| e["type"] == "text" && e["isDeleted"] != true).filter_map(|e| e["text"].as_str()).take(2_000).collect::<Vec<_>>().join(" ")
+        })
+        .unwrap_or_default()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -160,5 +172,14 @@ mod tests {
     fn excerpt_cuts_on_word() {
         let doc = Node::doc(vec![Node::paragraph(vec![Node::text("alpha beta gamma delta")])]);
         assert_eq!(excerpt(&doc, 12), "alpha beta…");
+    }
+
+    #[test]
+    fn drawing_text_is_searchable() {
+        let scene =
+            r#"{"type":"excalidraw","elements":[{"type":"rectangle"},{"type":"text","text":"Load balancer"},{"type":"text","text":"gone","isDeleted":true}]}"#;
+        let n = Node::new(nodes::DRAWING).attr("scene", scene).attr("preview", "/api/attachments/x/content");
+        assert_eq!(super::drawing_text(&n), "Load balancer");
+        assert!(super::plain_text(&Node::doc(vec![n])).contains("Load balancer"));
     }
 }

@@ -404,6 +404,11 @@ impl MdWriter {
             }
             nodes::COLUMNS | nodes::COLUMN | nodes::DETAILS_CONTENT | nodes::DECISION_ITEM => self.blocks(&n.content, prefix),
             nodes::IMAGE => self.line(prefix, &inline_md(std::slice::from_ref(n))),
+            nodes::DRAWING => {
+                if let Some(src) = n.attr_str("preview") {
+                    self.line(prefix, &format!("![Drawing]({src})"));
+                }
+            }
             nodes::TOC => self.line(prefix, "<!-- table of contents -->"),
             nodes::CHILD_PAGES => self.line(prefix, "<!-- child pages -->"),
             nodes::ATTACHMENT => {

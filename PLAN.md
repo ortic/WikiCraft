@@ -284,7 +284,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** Block math (KaTeX / LaTeX) `D O X`
 - [~] **P1** Mermaid, PlantUML (server-side render, sandboxed) `D X` (Mermaid client-side only; no PlantUML render)
 - [ ] **P1** Draw.io diagrams (embedded editor, stored as attachment + SVG preview) `D X C(app)`
-- [ ] **P1** Excalidraw sketches `D`
+- [x] **P1** Excalidraw sketches `D`
 - [~] **P1** File / attachment block with inline preview (PDF, Office, video, audio) `C D` (PDF/image preview only)
 - [~] **P1** Embeds: YouTube, Vimeo, Loom, Figma, Miro, Google Docs/Sheets/Slides, Airtable, Typeform, GitHub gist, iframe allowlist `C D O` (no Airtable/Typeform/gist)
 - [x] **P1** Anchors / table of contents block `C X`
@@ -420,7 +420,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 
 ### 4.10 Whiteboards & diagrams
 - [ ] **P1** Draw.io integration (self-hosted draw.io editor in an iframe; store `.drawio` + SVG) `D X C(app)`
-- [ ] **P1** Excalidraw block `D`
+- [x] **P1** Excalidraw block `D`
 - [~] **P1** Mermaid / PlantUML text diagrams `D X` (Mermaid client-side only)
 - [ ] **P2** Native infinite-canvas whiteboards: sticky notes, shapes, connectors, text, frames, images, pen `C`
   - [ ] Real-time multi-user (Yjs)

@@ -8,7 +8,7 @@ import { EMOTICONS, Emoticon } from '../icons'
 import { forwardRef, useEffect, useImperativeHandle, useState, type ReactNode } from 'react'
 import {
   Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Quote, Code2, Minus, Table, Info, AlertTriangle, CheckCircle2, XCircle, ChevronRight,
-  Hash, ListTree, CalendarDays, Tag, Sigma, Image as ImageIcon, Link2, Columns2, Paperclip, StickyNote, FileText, FilePlus2,
+  Hash, ListTree, CalendarDays, Tag, Sigma, Image as ImageIcon, Link2, Columns2, Paperclip, StickyNote, FileText, FilePlus2, PenTool,
 } from 'lucide-react'
 import { api } from '../api'
 import { headingIds } from './HeadingIds'
@@ -132,6 +132,7 @@ export function slashItems(onImage: (editor: Editor) => void, onAttachment: (edi
     { group: 'Basic', title: 'Task list', description: 'Checklist with assignees and dates', icon: ic(ListChecks), keywords: 'todo checkbox action', command: (e, r) => e.chain().focus().deleteRange(r).toggleTaskList().run() },
     { group: 'Basic', title: 'Quote', icon: ic(Quote), keywords: 'blockquote', command: (e, r) => e.chain().focus().deleteRange(r).toggleBlockquote().run() },
     { group: 'Basic', title: 'Code block', icon: ic(Code2), keywords: 'snippet pre', command: (e, r) => e.chain().focus().deleteRange(r).toggleCodeBlock().run() },
+    { group: 'Media', title: 'Drawing', description: 'Sketch a diagram or whiteboard (Excalidraw)', icon: ic(PenTool), keywords: 'excalidraw whiteboard sketch draw diagram', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'drawing' }).run() },
     { group: 'Media', title: 'Diagram (Mermaid)', description: 'Flowcharts, sequence diagrams, Gantt…', icon: ic(Columns2), keywords: 'mermaid flowchart sequence chart', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'codeBlock', attrs: { language: 'mermaid' }, content: [{ type: 'text', text: 'flowchart LR\n  A[Idea] --> B{Review}\n  B -->|approved| C[Ship it]\n  B -->|changes| A' }] }).run() },
     { group: 'Basic', title: 'Divider', icon: ic(Minus), keywords: 'hr rule', command: (e, r) => e.chain().focus().deleteRange(r).setHorizontalRule().run() },
     { group: 'Basic', title: 'Table', icon: ic(Table), keywords: 'grid', command: (e, r) => e.chain().focus().deleteRange(r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },

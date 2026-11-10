@@ -74,6 +74,8 @@ pub mod nodes {
     pub const MATH_INLINE: &str = "inlineMath";
     /// A macro we don't (yet) support natively. Preserves name/params/body for later mapping.
     pub const MACRO: &str = "macro";
+    /// an Excalidraw drawing: `scene` (JSON) and `preview` (PNG attachment URL)
+    pub const DRAWING: &str = "drawing";
 }
 
 /// Mark type names.
