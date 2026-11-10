@@ -133,6 +133,11 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   the Tab handler reads the DOM selection.
 - Jobs: cancel (queued at once, running at the next progress update via `jobs::checkpoint`) and retry (uploads kept
   7 days; a retried Confluence import runs as an update import = resume).
+- Attachment rules (largest file ≤ server cap, blocked/allowed extensions, storage per space and per wiki counting
+  all versions; also applied to files in Markdown/HTML/Notion imports, refused ones reported). Space owners with
+  handover (owner becomes space admin, notified; Admin → Spaces flags owners whose account is gone). Whole-space
+  copy (settings, templates, people, visible published pages; links/attachments/page-link properties point at the
+  copies; page copy now shares `copy_tree`). Template for pages below a page (nearest ancestor wins, then the space).
 
 ## Security review 4 (independent review agent, 2026-11-10 ~03:40 UTC: link previews, banner, switches, decision log, branding) — status
 No critical or high findings. All five fixed in `9f0b9a9`:
