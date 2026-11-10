@@ -158,13 +158,14 @@ impl TestApp {
         (s, r.json().await.unwrap_or(Value::Null))
     }
 
-    /// Polls until `f` returns Some, or panics after ~10 s.
+    /// Polls until `f` returns Some, or panics after ~30 s (busy CI runners need the headroom:
+    /// a collab test once needed more than 10 s there for the room to close and persist).
     pub async fn eventually<T, F, Fut>(&self, mut f: F) -> T
     where
         F: FnMut() -> Fut,
         Fut: std::future::Future<Output = Option<T>>,
     {
-        for _ in 0..100 {
+        for _ in 0..300 {
             if let Some(v) = f().await {
                 return v;
             }
