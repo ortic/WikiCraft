@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Upload, FileSearch, CheckCircle2, XCircle, UserPlus, Users, Activity, Database, RefreshCw, Mail, Send, Globe, Megaphone, Building2, Ban, RotateCcw, Paperclip } from 'lucide-react'
+import { Upload, FileSearch, CheckCircle2, XCircle, UserPlus, Users, Activity, Database, RefreshCw, Mail, Send, Globe, Megaphone, Building2, Ban, RotateCcw, Paperclip, Server } from 'lucide-react'
 import { api, formatBytes, formatDate, type Job } from '../api'
 import { Avatar, Modal, Spinner, useMe, useToast, type Features } from '../ui'
 import AdminWebhooks from './AdminWebhooks'
@@ -83,6 +83,7 @@ function Overview() {
       <AttachmentSettings />
       <AnnouncementSettings />
       <MailStatus />
+      <SystemInfo />
     </div>
   )
 }
@@ -175,6 +176,50 @@ function BrandingSettings() {
 type Announcement = { text: string; level: 'info' | 'warning' | 'success'; id: string }
 
 /** Admin → Overview: the banner everyone sees at the top of the wiki. */
+interface SystemState {
+  version: string
+  node: string
+  cluster: boolean
+  database: { version: string; sizeBytes: number; schema: number | null; connections: number; idleConnections: number }
+  jobs: { queued: number; running: number; failedLastDay: number }
+  search: { backend: string; indexed: number | null; pages: number }
+  mail: { enabled: boolean }
+  storage: { backend: string }
+  liveRooms: number
+  signIn: { id: string; kind: string; name: string }[]
+}
+
+/** Admin → Overview: what this installation runs on and how it's doing. */
+function SystemInfo() {
+  const sys = useQuery({ queryKey: ['admin-system'], queryFn: () => api.get<SystemState>('/admin/system'), refetchInterval: 30_000 })
+  const s = sys.data
+  if (!s) return null
+  const behind = s.search.indexed !== null && s.search.indexed < s.search.pages
+  const rows: [string, React.ReactNode][] = [
+    ['Version', `WikiCraft ${s.version}`],
+    ['Database', `PostgreSQL ${s.database.version} · ${formatBytes(s.database.sizeBytes)} · schema ${s.database.schema ?? '?'} · ${s.database.connections - s.database.idleConnections} of ${s.database.connections} connections busy`],
+    ['Background jobs', `${s.jobs.queued} queued · ${s.jobs.running} running${s.jobs.failedLastDay ? ` · ${s.jobs.failedLastDay} failed in the last day` : ''}`],
+    ['Search', `${s.search.backend} · ${s.search.indexed ?? '?'} of ${s.search.pages} pages indexed${behind ? ' (catching up, or rebuild the index)' : ''}`],
+    ['E-mail', s.mail.enabled ? 'configured' : 'off (WIKICRAFT_SMTP_URL not set)'],
+    ['File storage', s.storage.backend],
+    ['Sign-in', s.signIn.length ? `passwords and ${s.signIn.map((p) => `${p.name} (${p.kind})`).join(', ')}` : 'passwords'],
+    ['Replicas', s.cluster ? `clustered (this node ${s.node.slice(0, 8)})` : 'single server'],
+    ['Live editing', `${s.liveRooms} ${s.liveRooms === 1 ? 'page' : 'pages'} open`],
+  ]
+  return (
+    <div className="card" style={{ marginTop: 24, maxWidth: 720 }}>
+      <h3 style={{ marginTop: 0 }} className="row"><Server size={17} /> System</h3>
+      <table className="kv-table">
+        <tbody>
+          {rows.map(([k, v]) => (
+            <tr key={k}><th scope="row">{k}</th><td>{v}</td></tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  )
+}
+
 interface AttachmentRules {
   maxFileMb: number
   blockedTypes: string[]

@@ -133,6 +133,17 @@ impl SearchIndex {
         }
     }
 
+    /// How many pages the index holds (Postgres: pages with a search vector).
+    pub async fn indexed_documents(&self, db: &PgPool) -> anyhow::Result<u64> {
+        Ok(match &self.inner.backend {
+            Backend::Tantivy(t) => t.reader.searcher().num_docs(),
+            Backend::Postgres => {
+                let n: i64 = sqlx::query_scalar("SELECT count(*) FROM pages WHERE search_vec IS NOT NULL AND deleted_at IS NULL").fetch_one(db).await?;
+                n.max(0) as u64
+            }
+        })
+    }
+
     /// Queues a page for (re)indexing.
     pub fn enqueue(&self, page_id: Uuid) {
         let _ = self.inner.tx.send(page_id);

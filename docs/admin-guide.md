@@ -64,6 +64,8 @@ else is configured afterwards:
   storage limits per space and for the whole wiki (all versions of a file count; deleting
   attachments frees room). They apply to uploads and to the files in Markdown, HTML and Notion
   imports; Confluence imports and backup restores by admins aren't limited.
+- *Administration → Overview → System*: the version, database, background jobs, search index
+  (pages indexed of all pages), e-mail, file storage, sign-in providers and cluster mode.
 - *Administration → Users / Groups*: people and groups.
 - *Administration → Import*: Confluence, Word, Markdown, HTML, Notion and Obsidian imports, space
   backups, and the recent jobs (imports, restores, exports). **Cancel** stops a queued job at once

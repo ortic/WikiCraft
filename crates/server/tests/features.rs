@@ -1208,3 +1208,23 @@ async fn attachment_size_type_and_storage_rules() {
     assert_eq!(res["attachments"], 0);
     assert!(res["skippedFiles"][0].as_str().unwrap().contains("shot.gif"), "{res}");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn system_information_for_admins() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, _) = app.user(&owner, "mia@acme.test", "member").await;
+    assert_eq!(app.get(&member, "/admin/system").await.0, 403);
+    app.post(&owner, "/spaces", json!({"key": "SYS", "name": "System"})).await;
+    let (st, s) = app.get(&owner, "/admin/system").await;
+    assert_eq!(st, 200, "{s}");
+    assert_eq!(s["version"], env!("CARGO_PKG_VERSION"));
+    assert!(s["database"]["version"].as_str().unwrap().chars().next().unwrap().is_ascii_digit(), "{s}");
+    assert!(s["database"]["sizeBytes"].as_i64().unwrap() > 0);
+    assert!(s["database"]["schema"].as_i64().unwrap() >= 47, "latest migration: {s}");
+    assert_eq!(s["jobs"], json!({"queued": 0, "running": 0, "failedLastDay": 0}));
+    assert!(matches!(s["search"]["backend"].as_str(), Some("tantivy" | "postgres")));
+    assert!(s["search"]["pages"].as_i64().unwrap() >= 1, "the space's home page");
+    assert_eq!(s["mail"]["enabled"], false);
+    assert!(s["storage"]["backend"].is_string());
+}

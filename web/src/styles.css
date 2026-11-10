@@ -902,3 +902,6 @@ button.page-prop-key-btn:hover, button.page-prop-key-btn:focus-visible { backgro
 /* blocks changed since the reader's last visit */
 .ProseMirror .changed-block { background: color-mix(in srgb, var(--warning) 11%, transparent); box-shadow: -10px 0 0 color-mix(in srgb, var(--warning) 11%, transparent), -13px 0 0 var(--warning); border-radius: 2px; }
 .ProseMirror li.changed-block, .ProseMirror table.changed-block { box-shadow: none; outline: 2px solid color-mix(in srgb, var(--warning) 55%, transparent); outline-offset: 2px; }
+.kv-table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
+.kv-table th { text-align: left; font-weight: 500; color: var(--text-soft); padding: 5px 16px 5px 0; vertical-align: top; white-space: nowrap; width: 1%; }
+.kv-table td { padding: 5px 0; overflow-wrap: anywhere; }

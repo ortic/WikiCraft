@@ -5408,6 +5408,25 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /admin/system:
+    get:
+      tags:
+      - Admin
+      summary: 'System state: version, database (version, size, schema, connections), job queue, search index, mail, file
+        storage, sign-in providers, cluster'
+      operationId: get_admin_system
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: *id006
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /admin/reindex:
     post:
       tags:

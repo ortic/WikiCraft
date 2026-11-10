@@ -62,6 +62,43 @@ pub async fn stats(State(state): State<AppState>, CurrentUser(user): CurrentUser
     })))
 }
 
+/// `GET /api/admin/system`: version, database, job queue, search index, mail, storage and
+/// cluster state, for the admin overview.
+pub async fn system(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Value>> {
+    require_admin(&user)?;
+    let (pg_version, db_size): (String, i64) =
+        sqlx::query_as("SELECT current_setting('server_version'), pg_database_size(current_database())").fetch_one(&state.db).await?;
+    let migration: Option<i64> = sqlx::query_scalar("SELECT max(version) FROM _sqlx_migrations WHERE success").fetch_one(&state.db).await.ok().flatten();
+    let (queued, running, failed_day): (i64, i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE status = 'queued'), count(*) FILTER (WHERE status = 'running'),
+                count(*) FILTER (WHERE status = 'failed' AND finished_at > now() - interval '1 day')
+         FROM jobs WHERE workspace_id = $1",
+    )
+    .bind(user.workspace_id)
+    .fetch_one(&state.db)
+    .await?;
+    let pages: i64 = sqlx::query_scalar("SELECT count(*) FROM pages WHERE deleted_at IS NULL").fetch_one(&state.db).await?;
+    let indexed = state.search.indexed_documents(&state.db).await.ok();
+    Ok(Json(json!({
+        "version": env!("CARGO_PKG_VERSION"),
+        "node": state.node_id,
+        "cluster": state.relay.is_some(),
+        "database": {
+            "version": pg_version,
+            "sizeBytes": db_size,
+            "schema": migration,
+            "connections": state.db.size(),
+            "idleConnections": state.db.num_idle(),
+        },
+        "jobs": { "queued": queued, "running": running, "failedLastDay": failed_day },
+        "search": { "backend": state.search.backend_name(), "indexed": indexed, "pages": pages },
+        "mail": { "enabled": state.mailer.enabled() },
+        "storage": { "backend": state.blobs.backend_name() },
+        "liveRooms": state.rooms.all().len(),
+        "signIn": state.providers.iter().map(|p| json!({"id": p.id(), "kind": p.kind(), "name": p.display_name()})).collect::<Vec<_>>(),
+    })))
+}
+
 pub async fn reindex(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Value>> {
     require_admin(&user)?;
     let n = state.search.reindex_all(&state.db).await.map_err(ApiError::Internal)?;

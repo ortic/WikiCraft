@@ -216,6 +216,7 @@ pub fn router(state: AppState) -> Router {
         // admin
         .route("/admin/audit", get(admin::audit))
         .route("/admin/stats", get(admin::stats))
+        .route("/admin/system", get(admin::system))
         .route("/admin/reindex", post(admin::reindex))
         .route("/health", get(admin::health))
         .route("/openapi.yaml", get(openapi::spec))
