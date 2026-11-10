@@ -66,6 +66,9 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   (tab-separated) paste; table sort by column; instructional text (template hints, Confluence `ac:placeholder`);
   decision log (`decisionreport`) + `/decision`, `/decision log`, `/task report`; workspace name and logo; activity feed;
   security review 4 (5 findings, all fixed); table width modes (normal / wide / full, Confluence `data-layout`); external links in the page tree.
+- Bug found by CI (04:20): the automatic version on the last disconnect was skipped whenever the 2-second background
+  save had already stored the content, so history could miss whole editing sessions. Fixed in `4aaac2f`; the collab test
+  now runs the background save before everyone leaves and fails without the fix.
 - Note: running the whole test suite saturates this WSL machine (load ~100); a parallel demo server then hits DB
   pool timeouts, and the mail test's 4-second wait can flake. Both pass when the machine is idle.
 
