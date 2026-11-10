@@ -1,7 +1,55 @@
 import { BubbleMenu } from '@tiptap/react/menus'
 import type { Editor } from '@tiptap/react'
-import { ArrowDownToLine, ArrowLeftToLine, ArrowRightToLine, ArrowUpToLine, Columns3, Combine, PaintBucket, Rows3, Split, Trash2 } from 'lucide-react'
+import { ArrowDownAZ, ArrowDownToLine, ArrowDownZA, ArrowLeftToLine, ArrowRightToLine, ArrowUpToLine, Columns3, Combine, PaintBucket, Rows3, Split, Trash2 } from 'lucide-react'
 import { useState } from 'react'
+import { Fragment, type Node as PMNode } from '@tiptap/pm/model'
+
+/** The table around the cursor and the cursor's column, when the table has no merged cells. */
+function tableAt(editor: Editor): { node: PMNode; pos: number; col: number } | null {
+  const { $from } = editor.state.selection
+  for (let d = $from.depth; d > 0; d--) {
+    const node = $from.node(d)
+    if (node.type.name !== 'table') continue
+    if (d + 2 > $from.depth) return null
+    let merged = false
+    node.forEach((row) => row.forEach((cell) => { merged ||= cell.attrs.colspan > 1 || cell.attrs.rowspan > 1 }))
+    return merged ? null : { node, pos: $from.before(d), col: $from.index(d + 1) }
+  }
+  return null
+}
+
+/** A number for values like "1,200", "12.5%", "$ 40", "CHF 1'000"; null for text. */
+function numeric(s: string): number | null {
+  const t = s.replace(/[\s,'’%$€£¥]|CHF|EUR|USD/g, '')
+  return t && /^[-+]?\d*\.?\d+(e[-+]?\d+)?$/i.test(t) ? Number(t) : null
+}
+
+/** Sorts the rows below the header rows by the cursor's column (numbers numerically, empty cells last). */
+export function sortTable(editor: Editor, dir: 1 | -1): boolean {
+  const t = tableAt(editor)
+  if (!t) return false
+  const rows: PMNode[] = []
+  t.node.forEach((r) => rows.push(r))
+  let head = 0
+  while (head < rows.length) {
+    let allHeader = rows[head].childCount > 0
+    rows[head].forEach((c) => { allHeader &&= c.type.name === 'tableHeader' })
+    if (!allHeader) break
+    head++
+  }
+  const key = (r: PMNode) => (t.col < r.childCount ? r.child(t.col).textContent.trim() : '')
+  const sorted = rows.slice(head).sort((a, b) => {
+    const [x, y] = [key(a), key(b)]
+    if (!x || !y) return x ? -1 : y ? 1 : 0
+    const [nx, ny] = [numeric(x), numeric(y)]
+    const c = nx !== null && ny !== null ? nx - ny : x.localeCompare(y, undefined, { numeric: true, sensitivity: 'base' })
+    return c * dir
+  })
+  const tr = editor.state.tr.replaceWith(t.pos + 1, t.pos + t.node.nodeSize - 1, Fragment.from([...rows.slice(0, head), ...sorted]))
+  editor.view.dispatch(tr.scrollIntoView())
+  editor.commands.focus()
+  return true
+}
 
 const CELL_COLORS = [
   ['None', null],
@@ -51,6 +99,9 @@ export function TableMenu({ editor }: { editor: Editor }) {
         <span className="sep" />
         <button type="button" className={`icon-btn text-btn${editor.isActive('tableHeader') ? ' active' : ''}`} title="Header row" onMouseDown={(e) => e.preventDefault()} onClick={run((c) => c.toggleHeaderRow())}>Header row</button>
         <button type="button" className="icon-btn text-btn" title="Header column" onMouseDown={(e) => e.preventDefault()} onClick={run((c) => c.toggleHeaderColumn())}>Header col</button>
+        <span className="sep" />
+        {b('Sort rows by this column, A to Z / smallest first', () => sortTable(editor, 1), <ArrowDownAZ size={15} />, false, !tableAt(editor))}
+        {b('Sort rows by this column, Z to A / largest first', () => sortTable(editor, -1), <ArrowDownZA size={15} />, false, !tableAt(editor))}
         <span className="sep" />
         {b('Merge cells', run((c) => c.mergeCells()), <Combine size={15} />, false, !editor.can().mergeCells())}
         {b('Split cell', run((c) => c.splitCell()), <Split size={15} />, false, !editor.can().splitCell())}
