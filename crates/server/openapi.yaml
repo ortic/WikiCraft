@@ -3993,7 +3993,8 @@ paths:
     post:
       tags:
       - Import & export
-      summary: Import Word, Markdown, Notion or Obsidian (.docx, .md or a .zip of them)
+      summary: Import Word, Markdown, HTML, Notion or Obsidian (.docx, .md, .html or a .zip of them, incl. Confluence HTML
+        exports)
       operationId: post_imports_markdown
       requestBody:
         required: true

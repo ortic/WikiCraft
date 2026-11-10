@@ -260,9 +260,28 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
         }
         word.insert(name, (converted.title, converted.doc));
     }
+    // HTML pages too (plain sites, Notion and Confluence HTML exports); Confluence's export
+    // also names each page's parent (breadcrumbs) and its attachments
+    let is_html = |n: &str| {
+        let l = n.to_lowercase();
+        l.ends_with(".html") || l.ends_with(".htm")
+    };
+    let html_files: Vec<(String, Bytes)> = files.iter().filter(|(n, _)| is_html(n)).cloned().collect();
+    let mut html_meta: HashMap<String, (Option<String>, Vec<(String, String)>)> = HashMap::new();
+    if !html_files.is_empty() {
+        let pages = tokio::task::spawn_blocking(move || {
+            html_files.into_iter().map(|(n, d)| (n, crate::html_import::convert(&String::from_utf8_lossy(&d)))).collect::<Vec<_>>()
+        })
+        .await
+        .map_err(|e| ApiError::Internal(e.into()))?;
+        for (name, p) in pages {
+            word.insert(name.clone(), (p.title, p.doc));
+            html_meta.insert(name, (p.parent_href, p.attachments));
+        }
+    }
     files.sort_by(|a, b| a.0.cmp(&b.0));
     let is_md = |n: &str| n.to_lowercase().ends_with(".md") || n.to_lowercase().ends_with(".markdown");
-    let is_page = |n: &str| is_md(n) || is_docx(n);
+    let is_page = |n: &str| is_md(n) || is_docx(n) || is_html(n);
     let assets: HashMap<String, Bytes> = files.iter().filter(|(n, _)| !is_page(n)).cloned().collect();
     // every directory that holds files ("A.md" next to "A/" is that folder's page)
     let dirs: std::collections::HashSet<String> = files
@@ -279,6 +298,7 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
     let mut title_index: HashMap<String, Uuid> = HashMap::new();
     let mut path_index: HashMap<String, Uuid> = HashMap::new();
     let mut pending_docs: Vec<(Uuid, String, Node)> = Vec::new();
+    let mut parent_of: HashMap<Uuid, Option<Uuid>> = HashMap::new();
     let mut pos = 0.0;
     async fn ensure_folder(
         state: &AppState,
@@ -376,6 +396,7 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
             )
             .await?;
             created += 1;
+            parent_of.insert(id, parent);
             id
         };
         for l in fm_labels.iter().filter_map(|l| crate::routes::pages::normalize_label(l)).take(50) {
@@ -463,28 +484,86 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
         pending_docs.push((id, dir.to_string(), doc));
     }
 
-    // second pass: images → attachments, wiki links → page links
+    // Confluence HTML export: all pages sit in one folder, the breadcrumbs give the hierarchy
+    for (dir, id) in &folder_pages {
+        let pd = dir.rsplit_once('/').map(|(p, _)| p).unwrap_or("");
+        parent_of.entry(*id).or_insert(if pd.is_empty() { root_parent } else { folder_pages.get(pd).copied() });
+    }
+    let mut html_names: Vec<&String> = html_meta.keys().collect();
+    html_names.sort();
+    for name in html_names {
+        let Some(href) = &html_meta[name].0 else { continue };
+        let dir = name.rsplit_once('/').map(|(d, _)| d).unwrap_or("");
+        let target = local_target(dir, href);
+        let (Some(&child), Some(&parent)) = (path_index.get(name), path_index.get(&target)) else { continue };
+        // never create a cycle (hostile or inconsistent breadcrumbs)
+        let mut cur = Some(parent);
+        let mut cyclic = false;
+        for _ in 0..=parent_of.len() {
+            match cur {
+                Some(c) if c == child => {
+                    cyclic = true;
+                    break;
+                }
+                Some(c) if Some(c) == root_parent => break,
+                Some(c) => cur = parent_of.get(&c).copied().flatten(),
+                None => break,
+            }
+        }
+        if cyclic || cur.is_some_and(|c| Some(c) != root_parent) {
+            continue;
+        }
+        parent_of.insert(child, Some(parent));
+        sqlx::query("UPDATE pages SET parent_id = $2 WHERE id = $1").bind(child).bind(parent).execute(&state.db).await?;
+    }
+    let html_pages: HashMap<Uuid, &String> = html_meta.keys().filter_map(|n| path_index.get(n).map(|id| (*id, n))).collect();
+
+    // second pass: images and linked files → attachments, wiki links → page links
     let mut attachments = 0;
+    let find_asset = |joined: &str, decoded: &str| -> Option<(String, Bytes)> {
+        assets
+            .get_key_value(joined)
+            .or_else(|| assets.iter().find(|(k, _)| k.ends_with(&format!("/{decoded}")) || **k == decoded))
+            .map(|(k, v)| (k.clone(), v.clone()))
+    };
     for (id, dir, mut doc) in pending_docs {
-        let mut images: Vec<String> = Vec::new();
+        // file names the page lists for its attachments (Confluence HTML export)
+        let listed: Vec<(String, String)> = html_pages.get(&id).map(|n| html_meta[*n].1.clone()).unwrap_or_default();
+        let names: HashMap<String, String> = listed.iter().map(|(h, n)| (local_target(&dir, h), n.clone())).collect();
+        let mut refs: Vec<String> = Vec::new();
         doc.walk(&mut |n| {
             if n.kind == nodes::IMAGE
-                && let Some(src) = n.attr_str("src").filter(|s| !s.contains("://") && !s.starts_with('/') && !s.starts_with("data:"))
+                && let Some(src) = n.attr_str("src").filter(|s| is_local_file(s))
             {
-                images.push(src.to_string());
+                refs.push(src.to_string());
+            }
+            for m in &n.marks {
+                if m.kind == "link"
+                    && let Some(href) = m.attr_str("href").filter(|h| is_local_file(h) && !is_page_link(h))
+                {
+                    refs.push(href.to_string());
+                }
             }
         });
+        refs.extend(listed.iter().map(|(h, _)| h.clone()).filter(|h| is_local_file(h) && !is_page_link(h)));
+        // one attachment per file, however often the page refers to it
+        let mut stored: HashMap<String, Uuid> = HashMap::new();
         let mut urls: HashMap<String, String> = HashMap::new();
-        for src in images {
-            let decoded = percent_decode(&src);
+        for src in refs {
+            let decoded = percent_decode(src.split(['?', '#']).next().unwrap_or(&src));
             let joined = normalize_path(&if dir.is_empty() { decoded.clone() } else { format!("{dir}/{decoded}") });
-            let data = assets.get(&joined).or_else(|| assets.iter().find(|(k, _)| k.ends_with(&format!("/{decoded}")) || **k == decoded).map(|(_, v)| v));
-            if let Some(data) = data {
-                let fname = decoded.rsplit('/').next().unwrap_or(&decoded).to_string();
-                let att = crate::routes::attachments::store_attachment(state, user.workspace_id, id, Some(user.id), &fname, data.clone(), None, None).await?;
-                attachments += 1;
-                urls.insert(src.clone(), format!("/api/attachments/{att}/content"));
-            }
+            let Some((key, data)) = find_asset(&joined, &decoded) else { continue };
+            let att = match stored.get(&key) {
+                Some(a) => *a,
+                None => {
+                    let fname = names.get(&key).cloned().unwrap_or_else(|| decoded.rsplit('/').next().unwrap_or(&decoded).to_string());
+                    let a = crate::routes::attachments::store_attachment(state, user.workspace_id, id, Some(user.id), &fname, data, None, None).await?;
+                    attachments += 1;
+                    stored.insert(key, a);
+                    a
+                }
+            };
+            urls.insert(src.clone(), format!("/api/attachments/{att}/content"));
         }
         doc.walk_mut(&mut |n| {
             if n.kind == nodes::IMAGE
@@ -497,14 +576,16 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
                     let href = m.attr_str("href").unwrap_or("").to_string();
                     let (path, anchor) = href.split_once('#').map(|(a, b)| (a.to_string(), Some(b.to_string()))).unwrap_or((href.clone(), None));
                     let hash = anchor.map(|a| format!("#{a}")).unwrap_or_default();
-                    let new = if let Some(t) = href.strip_prefix("wikilink:") {
+                    let new = if let Some(u) = urls.get(&href) {
+                        Some(u.clone())
+                    } else if let Some(t) = href.strip_prefix("wikilink:") {
                         let (t, a) = t.split_once('#').map(|(x, y)| (x, format!("#{y}"))).unwrap_or((t, String::new()));
                         Some(match title_index.get(&t.to_lowercase()) {
                             Some(pid) => format!("/pages/{pid}{a}"),
                             None => format!("/missing?space={}&title={}", space.key, t),
                         })
-                    } else if !path.contains("://") && (path.ends_with(".md") || path.ends_with(".markdown") || path.ends_with(".csv")) {
-                        let decoded = percent_decode(&path);
+                    } else if is_local_file(&path) && is_page_link(&path) {
+                        let decoded = percent_decode(path.split('?').next().unwrap_or(&path));
                         // the exact file first (relative to this page), then by file name / title
                         let joined = normalize_path(&if dir.is_empty() { decoded.clone() } else { format!("{dir}/{decoded}") });
                         let stem = decoded.rsplit('/').next().unwrap_or(&decoded).rsplit_once('.').map(|(s, _)| s).unwrap_or(&decoded).to_string();
@@ -534,6 +615,25 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
         state.search.enqueue(*id);
     }
     Ok(json!({ "pages": created, "attachments": attachments }))
+}
+
+/// A relative reference to a file of the import (not a URL, absolute path, anchor or `data:`).
+fn is_local_file(href: &str) -> bool {
+    let h = href.trim();
+    let scheme = h.split_once(':').is_some_and(|(s, _)| !s.is_empty() && !s.contains('/') && s.chars().all(|c| c.is_ascii_alphanumeric() || "+.-".contains(c)));
+    !h.is_empty() && !scheme && !h.starts_with('/') && !h.starts_with('#') && !h.starts_with('?')
+}
+
+/// A link to another page of the import (Markdown, Notion database CSV, HTML).
+fn is_page_link(href: &str) -> bool {
+    let p = href.split(['?', '#']).next().unwrap_or(href).to_lowercase();
+    [".md", ".markdown", ".csv", ".html", ".htm"].iter().any(|e| p.ends_with(e))
+}
+
+/// The import path a relative reference from a file in `dir` points to.
+fn local_target(dir: &str, href: &str) -> String {
+    let decoded = percent_decode(href.split(['?', '#']).next().unwrap_or(href));
+    normalize_path(&if dir.is_empty() { decoded } else { format!("{dir}/{decoded}") })
 }
 
 /// Removes the 32-hex-digit id Notion appends to every file and folder name.

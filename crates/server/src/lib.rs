@@ -13,6 +13,7 @@ pub mod docx_import;
 pub mod error;
 pub mod export;
 pub mod extract;
+pub mod html_import;
 pub mod importer;
 pub mod jobs;
 pub mod mail;

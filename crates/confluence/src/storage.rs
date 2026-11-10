@@ -121,6 +121,17 @@ pub fn convert(body: &str, r: &dyn Resolver, stats: &mut Stats) -> Node {
     if mode == ParseMode::Lenient {
         stats.lenient_parses += 1;
     }
+    convert_children(&root, r, stats)
+}
+
+/// Converts the children of an already parsed element (plain HTML pages: the caller picks the
+/// content element and drops navigation first).
+pub fn convert_element(root: &Element, r: &dyn Resolver, stats: &mut Stats) -> Node {
+    stats.bodies += 1;
+    convert_children(root, r, stats)
+}
+
+fn convert_children(root: &Element, r: &dyn Resolver, stats: &mut Stats) -> Node {
     let mut c = Conv { r, stats };
     let content = c.children(&root.children, &[], false);
     let mut doc = Node::doc(wrap_inline_runs(content, true));
