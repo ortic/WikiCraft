@@ -155,7 +155,9 @@ impl WikiMcp {
             Ok(u) => u,
             Err(e) => return api_err(e),
         };
-        match crate::routes::spaces::list(State(self.state.clone()), MaybeUser(Some(user.0))).await {
+        match crate::routes::spaces::list(State(self.state.clone()), MaybeUser(Some(user.0)), axum::extract::Query(crate::routes::spaces::ListQuery::default()))
+            .await
+        {
             Ok(AxJson(spaces)) => {
                 let v = serde_json::to_value(spaces).unwrap_or_default();
                 let list: Vec<Value> = v

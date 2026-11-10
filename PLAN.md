@@ -199,7 +199,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Create / edit / delete spaces (name, key, description, icon/emoji, cover) `C D X O B` — a space opens on its home page, so its cover is the home page's cover (gradient, uploaded image or link); the directory is a list, where a separate cover image wouldn't show
 - [x] **P0** Space home / overview page `C D X`
 - [x] **P0** Personal spaces per user `C D`
-- [~] **P1** Space directory with search, categories, filters (team, personal, archived, starred) `C X` (name/key filter, categories, starred filter and starred first; archived spaces in Admin → Spaces; no personal-space filter)
+- [x] **P1** Space directory with search, categories, filters (team, personal, archived, starred) `C X` (name/key filter, categories, starred filter and starred first; all / team / personal spaces; archived spaces the reader can still read (`GET /spaces?archived=true`), also in Admin → Spaces)
 - [x] **P1** Space categories / tags `C` — one category per space (Space settings → Details); the space directory groups and filters by it
 - [x] **P1** Space archive (read-only, hidden from search by default) and restore `C`
 - [~] **P1** Space sidebar: page tree, shortcuts/links, blog, whiteboards, databases, custom sections `C` (page tree, blog, and shortcuts: space admins pin web addresses or wiki paths in Space settings or from the page menu; kept by space copies and backups. No whiteboards/databases/custom sections)

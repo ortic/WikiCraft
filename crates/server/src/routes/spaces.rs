@@ -1,5 +1,5 @@
 use axum::Json;
-use axum::extract::{Path, State};
+use axum::extract::{Path, Query, State};
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
@@ -107,14 +107,22 @@ pub struct SpaceView {
     owner_name: Option<String>,
 }
 
-/// Lists the spaces visible to the caller.
-pub async fn list(State(state): State<AppState>, MaybeUser(user): MaybeUser) -> ApiResult<Json<Vec<SpaceView>>> {
+#[derive(Deserialize, Default)]
+pub struct ListQuery {
+    /// `true`: the archived spaces the caller can still read, instead of the active ones
+    #[serde(default)]
+    pub archived: bool,
+}
+
+/// Lists the spaces visible to the caller (`?archived=true`: the archived ones).
+pub async fn list(State(state): State<AppState>, MaybeUser(user): MaybeUser, Query(q): Query<ListQuery>) -> ApiResult<Json<Vec<SpaceView>>> {
     let p = Principal::load(&state, user).await?;
     let ws = workspace_of(&state, &p).await?;
     let spaces = sqlx::query_as::<_, SpaceRow>(sqlx::AssertSqlSafe(format!(
-        "SELECT {SPACE_COLUMNS} FROM spaces WHERE workspace_id = $1 AND archived_at IS NULL ORDER BY lower(name)"
+        "SELECT {SPACE_COLUMNS} FROM spaces WHERE workspace_id = $1 AND (archived_at IS NOT NULL) = $2 ORDER BY lower(name)"
     )))
     .bind(ws)
+    .bind(q.archived)
     .fetch_all(&state.db)
     .await?;
     let counts: Vec<(Uuid, i64)> = sqlx::query_as("SELECT space_id, count(*) FROM pages WHERE workspace_id = $1 AND deleted_at IS NULL GROUP BY space_id")

@@ -30,6 +30,12 @@ async fn archive_is_read_only_and_delete_needs_archive_and_confirmation() {
     assert!(old["archivedAt"].is_string());
     assert_eq!(old["pages"], 2, "home + page");
     assert_eq!(app.get(&ed, "/admin/spaces").await.0, 403);
+    // the directory lists it under the archived ones only, for people who could read it
+    let keys = |v: serde_json::Value| v.as_array().unwrap().iter().map(|s| s["key"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+    assert!(!keys(app.get(&ed, "/spaces").await.1).contains(&"OLD".to_string()));
+    let archived = app.get(&ed, "/spaces?archived=true").await.1;
+    assert_eq!(keys(archived.clone()), vec!["OLD"]);
+    assert_eq!(archived[0]["role"], "viewer", "read-only");
 
     // unarchive restores editing
     assert_eq!(app.post(&owner, "/admin/spaces/OLD/unarchive", json!({})).await.0, 204);

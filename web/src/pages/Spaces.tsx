@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Plus, Star } from 'lucide-react'
-import { api, type Space } from '../api'
+import { api, formatDate, type Space } from '../api'
 import { ErrorBox, SpaceIcon, Spinner, useMe } from '../ui'
 import CreateSpaceDialog from '../components/CreateSpaceDialog'
 
@@ -13,6 +13,9 @@ export default function SpacesPage() {
   const spaces = useQuery({ queryKey: ['spaces'], queryFn: () => api.get<Space[]>('/spaces') })
   const [category, setCategory] = useState<string | null>(null)
   const [starredOnly, setStarredOnly] = useState(false)
+  // team or personal spaces only, or the archived ones (read-only)
+  const [kind, setKind] = useState<'all' | 'team' | 'personal' | 'archived'>('all')
+  const archived = useQuery({ queryKey: ['spaces', 'archived'], queryFn: () => api.get<Space[]>('/spaces?archived=true'), enabled: kind === 'archived' })
   const qc = useQueryClient()
   const signedIn = !!me.data?.user
   const toggleStar = async (s: Space) => {
@@ -20,14 +23,18 @@ export default function SpacesPage() {
     qc.setQueryData<Space[]>(['spaces'], (old) => old?.map((x) => (x.id === s.id ? { ...x, starred: !s.starred } : x)))
   }
   // starred first, then by name (the server sorts by name)
-  const all = [...(spaces.data ?? [])].sort((a, b) => Number(!!b.starred) - Number(!!a.starred))
+  const source = kind === 'archived' ? archived.data : spaces.data
+  const all = [...(source ?? [])].sort((a, b) => Number(!!b.starred) - Number(!!a.starred))
+  const anyPersonal = (spaces.data ?? []).some((s) => s.personalOwnerId)
   const anyStarred = all.some((s) => s.starred)
   const categories = [...new Set(all.map((s) => s.category).filter((c): c is string => !!c))].sort((a, b) => a.localeCompare(b))
   const list = all.filter(
     (s) =>
       (!q || s.name.toLowerCase().includes(q.toLowerCase()) || s.key.toLowerCase().includes(q.toLowerCase())) &&
       (category === null || (s.category ?? '') === category) &&
-      (!starredOnly || !!s.starred),
+      (!starredOnly || !!s.starred) &&
+      (kind !== 'team' || !s.personalOwnerId) &&
+      (kind !== 'personal' || !!s.personalOwnerId),
   )
   // grouped by category (uncategorised last) when there are categories and none is picked
   const groups: [string | null, Space[]][] =
@@ -46,6 +53,16 @@ export default function SpacesPage() {
         )}
       </div>
       <input className="input" style={{ margin: '18px 0 10px', maxWidth: 360 }} placeholder="Filter spaces" value={q} onChange={(e) => setQ(e.target.value)} />
+      {signedIn && (
+        <div className="chips" style={{ marginBottom: 8 }} role="group" aria-label="Kind of space">
+          {(['all', 'team', ...(anyPersonal ? ['personal'] : []), 'archived'] as const).map((k) => (
+            <button key={k} className={`chip${kind === k ? ' active' : ''}`} aria-pressed={kind === k} onClick={() => setKind(k as typeof kind)}>
+              {k === 'all' ? 'All spaces' : k === 'team' ? 'Team spaces' : k === 'personal' ? 'Personal spaces' : 'Archived'}
+            </button>
+          ))}
+        </div>
+      )}
+      {kind === 'archived' && archived.data?.length === 0 && <div className="empty">No archived spaces you can read.</div>}
       {(categories.length > 0 || anyStarred) && (
         <div className="chips" style={{ marginBottom: 14 }}>
           {anyStarred && (
@@ -85,7 +102,9 @@ export default function SpacesPage() {
                   <Link to={`/spaces/${s.key}`} className="row" style={{ color: 'var(--text)' }}>
                     <SpaceIcon space={s} /> <b>{s.name}</b>
                   </Link>
-                  {signedIn && (
+                  {s.archivedAt && <span className="badge">archived {formatDate(s.archivedAt)}</span>}
+                  {s.personalOwnerId && kind !== 'personal' && <span className="badge">personal</span>}
+                  {signedIn && !s.archivedAt && (
                     <button
                       type="button"
                       className={`icon-btn star-toggle${s.starred ? ' on' : ''}`}

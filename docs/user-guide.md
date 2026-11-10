@@ -8,7 +8,8 @@ Mac) in the app for the keyboard shortcuts.
 - **Home** shows the pages you visited recently, your starred pages, open tasks assigned to you
   and the activity: everything, what you watch, or what the people you follow did.
 - **Spaces** hold the pages of a team or project, as a tree in the sidebar. Drag pages in the
-  tree to reorder or nest them.
+  tree to reorder or nest them. The space directory filters by name, category, starred, team or
+  personal spaces, and shows the archived spaces you can still read.
 - **Search** (`Ctrl K` / `Cmd K` jumps straight to a page or runs an action: create a page or
   folder, open the trash, dark mode …; start with `>` for actions only) finds pages, blog posts
   and comments; filter by space, type, label, contributor and date, and save searches you repeat.

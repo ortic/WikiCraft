@@ -1877,8 +1877,14 @@ paths:
     get:
       tags:
       - Spaces
-      summary: Spaces visible to the caller
+      summary: 'Spaces visible to the caller (archived=true: the archived ones they can still read)'
       operationId: get_spaces
+      parameters:
+      - name: archived
+        in: query
+        required: false
+        description: true for archived spaces
+        schema: *id001
       responses:
         '200':
           description: OK

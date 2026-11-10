@@ -121,7 +121,7 @@ op("/groups/{id}", "delete", "Users", "Delete a group (admins)", res=NO)
 op("/groups/{id}/members", "post", "Users", "Add a member", req=body(obj({"userId": uuid})), res=NO)
 op("/groups/{id}/members/{user_id}", "delete", "Users", "Remove a member", res=NO)
 # spaces
-op("/spaces", "get", "Spaces", "Spaces visible to the caller", res=resp(arr(S("Space"))), public=True)
+op("/spaces", "get", "Spaces", "Spaces visible to the caller (archived=true: the archived ones they can still read)", query=[q("archived", "true for archived spaces")], res=resp(arr(S("Space"))), public=True)
 op("/spaces", "post", "Spaces", "Create a space", req=body(obj({"key": txt, "name": txt, "description": txt, "icon": txt, "defaultRole": txt}, ["key", "name"])), res=resp(S("Space"), "201", "Created"))
 op("/spaces/{key}", "get", "Spaces", "A space", res=resp(S("Space")), public=True)
 op("/spaces/{key}", "patch", "Spaces", "Update key (old key keeps working), name, description, icon, category, default role, anonymous access, default template, sidebar shortcuts ([{title, url}], up to 20; url = https://… or a /path in this wiki), look ({accentColor?: #rrggbb, hideBlog?: bool}, replaces it)", req=body(anyobj))
