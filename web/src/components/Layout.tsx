@@ -10,6 +10,7 @@ import SearchPalette, { type PaletteAction } from './SearchPalette'
 import CreateSpaceDialog from './CreateSpaceDialog'
 import NotificationsMenu from './NotificationsMenu'
 import TemplatePicker from './TemplatePicker'
+import { applySpaceAccent } from '../look'
 
 export function useCurrentSpaceKey(): string | undefined {
   const pageMatch = useMatch('/pages/:id/*')
@@ -35,6 +36,13 @@ export default function Layout() {
   const spaces = useQuery({ queryKey: ['spaces'], queryFn: () => api.get<Space[]>('/spaces') })
   const favorites = useQuery({ queryKey: ['favorites'], queryFn: () => api.get<{ id: string; title: string }[]>('/favorites'), enabled: !!user })
   const current = spaces.data?.find((s) => s.key.toLowerCase() === spaceKey?.toLowerCase())
+
+  // inside a space, its own accent colour (Space settings → Look) replaces the workspace's
+  const spaceAccent = current?.look?.accentColor
+  useEffect(() => {
+    applySpaceAccent(spaceAccent)
+    return () => applySpaceAccent(null)
+  }, [spaceAccent])
 
   useEffect(() => setMobileOpen(false), [loc.pathname])
   useEffect(() => {
@@ -210,9 +218,11 @@ export default function Layout() {
                 <div className="faint small">{current.pageCount} pages</div>
               </div>
             </Link>
-            <NavLink to={`/spaces/${current.key}/blog`} className="nav-item" style={{ marginTop: 4 }}>
-              <Newspaper size={15} /> Blog
-            </NavLink>
+            {!current.look?.hideBlog && (
+              <NavLink to={`/spaces/${current.key}/blog`} className="nav-item" style={{ marginTop: 4 }}>
+                <Newspaper size={15} /> Blog
+              </NavLink>
+            )}
             {!!current.shortcuts?.length && (
               <nav aria-label="Space shortcuts" className="space-shortcuts">
                 {current.shortcuts.map((s, i) =>

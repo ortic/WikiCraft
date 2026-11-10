@@ -45,7 +45,7 @@ pub struct WorkspaceUpdate {
 pub const DATE_FORMATS: &[&str] = &["auto", "yyyy-mm-dd", "dd.mm.yyyy", "dd/mm/yyyy", "mm/dd/yyyy", "d mmm yyyy"];
 
 /// `#rrggbb` (lower-cased), or None.
-fn clean_color(s: &str) -> Option<String> {
+pub fn clean_color(s: &str) -> Option<String> {
     let s = s.trim();
     (s.len() == 7 && s.starts_with('#') && s[1..].chars().all(|c| c.is_ascii_hexdigit())).then(|| s.to_ascii_lowercase())
 }

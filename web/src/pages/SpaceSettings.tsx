@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useCanonicalSpaceKey } from '../useCanonicalKey'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Archive, Trash2, RotateCcw, Users, X } from 'lucide-react'
-import { api, formatDate, type Shortcut, type Space } from '../api'
+import { api, formatDate, type Shortcut, type Space, type SpaceLook } from '../api'
 import { SymbolPicker } from '../icons'
 import ExportPanel from '../components/ExportPanel'
 import { ErrorBox, SpaceIcon, Spinner, useFeatures, useToast } from '../ui'
@@ -111,6 +111,7 @@ function Details({ space }: { space: Space }) {
       </div>
       <button className="btn btn-primary" onClick={save}>Save</button>
       <Shortcuts space={space} />
+      <SpaceLookCard space={space} />
       {!space.personalOwnerId && <SpaceOwner space={space} />}
       {!space.personalOwnerId && <CopySpace space={space} />}
       <div className="card danger-zone" style={{ marginTop: 28 }}>
@@ -170,6 +171,43 @@ function Shortcuts({ space }: { space: Space }) {
         <span className="spacer" />
         <button className="btn btn-primary btn-sm" disabled={!rows} onClick={save}>Save</button>
       </div>
+    </div>
+  )
+}
+
+/** The space's own accent colour and sidebar options. */
+function SpaceLookCard({ space }: { space: Space }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const look = space.look ?? {}
+  const [color, setColor] = useState<string | null>(null)
+  const shown = color ?? look.accentColor ?? ''
+  const valid = /^#[0-9a-f]{6}$/i.test(shown)
+  const save = async (next: SpaceLook, message: string) => {
+    try {
+      await api.patch(`/spaces/${space.key}`, { look: next })
+      qc.invalidateQueries({ queryKey: ['space'] })
+      qc.invalidateQueries({ queryKey: ['spaces'] })
+      setColor(null)
+      toast(message)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not save')
+    }
+  }
+  return (
+    <div className="card" style={{ marginTop: 28 }}>
+      <b>Look</b>
+      <p className="muted small" style={{ margin: '4px 0 10px' }}>An accent colour for buttons, links and highlights while people are in this space; without one, the workspace’s.</p>
+      <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        <input type="color" aria-label="Pick a colour" value={valid ? shown : '#4f46e5'} onChange={(e) => setColor(e.target.value)} style={{ width: 40, height: 32, padding: 2, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg)' }} />
+        <input className="input" aria-label="Accent colour" style={{ maxWidth: 120, fontFamily: 'var(--mono)' }} placeholder="Workspace’s" maxLength={7} value={shown} onChange={(e) => setColor(e.target.value)} />
+        <button className="btn btn-sm" disabled={!valid || shown.toLowerCase() === (look.accentColor ?? '')} onClick={() => save({ ...look, accentColor: shown }, 'Colour saved')}>Save</button>
+        {look.accentColor && <button className="btn btn-sm" onClick={() => save({ ...look, accentColor: '' }, 'Back to the workspace colour')}>Use the workspace colour</button>}
+      </div>
+      <label className="row" style={{ gap: 8, marginTop: 12 }}>
+        <input type="checkbox" checked={!look.hideBlog} onChange={(e) => save({ ...look, hideBlog: !e.target.checked }, e.target.checked ? 'The blog is back in the sidebar' : 'The blog is hidden from the sidebar')} />
+        Show the blog in the sidebar
+      </label>
     </div>
   )
 }

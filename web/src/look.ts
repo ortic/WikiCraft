@@ -69,8 +69,24 @@ export function accentCss(color: string): string | null {
   ].join('\n')
 }
 
-/** Applies (or with null removes) the workspace accent colour. */
+// the workspace's colour, and the current space's (which wins while you're in that space)
+let workspaceAccent: string | null = null
+let spaceAccent: string | null = null
+
+/** Sets the workspace accent colour (null = the built-in one). */
 export function applyAccent(color: string | null | undefined) {
+  workspaceAccent = color || null
+  render()
+}
+
+/** Sets the accent colour of the space being viewed (null = the workspace's). */
+export function applySpaceAccent(color: string | null | undefined) {
+  spaceAccent = color || null
+  render()
+}
+
+function render() {
+  const color = spaceAccent ?? workspaceAccent
   const css = color ? accentCss(color) : null
   let el = document.getElementById('workspace-accent') as HTMLStyleElement | null
   if (!css) {

@@ -389,6 +389,17 @@ async fn copying_a_whole_space() {
         .await;
     assert_eq!(st, 200, "{s}");
     assert_eq!(s["shortcuts"][0], json!({"title": "Setup guide", "url": format!("/pages/{setup}")}));
+    // the space's own look: an accent colour and a sidebar without the blog
+    assert_eq!(s["look"], json!({}));
+    for bad in [json!({"accentColor": "teal"}), json!({"hideBlog": "yes"}), json!({"font": "Comic"}), json!("dark")] {
+        assert_eq!(app.patch(&owner, "/spaces/SRC", json!({ "look": bad })).await.0, 400, "{bad}");
+    }
+    assert_eq!(app.patch(&rita, "/spaces/SRC", json!({"look": {}})).await.0, 403);
+    let (_, s) = app.patch(&owner, "/spaces/SRC", json!({"look": {"accentColor": "#0E7C66", "hideBlog": true}})).await;
+    assert_eq!(s["look"], json!({"accentColor": "#0e7c66", "hideBlog": true}));
+    let (_, s) = app.patch(&owner, "/spaces/SRC", json!({"look": {"accentColor": "", "hideBlog": false}})).await;
+    assert_eq!(s["look"], json!({}), "empty and false go back to the defaults");
+    app.patch(&owner, "/spaces/SRC", json!({"look": {"accentColor": "#0e7c66"}})).await;
 
     // only space admins copy a space
     assert_eq!(app.post(&rita, "/spaces/SRC/copy", json!({"key": "DST", "name": "Copy"})).await.0, 403);
@@ -433,4 +444,5 @@ async fn copying_a_whole_space() {
         json!([{"title": "Setup guide", "url": format!("/pages/{new_setup}")}, {"title": "Status page", "url": "https://status.acme.test"}]),
         "shortcuts follow the copied pages"
     );
+    assert_eq!(d["look"], json!({"accentColor": "#0e7c66"}));
 }

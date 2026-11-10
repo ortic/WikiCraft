@@ -111,6 +111,9 @@ pub struct BackupSpace {
     /// sidebar links `[{title, url}]`
     #[serde(default)]
     pub shortcuts: Value,
+    /// the space's look `{accentColor?, hideBlog?}`
+    #[serde(default)]
+    pub look: Value,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -203,11 +206,19 @@ pub async fn run_export(state: &AppState, job_id: Uuid, actor: Uuid, input: &Val
     if role == Role::None || (format == Format::Backup && role < Role::Admin) {
         anyhow::bail!("you don't have permission to export this space");
     }
-    let (key, name, description, icon, default_role, home, shortcuts): (String, String, Option<String>, Option<String>, String, Option<Uuid>, Value) =
-        sqlx::query_as("SELECT key, name, description, icon, default_role, home_page_id, shortcuts FROM spaces WHERE id = $1")
-            .bind(space_id)
-            .fetch_one(&state.db)
-            .await?;
+    let (key, name, description, icon, default_role, home, shortcuts, look): (
+        String,
+        String,
+        Option<String>,
+        Option<String>,
+        String,
+        Option<Uuid>,
+        Value,
+        Value,
+    ) = sqlx::query_as("SELECT key, name, description, icon, default_role, home_page_id, shortcuts, look FROM spaces WHERE id = $1")
+        .bind(space_id)
+        .fetch_one(&state.db)
+        .await?;
 
     let rows = sqlx::query_as::<_, PageRow>(
         "SELECT p.id, p.parent_id, p.kind, p.title, p.icon, p.position, p.content, p.page_status, p.full_width, p.created_at, p.updated_at,
@@ -324,7 +335,7 @@ pub async fn run_export(state: &AppState, job_id: Uuid, actor: Uuid, input: &Val
                     format: BACKUP_FORMAT.into(),
                     version: 1,
                     exported_at: stamp,
-                    space: BackupSpace { key: key.clone(), name: name.clone(), description: description.clone(), icon: icon.clone(), default_role: default_role.clone(), home_page_id: home, shortcuts: shortcuts.clone() },
+                    space: BackupSpace { key: key.clone(), name: name.clone(), description: description.clone(), icon: icon.clone(), default_role: default_role.clone(), home_page_id: home, shortcuts: shortcuts.clone(), look: look.clone() },
                     pages: pages
                         .iter()
                         .map(|pg| BackupPage {
@@ -933,6 +944,9 @@ pub async fn run_restore(state: &AppState, job_id: Uuid, actor: Uuid, archive: &
             let remapped: Value = serde_json::from_str(&crate::routes::pages::remap_uuids(&clean.to_string(), &page_ids)).unwrap_or(json!([]));
             sqlx::query("UPDATE spaces SET shortcuts = $2 WHERE id = $1").bind(space.id).bind(remapped).execute(&state.db).await?;
         }
+    }
+    if let Ok(look) = crate::routes::spaces::clean_look(&m.space.look) {
+        sqlx::query("UPDATE spaces SET look = $2 WHERE id = $1").bind(space.id).bind(look).execute(&state.db).await?;
     }
     if let Some(home) = m.space.home_page_id.and_then(|h| page_ids.get(&h)) {
         sqlx::query("UPDATE spaces SET home_page_id = $2 WHERE id = $1").bind(space.id).bind(home).execute(&state.db).await?;

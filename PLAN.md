@@ -203,7 +203,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** Space categories / tags `C` — one category per space (Space settings → Details); the space directory groups and filters by it
 - [x] **P1** Space archive (read-only, hidden from search by default) and restore `C`
 - [~] **P1** Space sidebar: page tree, shortcuts/links, blog, whiteboards, databases, custom sections `C` (page tree, blog, and shortcuts: space admins pin web addresses or wiki paths in Space settings or from the page menu; kept by space copies and backups. No whiteboards/databases/custom sections)
-- [ ] **P1** Space-level look & feel: theme, colors, header image, sidebar config `C X`
+- [~] **P1** Space-level look & feel: theme, colors, header image, sidebar config `C X` (Space settings → Look: an accent colour that replaces the workspace's inside the space, and a sidebar without the blog; kept by space copies and backups. No header image (the home page's cover does that) or other sidebar sections)
 - [x] **P1** Space templates (create a space prefilled with a page structure) `C X`
 - [x] **P1** Space permissions screen (users × groups × anonymous × guests matrix) `C DC X B`
 - [x] **P1** Space admins / owners, ownership transfer `C` — every space has an owner (its creator; personal spaces their person), shown in Space settings → Details and Admin → Spaces (flagged when the owner's account is gone); space admins hand it over to an active non-guest account, who becomes a space admin and is notified (`PUT /api/spaces/{key}/owner`, audited)

@@ -89,6 +89,13 @@ export interface Me {
   mustSetUpTwoFactor?: boolean
 }
 
+export interface SpaceLook {
+  /** `#rrggbb`; unset = the workspace's */
+  accentColor?: string
+  /** the sidebar leaves out the blog */
+  hideBlog?: boolean
+}
+
 export interface Space {
   id: string
   key: string
@@ -111,6 +118,8 @@ export interface Space {
   personalOwnerId?: string | null
   /** links pinned to the space sidebar */
   shortcuts?: Shortcut[]
+  /** the space's own look (Space settings → Look) */
+  look?: SpaceLook
 }
 
 export interface Shortcut {

@@ -40,9 +40,12 @@ pub struct SpaceRow {
     /// sidebar links: `[{title, url}]`
     #[sqlx(default)]
     pub shortcuts: Value,
+    /// the space's own look: `{accentColor?, hideBlog?}`
+    #[sqlx(default)]
+    pub look: Value,
 }
 
-pub const SPACE_COLUMNS: &str = "id, workspace_id, key, name, description, icon, home_page_id, default_role, anonymous_access, personal_owner_id, created_at, updated_at, archived_at, default_template, category, owner_id, shortcuts";
+pub const SPACE_COLUMNS: &str = "id, workspace_id, key, name, description, icon, home_page_id, default_role, anonymous_access, personal_owner_id, created_at, updated_at, archived_at, default_template, category, owner_id, shortcuts, look";
 
 impl SpaceRow {
     pub fn access_row(&self) -> SpaceAccessRow {
@@ -276,7 +279,7 @@ pub async fn copy(
     let space =
         create_space(&state, user.workspace_id, Some(user.id), &new_key, name, src.description.as_deref(), src.icon.as_deref(), &src.default_role, None)
             .await?;
-    sqlx::query("UPDATE spaces SET category = $2 WHERE id = $1").bind(space.id).bind(&src.category).execute(&state.db).await?;
+    sqlx::query("UPDATE spaces SET category = $2, look = $3 WHERE id = $1").bind(space.id).bind(&src.category).bind(&src.look).execute(&state.db).await?;
     sqlx::query("INSERT INTO space_permissions (space_id, subject_type, subject_id, role) VALUES ($1, 'user', $2, 'admin') ON CONFLICT DO NOTHING")
         .bind(space.id)
         .bind(user.id)
@@ -544,6 +547,33 @@ pub struct UpdateSpace {
     category: Option<String>,
     /// sidebar links (replaces the list)
     shortcuts: Option<Vec<Shortcut>>,
+    /// the space's look (replaces it): `{accentColor?, hideBlog?}`
+    look: Option<Value>,
+}
+
+/// Checks a space look: an accent colour (`#rrggbb`; empty = the workspace's) and whether the
+/// sidebar leaves out the blog.
+pub fn clean_look(v: &Value) -> ApiResult<Value> {
+    let o = v.as_object().ok_or_else(|| ApiError::bad("look must be an object"))?;
+    let mut out = serde_json::Map::new();
+    for (k, val) in o {
+        match k.as_str() {
+            "accentColor" => {
+                let c = val.as_str().unwrap_or_default();
+                if !c.trim().is_empty() {
+                    let c = crate::routes::branding::clean_color(c).ok_or_else(|| ApiError::bad("accentColor must look like #1f6feb"))?;
+                    out.insert(k.clone(), json!(c));
+                }
+            }
+            "hideBlog" => {
+                if val.as_bool().ok_or_else(|| ApiError::bad("hideBlog must be true or false"))? {
+                    out.insert(k.clone(), json!(true));
+                }
+            }
+            other => return Err(ApiError::bad(format!("unknown look setting {other}"))),
+        }
+    }
+    Ok(Value::Object(out))
 }
 
 #[derive(Deserialize, Serialize, Clone)]
@@ -645,6 +675,10 @@ pub async fn update(
     if let Some(list) = req.shortcuts {
         let list = clean_shortcuts(list)?;
         sqlx::query("UPDATE spaces SET shortcuts = $2 WHERE id = $1").bind(space.id).bind(list).execute(&state.db).await?;
+    }
+    if let Some(look) = &req.look {
+        let look = clean_look(look)?;
+        sqlx::query("UPDATE spaces SET look = $2 WHERE id = $1").bind(space.id).bind(look).execute(&state.db).await?;
     }
     if let Some(k) = &new_key {
         rename_key(&state, user.workspace_id, space.id, &space.key, k).await?;

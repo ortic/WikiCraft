@@ -70,7 +70,13 @@ async fn export_and_restore_a_space() {
     let (st, _) = app.put(&owner, &format!("/pages/{guide}/content"), json!({"markdown": format!("Start with [the setup](/pages/{setup}#install).")})).await;
     assert_eq!(st, 200);
     app.put(&owner, &format!("/pages/{guide}/labels"), json!({"labels": ["howto"]})).await;
-    let (st, _) = app.patch(&owner, "/spaces/DOC", json!({"shortcuts": [{"title": "Guide", "url": format!("/pages/{guide}")}]})).await;
+    let (st, _) = app
+        .patch(
+            &owner,
+            "/spaces/DOC",
+            json!({"shortcuts": [{"title": "Guide", "url": format!("/pages/{guide}")}], "look": {"accentColor": "#aa3300", "hideBlog": true}}),
+        )
+        .await;
     assert_eq!(st, 200);
     let (_, me) = app.get(&owner, "/me").await;
     let (st, _) = app
@@ -202,6 +208,7 @@ async fn export_and_restore_a_space() {
     assert_eq!(tree["homePageId"].as_str().unwrap(), id_of("Docs"), "home page restored");
     let (_, doc2) = app.get(&owner, "/spaces/DOC2").await;
     assert_eq!(doc2["shortcuts"], json!([{"title": "Guide", "url": format!("/pages/{r_guide}")}]), "shortcuts restored, pointing at the restored page");
+    assert_eq!(doc2["look"], json!({"accentColor": "#aa3300", "hideBlog": true}));
     let (_, g) = app.get(&owner, &format!("/pages/{r_guide}")).await;
     assert!(g["content"].to_string().contains(&format!("/pages/{r_setup}#install")), "links point at the restored page");
     let (_, labels) = app.get(&owner, &format!("/pages/{r_guide}/labels")).await;

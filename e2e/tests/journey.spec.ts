@@ -574,6 +574,44 @@ test('page properties: typed values in a panel, and a properties report that fil
   await ctx.close()
 })
 
+test('workspace accent colour and date format, and a space with its own colour', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState })
+  const page = await ctx.newPage()
+  const accent = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue('--accent').trim())
+  await page.goto('/admin')
+  await page.locator('#ws-accent').fill('#0e7c66')
+  await page.locator('.card', { hasText: 'Look and dates' }).getByRole('button', { name: 'Save' }).click()
+  await expect.poll(accent).toBe('#0e7c66')
+  await page.locator('#ws-datefmt').selectOption('dd.mm.yyyy')
+  await expect(page.locator('.card', { hasText: 'Look and dates' })).toContainText(/For example 05\.03\.\d{4}/)
+
+  // a space's own colour wins inside it; its sidebar can leave out the blog
+  const h = { 'content-type': 'application/json', 'x-wikicraft': '1' }
+  await page.evaluate(async (headers) => {
+    await fetch('/api/spaces/PRODUCT', { method: 'PATCH', headers, body: JSON.stringify({ look: { accentColor: '#aa3300', hideBlog: true } }) })
+  }, h)
+  await page.goto(pageUrl)
+  await expect.poll(accent).toBe('#aa3300')
+  await expect(page.locator('.sidebar').getByRole('link', { name: 'Blog' })).toHaveCount(0)
+  await page.goto('/')
+  await expect.poll(accent).toBe('#0e7c66')
+
+  // a pale colour is darkened until text keeps AA contrast
+  await page.evaluate(async (headers) => {
+    await fetch('/api/admin/workspace', { method: 'PUT', headers, body: JSON.stringify({ accentColor: '#ffd400' }) })
+  }, h)
+  await page.goto('/')
+  await expect.poll(accent).not.toBe('#0e7c66')
+  const { violations } = await new AxeBuilder({ page }).withRules(['color-contrast']).analyze()
+  expect(violations.map((v) => v.nodes.map((n) => n.target.join(' ')).join(', '))).toEqual([])
+
+  await page.evaluate(async (headers) => {
+    await fetch('/api/admin/workspace', { method: 'PUT', headers, body: JSON.stringify({ accentColor: '', dateFormat: 'auto' }) })
+    await fetch('/api/spaces/PRODUCT', { method: 'PATCH', headers, body: JSON.stringify({ look: {} }) })
+  }, h)
+  await ctx.close()
+})
+
 test('the high-contrast theme meets WCAG AAA contrast (7:1) on the main screens', async ({ browser }) => {
   const ctx = await browser.newContext({ storageState: ownerState })
   await ctx.addInitScript(() => localStorage.setItem('wc-theme', 'contrast'))
