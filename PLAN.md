@@ -544,7 +544,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P2** XWiki XAR export
 - [ ] **P2** Docmost, Outline (JSON export), BookStack (API), Wiki.js (DB / git), DokuWiki, SharePoint pages, GitHub wiki, Quip `X(MediaWiki,Dokuwiki)`
 - [~] **P1** Import job UI: upload (resumable, multi-GB), dry-run analysis report, mapping (users, spaces, macros), progress, cancel, retry, final report with warnings per page (no resumable upload, mapping, cancel or retry)
-- [~] **P1** Re-runnable & incremental imports (stable source-id mapping; update instead of duplicate) (source-id mapping kept; re-import duplicates)
+- [~] **P1** Re-runnable & incremental imports (stable source-id mapping; update instead of duplicate) (Confluence: update imports, see §6.3; Notion / Word / HTML / Markdown imports still create new pages)
 
 ### 4.19 Export, print & publishing
 - [~] **P1** Export page / subtree to PDF (headers/footers, TOC, page numbers, cover page, custom CSS/template) `C X B` (browser print-to-PDF only)
@@ -588,8 +588,8 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 
 ### 4.22 AI (self-hostable, permission-aware)
 - [ ] **P2** Provider abstraction: OpenAI-compatible APIs, Azure OpenAI, Anthropic, Gemini, Ollama, vLLM, local embeddings `D`
-- [ ] **P2** Admin controls: enable per workspace/space, data retention, no-training guarantee, classification-aware exclusion `C`
-- [ ] **P2** Ask the wiki (RAG chat) with citations to blocks, follow-ups, permission-filtered retrieval `C D O`
+- [~] **P2** Admin controls: enable per workspace/space, data retention, no-training guarantee, classification-aware exclusion `C` (workspace feature switch; nothing per space)
+- [~] **P2** Ask the wiki (RAG chat) with citations to blocks, follow-ups, permission-filtered retrieval `C D O` (search page: permission-filtered retrieval, Claude Messages API, numbered citations to pages, rate limited; no follow-ups, citations to pages not blocks; only tested against a stub API so far)
 - [ ] **P2** AI semantic search / answers in the search bar `C D O`
 - [ ] **P2** Writing assist in editor: improve, shorten, expand, fix grammar, change tone, translate, summarize, continue `C D`
 - [ ] **P2** Page / thread summaries; "catch me up" on changes since last visit `C`
