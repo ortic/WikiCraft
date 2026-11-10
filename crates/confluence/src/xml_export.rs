@@ -285,15 +285,15 @@ fn dispatch(o: RawObject, export: &mut Export, pending: &mut Pending) {
             }
         }
         "SpacePermission" => {
-            let all_users = o.get("allUsersSubject").is_some_and(|v| v == "true" || v == "1");
-            export.space_permissions.push(SpacePermission {
-                space_id: o.get("space").unwrap_or_default(),
-                kind: o.get("type").unwrap_or_default(),
-                user_key: o.get("userSubject"),
-                group: o.get("group"),
-                anonymous: !all_users && o.get("userSubject").is_none() && o.get("group").is_none(),
-                all_users,
-            })
+            if !inactive(o.get("active").as_deref()) {
+                export.space_permissions.push(SpacePermission::new(
+                    o.get("space").unwrap_or_default(),
+                    o.get("type").unwrap_or_default(),
+                    o.get("userSubject"),
+                    o.get("group"),
+                    o.get("allUsersSubject").as_deref(),
+                ));
+            }
         }
         "ContentPermissionSet" => {
             if let Some(c) = o.get("owningContent") {

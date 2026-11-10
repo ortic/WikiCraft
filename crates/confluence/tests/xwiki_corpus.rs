@@ -257,3 +257,17 @@ fn cloud_csv_backups() {
     assert!(c.plan.report.counts["watches"] > 50);
     assert_eq!(c.plan.spaces[0].favourited_by.len(), 2);
 }
+
+#[test]
+fn space_permission_subjects() {
+    // current exports name the subject: all-licensed-users / anonymous-users / all-product-admins
+    let Some(ex) = load("permissions") else { return };
+    let all_users = ex.space_permissions.iter().filter(|p| p.all_users).count();
+    let anonymous = ex.space_permissions.iter().filter(|p| p.anonymous).count();
+    assert!(all_users >= 1, "all-licensed-users is everybody signed in");
+    assert!(anonymous >= 1, "anonymous-users is public access");
+    assert!(
+        ex.space_permissions.iter().filter(|p| p.anonymous).all(|p| !p.all_users && p.user_key.is_none() && p.group.is_none()),
+        "a grant is to one kind of subject"
+    );
+}

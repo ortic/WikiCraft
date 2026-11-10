@@ -180,17 +180,16 @@ pub fn read(source: &Source, export: &mut Export) -> Result<(), crate::Error> {
     // Space permissions
     if let Some(n) = find(source, &names, "spacepermissions") {
         for_each_row(source, &n, |r| {
-            let user = get(&r, "permusername");
-            let group = get(&r, "permgroupname");
-            let all_users = get(&r, "permalluserssubject").is_some_and(|v| v != "0" && v != "f" && v != "false");
-            export.space_permissions.push(SpacePermission {
-                space_id: get(&r, "spaceid").unwrap_or_default(),
-                kind: get(&r, "permtype").unwrap_or_default(),
-                anonymous: !all_users && user.is_none() && group.is_none(),
-                all_users,
-                user_key: user,
-                group,
-            });
+            if inactive(get(&r, "active").as_deref()) {
+                return;
+            }
+            export.space_permissions.push(SpacePermission::new(
+                get(&r, "spaceid").unwrap_or_default(),
+                get(&r, "permtype").unwrap_or_default(),
+                get(&r, "permusername"),
+                get(&r, "permgroupname"),
+                get(&r, "permalluserssubject").as_deref(),
+            ));
         })?;
     }
 

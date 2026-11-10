@@ -221,6 +221,28 @@ pub struct SpacePermission {
     pub all_users: bool,
 }
 
+impl SpacePermission {
+    /// A grant from its subject columns: a user, a group, or `allUsersSubject`, whose value is
+    /// `all-licensed-users` / `anonymous-users` / `all-product-admins` in current exports and a
+    /// boolean in old ones. A grant to product admins is left out (both flags off): workspace
+    /// admins have access anyway.
+    pub fn new(space_id: String, kind: String, user_key: Option<String>, group: Option<String>, all_users_subject: Option<&str>) -> Self {
+        let subject = all_users_subject.map(|v| v.trim().to_ascii_lowercase()).filter(|v| !v.is_empty());
+        let (all_users, anonymous) = match subject.as_deref() {
+            Some("all-licensed-users" | "all-users" | "true" | "t" | "1") => (true, false),
+            Some("anonymous-users" | "anonymous") => (false, true),
+            Some("false" | "f" | "0") | None => (false, user_key.is_none() && group.is_none()),
+            Some(_) => (false, false),
+        };
+        Self { space_id, kind, user_key, group, anonymous, all_users }
+    }
+}
+
+/// Whether an `active` column / property switches a row off (absent means active).
+pub fn inactive(active: Option<&str>) -> bool {
+    active.is_some_and(|v| matches!(v.trim().to_ascii_lowercase().as_str(), "false" | "f" | "0"))
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
 #[serde(rename_all = "snake_case")]
 pub enum RestrictionKind {
@@ -286,5 +308,26 @@ impl Export {
     pub fn attachment_path(&self, attachment_id: &str, version: i64) -> Option<&str> {
         let versions = self.attachment_files.get(attachment_id)?;
         versions.get(&version).or_else(|| versions.values().next_back()).map(String::as_str)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn space_permission_subjects() {
+        let p = |user: Option<&str>, group: Option<&str>, all: Option<&str>| {
+            let p = SpacePermission::new("1".into(), "VIEWSPACE".into(), user.map(String::from), group.map(String::from), all);
+            (p.all_users, p.anonymous)
+        };
+        assert_eq!(p(None, None, Some("all-licensed-users")), (true, false));
+        assert_eq!(p(None, None, Some("anonymous-users")), (false, true));
+        assert_eq!(p(None, None, Some("all-product-admins")), (false, false));
+        assert_eq!(p(None, None, Some("true")), (true, false), "old exports");
+        assert_eq!(p(None, None, None), (false, true), "no subject at all: anonymous");
+        assert_eq!(p(Some("u1"), None, None), (false, false));
+        assert_eq!(p(None, Some("devs"), Some("")), (false, false));
+        assert!(inactive(Some("false")) && inactive(Some("f")) && !inactive(Some("t")) && !inactive(None));
     }
 }
