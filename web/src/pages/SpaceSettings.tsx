@@ -6,7 +6,7 @@ import { Archive, Trash2, RotateCcw, Users, X } from 'lucide-react'
 import { api, formatDate, type Space } from '../api'
 import { SymbolPicker } from '../icons'
 import ExportPanel from '../components/ExportPanel'
-import { ErrorBox, SpaceIcon, Spinner, useToast } from '../ui'
+import { ErrorBox, SpaceIcon, Spinner, useFeatures, useToast } from '../ui'
 
 interface Grant {
   subjectType: 'user' | 'group'
@@ -21,13 +21,17 @@ export default function SpaceSettings() {
   const { key } = useParams()
   const [params, setParams] = useSearchParams()
   const requested = params.get('tab') ?? 'details'
+  const features = useFeatures()
   const space = useQuery({ queryKey: ['space', key], queryFn: () => api.get<Space>(`/spaces/${key}`) })
   useCanonicalSpaceKey(key, space.data?.key)
   if (space.isLoading) return <div className="content-pad"><Spinner /></div>
   if (space.error) return <div className="content-pad"><ErrorBox error={space.error} /></div>
   const s = space.data!
   // non-admins have no details/permissions tabs
-  const tab = s.role !== 'admin' && (requested === 'details' || requested === 'permissions') ? 'export' : requested
+  const exports = features.exports !== false
+  const fallback = exports ? 'export' : 'archived'
+  const tab =
+    (s.role !== 'admin' && (requested === 'details' || requested === 'permissions')) || (!exports && requested === 'export') ? fallback : requested
   return (
     <div className="content-pad">
       <h1 style={{ marginTop: 0 }}>{s.name} · Settings</h1>
@@ -40,7 +44,7 @@ export default function SpaceSettings() {
         )}
         <button className={`tab ${tab === 'archived' ? 'active' : ''}`} onClick={() => setParams({ tab: 'archived' })}>Archived</button>
         <button className={`tab ${tab === 'trash' ? 'active' : ''}`} onClick={() => setParams({ tab: 'trash' })}>Trash</button>
-        <button className={`tab ${tab === 'export' ? 'active' : ''}`} onClick={() => setParams({ tab: 'export' })}>Export</button>
+        {exports && <button className={`tab ${tab === 'export' ? 'active' : ''}`} onClick={() => setParams({ tab: 'export' })}>Export</button>}
       </div>
       {tab === 'details' && s.role === 'admin' && <Details space={s} />}
       {tab === 'permissions' && s.role === 'admin' && <Permissions space={s} />}

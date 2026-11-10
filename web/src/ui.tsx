@@ -8,6 +8,15 @@ export function useMe() {
   return useQuery({ queryKey: ['me'], queryFn: () => api.get<Me>('/me'), staleTime: 60_000 })
 }
 
+export type Features = { publicLinks: boolean; exports: boolean; ai: boolean; personalSpaces: boolean }
+
+/** Workspace switches as they apply to the signed-in person (Admin → Overview). Undefined while
+ *  loading or when signed out: callers treat that as "on" (the server enforces them anyway). */
+export function useFeatures(): Partial<Features> {
+  const q = useQuery({ queryKey: ['features'], queryFn: () => api.get<Features>('/features'), staleTime: 300_000, retry: false })
+  return q.data ?? {}
+}
+
 export function Logo() {
   return (
     <span className="logo">

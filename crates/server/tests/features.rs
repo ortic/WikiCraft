@@ -405,3 +405,36 @@ async fn announcement_banner() {
     assert_eq!(app.put(&owner, "/admin/announcement", json!({"text": ""})).await.1, Value::Null);
     assert_eq!(app.get(&member, "/announcement").await.1, Value::Null);
 }
+
+#[tokio::test]
+async fn feature_switches() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, _) = app.user(&owner, "fs@acme.test", "member").await;
+    app.post(&owner, "/spaces", json!({"key": "FS", "name": "Switches", "defaultRole": "editor"})).await;
+    let (_, page) = app.post(&owner, "/pages", json!({"spaceKey": "FS", "title": "Plan", "markdown": "Ship it"})).await;
+    let export = format!("/pages/{}/export?format=md", page["id"].as_str().unwrap());
+
+    let (_, f) = app.get(&member, "/features").await;
+    assert_eq!(f, json!({"publicLinks": true, "exports": true, "ai": false, "personalSpaces": true}), "on by default; ai needs a key");
+    assert_eq!(app.get(&member, &export).await.0, 200);
+
+    assert_eq!(app.put(&member, "/admin/settings", json!({"exports": false})).await.0, 403);
+    assert_eq!(app.put(&owner, "/admin/settings", json!({"export": false})).await.0, 400, "unknown switch");
+    let (st, s) = app.put(&owner, "/admin/settings", json!({"exports": false, "personalSpaces": false})).await;
+    assert_eq!(st, 200, "{s}");
+    assert_eq!(s, json!({"publicLinks": true, "exports": false, "ai": true, "personalSpaces": false}));
+
+    // members can't export any more, admins still can
+    assert_eq!(app.get(&member, &export).await.0, 400);
+    assert_eq!(app.post(&member, "/spaces/FS/export", json!({"format": "markdown"})).await.0, 400);
+    assert_eq!(app.get(&owner, &export).await.0, 200);
+    assert_eq!(app.get(&member, "/features").await.1["exports"], false);
+    assert_eq!(app.get(&owner, "/features").await.1["exports"], true);
+    // no new personal spaces
+    assert_eq!(app.post(&member, "/me/space", json!({})).await.0, 400);
+
+    app.put(&owner, "/admin/settings", json!({"exports": true, "personalSpaces": true})).await;
+    assert_eq!(app.get(&member, &export).await.0, 200);
+    assert_eq!(app.post(&member, "/me/space", json!({})).await.0, 201);
+}

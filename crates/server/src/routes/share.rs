@@ -33,10 +33,24 @@ async fn restricted(state: &AppState, page: Uuid) -> ApiResult<bool> {
     .await?)
 }
 
-async fn links_enabled(state: &AppState, ws: Uuid) -> ApiResult<bool> {
-    let v: Option<bool> =
-        sqlx::query_scalar("SELECT (settings->>'publicLinks')::boolean FROM workspaces WHERE id = $1").bind(ws).fetch_optional(&state.db).await?.flatten();
+/// Workspace-wide switches an admin can turn off (all on by default), stored in
+/// `workspaces.settings`.
+pub const SWITCHES: [&str; 4] = ["publicLinks", "exports", "ai", "personalSpaces"];
+
+/// Whether the workspace switch `key` (one of [`SWITCHES`]) is on.
+pub async fn switch_on(state: &AppState, ws: Uuid, key: &str) -> ApiResult<bool> {
+    debug_assert!(SWITCHES.contains(&key));
+    let v: Option<bool> = sqlx::query_scalar("SELECT (settings->>$2)::boolean FROM workspaces WHERE id = $1")
+        .bind(ws)
+        .bind(key)
+        .fetch_optional(&state.db)
+        .await?
+        .flatten();
     Ok(v.unwrap_or(true))
+}
+
+async fn links_enabled(state: &AppState, ws: Uuid) -> ApiResult<bool> {
+    switch_on(state, ws, "publicLinks").await
 }
 
 #[derive(serde::Serialize, sqlx::FromRow)]
@@ -138,29 +152,61 @@ pub async fn revoke(State(state): State<AppState>, CurrentUser(user): CurrentUse
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[derive(Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct Settings {
-    public_links: Option<bool>,
+async fn switches(state: &AppState, ws: Uuid) -> ApiResult<serde_json::Map<String, Value>> {
+    let mut out = serde_json::Map::new();
+    for key in SWITCHES {
+        out.insert(key.to_string(), Value::Bool(switch_on(state, ws, key).await?));
+    }
+    Ok(out)
 }
 
-/// `GET|PUT /api/admin/settings` — workspace-wide switches.
+/// `GET|PUT /api/admin/settings` — workspace-wide switches (`{publicLinks, exports, ai,
+/// personalSpaces}`; a PUT changes the ones it names).
 pub async fn get_settings(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Value>> {
     require_admin(&user)?;
-    Ok(Json(json!({ "publicLinks": links_enabled(&state, user.workspace_id).await? })))
+    Ok(Json(Value::Object(switches(&state, user.workspace_id).await?)))
 }
 
-pub async fn put_settings(State(state): State<AppState>, CurrentUser(user): CurrentUser, Json(req): Json<Settings>) -> ApiResult<Json<Value>> {
+pub async fn put_settings(State(state): State<AppState>, CurrentUser(user): CurrentUser, Json(req): Json<serde_json::Map<String, Value>>) -> ApiResult<Json<Value>> {
     require_admin(&user)?;
-    if let Some(v) = req.public_links {
-        sqlx::query("UPDATE workspaces SET settings = settings || jsonb_build_object('publicLinks', $2::boolean) WHERE id = $1")
+    for (key, v) in &req {
+        let (Some(key), Some(v)) = (SWITCHES.iter().find(|k| *k == key), v.as_bool()) else {
+            return Err(ApiError::bad(format!("unknown setting {key} (expected true/false for one of {})", SWITCHES.join(", "))));
+        };
+        sqlx::query("UPDATE workspaces SET settings = settings || jsonb_build_object($2::text, $3::boolean) WHERE id = $1")
             .bind(user.workspace_id)
+            .bind(key)
             .bind(v)
             .execute(&state.db)
             .await?;
-        audit::log(&state, user.workspace_id, Some(user.id), "workspace.settings", None, None, json!({"publicLinks": v})).await;
+        audit::log(&state, user.workspace_id, Some(user.id), "workspace.settings", None, None, json!({ *key: v })).await;
     }
     get_settings(State(state), CurrentUser(user)).await
+}
+
+/// `GET /api/features` — what the caller may use here (switches as they apply to them: admins
+/// can always export; Ask the wiki also needs an API key).
+pub async fn features(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Value>> {
+    let mut f = switches(&state, user.workspace_id).await?;
+    if user.is_admin() {
+        f.insert("exports".into(), Value::Bool(true));
+    }
+    let ai_configured = state.config.ai_api_key.as_deref().is_some_and(|k| !k.is_empty());
+    let ai = f.get("ai").and_then(Value::as_bool).unwrap_or(false) && ai_configured;
+    f.insert("ai".into(), Value::Bool(ai));
+    if user.is_guest() {
+        f.insert("personalSpaces".into(), Value::Bool(false));
+    }
+    Ok(Json(Value::Object(f)))
+}
+
+/// Refuses exports for non-admins when an admin turned them off.
+pub async fn require_exports(state: &AppState, ws: Uuid, user: Option<&crate::auth::User>) -> ApiResult<()> {
+    if user.is_some_and(|u| u.is_admin()) || switch_on(state, ws, "exports").await? {
+        Ok(())
+    } else {
+        Err(ApiError::bad("exports are turned off on this wiki"))
+    }
 }
 
 // ---- public side ---------------------------------------------------------------------------

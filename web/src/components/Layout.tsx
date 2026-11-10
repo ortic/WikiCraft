@@ -4,7 +4,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Search, Home as HomeIcon, LayoutGrid, Star, Settings, Plus, LogOut, Moon, Shield, Menu, Trash2, UserCog, Newspaper, ListChecks, Download, Info, TriangleAlert, CircleCheck, X } from 'lucide-react'
 import ShortcutsDialog from './ShortcutsDialog'
 import { api, type Page, type Space } from '../api'
-import { Avatar, Logo, SpaceIcon, useMe } from '../ui'
+import { Avatar, Logo, SpaceIcon, useFeatures, useMe } from '../ui'
 import SpaceTree from './SpaceTree'
 import SearchPalette from './SearchPalette'
 import CreateSpaceDialog from './CreateSpaceDialog'
@@ -21,6 +21,7 @@ export function useCurrentSpaceKey(): string | undefined {
 
 export default function Layout() {
   const me = useMe()
+  const features = useFeatures()
   const user = me.data?.user
   const nav = useNavigate()
   const qc = useQueryClient()
@@ -98,7 +99,7 @@ export default function Layout() {
                     <div className="mi-desc">{user.email}</div>
                   </div>
                 </div>
-                {user.role !== 'guest' && (
+                {user.role !== 'guest' && features.personalSpaces !== false && (
                   <div
                     className="menu-item"
                     onClick={async () => {

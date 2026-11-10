@@ -263,12 +263,16 @@ pub async fn create_my_space(State(state): State<AppState>, CurrentUser(user): C
     if user.is_guest() {
         return Err(ApiError::Forbidden);
     }
+    let allowed = crate::routes::share::switch_on(&state, user.workspace_id, "personalSpaces").await?;
     if let Some(row) = sqlx::query_as::<_, SpaceRow>(sqlx::AssertSqlSafe(format!("SELECT {SPACE_COLUMNS} FROM spaces WHERE personal_owner_id = $1")))
         .bind(user.id)
         .fetch_optional(&state.db)
         .await?
     {
         return Ok((StatusCode::OK, Json(row)));
+    }
+    if !allowed {
+        return Err(ApiError::bad("personal spaces are turned off on this wiki"));
     }
     // ~ + the e-mail's local part (or name), made unique
     let base: String = user

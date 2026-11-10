@@ -1006,6 +1006,8 @@ pub struct ExportQuery {
 pub async fn export(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path(id): Path<Uuid>, Query(q): Query<ExportQuery>) -> ApiResult<Response> {
     let p = Principal::load(&state, user).await?;
     require_page(&state, &p, id, Need::View).await?;
+    let ws: Uuid = sqlx::query_scalar("SELECT s.workspace_id FROM pages p JOIN spaces s ON s.id = p.space_id WHERE p.id = $1").bind(id).fetch_one(&state.db).await?;
+    crate::routes::share::require_exports(&state, ws, p.user.as_ref()).await?;
     let (title, content): (String, Value) = sqlx::query_as("SELECT title, content FROM pages WHERE id = $1").bind(id).fetch_one(&state.db).await?;
     let doc = match state.rooms.get(id) {
         Some(r) => r.snapshot(),

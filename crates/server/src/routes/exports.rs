@@ -33,6 +33,7 @@ pub async fn start(
     if req.format == Format::Backup && role < Role::Admin {
         return Err(ApiError::Forbidden);
     }
+    crate::routes::share::require_exports(&state, user.workspace_id, Some(&user)).await?;
     let job = new_id();
     sqlx::query("INSERT INTO jobs (id, workspace_id, kind, created_by, progress, input) VALUES ($1, $2, 'export.space', $3, $4, $5)")
         .bind(job)

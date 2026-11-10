@@ -5,7 +5,7 @@ import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIco
 import { NoAccess, OwnerDialog, RequestReviewDialog, VerificationBadge, VerifyDialog } from '../components/Verification'
 import { ApiError, api, formatDate, type Page, type Space } from '../api'
 import { PageDecor } from '../components/PageDecor'
-import { ErrorBox, Spinner, useMe, useToast } from '../ui'
+import { ErrorBox, Spinner, useFeatures, useMe, useToast } from '../ui'
 import Editor, { PresenceAvatars, type Presence } from '../editor/Editor'
 import CommentsPanel from '../components/CommentsPanel'
 import AttachmentsPanel from '../components/AttachmentsPanel'
@@ -21,6 +21,7 @@ export default function PageView() {
   const qc = useQueryClient()
   const toast = useToast()
   const me = useMe()
+  const features = useFeatures()
   const user = me.data?.user ?? null
   const page = useQuery({ queryKey: ['page', id], queryFn: () => api.get<Page>(`/pages/${id}`), retry: false })
   const space = useQuery({ queryKey: ['space', page.data?.spaceKey], queryFn: () => api.get<Space>(`/spaces/${page.data!.spaceKey}`), enabled: !!page.data?.spaceKey })
@@ -254,6 +255,7 @@ export default function PageView() {
                     <Copy size={15} /> Copy page
                   </div>
                 )}
+                {features.exports !== false && (<>
                 <div className="menu-sep" />
                 <div className="menu-label">Export</div>
                 <div className="menu-item" onClick={() => { setMenu(false); setTimeout(() => window.print(), 50) }}>
@@ -271,6 +273,7 @@ export default function PageView() {
                 <a className="menu-item" href={`/api/pages/${p.id}/export?format=html`}>
                   <Download size={15} /> HTML
                 </a>
+                </>)}
                 {(p.access.admin || (canEdit && space.data?.homePageId !== p.id)) && <div className="menu-sep" />}
                 {canEdit && space.data?.homePageId !== p.id && (
                   <div className="menu-item" onClick={() => { setMenu(false); archive() }}>

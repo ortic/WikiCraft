@@ -3,7 +3,7 @@ import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Upload, FileSearch, CheckCircle2, XCircle, UserPlus, Users, Activity, Database, RefreshCw, Mail, Send, Globe, Megaphone } from 'lucide-react'
 import { api, formatBytes, formatDate, type Job } from '../api'
-import { Avatar, Modal, Spinner, useMe, useToast } from '../ui'
+import { Avatar, Modal, Spinner, useMe, useToast, type Features } from '../ui'
 import AdminWebhooks from './AdminWebhooks'
 import AdminSpaces from './AdminSpaces'
 
@@ -130,24 +130,43 @@ function AnnouncementSettings() {
 function WorkspaceSettings() {
   const qc = useQueryClient()
   const toast = useToast()
-  const settings = useQuery({ queryKey: ['admin-settings'], queryFn: () => api.get<{ publicLinks: boolean }>('/admin/settings') })
+  const settings = useQuery({ queryKey: ['admin-settings'], queryFn: () => api.get<Features>('/admin/settings') })
   if (!settings.data) return null
+  const set = async (key: keyof Features, on: boolean, message: string) => {
+    try {
+      await api.put('/admin/settings', { [key]: on })
+      qc.invalidateQueries({ queryKey: ['admin-settings'] })
+      qc.invalidateQueries({ queryKey: ['features'] })
+      qc.invalidateQueries({ queryKey: ['ai-status'] })
+      toast(message)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not save')
+    }
+  }
+  const s = settings.data
   return (
     <div className="card" style={{ marginTop: 24, maxWidth: 720 }}>
-      <h3 style={{ marginTop: 0 }} className="row"><Globe size={17} /> Sharing</h3>
+      <h3 style={{ marginTop: 0 }} className="row"><Globe size={17} /> Sharing and features</h3>
       <label className="row">
-        <input
-          type="checkbox"
-          checked={settings.data.publicLinks}
-          onChange={async (e) => {
-            await api.put('/admin/settings', { publicLinks: e.target.checked })
-            qc.invalidateQueries({ queryKey: ['admin-settings'] })
-            toast(e.target.checked ? 'Public links are allowed' : 'Public links are turned off — existing links stop working')
-          }}
-        />
+        <input type="checkbox" checked={s.publicLinks} onChange={(e) => set('publicLinks', e.target.checked, e.target.checked ? 'Public links are allowed' : 'Public links are turned off — existing links stop working')} />
         Allow public links (anyone with the link can read a shared page)
       </label>
-      <p className="faint small" style={{ marginBottom: 0 }}>Turning this off disables every existing public link immediately; turning it back on restores them.</p>
+      <p className="faint small" style={{ margin: '2px 0 12px 24px' }}>Turning this off disables every existing public link immediately; turning it back on restores them.</p>
+      <label className="row">
+        <input type="checkbox" checked={s.exports} onChange={(e) => set('exports', e.target.checked, e.target.checked ? 'Everyone can export pages and spaces' : 'Exports are limited to administrators')} />
+        Allow exports (Word, Markdown, HTML, PDF and space archives)
+      </label>
+      <p className="faint small" style={{ margin: '2px 0 12px 24px' }}>When off, only administrators can export; the export menu entries are hidden for everyone else.</p>
+      <label className="row">
+        <input type="checkbox" checked={s.ai} onChange={(e) => set('ai', e.target.checked, e.target.checked ? 'Ask the wiki is on' : 'Ask the wiki is off')} />
+        Ask the wiki (questions answered by Claude from the pages a person can see)
+      </label>
+      <p className="faint small" style={{ margin: '2px 0 12px 24px' }}>Also needs an API key on the server (WIKICRAFT_AI_API_KEY). When off, no page content is sent anywhere.</p>
+      <label className="row">
+        <input type="checkbox" checked={s.personalSpaces} onChange={(e) => set('personalSpaces', e.target.checked, e.target.checked ? 'People can create personal spaces' : 'No new personal spaces')} />
+        Personal spaces (a private space per person for drafts and notes)
+      </label>
+      <p className="faint small" style={{ margin: '2px 0 0 24px' }}>Turning this off stops new personal spaces; existing ones stay.</p>
     </div>
   )
 }

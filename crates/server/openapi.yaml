@@ -4205,11 +4205,20 @@ paths:
     get:
       tags:
       - Admin
-      summary: Workspace settings (public links)
+      summary: Workspace switches (public links, exports, Ask the wiki, personal spaces)
       operationId: get_admin_settings
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema: &id010
+                type: object
+                properties:
+                  publicLinks: *id003
+                  exports: *id003
+                  ai: *id003
+                  personalSpaces: *id003
         4XX:
           description: Error
           content:
@@ -4219,19 +4228,37 @@ paths:
     put:
       tags:
       - Admin
-      summary: Change workspace settings
+      summary: Turn workspace switches on or off (only the ones named change)
       operationId: put_admin_settings
       requestBody:
         required: true
         content:
           application/json:
-            schema:
-              type: object
-              properties:
-                publicLinks: *id003
+            schema: *id010
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema: *id010
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /features:
+    get:
+      tags:
+      - Admin
+      summary: The switches as they apply to the caller (admins can always export)
+      operationId: get_features
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: *id010
         4XX:
           description: Error
           content:

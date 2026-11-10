@@ -48,8 +48,12 @@ fn allow(user: Uuid) -> bool {
 }
 
 /// `GET /api/ai/status`
-pub async fn status(State(state): State<AppState>, MaybeUser(_user): MaybeUser) -> Json<Value> {
-    Json(json!({ "enabled": state.config.ai_api_key.as_deref().is_some_and(|k| !k.is_empty()), "model": state.config.ai_model }))
+pub async fn status(State(state): State<AppState>, MaybeUser(user): MaybeUser) -> ApiResult<Json<Value>> {
+    let mut enabled = state.config.ai_api_key.as_deref().is_some_and(|k| !k.is_empty());
+    if let Some(u) = &user {
+        enabled = enabled && crate::routes::share::switch_on(&state, u.workspace_id, "ai").await?;
+    }
+    Ok(Json(json!({ "enabled": enabled, "model": state.config.ai_model })))
 }
 
 #[derive(Deserialize)]
@@ -174,6 +178,9 @@ pub async fn ask(State(state): State<AppState>, CurrentUser(user): CurrentUser, 
     let Some(key) = state.config.ai_api_key.clone().filter(|k| !k.is_empty()) else {
         return Err(ApiError::bad("Ask the wiki isn't enabled on this server"));
     };
+    if !crate::routes::share::switch_on(&state, user.workspace_id, "ai").await? {
+        return Err(ApiError::bad("Ask the wiki is turned off on this wiki"));
+    }
     let question = req.question.trim();
     if question.is_empty() || question.chars().count() > 2000 {
         return Err(ApiError::bad("ask a question of up to 2000 characters"));
