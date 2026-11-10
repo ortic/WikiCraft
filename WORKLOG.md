@@ -4,7 +4,7 @@ Autonomous build session started 2026-11-09 (user asked for ~15 h of work follow
 Since the user's request every change is committed and pushed to `origin/master` (github.com/ortic/WikiCraft). Dev Postgres: docker container `wikicraft-pg` on `127.0.0.1:55432`
 (user/pass/db = `wikicraft`). Port 5432 and 5173 are taken by other tools on this machine.
 
-## Status (2026-11-10, ~00:40 UTC)
+## Status (2026-11-10, ~03:10 UTC)
 
 | Area | State |
 |---|---|
@@ -53,6 +53,17 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   + LibreOffice fixtures); find & replace (Ctrl+F/H); image lightbox; page verification + review requests +
   report; request access; OpenSearch; Slack/Teams/Google Chat webhook formats; "changed since your last visit";
   Ask the wiki (Claude Messages API over raw HTTP, permission-filtered retrieval, mock-API tests).
+- Night, second half (2026-11-10 00:40–03:10 UTC): space key rename with aliases; Word export of a page tree;
+  per-block history diff; phone layout fixes (+ e2e phone test); archive pages; popular pages; space templates
+  (team / project / knowledge base / engineering); search filters + comment search + comment editing; code block
+  line numbers / wrap; Markdown paste; open sign-up for e-mail domains (confirmation e-mail, no account rows
+  until confirmed); personal spaces; drag handles; `/api/v1`; open tasks on Home; image text wrap; callout
+  type / icon menu; `[[#heading` and attachment links; notification muting; saved searches; security review 3
+  (all findings fixed); watch a space; default template per space; page owners; jump to a collaborator;
+  Excalidraw drawings (fonts self-hosted, PNG preview attachment for readers / exports); image annotation;
+  link previews (server-side OpenGraph fetch with the webhook SSRF guards, cached); announcement banner;
+  feature switches (public links, exports, Ask the wiki, personal spaces); space categories; spreadsheet
+  (tab-separated) paste; table sort by column.
 - Note: running the whole test suite saturates this WSL machine (load ~100); a parallel demo server then hits DB
   pool timeouts, and the mail test's 4-second wait can flake. Both pass when the machine is idle.
 

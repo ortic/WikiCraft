@@ -4,21 +4,26 @@ A self-hosted team wiki with a **Rust backend**, a modern real-time editor, and 
 **Confluence migration**. Built for teams that need a home after Confluence Data Center goes
 end-of-life (2029-03-28).
 
-- **Spaces & page trees**: unlimited nesting, drag-and-drop reordering, trash with restore, copy, labels, favorites
+- **Spaces & page trees**: unlimited nesting, drag-and-drop reordering, trash with restore, archive, copy, labels, favorites; space templates (team, project, knowledge base, engineering), space categories, personal spaces, space key rename (old links keep working)
 - **Real-time collaboration**: Google-Docs-style co-editing with live cursors (Yjs CRDT; the server speaks the y-websocket protocol via `yrs`)
-- **Rich editor**: slash commands, tables, task lists, info/warning panels, expand blocks, code blocks with syntax highlighting, math, mentions, status lozenges, dates, embeds, file previews, table of contents, child pages, includes
-- **Version history** with diff and restore; automatic versions when editors leave
+- **Rich editor**: slash commands, drag handles, tables (merge, colours, sort by column), task lists, callouts with custom icons, expand blocks, code blocks with syntax highlighting and line numbers, math, mentions, status lozenges, dates, embeds and link previews, file previews, table of contents, child pages, includes, heading links, find & replace
+- **Drawings & images**: Excalidraw sketches stored in the page, image annotation (arrows, boxes, text), text wrap around images, lightbox
+- **Paste anything**: Markdown becomes formatted content, spreadsheet cells become tables, images upload on paste or drop
+- **Version history** with per-block diff and restore; automatic versions when editors leave; "changed since your last visit" banner
+- **Page lifecycle**: owners, verification ("this page is accurate" with expiry), archive, request access
 - **Comments**: page and inline comments, threads, resolve/reopen, mention notifications
 - **Permissions**: workspace roles, space roles (viewer/commenter/editor/admin) for users and groups, page view/edit restrictions (view restrictions are inherited, like Confluence), anonymous access, guests
-- **Search**: full-text (tantivy) with snippets, permission-aware
+- **Search**: full-text (tantivy or Postgres) with snippets, permission-aware, filters (type, label, contributor, date), comments indexed, saved searches, browser search (OpenSearch)
 - **Confluence import**: classic XML exports *and* the new Cloud CSV exports, with history, attachments, comments (incl. inline), labels, restrictions, authors, macro mapping, link rewriting and a dry-run report
 - **Markdown / Obsidian import**: zip of Markdown files with images and `[[wikilinks]]`
-- **Export & backup**: single pages as Markdown/HTML/JSON; whole spaces as a browsable static HTML site, a Markdown folder tree (re-importable) or a full backup that restores into a new space
+- **Word**: import .docx (headings, lists, tables, images, footnotes) and export pages or whole page trees to .docx
+- **Export & backup**: single pages as Word/Markdown/HTML/PDF; whole spaces as a browsable static HTML site, a Markdown folder tree (re-importable) or a full backup that restores into a new space
 - **Sign-in**: local accounts, OpenID Connect (Microsoft Entra ID, Google, GitLab, Okta, Keycloak, Authentik, …), GitHub, LDAP / Active Directory and SAML 2.0 — several at once, with just-in-time provisioning, domain rules, group sync and account linking
-- **E-mail**: invitations, password reset and notification digests over SMTP (outbox with retries)
-- **AI-ready**: built-in [MCP](https://modelcontextprotocol.io) server — Claude & co. can search, read and write pages with the user's permissions
-- **Templates**: built-in (meeting notes, decision record, how-to, retrospective, runbook, PRD) and custom space/workspace templates
-- **Notifications**: mentions, comments, watched-page updates (in-app and as e-mail digest); watch/unwatch pages; a "My tasks" view of task items assigned to you
+- **E-mail**: invitations, password reset, open sign-up for your e-mail domains (with confirmation) and notification digests over SMTP (outbox with retries)
+- **AI-ready**: built-in [MCP](https://modelcontextprotocol.io) server — Claude & co. can search, read and write pages with the user's permissions; *Ask the wiki* answers questions from the pages a person can see, with sources (optional, needs an Anthropic API key)
+- **Templates**: built-in (meeting notes, decision record, how-to, retrospective, runbook, PRD), custom space/workspace templates and a default template per space
+- **Notifications**: mentions, comments, watched-page and watched-space updates (in-app and as e-mail digest), per-page muting; a "My tasks" view of task items assigned to you; webhooks with Slack, Microsoft Teams and Google Chat formats
+- **Administration**: announcement banner, feature switches (public links, exports, Ask the wiki, personal spaces), audit log, usage overview
 - **Migration-friendly URLs**: old Confluence links (`/display/KEY/Title`, `viewpage.action?pageId=`, Cloud `/wiki/spaces/…/pages/ID`, `/x/` tiny links) redirect to the imported pages
 - **API**: REST + personal API tokens; audit log
 
