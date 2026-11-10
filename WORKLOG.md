@@ -108,6 +108,10 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   history versions) and verified the CSV tables we had only guessed. Confluence watches and favourites imported.
 - Template variables (`{{Name}}`, asked for in the Create dialog), minor changes (no watcher notifications), watching
   a page and the pages below. The axe check caught 3:1 contrast on the tree's draft badge.
+- Confluence update imports (trial import now, changes across at cutover; conflicts reported, idempotent);
+  space permission subjects as current exports write them (`all-licensed-users` was read as anonymous); full URLs
+  of the old site become internal links (2,334 in the ToIP export: a Cloud address can't be redirected); smart
+  link embeds. People directory and profiles. A PPTX overview deck was made on request (scratchpad, not in the repo).
 - Note: running the whole test suite saturates this WSL machine (load ~100); a parallel demo server then hits DB
   pool timeouts, and the mail test's 4-second wait can flake. Both pass when the machine is idle.
 
