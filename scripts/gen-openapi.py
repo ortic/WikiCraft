@@ -83,6 +83,8 @@ op("/me/tokens", "post", "Account", "Create a personal API token (shown once)", 
 op("/me/tokens/{id}", "delete", "Account", "Delete a personal API token", res=NO)
 op("/me/preferences", "get", "Account", "Notification e-mail preference")
 op("/me/preferences", "put", "Account", "Set the notification e-mail preference", req=body(obj({"emailNotifications": {"enum": ["all", "important", "none"]}})))
+op("/me/space", "get", "Spaces", "Your personal space (key or null)", res=resp(obj({"key": txt})))
+op("/me/space", "post", "Spaces", "Create (or get) your private personal space", res=resp(S("Space"), "201", "Created"))
 op("/me/sessions", "get", "Account", "Active sessions of the current user")
 op("/me/sessions/{id}", "delete", "Account", "Sign out one session", res=NO)
 op("/me/sessions/revoke-others", "post", "Account", "Sign out everywhere else")

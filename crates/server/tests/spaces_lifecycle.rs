@@ -159,3 +159,35 @@ async fn spaces_from_templates() {
     let (_, plan) = app.get(&owner, &format!("/pages/{}", plan["id"].as_str().unwrap())).await;
     assert!(plan["content"].to_string().contains("Milestones") || plan["content"]["content"].as_array().unwrap().len() > 2, "{plan}");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn personal_spaces_are_private() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (ann, _) = app.user(&owner, "ann.lee@acme.test", "member").await;
+    let (bob, _) = app.user(&owner, "bob@acme.test", "member").await;
+    let (_, none) = app.get(&ann, "/me/space").await;
+    assert!(none["key"].is_null());
+    let (st, sp) = app.post(&ann, "/me/space", json!({})).await;
+    assert_eq!(st, 201, "{sp}");
+    assert_eq!(sp["key"], "~ANNLEE");
+    let (st, again) = app.post(&ann, "/me/space", json!({})).await;
+    assert_eq!((st, again["id"].clone()), (200, sp["id"].clone()), "one per person");
+    let (_, mine) = app.get(&ann, "/me/space").await;
+    assert_eq!(mine["key"], "~ANNLEE");
+    // Ann administers it; Bob neither sees nor finds it
+    let (st, s) = app.get(&ann, "/spaces/~annlee").await;
+    assert_eq!((st, s["role"].as_str()), (200, Some("admin")));
+    let (st, _) = app.post(&ann, "/pages", json!({"spaceKey": "~ANNLEE", "title": "Draft idea", "markdown": "quokka plan"})).await;
+    assert_eq!(st, 201);
+    assert_eq!(app.get(&bob, "/spaces/~ANNLEE").await.0, 404);
+    let (_, list) = app.get(&bob, "/spaces").await;
+    assert!(!list.to_string().contains("~ANNLEE"));
+    app.eventually(|| async {
+        let (_, r) = app.get(&ann, "/search?q=quokka").await;
+        (r.as_array().unwrap().len() == 1).then_some(())
+    })
+    .await;
+    let (_, r) = app.get(&bob, "/search?q=quokka").await;
+    assert_eq!(r.as_array().unwrap().len(), 0);
+}

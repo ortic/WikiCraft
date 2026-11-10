@@ -993,6 +993,45 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /me/space:
+    get:
+      tags:
+      - Spaces
+      summary: Your personal space (key or null)
+      operationId: get_me_space
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  key: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+      - Spaces
+      summary: Create (or get) your private personal space
+      operationId: post_me_space
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Space'
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /me/sessions:
     get:
       tags:

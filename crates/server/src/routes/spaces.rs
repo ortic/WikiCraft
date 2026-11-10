@@ -246,6 +246,86 @@ pub async fn create_space(
     Ok(row)
 }
 
+/// `GET /api/me/space`: the caller's personal space, if they have one.
+pub async fn my_space(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<serde_json::Value>> {
+    let key: Option<String> =
+        sqlx::query_scalar("SELECT key FROM spaces WHERE personal_owner_id = $1 AND archived_at IS NULL").bind(user.id).fetch_optional(&state.db).await?;
+    Ok(Json(json!({ "key": key })))
+}
+
+/// `POST /api/me/space`: creates the caller's personal space (private: only the owner, unless
+/// they share it) or returns the existing one. Key `~NAME`.
+pub async fn create_my_space(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<(StatusCode, Json<SpaceRow>)> {
+    if user.is_guest() {
+        return Err(ApiError::Forbidden);
+    }
+    if let Some(row) = sqlx::query_as::<_, SpaceRow>(sqlx::AssertSqlSafe(format!("SELECT {SPACE_COLUMNS} FROM spaces WHERE personal_owner_id = $1")))
+        .bind(user.id)
+        .fetch_optional(&state.db)
+        .await?
+    {
+        return Ok((StatusCode::OK, Json(row)));
+    }
+    // ~ + the e-mail's local part (or name), made unique
+    let base: String = user
+        .email
+        .as_deref()
+        .and_then(|e| e.split('@').next())
+        .unwrap_or(&user.name)
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric())
+        .take(24)
+        .collect::<String>()
+        .to_uppercase();
+    let base = if base.is_empty() { "ME".to_string() } else { base };
+    let mut key = format!("~{base}");
+    for i in 2..100 {
+        let taken: bool = sqlx::query_scalar(
+            "SELECT EXISTS (SELECT 1 FROM spaces WHERE workspace_id = $1 AND lower(key) = lower($2)) OR EXISTS (SELECT 1 FROM space_key_aliases WHERE workspace_id = $1 AND lower(key) = lower($2))",
+        )
+        .bind(user.workspace_id)
+        .bind(&key)
+        .fetch_one(&state.db)
+        .await?;
+        if !taken {
+            break;
+        }
+        key = format!("~{base}{i}");
+    }
+    let space = create_space(&state, user.workspace_id, Some(user.id), &key, &user.name, Some("Personal space"), Some("star:amber"), "none", None).await?;
+    sqlx::query("UPDATE spaces SET personal_owner_id = $2 WHERE id = $1").bind(space.id).bind(user.id).execute(&state.db).await?;
+    let home = crate::routes::pages::insert_page(
+        &state.db,
+        crate::routes::pages::NewPage {
+            id: new_id(),
+            workspace_id: user.workspace_id,
+            space_id: space.id,
+            parent_id: None,
+            kind: "page".into(),
+            title: user.name.clone(),
+            content: wikicraft_doc_model::Node::doc(vec![
+                wikicraft_doc_model::Node::paragraph(vec![wikicraft_doc_model::Node::text(
+                    "Your personal space: drafts, notes and anything you're not ready to share. Only you can see it until you share pages or the space.",
+                )]),
+                wikicraft_doc_model::Node::new(wikicraft_doc_model::nodes::CHILD_PAGES),
+            ]),
+            position: 0.0,
+            created_by: Some(user.id),
+            created_at: None,
+            source_ref: None,
+        },
+    )
+    .await?;
+    sqlx::query("UPDATE spaces SET home_page_id = $1 WHERE id = $2").bind(home).bind(space.id).execute(&state.db).await?;
+    state.search.enqueue(home);
+    audit::log(&state, user.workspace_id, Some(user.id), "space.create_personal", Some("space"), Some(space.id), json!({"key": key})).await;
+    let row = sqlx::query_as::<_, SpaceRow>(sqlx::AssertSqlSafe(format!("SELECT {SPACE_COLUMNS} FROM spaces WHERE id = $1")))
+        .bind(space.id)
+        .fetch_one(&state.db)
+        .await?;
+    Ok((StatusCode::CREATED, Json(row)))
+}
+
 pub async fn get(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path(key): Path<String>) -> ApiResult<Json<SpaceView>> {
     let p = Principal::load(&state, user).await?;
     let (space, role) = load_space(&state, &p, &key).await?;

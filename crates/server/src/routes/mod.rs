@@ -62,6 +62,7 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/signup", get(account::signup_info).post(account::signup))
         .route("/admin/signup", get(account::get_signup_settings).put(account::put_signup_settings))
         .route("/me/preferences", get(account::get_preferences).put(account::put_preferences))
+        .route("/me/space", get(spaces::my_space).post(spaces::create_my_space))
         .route("/users/invite", post(account::invite))
         .route("/admin/mail", get(account::mail_status))
         .route("/admin/mail/test", post(account::mail_test))

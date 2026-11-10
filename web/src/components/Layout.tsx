@@ -98,6 +98,18 @@ export default function Layout() {
                     <div className="mi-desc">{user.email}</div>
                   </div>
                 </div>
+                {user.role !== 'guest' && (
+                  <div
+                    className="menu-item"
+                    onClick={async () => {
+                      setUserMenu(false)
+                      const s = await api.post<{ key: string }>('/me/space')
+                      nav(`/spaces/${encodeURIComponent(s.key)}`)
+                    }}
+                  >
+                    <Star size={15} /> Personal space
+                  </div>
+                )}
                 <div className="menu-item" onClick={() => { setUserMenu(false); nav('/settings') }}>
                   <UserCog size={15} /> Profile, API tokens & AI
                 </div>
