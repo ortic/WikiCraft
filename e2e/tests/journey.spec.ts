@@ -414,6 +414,29 @@ test('a search box and a create-page button inside a page', async ({ browser }) 
   await ctx.close()
 })
 
+test('history compares two versions word by word, inline or side by side', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState })
+  const page = await ctx.newPage()
+  await page.goto('/')
+  const id = await page.evaluate(async () => {
+    const h = { 'content-type': 'application/json', 'x-wikicraft': '1' }
+    const r = await fetch('/api/pages', { method: 'POST', headers: h, body: JSON.stringify({ spaceKey: 'PRODUCT', title: 'Pricing', markdown: 'Plans start at ten euros per seat.\n\nAnnual billing only.' }) })
+    const pid = (await r.json()).id as string
+    await fetch(`/api/pages/${pid}/content`, { method: 'PUT', headers: h, body: JSON.stringify({ markdown: 'Plans start at twelve euros per seat.\n\nAnnual billing only.' }) })
+    return pid
+  })
+  await page.goto(`/pages/${id}/history`)
+  await expect(page.locator('.diff-line.changed del')).toHaveText('ten')
+  await expect(page.locator('.diff-line.changed ins')).toHaveText('twelve')
+  await expect(page.getByText('1 change', { exact: true })).toBeVisible()
+  await page.getByRole('button', { name: 'Side by side' }).click()
+  await expect(page.locator('.diff-split del')).toHaveText('ten')
+  await expect(page.locator('.diff-split ins')).toHaveText('twelve')
+  await page.getByLabel('Show unchanged').uncheck()
+  await expect(page.locator('.diff-split')).not.toContainText('Annual billing')
+  await ctx.close()
+})
+
 test('main screens have no serious accessibility violations (axe, WCAG 2.2 AA)', async ({ browser }) => {
   const problems: string[] = []
   const audit = async (p: Page, name: string) => {

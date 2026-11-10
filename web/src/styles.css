@@ -106,6 +106,22 @@ code, pre { font-family: var(--mono); }
 .macro-create { padding: 2px 0; }
 .child-search { margin: 4px 0 8px; max-width: 320px; }
 .child-heading > :is(h2, h3, h4, h5, h6) { margin: .6em 0 .2em; }
+/* history: comparing two versions */
+.diff-lines { font-size: 14px; }
+.diff-line { padding: 2px 8px; white-space: pre-wrap; }
+.diff-line.removed { text-decoration: line-through; }
+.diff-mark { display: inline-block; width: 1.2em; color: var(--text-faint); user-select: none; }
+.diff-line del, .diff-cell del { text-decoration: line-through; }
+.diff-line ins, .diff-cell ins { text-decoration: none; }
+.diff-split { display: grid; grid-template-columns: 1fr 1fr; gap: 1px 12px; font-size: 14px; }
+.diff-split-head { padding: 0 8px 4px; border-bottom: 1px solid var(--border); }
+.diff-cell { padding: 2px 8px; white-space: pre-wrap; min-width: 0; overflow-wrap: anywhere; }
+.seg { display: inline-flex; }
+.seg .btn { border-radius: 0; }
+.seg .btn:first-child { border-radius: 6px 0 0 6px; }
+.seg .btn:last-child { border-radius: 0 6px 6px 0; margin-left: -1px; }
+.seg .btn.active { background: var(--accent-soft); color: var(--accent-text); }
+@media (max-width: 640px) { .diff-split { grid-template-columns: 1fr; } }
 /* a line of information in a menu */
 .menu-note { padding: 4px 12px 6px 34px; }
 .minor-toggle { border: 1px solid var(--border); background: transparent; cursor: pointer; font-family: inherit; min-height: 24px; }

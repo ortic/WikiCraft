@@ -365,7 +365,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 ### 4.6 Drafts, versions & history
 - [x] **P0** Version on publish (or periodic for live docs) with author, timestamp, optional message `C D X O B`
 - [x] **P0** Version list, view any version, restore version (creates a new version) `C D X O B`
-- [~] **P1** Visual diff between any two versions (inline + side-by-side, block-aware) `C X B` (paragraph diff vs previous version only)
+- [x] **P1** Visual diff between any two versions (inline + side-by-side, block-aware) `C X B` — compare any version with any other; per text block, changed paragraphs word by word; inline or side by side; unchanged lines can be hidden
 - [~] **P1** "What changed since my last visit" highlighting `C` (banner + diff since the last seen version; no inline highlight)
 - [x] **P1** Minor edit flag (no notifications) `C X` — "Minor change" switch while editing (per person and editing session, `PUT /pages/{id}/minor-edit`): the session's version is minor when everybody who edited it said so, watchers aren't notified, history shows *minor*; `minor` on named versions; webhooks carry it
 - [x] **P1** Personal unpublished drafts (new pages not yet published) and a drafts list `C D` — `pages.draft`: only the creator sees a draft and the pages below it (space admins included; enforced in the central access checks), no mentions / watcher notifications / webhooks until Publish (which also creates a "Published" version); new pages from the Create dialog start as drafts (remembered choice); draft banner + Publish, draft badge in the tree, Drafts on Home, `GET /me/drafts`
