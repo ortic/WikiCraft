@@ -16,7 +16,7 @@ anyobj = {"type": "object", "additionalProperties": True}
 schemas = {
     "Error": obj({"error": txt, "message": txt}),
     "User": obj({"id": uuid, "workspaceId": uuid, "email": {"type": ["string", "null"]}, "name": txt, "role": {"enum": ["owner", "admin", "member", "guest"]}, "status": {"enum": ["active", "invited", "deactivated", "placeholder"]}, "avatarUrl": {"type": ["string", "null"]}}),
-    "Space": obj({"id": uuid, "key": txt, "name": txt, "description": {"type": ["string", "null"]}, "icon": {"type": ["string", "null"], "description": "symbol[:color] from the WikiCraft icon set"}, "homePageId": uuid, "category": {"type": ["string", "null"]}, "defaultRole": {"enum": ["none", "viewer", "commenter", "editor", "admin"]}, "anonymousAccess": boolean, "role": txt, "starred": boolean, "watching": boolean}),
+    "Space": obj({"id": uuid, "key": txt, "name": txt, "ownerId": {"type": ["string", "null"], "format": "uuid", "description": "the person responsible (always a space admin)"}, "ownerName": {"type": ["string", "null"], "description": "single space only"}, "description": {"type": ["string", "null"]}, "icon": {"type": ["string", "null"], "description": "symbol[:color] from the WikiCraft icon set"}, "homePageId": uuid, "category": {"type": ["string", "null"]}, "defaultRole": {"enum": ["none", "viewer", "commenter", "editor", "admin"]}, "anonymousAccess": boolean, "role": txt, "starred": boolean, "watching": boolean}),
     "PmNode": {"type": "object", "description": "ProseMirror / Tiptap JSON node (type, attrs, content, text, marks)", "additionalProperties": True},
     "PageAccess": obj({"view": boolean, "comment": boolean, "edit": boolean, "admin": boolean}),
     "PropertyType": {"type": "string", "enum": ["text", "number", "date", "user", "select", "url", "page"]},
@@ -175,6 +175,7 @@ op("/pages/{id}/unarchive", "post", "Pages", "Restore an archived page", res=res
 op("/spaces/{key}/archived", "get", "Spaces", "Archived pages of a space", res=resp(arr(obj({"id": uuid, "title": txt, "archivedAt": txt, "archivedBy": txt, "descendants": num, "canRestore": boolean}))))
 op("/spaces/{key}/star", "put", "Spaces", "Star a space (shown first in the directory and in the sidebar)", res=NO)
 op("/spaces/{key}/star", "delete", "Spaces", "Unstar a space", res=NO)
+op("/spaces/{key}/owner", "put", "Spaces", "Hand the space over (space admins): the new owner becomes a space admin and is notified", req=body(obj({"userId": uuid})), res=resp(S("Space")))
 op("/spaces/{key}/watch", "put", "Spaces", "Watch the space (new and updated pages)", res=NO)
 op("/spaces/{key}/watch", "delete", "Spaces", "Stop watching the space", res=NO)
 op("/pages/{id}/access-request", "post", "Pages", "Ask the page's admins for access (always 204; reveals nothing about the page)", req=body(obj({"message": txt})), res=resp(None, "204", "Sent"))

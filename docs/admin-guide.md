@@ -79,6 +79,10 @@ member directory).
 
 **Space roles**, per user or group: *viewer*, *commenter*, *editor*, *admin*. Each space has a
 default role for all members (or *none* for a private space) and optional anonymous read access.
+Each space also has an **owner**, the person responsible for it: its creator at first. Space
+admins hand it over in *Space settings → Details*; the new owner becomes a space admin and gets a
+notification. *Administration → Spaces* lists the owners and marks spaces whose owner's account
+was deactivated.
 
 **Drafts** are the exception to all of this: an unpublished draft (and what's below it) is only
 visible to the person who created it, space and workspace admins included, until they publish it.

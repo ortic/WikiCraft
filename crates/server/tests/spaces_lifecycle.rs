@@ -288,3 +288,53 @@ async fn starred_spaces() {
     assert_eq!(app.delete(&member, "/spaces/ZZZ/star").await, 204);
     assert!(starred(&member).await.is_empty());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn space_owner_handover() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (rita, rita_id) = app.user(&owner, "rita@acme.test", "member").await;
+    let (_, gus_id) = app.user(&owner, "gus@acme.test", "guest").await;
+    app.post(&owner, "/spaces", json!({"key": "OPS", "name": "Operations", "defaultRole": "editor"})).await;
+    let (_, me) = app.get(&owner, "/me").await;
+    let owner_id = me["user"]["id"].as_str().unwrap().to_string();
+
+    // the creator owns a new space
+    let (_, s) = app.get(&rita, "/spaces/OPS").await;
+    assert_eq!(s["ownerId"], owner_id.as_str());
+    assert_eq!(s["ownerName"], "Owner");
+    assert_eq!(s["role"], "editor");
+
+    // only space admins hand it over, to an active non-guest account
+    assert_eq!(app.put(&rita, "/spaces/OPS/owner", json!({"userId": rita_id})).await.0, 403);
+    assert_eq!(app.put(&owner, "/spaces/OPS/owner", json!({"userId": gus_id})).await.0, 400, "guests can't own spaces");
+    assert_eq!(app.put(&owner, "/spaces/OPS/owner", json!({"userId": uuid::Uuid::nil()})).await.0, 400);
+    let (st, s) = app.put(&owner, "/spaces/OPS/owner", json!({"userId": rita_id})).await;
+    assert_eq!(st, 200, "{s}");
+    assert_eq!(s["ownerName"], "rita");
+    // the new owner is a space admin now and was told
+    let (_, s) = app.get(&rita, "/spaces/OPS").await;
+    assert_eq!(s["role"], "admin");
+    let (_, n) = app.get(&rita, "/notifications").await;
+    let item = n["items"].as_array().unwrap().iter().find(|i| i["kind"] == "space_owner").cloned().unwrap();
+    assert_eq!(item["data"]["spaceKey"], "OPS");
+    assert_eq!(item["actorName"], "Owner");
+
+    // Admin → Spaces shows owners and flags spaces whose owner left
+    let owner_row = |list: &Value| list.as_array().unwrap().iter().find(|s| s["key"] == "OPS").cloned().unwrap();
+    let (_, list) = app.get(&owner, "/admin/spaces").await;
+    assert_eq!(owner_row(&list)["ownerName"], "rita");
+    assert_eq!(owner_row(&list)["ownerActive"], true);
+    app.patch(&owner, &format!("/users/{rita_id}"), json!({"status": "deactivated"})).await;
+    let (_, list) = app.get(&owner, "/admin/spaces").await;
+    assert_eq!(owner_row(&list)["ownerActive"], false);
+    assert_eq!(app.put(&owner, "/spaces/OPS/owner", json!({"userId": rita_id})).await.0, 400, "no active account");
+    assert_eq!(app.put(&owner, "/spaces/OPS/owner", json!({"userId": owner_id})).await.0, 200, "taken back");
+
+    // personal spaces stay with their person
+    let (st, ps) = app.post(&owner, "/me/space", json!({})).await;
+    assert_eq!(st, 201, "{ps}");
+    let key = ps["key"].as_str().unwrap();
+    assert_eq!(app.get(&owner, &format!("/spaces/{key}")).await.1["ownerId"], owner_id.as_str());
+    assert_eq!(app.put(&owner, &format!("/spaces/{key}/owner"), json!({"userId": owner_id})).await.0, 400);
+}

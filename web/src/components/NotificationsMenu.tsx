@@ -10,7 +10,7 @@ interface Notification {
   pageId: string | null
   pageTitle: string | null
   actorName: string | null
-  data: { excerpt?: string; version?: number; commentId?: string; text?: string; due?: string }
+  data: { excerpt?: string; version?: number; commentId?: string; text?: string; due?: string; spaceKey?: string; spaceName?: string }
   createdAt: string
   readAt: string | null
 }
@@ -36,6 +36,8 @@ function describe(n: Notification): string {
       return `${who} updated ${n.pageTitle}${n.data.version ? ` (v${n.data.version})` : ''}`
     case 'task_due':
       return `Your task is due: “${n.data.text ?? ''}” on ${n.pageTitle}`
+    case 'space_owner':
+      return `${who} made you the owner of the space ${n.data.spaceName ?? n.data.spaceKey ?? ''}`
     default:
       return `${who} · ${n.pageTitle ?? ''}`
   }
@@ -58,6 +60,7 @@ export default function NotificationsMenu() {
       qc.invalidateQueries({ queryKey: ['notifications'] })
     }
     if (n.pageId) nav(`/pages/${n.pageId}`)
+    else if (n.data.spaceKey) nav(`/spaces/${n.data.spaceKey}`)
   }
   return (
     <div style={{ position: 'relative' }}>

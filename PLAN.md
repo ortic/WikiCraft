@@ -206,7 +206,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P1** Space-level look & feel: theme, colors, header image, sidebar config `C X`
 - [x] **P1** Space templates (create a space prefilled with a page structure) `C X`
 - [x] **P1** Space permissions screen (users × groups × anonymous × guests matrix) `C DC X B`
-- [~] **P1** Space admins / owners, ownership transfer `C` (admin role only; no owner/transfer)
+- [x] **P1** Space admins / owners, ownership transfer `C` — every space has an owner (its creator; personal spaces their person), shown in Space settings → Details and Admin → Spaces (flagged when the owner's account is gone); space admins hand it over to an active non-guest account, who becomes a space admin and is notified (`PUT /api/spaces/{key}/owner`, audited)
 - [~] **P1** Copy space; move pages between spaces `C X` (move and copy pages with their sub-pages and attachments to another space from the page menu; no whole-space copy yet)
 - [x] **P1** Space key rename with redirects `X`
 - [ ] **P2** Space-level announcement banner `C`
@@ -509,7 +509,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 
 ### 4.16 Content lifecycle & governance
 - [x] **P1** Trash, restore, permanent delete `C D X` — see the trash item in §4.3
-- [~] **P1** Archive pages/spaces `C` (space archive via API only)
+- [x] **P1** Archive pages/spaces `C` — pages from the page menu (read-only, out of tree and search, restorable); spaces from Space settings → Details (space admins) or Admin → Spaces, which also restores and deletes them
 - [x] **P1** Page verification: request review, approve, "verified" badge with expiry `D(EE) C`
 - [ ] **P2** Approval workflows (draft → review → approved → published; multiple approvers; per space) `C(apps e.g. Comala) X(change requests)`
 - [ ] **P2** XWiki-style change requests (propose changes, review, merge) `X`

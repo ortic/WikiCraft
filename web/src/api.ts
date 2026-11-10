@@ -93,6 +93,10 @@ export interface Space {
   archivedAt?: string | null
   /** the signed-in person starred it */
   starred?: boolean
+  /** the person responsible for the space */
+  ownerId?: string | null
+  ownerName?: string | null
+  personalOwnerId?: string | null
 }
 
 export interface TreeNode {

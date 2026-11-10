@@ -34,9 +34,12 @@ pub struct SpaceRow {
     /// directory grouping ("Teams", "Projects", …)
     #[sqlx(default)]
     pub category: Option<String>,
+    /// the person responsible for the space
+    #[sqlx(default)]
+    pub owner_id: Option<Uuid>,
 }
 
-pub const SPACE_COLUMNS: &str = "id, workspace_id, key, name, description, icon, home_page_id, default_role, anonymous_access, personal_owner_id, created_at, updated_at, archived_at, default_template, category";
+pub const SPACE_COLUMNS: &str = "id, workspace_id, key, name, description, icon, home_page_id, default_role, anonymous_access, personal_owner_id, created_at, updated_at, archived_at, default_template, category, owner_id";
 
 impl SpaceRow {
     pub fn access_row(&self) -> SpaceAccessRow {
@@ -93,6 +96,9 @@ pub struct SpaceView {
     watching: bool,
     /// the caller starred the space
     starred: bool,
+    /// the owner's name (single space only)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    owner_name: Option<String>,
 }
 
 /// Lists the spaces visible to the caller.
@@ -120,7 +126,7 @@ pub async fn list(State(state): State<AppState>, MaybeUser(user): MaybeUser) -> 
         if role > Role::None {
             let page_count = counts.get(&s.id).copied().unwrap_or(0);
             let starred = starred.contains(&s.id);
-            out.push(SpaceView { space: s, role, page_count, watching: false, starred });
+            out.push(SpaceView { space: s, role, page_count, watching: false, starred, owner_name: None });
         }
     }
     Ok(Json(out))
@@ -241,7 +247,7 @@ pub async fn create_space(
 ) -> ApiResult<SpaceRow> {
     let id = new_id();
     let row = sqlx::query_as::<_, SpaceRow>(sqlx::AssertSqlSafe(format!(
-        "INSERT INTO spaces (id, workspace_id, key, name, description, icon, default_role, created_by, source_ref) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING {SPACE_COLUMNS}"
+        "INSERT INTO spaces (id, workspace_id, key, name, description, icon, default_role, created_by, owner_id, source_ref) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $8, $9) RETURNING {SPACE_COLUMNS}"
     )))
     .bind(id)
     .bind(ws)
@@ -364,7 +370,11 @@ pub async fn get(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path
         }
         None => (false, false),
     };
-    Ok(Json(SpaceView { space, role, page_count, watching, starred }))
+    let owner_name: Option<String> = match space.owner_id {
+        Some(o) => sqlx::query_scalar("SELECT name FROM users WHERE id = $1").bind(o).fetch_optional(&state.db).await?,
+        None => None,
+    };
+    Ok(Json(SpaceView { space, role, page_count, watching, starred, owner_name }))
 }
 
 #[derive(Deserialize)]
@@ -471,6 +481,64 @@ pub async fn update(
     .await?;
     audit::log(&state, user.workspace_id, Some(user.id), "space.update", Some("space"), Some(space.id), json!({})).await;
     Ok(Json(row))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct SetOwner {
+    user_id: Uuid,
+}
+
+/// `PUT /api/spaces/{key}/owner {userId}`: hands a space over (space admins). The new owner
+/// becomes a space admin and is notified; the previous owner keeps their role.
+pub async fn set_owner(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(key): Path<String>,
+    Json(req): Json<SetOwner>,
+) -> ApiResult<Json<SpaceView>> {
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    let (space, role) = load_space(&state, &p, &key).await?;
+    if role < Role::Admin {
+        return Err(ApiError::Forbidden);
+    }
+    if space.personal_owner_id.is_some() {
+        return Err(ApiError::bad("a personal space belongs to its person"));
+    }
+    let target: Option<(String, String, String)> = sqlx::query_as("SELECT name, role, status FROM users WHERE id = $1 AND workspace_id = $2")
+        .bind(req.user_id)
+        .bind(user.workspace_id)
+        .fetch_optional(&state.db)
+        .await?;
+    let Some((name, target_role, status)) = target else { return Err(ApiError::bad("unknown person")) };
+    if status != "active" {
+        return Err(ApiError::bad(format!("{name} has no active account")));
+    }
+    if target_role == "guest" {
+        return Err(ApiError::bad("guests can't own spaces"));
+    }
+    let mut tx = state.db.begin().await?;
+    sqlx::query("UPDATE spaces SET owner_id = $2, updated_at = now() WHERE id = $1").bind(space.id).bind(req.user_id).execute(&mut *tx).await?;
+    sqlx::query(
+        "INSERT INTO space_permissions (space_id, subject_type, subject_id, role) VALUES ($1, 'user', $2, 'admin')
+         ON CONFLICT (space_id, subject_type, subject_id) DO UPDATE SET role = 'admin'",
+    )
+    .bind(space.id)
+    .bind(req.user_id)
+    .execute(&mut *tx)
+    .await?;
+    if req.user_id != user.id {
+        sqlx::query("INSERT INTO notifications (id, user_id, kind, actor_id, data) VALUES ($1, $2, 'space_owner', $3, $4)")
+            .bind(new_id())
+            .bind(req.user_id)
+            .bind(user.id)
+            .bind(json!({"spaceKey": space.key, "spaceName": space.name}))
+            .execute(&mut *tx)
+            .await?;
+    }
+    tx.commit().await?;
+    audit::log(&state, user.workspace_id, Some(user.id), "space.owner", Some("space"), Some(space.id), json!({"owner": req.user_id, "name": name})).await;
+    get(State(state), MaybeUser(Some(user)), Path(space.key)).await
 }
 
 pub async fn archive(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(key): Path<String>) -> ApiResult<StatusCode> {

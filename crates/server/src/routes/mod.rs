@@ -173,6 +173,7 @@ pub fn router(state: AppState) -> Router {
         .route("/pages/{id}/unarchive", post(archive::unarchive))
         .route("/spaces/{key}/archived", get(archive::list))
         .route("/spaces/{key}/watch", put(spaces::watch).delete(spaces::unwatch))
+        .route("/spaces/{key}/owner", put(spaces::set_owner))
         .route("/spaces/{key}/star", put(spaces::star).delete(spaces::unstar))
         .route("/reports/verification", get(verification::report))
         .route("/ai/status", get(ai::status))

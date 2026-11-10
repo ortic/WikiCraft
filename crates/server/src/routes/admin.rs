@@ -99,6 +99,10 @@ pub struct SpaceOverview {
     storage_bytes: i64,
     last_updated: Option<chrono::DateTime<chrono::Utc>>,
     personal: bool,
+    owner_id: Option<Uuid>,
+    owner_name: Option<String>,
+    /// the owner's account is active (otherwise the space needs a new owner)
+    owner_active: bool,
 }
 
 /// `GET /api/admin/spaces` — every space, archived ones included, with size and activity.
@@ -112,8 +116,9 @@ pub async fn spaces(State(state): State<AppState>, CurrentUser(user): CurrentUse
                     (SELECT COALESCE(sum(av.size), 0)::bigint FROM attachment_versions av JOIN attachments a ON a.id = av.attachment_id JOIN pages p ON p.id = a.page_id
                       WHERE p.space_id = s.id AND a.deleted_at IS NULL) AS storage_bytes,
                     (SELECT max(p.updated_at) FROM pages p WHERE p.space_id = s.id) AS last_updated,
-                    s.personal_owner_id IS NOT NULL AS personal
-             FROM spaces s WHERE s.workspace_id = $1 ORDER BY s.archived_at IS NOT NULL, lower(s.name)",
+                    s.personal_owner_id IS NOT NULL AS personal,
+                    s.owner_id, o.name AS owner_name, COALESCE(o.status = 'active', false) AS owner_active
+             FROM spaces s LEFT JOIN users o ON o.id = s.owner_id WHERE s.workspace_id = $1 ORDER BY s.archived_at IS NOT NULL, lower(s.name)",
         )
         .bind(user.workspace_id)
         .fetch_all(&state.db)

@@ -66,6 +66,17 @@ components:
         id: *id002
         key: *id001
         name: *id001
+        ownerId:
+          type:
+          - string
+          - 'null'
+          format: uuid
+          description: the person responsible (always a space admin)
+        ownerName:
+          type:
+          - string
+          - 'null'
+          description: single space only
         description:
           type:
           - string
@@ -3275,6 +3286,38 @@ paths:
         schema: *id001
       responses:
         '204': *id007
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /spaces/{key}/owner:
+    put:
+      tags:
+      - Spaces
+      summary: 'Hand the space over (space admins): the new owner becomes a space admin and is notified'
+      operationId: put_spaces_key_owner
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId: *id002
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Space'
         4XX:
           description: Error
           content:

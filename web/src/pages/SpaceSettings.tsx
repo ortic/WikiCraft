@@ -110,6 +110,7 @@ function Details({ space }: { space: Space }) {
         {key !== space.key && <div className="faint small">Pages keep their links: URLs with {space.key} redirect to {key || '…'}.</div>}
       </div>
       <button className="btn btn-primary" onClick={save}>Save</button>
+      {!space.personalOwnerId && <SpaceOwner space={space} />}
       <div className="card danger-zone" style={{ marginTop: 28 }}>
         <b>Archive this space</b>
         <p className="muted small" style={{ margin: '4px 0 10px' }}>Archived spaces are read-only and leave search and the space list. Workspace admins can restore them under Admin → Spaces.</p>
@@ -125,6 +126,59 @@ function Details({ space }: { space: Space }) {
           Archive space
         </button>
       </div>
+    </div>
+  )
+}
+
+/** Who is responsible for the space, and handing it over. */
+function SpaceOwner({ space }: { space: Space }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [picking, setPicking] = useState(false)
+  const [q, setQ] = useState('')
+  const users = useQuery({
+    queryKey: ['user-search', q],
+    queryFn: () => api.get<{ id: string; name: string; role?: string }[]>(`/users?q=${encodeURIComponent(q)}`),
+    enabled: picking && q.trim().length > 0,
+  })
+  const pick = async (u: { id: string; name: string }) => {
+    if (!confirm(`Make ${u.name} the owner of “${space.name}”? They become a space admin; your own role stays as it is.`)) return
+    try {
+      await api.put(`/spaces/${space.key}/owner`, { userId: u.id })
+      qc.invalidateQueries({ queryKey: ['space'] })
+      setPicking(false)
+      setQ('')
+      toast(`${u.name} owns this space now`)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not change the owner')
+    }
+  }
+  return (
+    <div className="card" style={{ marginTop: 28 }}>
+      <b>Owner</b>
+      <p className="muted small" style={{ margin: '4px 0 10px' }}>
+        The person responsible for this space and the first contact for questions about it. The owner is always a space admin.
+      </p>
+      <div className="row" style={{ gap: 8 }}>
+        {space.ownerId && space.ownerName ? <Link to={`/people/${space.ownerId}`}>{space.ownerName}</Link> : <span className="faint">Nobody</span>}
+        <span className="spacer" />
+        {!picking && <button className="btn btn-sm" onClick={() => setPicking(true)}>Change owner…</button>}
+      </div>
+      {picking && (
+        <div style={{ marginTop: 10 }}>
+          <div className="row" style={{ gap: 6 }}>
+            <input className="input" autoFocus placeholder="Search people" aria-label="New owner" value={q} onChange={(e) => setQ(e.target.value)} />
+            <button className="btn btn-sm" onClick={() => { setPicking(false); setQ('') }}>Cancel</button>
+          </div>
+          <div className="list-plain" role="listbox" style={{ marginTop: 4 }}>
+            {(users.data ?? []).filter((u) => u.id !== space.ownerId && u.role !== 'guest').slice(0, 8).map((u) => (
+              <button key={u.id} type="button" role="option" aria-selected={false} className="menu-item" style={{ width: '100%' }} onClick={() => pick(u)}>
+                {u.name}
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   )
 }

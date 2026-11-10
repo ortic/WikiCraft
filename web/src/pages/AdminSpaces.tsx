@@ -17,6 +17,10 @@ interface SpaceRow {
   storageBytes: number
   lastUpdated: string | null
   personal: boolean
+  ownerId: string | null
+  ownerName: string | null
+  /** the owner's account is active */
+  ownerActive: boolean
 }
 
 /** Admin → Spaces: every space incl. archived ones; archive, restore, delete. */
@@ -43,7 +47,7 @@ export default function AdminSpaces() {
       <p className="muted" style={{ marginTop: 0 }}>Archived spaces are read-only and hidden from search and the space list. Only archived spaces can be deleted, and deleting is permanent.</p>
       <table className="list">
         <thead>
-          <tr><th>Space</th><th>Pages</th><th>Attachments</th><th>Last updated</th><th>Access</th><th /></tr>
+          <tr><th>Space</th><th>Owner</th><th>Pages</th><th>Attachments</th><th>Last updated</th><th>Access</th><th /></tr>
         </thead>
         <tbody>
           {spaces.data?.map((s) => (
@@ -56,6 +60,12 @@ export default function AdminSpaces() {
                   {s.archivedAt && <span className="badge">archived {formatDate(s.archivedAt)}</span>}
                   {s.personal && <span className="badge">personal</span>}
                 </span>
+              </td>
+              <td className="small">
+                {s.ownerId && s.ownerName ? <Link to={`/people/${s.ownerId}`}>{s.ownerName}</Link> : <span className="faint">nobody</span>}
+                {!s.personal && !s.archivedAt && (!s.ownerId || !s.ownerActive) && (
+                  <> <Link className="badge" to={`/spaces/${s.key}/settings?tab=details`} title="The owner has no active account: pick a new one in the space settings">needs an owner</Link></>
+                )}
               </td>
               <td>{s.pages}</td>
               <td className="small">{s.attachments} · {formatBytes(s.storageBytes)}</td>
