@@ -21,6 +21,7 @@ pub mod mcp;
 pub mod metrics;
 pub mod mfa;
 pub mod routes;
+pub mod schema_upgrade;
 pub mod search;
 pub mod sso;
 pub mod web_assets;

@@ -271,10 +271,11 @@ impl Rooms {
                 let mut pm = Node::from_json(&content).unwrap_or_else(|_| Node::empty_doc());
                 blocks::ensure_ids(&mut pm);
                 ydoc::write_pm(&doc, &pm);
-                let claimed = sqlx::query("UPDATE pages SET ydoc = $1, content = $3 WHERE id = $2 AND ydoc IS NULL")
+                let claimed = sqlx::query("UPDATE pages SET ydoc = $1, content = $3, schema_version = $4 WHERE id = $2 AND ydoc IS NULL")
                     .bind(ydoc::encode_state(&doc))
                     .bind(page_id)
                     .bind(pm.to_json())
+                    .bind(wikicraft_doc_model::schema::VERSION)
                     .execute(&state.db)
                     .await?;
                 if claimed.rows_affected() == 0 {
@@ -336,10 +337,11 @@ async fn assign_block_ids(state: &AppState, page_id: Uuid, doc: &yrs::Doc) -> Ap
         return Ok(None);
     }
     let update = doc.transact().encode_state_as_update_v1(&before);
-    sqlx::query("UPDATE pages SET ydoc = $2, content = $3 WHERE id = $1 AND deleted_at IS NULL")
+    sqlx::query("UPDATE pages SET ydoc = $2, content = $3, schema_version = $4 WHERE id = $1 AND deleted_at IS NULL")
         .bind(page_id)
         .bind(ydoc::encode_state(doc))
         .bind(ydoc::doc_to_pm(doc).to_json())
+        .bind(wikicraft_doc_model::schema::VERSION)
         .execute(&mut *tx)
         .await?;
     tx.commit().await?;
@@ -400,6 +402,7 @@ async fn save(state: &AppState, room: &Room, editor: Option<Uuid>, edited: bool)
             "UPDATE pages SET ydoc = $1, content = $2, text_content = $3,
                  updated_at = CASE WHEN $6 THEN now() ELSE updated_at END,
                  updated_by = CASE WHEN $6 THEN COALESCE($4, updated_by) ELSE updated_by END
+                 , schema_version = $7
              WHERE id = $5 AND deleted_at IS NULL",
         )
         .bind(bytes)
@@ -408,6 +411,7 @@ async fn save(state: &AppState, room: &Room, editor: Option<Uuid>, edited: bool)
         .bind(editor)
         .bind(room.page_id)
         .bind(edited)
+        .bind(wikicraft_doc_model::schema::VERSION)
         .execute(&mut *tx)
         .await?;
         tx.commit().await?;

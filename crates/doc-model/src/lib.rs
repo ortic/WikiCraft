@@ -6,6 +6,7 @@ pub mod html;
 pub mod icons;
 pub mod markdown;
 pub mod node;
+pub mod schema;
 pub mod text;
 pub mod toc;
 pub mod ydoc;

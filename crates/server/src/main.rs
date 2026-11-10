@@ -126,6 +126,7 @@ async fn main() -> anyhow::Result<()> {
             tokio::spawn(wikicraft::collab::persist_loop(state.clone()));
             wikicraft::cluster::spawn(&state);
             wikicraft::jobs::spawn_worker(&state);
+            wikicraft::schema_upgrade::spawn(&state);
             wikicraft::mail::spawn_worker(&state);
             wikicraft::webhooks::spawn_worker(&state);
             let app = wikicraft::routes::router(state.clone());

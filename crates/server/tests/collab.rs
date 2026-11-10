@@ -239,3 +239,45 @@ async fn merging_a_placeholder_user() {
     let after: chrono::DateTime<chrono::Utc> = sqlx::query_scalar("SELECT updated_at FROM pages WHERE id = $1::uuid").bind(&pid).fetch_one(db).await.unwrap();
     assert_eq!(after, updated_at, "a merge isn't an edit");
 }
+
+/// Pages stored in an older document format are upgraded in the background (here: block ids
+/// for pages from before them), with or without Yjs state, without counting as an edit.
+#[tokio::test(flavor = "multi_thread")]
+async fn old_pages_are_upgraded_in_the_background() {
+    use wikicraft_doc_model::{blocks, schema, ydoc};
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    app.post(&owner, "/spaces", json!({"key": "UPG", "name": "Upgrade"})).await;
+    let db = &app.state.db;
+    let mut ids = Vec::new();
+    for (title, with_ydoc) in [("Opened before", true), ("Never opened", false)] {
+        let (_, p) = app.post(&owner, "/pages", json!({"spaceKey": "UPG", "title": title, "markdown": "# Notes\n\n- one\n- two\n\nText."})).await;
+        let id = p["id"].as_str().unwrap().to_string();
+        let (_, page) = app.get(&owner, &format!("/pages/{id}")).await;
+        let mut old = Node::from_json(&page["content"]).unwrap();
+        blocks::strip_ids(&mut old);
+        let y = with_ydoc.then(|| ydoc::pm_to_update(&old));
+        sqlx::query("UPDATE pages SET content = $2, ydoc = $3, schema_version = 1, updated_at = '2021-05-05T00:00:00Z' WHERE id = $1::uuid")
+            .bind(&id)
+            .bind(old.to_json())
+            .bind(y)
+            .execute(db)
+            .await
+            .unwrap();
+        ids.push(id);
+    }
+    let handled = wikicraft::schema_upgrade::upgrade_batch(&app.state, 50).await.unwrap();
+    assert!(handled >= 2, "{handled}");
+    assert_eq!(wikicraft::schema_upgrade::upgrade_batch(&app.state, 50).await.unwrap(), 0, "all done");
+    for id in &ids {
+        let (content, y, version, updated): (serde_json::Value, Option<Vec<u8>>, i32, chrono::DateTime<chrono::Utc>) =
+            sqlx::query_as("SELECT content, ydoc, schema_version, updated_at FROM pages WHERE id = $1::uuid").bind(id).fetch_one(db).await.unwrap();
+        assert_eq!(version, schema::VERSION);
+        assert_eq!(updated.to_rfc3339(), "2021-05-05T00:00:00+00:00", "not an edit");
+        let mut doc = Node::from_json(&content).unwrap();
+        assert_eq!(blocks::ensure_ids(&mut doc), 0, "every block has an id: {content}");
+        if let Some(y) = y {
+            assert_eq!(ydoc::update_to_pm(&y).unwrap(), Node::from_json(&content).unwrap(), "JSON and Yjs state agree");
+        }
+    }
+}
