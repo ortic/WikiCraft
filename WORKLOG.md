@@ -122,6 +122,17 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   --test-threads 2`) passed; it also caught nothing new, but a filtered run had missed a test the draw.io commit broke.
 - Note: running the whole test suite saturates this WSL machine (load ~100); a parallel demo server then hits DB
   pool timeouts, and the mail test's 4-second wait can flake. Both pass when the machine is idle.
+- 2026-11-10 (day): live Confluence macros (children options, search box, create-page button); history compares any
+  two versions word by word; high-contrast theme (axe AAA check); copy/move pages across spaces with attachments.
+- Page properties (typed: text, select, number, date, person, web address, page link) in a panel above the body;
+  properties report with `where` conditions, `/properties` slash command, Confluence properties tables still
+  count; searchable, copied, exported (HTML table, Markdown front matter), backed up; front matter and Notion
+  database columns import as properties (types inferred per column; Notion's `Key: Value` lines removed).
+- Indentation of paragraphs and headings (Tab at the start / Ctrl+], Shift+Tab / Ctrl+[; Confluence margin-left and
+  Word w:ind import; HTML/Word export). Pitfall: right after Home, ProseMirror's selection lags the DOM caret, so
+  the Tab handler reads the DOM selection.
+- Jobs: cancel (queued at once, running at the next progress update via `jobs::checkpoint`) and retry (uploads kept
+  7 days; a retried Confluence import runs as an update import = resume).
 
 ## Security review 4 (independent review agent, 2026-11-10 ~03:40 UTC: link previews, banner, switches, decision log, branding) — status
 No critical or high findings. All five fixed in `9f0b9a9`:
