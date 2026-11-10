@@ -570,7 +570,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P2** Browser extension (clip web page, quick search)
 
 ### 4.21 Extensibility & developer platform
-- [~] **P0** REST API (OpenAPI 3.1 spec, generated; versioned `/api/v1`) covering all entities `C D X O B` (OpenAPI 3.1 at /api/openapi.yaml; unversioned)
+- [x] **P0** REST API (OpenAPI 3.1 spec, generated; versioned `/api/v1`) covering all entities `C D X O B`
 - [~] **P1** API keys, OAuth2 apps, scopes, rate limits, pagination (cursor), ETags / conditional requests `C` (API tokens only)
 - [x] **P1** Webhooks (page created/updated/deleted/moved, comment, space, user; HMAC-signed, retries, delivery log) `C B O`
 - [x] **P1** Built-in MCP server (search, read page, create/update page, comment) honoring permissions `D C`

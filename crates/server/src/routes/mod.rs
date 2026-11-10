@@ -197,6 +197,8 @@ pub fn router(state: AppState) -> Router {
         .route("/wiki/x/{tiny}", get(legacy::tiny));
 
     Router::new()
+        // /api/v1 is the stable, versioned path for integrations; /api is what the web app uses
+        .nest("/api/v1", saml_routes(api.clone()))
         .nest("/api", saml_routes(api))
         .merge(legacy)
         .fallback_service(spa)

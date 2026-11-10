@@ -207,3 +207,15 @@ async fn markdown_conversion_for_paste() {
     assert_eq!(kinds, vec!["heading", "taskList", "table"]);
     assert_ne!(app.post(&common::client(), "/markdown", json!({"markdown": "x"})).await.0, 200, "signed-in only");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn versioned_api_path() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let r = owner.get(format!("{}/api/v1/me", app.base)).send().await.unwrap();
+    assert_eq!(r.status(), 200);
+    let me: serde_json::Value = r.json().await.unwrap();
+    assert_eq!(me["user"]["email"], "owner@acme.test");
+    let spec = reqwest::get(format!("{}/api/v1/openapi.yaml", app.base)).await.unwrap().text().await.unwrap();
+    assert!(spec.contains("url: /api/v1"));
+}

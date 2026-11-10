@@ -241,7 +241,7 @@ doc = {
         "version": "0.1.0",
         "description": "All endpoints live under /api. Authenticate with a personal API token (`Authorization: Bearer wct_…`, create one under Settings) or the browser session cookie; cookie-authenticated requests that change data must send `x-wikicraft: 1`. Content is ProseMirror/Tiptap JSON (or Markdown where noted). Results are always filtered by the caller's permissions. Webhook payloads use the WebhookEvent schema.",
     },
-    "servers": [{"url": "/api"}],
+    "servers": [{"url": "/api/v1", "description": "versioned (integrations)"}, {"url": "/api", "description": "unversioned alias used by the web app"}],
     "security": [{"token": []}, {"session": []}],
     "components": {
         "securitySchemes": {
