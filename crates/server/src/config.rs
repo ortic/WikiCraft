@@ -127,6 +127,19 @@ pub struct Config {
     /// Disable password logins (SSO only).
     #[arg(long, env = "WIKICRAFT_DISABLE_PASSWORD_LOGIN", default_value_t = false)]
     pub disable_password_login: bool,
+
+    /// Anthropic API key: enables "Ask the wiki" (answers from the pages a person can see).
+    /// Unset = the feature is off and no content ever leaves the server.
+    #[arg(long, env = "WIKICRAFT_AI_API_KEY", hide_env_values = true)]
+    pub ai_api_key: Option<String>,
+
+    /// Claude model for "Ask the wiki".
+    #[arg(long, env = "WIKICRAFT_AI_MODEL", default_value = "claude-opus-5-5")]
+    pub ai_model: String,
+
+    /// Base URL of the Anthropic API (a gateway or proxy may sit in between).
+    #[arg(long, env = "WIKICRAFT_AI_BASE_URL", default_value = "https://api.anthropic.com")]
+    pub ai_base_url: String,
 }
 
 impl Config {

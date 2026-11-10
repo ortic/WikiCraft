@@ -140,6 +140,8 @@ All settings are flags or environment variables:
 | `WIKICRAFT_DISABLE_PASSWORD_LOGIN` | `false` | turn off local passwords (SSO / LDAP only) |
 | `WIKICRAFT_SMTP_URL` | — | outgoing mail: `smtps://user:pass@host` (TLS), `smtp://user:pass@host:587?tls=required` (STARTTLS) or `smtp://host:25` (plain, local relays) |
 | `WIKICRAFT_MAIL_FROM` | `WikiCraft <wikicraft@localhost>` | sender address |
+| `WIKICRAFT_AI_API_KEY` | — | Anthropic API key: turns on *Ask the wiki* (off when unset; nothing leaves the server) |
+| `WIKICRAFT_AI_MODEL` / `WIKICRAFT_AI_BASE_URL` | `claude-opus-5-5` / `https://api.anthropic.com` | model and API endpoint (e.g. a gateway) for *Ask the wiki* |
 
 ### Sign-in: SSO, LDAP / Active Directory, SAML
 
@@ -242,6 +244,10 @@ Verify `X-WikiCraft-Signature: sha256=<hex HMAC-SHA256(body, secret)>`. Non-2xx 
 retried with exponential backoff (8 attempts). Payloads carry metadata only, never page content.
 Targets on private/loopback addresses are refused unless `WIKICRAFT_WEBHOOK_ALLOW_PRIVATE=true`.
 
+Chat channels: pick *Slack or Mattermost*, *Microsoft Teams (Workflows)* or *Google Chat* as
+the format (`"format": "slack" | "teams" | "googlechat"`) and paste the channel's incoming-webhook
+URL; events then arrive as readable messages ("Ann updated *Q3 plan* in Finance") with a link.
+
 ## AI assistants (MCP)
 
 Create a personal API token (profile menu → *Profile, API tokens & AI*) and point any MCP client
@@ -254,6 +260,14 @@ claude mcp add --transport http wikicraft https://your-wiki/api/mcp --header "Au
 Tools: `search`, `get_page` (Markdown), `list_spaces`, `list_children`, `recent_changes`,
 `create_page`, `update_page`, `append_to_page`, `add_comment`. Every call runs through the same
 authorization checks as the UI.
+
+## Ask the wiki
+
+With `WIKICRAFT_AI_API_KEY` set, the search page offers *Ask the wiki*: the question runs through
+the normal, permission-filtered search, the most relevant passages of the best pages are sent to
+Claude, and the answer comes back with numbered citations linking to those pages. Only pages the
+asker can open are ever sent; page text is passed as data, not instructions. Questions are rate
+limited per person (20 per 10 minutes).
 
 ## License
 

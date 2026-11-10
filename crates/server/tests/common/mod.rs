@@ -62,6 +62,9 @@ pub async fn spawn_with(tweak: impl FnOnce(&mut Config)) -> TestApp {
         session_idle_minutes: 0,
         webhook_allow_private: true,
         mail_from: "WikiCraft <wiki@acme.test>".into(),
+        ai_api_key: None,
+        ai_model: "claude-opus-5-5".into(),
+        ai_base_url: "https://api.anthropic.com".into(),
     };
     tweak(&mut config);
     let state = AppState::new(config).await.unwrap();

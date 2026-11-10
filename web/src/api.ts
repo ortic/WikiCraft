@@ -111,6 +111,8 @@ export interface Page {
   version: number
   status: string
   pageStatus: string | null
+  /** set when other people changed the page since the reader's previous visit */
+  changedSince?: { version: number; at: string; versions: number; editors: string[] } | null
   fullWidth: boolean
   createdByName: string | null
   createdAt: string

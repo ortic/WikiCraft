@@ -172,6 +172,8 @@ op("/notifications/read", "post", "Notifications", "Mark notifications as read",
 op("/tasks", "get", "Tasks", "Tasks assigned to me", res=resp(arr(S("Task"))), query=[q("status", "open | done | all")])
 op("/reports/pages", "get", "Reports", "Pages by label / recently updated (contentbylabel, recently-updated)", query=[q("labels", "comma-separated"), q("spaces", "comma-separated keys"), q("operator", "all = every label"), q("sort", "title | updated | created"), q("max", "limit", num)], public=True)
 op("/reports/properties", "get", "Reports", "Page properties report (detailssummary)", query=[q("labels", "comma-separated"), q("spaces", "comma-separated keys")], public=True)
+op("/ai/status", "get", "Search", "Whether Ask the wiki is enabled", res=resp(obj({"enabled": boolean, "model": txt})), public=True)
+op("/ai/ask", "post", "Search", "Ask the wiki: an answer from the pages you can see, with sources", req=body(obj({"question": txt, "spaceKey": txt}, ["question"])), res=resp(obj({"answer": txt, "answerHtml": txt, "sources": arr(obj({"n": num, "pageId": uuid, "title": txt, "spaceKey": txt, "spaceName": txt})), "model": txt})))
 op("/reports/verification", "get", "Reports", "Verified pages by state", query=[q("status", "expired | verified | edited"), q("space", "space key")], public=True)
 op("/reports/tasks", "get", "Reports", "Task report (tasks-report-macro)", query=[q("spaces", "keys"), q("labels", "labels"), q("status", "open | done | all")], public=True)
 op("/templates", "get", "Templates", "Built-in and custom templates", query=[q("space", "space key")])

@@ -3097,6 +3097,76 @@ paths:
       - {}
       - session: []
       - token: []
+  /ai/status:
+    get:
+      tags:
+      - Search
+      summary: Whether Ask the wiki is enabled
+      operationId: get_ai_status
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled: *id003
+                  model: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - {}
+      - session: []
+      - token: []
+  /ai/ask:
+    post:
+      tags:
+      - Search
+      summary: 'Ask the wiki: an answer from the pages you can see, with sources'
+      operationId: post_ai_ask
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                question: *id001
+                spaceKey: *id001
+              required:
+              - question
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  answer: *id001
+                  answerHtml: *id001
+                  sources:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        n: *id005
+                        pageId: *id002
+                        title: *id001
+                        spaceKey: *id001
+                        spaceName: *id001
+                  model: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /reports/verification:
     get:
       tags:

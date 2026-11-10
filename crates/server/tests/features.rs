@@ -112,3 +112,32 @@ async fn opensearch_description() {
     assert!(body.contains(&format!("template=\"{}/search?q={{searchTerms}}\"", app.base)), "{body}");
     assert!(body.contains("<ShortName>"));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn changed_since_last_visit() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, _) = app.user(&owner, "mia@acme.test", "member").await;
+    app.post(&owner, "/spaces", json!({"key": "CHG", "name": "Changes"})).await;
+    let (_, pg) = app.post(&owner, "/pages", json!({"spaceKey": "CHG", "title": "Policy", "markdown": "v1"})).await;
+    let pg = pg["id"].as_str().unwrap().to_string();
+    // first visit: nothing to report
+    let (_, p) = app.get(&member, &format!("/pages/{pg}")).await;
+    assert!(p["changedSince"].is_null());
+    let v1 = p["version"].as_i64().unwrap();
+    // the owner edits twice
+    for text in ["v2", "v3"] {
+        let (st, _) = app.put(&owner, &format!("/pages/{pg}/content"), json!({"markdown": text})).await;
+        assert_eq!(st, 200);
+    }
+    let (_, p) = app.get(&member, &format!("/pages/{pg}")).await;
+    let c = &p["changedSince"];
+    assert_eq!(c["version"].as_i64().unwrap(), v1, "{p}");
+    assert_eq!(c["versions"], 2);
+    assert_eq!(c["editors"], json!(["Owner"]));
+    // reported once; the editor's own changes are never reported to them
+    let (_, p) = app.get(&member, &format!("/pages/{pg}")).await;
+    assert!(p["changedSince"].is_null());
+    let (_, p) = app.get(&owner, &format!("/pages/{pg}")).await;
+    assert!(p["changedSince"].is_null());
+}

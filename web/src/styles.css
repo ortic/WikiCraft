@@ -517,3 +517,18 @@ kbd { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 1px 6p
 .no-access-form { display: flex; gap: 8px; margin-top: 16px; }
 .no-access-form .input { flex: 1; }
 @media (max-width: 600px) { .no-access-form { flex-direction: column; } }
+
+.changed-banner { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin: 4px 0 14px; padding: 8px 12px; border-radius: 8px; background: var(--accent-soft); color: var(--accent-text); font-size: 13.5px; }
+.changed-banner a { font-weight: 600; color: inherit; text-decoration: underline; }
+.changed-banner .icon-btn { margin-left: auto; color: inherit; width: 24px; height: 24px; }
+
+/* Ask the wiki */
+.ai-answer { margin-top: 18px; max-width: 860px; border-color: color-mix(in srgb, var(--accent) 35%, var(--border)); }
+.ai-answer-head { gap: 8px; margin-bottom: 10px; color: var(--accent-text); }
+.ai-answer-body { line-height: 1.6; }
+.ai-answer-body p:first-child { margin-top: 0; }
+.ai-answer-body a { font-size: 12px; font-weight: 600; text-decoration: none; vertical-align: super; }
+.ai-sources { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 12px; }
+.ai-source { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border: 1px solid var(--border); border-radius: 999px; font-size: 12.5px; color: var(--text-soft); text-decoration: none; }
+.ai-source:hover { background: var(--bg-hover); color: var(--text); }
+.ai-source-n { font-weight: 700; color: var(--accent-text); }

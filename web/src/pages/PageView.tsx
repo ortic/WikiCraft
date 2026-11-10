@@ -30,6 +30,12 @@ export default function PageView() {
   const [restrictions, setRestrictions] = useState(false)
   const [share, setShare] = useState(false)
   const [verifyOpen, setVerifyOpen] = useState(false)
+  // the first answer for this page says what changed since the last visit; later refetches don't
+  const [changed, setChanged] = useState<{ id: string; info: NonNullable<Page['changedSince']> } | null>(null)
+  useEffect(() => {
+    const c = page.data?.changedSince
+    if (c && page.data && changed?.id !== page.data.id) setChanged({ id: page.data.id, info: c })
+  }, [page.data, changed?.id])
   const [reviewOpen, setReviewOpen] = useState(false)
   const [focusComment, setFocusComment] = useState<string | null>(null)
   const [pendingComment, setPendingComment] = useState<{ text: string; apply: (id: string) => void } | null>(null)
@@ -274,6 +280,18 @@ export default function PageView() {
             {p.pageStatus && <span className="badge">{p.pageStatus}</span>}
             {!canEdit && <span className="badge">Read only</span>}
           </div>
+          {changed?.id === p.id && (
+            <div className="changed-banner">
+              <HistoryIcon size={15} />
+              <span>
+                Changed since your last visit {formatDate(changed.info.at)}
+                {changed.info.editors.length ? ` by ${changed.info.editors.slice(0, 3).join(', ')}${changed.info.editors.length > 3 ? ' and others' : ''}` : ''}
+                {' '}({changed.info.versions} {changed.info.versions === 1 ? 'version' : 'versions'}).
+              </span>
+              <Link to={`/pages/${p.id}/history?since=${changed.info.version}`}>View changes</Link>
+              <button className="icon-btn" title="Dismiss" onClick={() => setChanged({ id: '', info: changed.info })}><X size={14} /></button>
+            </div>
+          )}
           <Editor key={p.id} pageId={p.id} user={user} editable={canEdit} onPresence={onPresence} onStats={onStats} onCommentClick={onCommentClick} onRequestComment={p.access.comment ? onRequestComment : undefined} />
 
           <div className="page-reactions">

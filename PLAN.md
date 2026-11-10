@@ -246,7 +246,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P0** Drag & drop blocks (block handles), drag & drop files/images `C D O N` (file drop only; no block handles)
 - [x] **P0** Keyboard shortcuts + shortcut help dialog `C D O`
 - [~] **P1** Floating formatting toolbar + fixed toolbar option `C D` (bubble menu only)
-- [ ] **P1** Find & replace in page `C`
+- [x] **P1** Find & replace in page `C`
 - [x] **P1** Word count / reading time `C`
 - [x] **P1** Autosave + offline-tolerant editing (queue updates while disconnected) `C D`
 - [~] **P1** Spellcheck (browser) + optional server-side grammar/AI assist `C` (browser spellcheck only)
@@ -308,7 +308,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 #### 4.4.5 Images & media
 - [x] **P0** Upload, paste, drag & drop, URL images `C D X O B`
 - [~] **P0** Resize, align (left/center/right/wrap), caption, alt text `C D` (no text wrap)
-- [ ] **P1** Lightbox / zoom, image border `C D`
+- [~] **P1** Lightbox / zoom, image border `C D` (lightbox; no borders)
 - [ ] **P1** Image annotation (arrows, boxes, text) `C`
 - [ ] **P1** Responsive thumbnails & WebP/AVIF renditions generated server-side `C`
 - [ ] **P2** Gallery block `C X`
@@ -366,7 +366,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Version on publish (or periodic for live docs) with author, timestamp, optional message `C D X O B`
 - [x] **P0** Version list, view any version, restore version (creates a new version) `C D X O B`
 - [~] **P1** Visual diff between any two versions (inline + side-by-side, block-aware) `C X B` (paragraph diff vs previous version only)
-- [ ] **P1** "What changed since my last visit" highlighting `C`
+- [~] **P1** "What changed since my last visit" highlighting `C` (banner + diff since the last seen version; no inline highlight)
 - [ ] **P1** Minor edit flag (no notifications) `C X`
 - [ ] **P1** Personal unpublished drafts (new pages not yet published) and a drafts list `C D`
 - [ ] **P1** Scheduled publishing `C(apps)`
@@ -382,7 +382,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P0** Edit / delete own comments; admins can moderate `C D X` (no comment edit UI)
 - [~] **P1** Rich comments (formatting, mentions, emoji, images, code) `C D O` (Markdown + @mentions; no images)
 - [~] **P1** Reactions (emoji) on pages and comments `C O` (likes on pages and comments; no emoji by design)
-- [ ] **P1** Page likes / "helpful" signal `C X`
+- [x] **P1** Page likes / "helpful" signal `C X`
 - [~] **P1** Comment sorting and filtering (open / resolved / mine) `C` (resolved toggle only)
 - [~] **P1** Tasks: assign via mention, due dates, "my tasks" view across spaces, reminders `C` (My tasks page done; no reminders)
 - [~] **P1** Comment notifications + reply via email `C DC` (e-mail digest; no reply by e-mail)
@@ -445,7 +445,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P2** Search analytics (top queries, zero-result queries) `C`
 - [ ] **P2** Federated search across connected tools (GitHub, Drive, Slack) `C(Rovo)`
 - [ ] **P2** OpenSearch/Elasticsearch backend for very large installs `DC X`
-- [ ] **P1** OpenSearch description (browser search integration)
+- [x] **P1** OpenSearch description (browser search integration)
 
 ### 4.12 Permissions, sharing & access control
 > Must be at least as expressive as Confluence (global → space → page restrictions) and safe by default.
@@ -459,7 +459,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** Anonymous / public access per space (read-only) `C X B O`
 - [~] **P1** Public share links for a single page (with optional expiry, password, subtree inclusion, disable globally) `C D O` (no password)
 - [x] **P1** Guest users limited to specific spaces `C`
-- [ ] **P1** Request access flow (request → owner approves) `C`
+- [~] **P1** Request access flow (request → owner approves) `C` (request notifies page admins; they grant via restrictions/permissions)
 - [x] **P1** "Inspect permissions": why can user X see/edit page Y? `C`
 - [ ] **P1** Effective permission cache with invalidation (fast tree rendering for 100k pages)
 - [ ] **P2** Custom space roles / permission schemes `C`
@@ -502,7 +502,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P1** Email notifications with batching / digest (immediate, hourly, daily) `C DC X O` (2-minute digest; no hourly/daily choice)
 - [~] **P1** Watch page / page subtree / space / blog; auto-watch on create/edit `C X` (pages only; auto-watch on create)
 - [ ] **P1** Notification preferences per channel and event type `C`
-- [ ] **P1** Slack / Microsoft Teams / Mattermost notifications (per user and per space channel) `C O`
+- [~] **P1** Slack / Microsoft Teams / Mattermost notifications (per user and per space channel) `C O` (per workspace/space channel via webhook formats; not per user)
 - [ ] **P2** Web push notifications (PWA) `C`
 - [ ] **P2** Read confirmations / acknowledgement campaigns ("please confirm you read the policy") `D(EE, planned) C(apps)`
 - [ ] **P2** Content review reminders (page owner must re-verify every N days) `D(EE)`
@@ -510,7 +510,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 ### 4.16 Content lifecycle & governance
 - [~] **P1** Trash, restore, permanent delete `C D X` (no permanent delete)
 - [~] **P1** Archive pages/spaces `C` (space archive via API only)
-- [ ] **P1** Page verification: request review, approve, "verified" badge with expiry `D(EE) C`
+- [x] **P1** Page verification: request review, approve, "verified" badge with expiry `D(EE) C`
 - [ ] **P2** Approval workflows (draft → review → approved → published; multiple approvers; per space) `C(apps e.g. Comala) X(change requests)`
 - [ ] **P2** XWiki-style change requests (propose changes, review, merge) `X`
 - [ ] **P2** Stale-content detection and bulk archive ("content manager") `C`
@@ -537,7 +537,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Markdown / Markdown-zip (Obsidian vault with wikilinks, front matter) `D O`
 - [ ] **P1** HTML files / zip `D`
 - [~] **P1** Notion export (Markdown + CSV databases, HTML) `D O` (Markdown + CSV; no HTML export format)
-- [ ] **P1** DOCX (Word) import as page(s); split by heading `D X`
+- [~] **P1** DOCX (Word) import as page(s); split by heading `D X` (one page per document; no split)
 - [ ] **P2** PDF import (text + images) `D`
 - [ ] **P2** Google Docs (via export or Drive API)
 - [ ] **P2** MediaWiki XML dump `X`
@@ -548,7 +548,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 
 ### 4.19 Export, print & publishing
 - [~] **P1** Export page / subtree to PDF (headers/footers, TOC, page numbers, cover page, custom CSS/template) `C X B` (browser print-to-PDF only)
-- [ ] **P1** Export to Word (DOCX) `C X B`
+- [~] **P1** Export to Word (DOCX) `C X B` (single page, report macros evaluated; no subtree export)
 - [x] **P1** Export to Markdown / HTML (zip with attachments) `D O B`
 - [x] **P1** Print-friendly view `C X B`
 - [x] **P1** Native space export/backup format (JSON + blobs, versioned) for move/restore between instances `C X`

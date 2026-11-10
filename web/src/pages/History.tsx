@@ -1,5 +1,5 @@
 import { useState } from 'react'
-import { Link, useNavigate, useParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ArrowLeft, RotateCcw } from 'lucide-react'
 import { api, formatDate, type Page, type PmNode, type Version } from '../api'
@@ -50,10 +50,14 @@ export default function History() {
   const toast = useToast()
   const page = useQuery({ queryKey: ['page', id], queryFn: () => api.get<Page>(`/pages/${id}`) })
   const versions = useQuery({ queryKey: ['versions', id], queryFn: () => api.get<Version[]>(`/pages/${id}/versions`) })
+  const [params] = useSearchParams()
+  // ?since=<version>: everything that changed after that version (from "changed since your last visit")
+  const since = Number(params.get('since')) || null
   const [selected, setSelected] = useState<number | null>(null)
   const sel = selected ?? versions.data?.[0]?.version ?? null
   const idx = versions.data?.findIndex((v) => v.version === sel) ?? -1
-  const prevVersion = idx >= 0 ? versions.data?.[idx + 1]?.version : undefined
+  const sinceMode = since != null && selected == null && sel != null && since < sel
+  const prevVersion = sinceMode ? since : idx >= 0 ? versions.data?.[idx + 1]?.version : undefined
   const cur = useQuery({ queryKey: ['version', id, sel], queryFn: () => api.get<{ content: PmNode; title: string }>(`/pages/${id}/versions/${sel}`), enabled: sel != null })
   const prev = useQuery({ queryKey: ['version', id, prevVersion], queryFn: () => api.get<{ content: PmNode; title: string }>(`/pages/${id}/versions/${prevVersion}`), enabled: prevVersion != null })
   const lines = cur.data ? diff(prev.data ? plain(prev.data.content) : [], plain(cur.data.content)) : []
@@ -90,7 +94,7 @@ export default function History() {
         <div className="card">
           <div className="row" style={{ marginBottom: 12 }}>
             <b>Version {sel}</b>
-            <span className="faint small">{prevVersion ? `changes since v${prevVersion}` : 'first version'}</span>
+            <span className="faint small">{prevVersion ? `changes since v${prevVersion}${sinceMode ? ' (your last visit)' : ''}` : 'first version'}</span>
             <span className="spacer" />
             {page.data?.access.edit && sel !== versions.data?.[0]?.version && (
               <button className="btn" onClick={restore}>

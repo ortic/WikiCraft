@@ -73,25 +73,30 @@ pub struct SearchQuery {
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct SearchResult {
-    page_id: Uuid,
-    title: String,
-    snippet: String,
-    space_key: String,
-    space_name: String,
-    score: f32,
+    pub page_id: Uuid,
+    pub title: String,
+    pub snippet: String,
+    pub space_key: String,
+    pub space_name: String,
+    pub score: f32,
 }
 
 pub async fn search(State(state): State<AppState>, MaybeUser(user): MaybeUser, Query(q): Query<SearchQuery>) -> ApiResult<Json<Vec<SearchResult>>> {
     let p = Principal::load(&state, user).await?;
-    let mut spaces = visible_spaces(&state, &p).await?;
+    Ok(Json(visible_hits(&state, &p, &q.q, q.space.as_deref(), q.limit.unwrap_or(20)).await?))
+}
+
+/// Full-text hits for `query` among the pages `p` may see (optionally in one space).
+pub async fn visible_hits(state: &AppState, p: &Principal, query: &str, space: Option<&str>, limit: usize) -> ApiResult<Vec<SearchResult>> {
+    let mut spaces = visible_spaces(state, p).await?;
     // archived spaces stay readable but drop out of search
     spaces.retain(|(s, _)| s.archived_at.is_none());
-    if let Some(k) = &q.space {
+    if let Some(k) = space {
         spaces.retain(|(s, _)| s.key.eq_ignore_ascii_case(k));
     }
     let ids: Vec<Uuid> = spaces.iter().map(|(s, _)| s.id).collect();
-    let limit = q.limit.unwrap_or(20).clamp(1, 100);
-    let mut hits = state.search.search(&q.q, &ids, limit * 2).await.map_err(ApiError::Internal)?;
+    let limit = limit.clamp(1, 100);
+    let mut hits = state.search.search(query, &ids, limit * 2).await.map_err(ApiError::Internal)?;
     // the index may lag behind moves/deletes: use the database's current space and state
     let hit_ids: Vec<Uuid> = hits.iter().map(|h| h.page_id).collect();
     let current: std::collections::HashMap<Uuid, Uuid> =
@@ -109,7 +114,7 @@ pub async fn search(State(state): State<AppState>, MaybeUser(user): MaybeUser, Q
         None => false,
     });
     let pairs: Vec<(Uuid, Uuid)> = hits.iter().map(|h| (h.page_id, h.space_id)).collect();
-    let visible = filter_visible(&state, &p, &spaces, &pairs).await?;
+    let visible = filter_visible(state, p, &spaces, &pairs).await?;
     let by_id: HashMap<Uuid, &SpaceRow> = spaces.iter().map(|(s, _)| (s.id, s)).collect();
     let out = hits
         .into_iter()
@@ -127,7 +132,7 @@ pub async fn search(State(state): State<AppState>, MaybeUser(user): MaybeUser, Q
             }
         })
         .collect();
-    Ok(Json(out))
+    Ok(out)
 }
 
 #[derive(Serialize, sqlx::FromRow)]

@@ -1,6 +1,7 @@
 pub mod access_request;
 pub mod account;
 pub mod admin;
+pub mod ai;
 pub mod attachments;
 pub mod auth;
 pub mod comments;
@@ -123,6 +124,8 @@ pub fn router(state: AppState) -> Router {
         .route("/pages/{id}/verification/request", post(verification::request_review))
         .route("/pages/{id}/access-request", post(access_request::request))
         .route("/reports/verification", get(verification::report))
+        .route("/ai/status", get(ai::status))
+        .route("/ai/ask", post(ai::ask))
         .route("/comments/{id}/like", put(likes::like_comment).delete(likes::unlike_comment))
         .route("/pages/{id}/share-links", get(share::list).post(share::create))
         .route("/share-links/{id}", delete(share::revoke))

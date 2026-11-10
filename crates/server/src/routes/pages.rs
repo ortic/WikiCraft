@@ -240,6 +240,38 @@ pub async fn breadcrumbs(state: &AppState, page_id: Uuid) -> ApiResult<Vec<Crumb
     .await?)
 }
 
+/// Records that `user` saw `version` and returns what changed since their previous visit:
+/// `{version, at, versions, editors}` when other people saved versions in between.
+async fn changed_since(state: &AppState, user: Uuid, page: Uuid, version: i32) -> ApiResult<Value> {
+    let prev: Option<(i32, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
+        "WITH old AS (SELECT version, seen_at FROM page_seen WHERE user_id = $1 AND page_id = $2)
+         , up AS (INSERT INTO page_seen (user_id, page_id, version, seen_at) VALUES ($1, $2, $3, now())
+                  ON CONFLICT (user_id, page_id) DO UPDATE SET version = GREATEST(page_seen.version, $3), seen_at = now())
+         SELECT version, seen_at FROM old",
+    )
+    .bind(user)
+    .bind(page)
+    .bind(version)
+    .fetch_optional(&state.db)
+    .await?;
+    let Some((seen, at)) = prev.filter(|(v, _)| *v < version) else { return Ok(Value::Null) };
+    let (count, editors): (i64, Vec<String>) = sqlx::query_as(
+        "SELECT count(*), COALESCE(array_agg(DISTINCT u.name) FILTER (WHERE u.name IS NOT NULL), '{}')
+         FROM page_versions v LEFT JOIN users u ON u.id = v.created_by
+         WHERE v.page_id = $1 AND v.version > $2 AND v.version <= $3 AND v.created_by IS DISTINCT FROM $4",
+    )
+    .bind(page)
+    .bind(seen)
+    .bind(version)
+    .bind(user)
+    .fetch_one(&state.db)
+    .await?;
+    if count == 0 {
+        return Ok(Value::Null);
+    }
+    Ok(json!({ "version": seen, "at": at, "versions": count, "editors": editors }))
+}
+
 pub async fn get(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path(id): Path<Uuid>) -> ApiResult<Json<Value>> {
     let p = Principal::load(&state, user.clone()).await?;
     let (access, _) = require_page(&state, &p, id, Need::View).await?;
@@ -287,6 +319,11 @@ pub async fn get(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path
         .bind(id)
         .fetch_one(&state.db)
         .await?;
+    // what changed since this reader's last visit (versions by other people)
+    let changed_since = match &user {
+        Some(u) => changed_since(&state, u.id, id, page.version).await?,
+        None => Value::Null,
+    };
     let watching: bool = match &user {
         Some(u) => {
             sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM watches WHERE user_id = $1 AND page_id = $2)").bind(u.id).bind(id).fetch_one(&state.db).await?
@@ -297,6 +334,7 @@ pub async fn get(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path
     let o = v.as_object_mut().expect("object");
     o.insert("breadcrumbs".into(), serde_json::to_value(crumbs)?);
     o.insert("labels".into(), json!(labels));
+    o.insert("changedSince".into(), changed_since);
     o.insert("access".into(), serde_json::to_value(access)?);
     o.insert("restricted".into(), json!(restricted));
     o.insert("favorite".into(), json!(favorite));
