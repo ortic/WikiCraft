@@ -19,6 +19,28 @@ pub struct TestApp {
     pub _data: tempfile::TempDir,
 }
 
+/// Test databases aren't dropped when a test ends (the app still holds connections); instead the
+/// first test of every test binary drops those older than two hours (younger ones may belong to
+/// tests running right now) and those from before the timestamped names.
+async fn drop_stale_databases(admin: &sqlx::PgPool, now: u64) {
+    static DONE: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+    if DONE.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        return;
+    }
+    let names: Vec<String> =
+        sqlx::query_scalar("SELECT datname FROM pg_database WHERE datname LIKE 'wikicraft\\_test\\_%'").fetch_all(admin).await.unwrap_or_default();
+    for name in names {
+        let rest = &name["wikicraft_test_".len()..];
+        let stale = match rest.split_once('_') {
+            Some((secs, _)) => secs.parse::<u64>().is_ok_and(|t| t + 2 * 3600 < now),
+            None => true, // old format: no timestamp
+        };
+        if stale && name.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') {
+            let _ = sqlx::query(sqlx::AssertSqlSafe(format!("DROP DATABASE IF EXISTS {name} WITH (FORCE)"))).execute(admin).await;
+        }
+    }
+}
+
 pub async fn spawn() -> TestApp {
     spawn_with(|_| {}).await
 }
@@ -26,8 +48,10 @@ pub async fn spawn() -> TestApp {
 /// Like [`spawn`], with a hook to adjust the configuration (base URL is already the real address).
 pub async fn spawn_with(tweak: impl FnOnce(&mut Config)) -> TestApp {
     let _ = tracing_subscriber::fmt().with_env_filter("wikicraft=debug,warn").with_test_writer().try_init();
-    let db_name = format!("wikicraft_test_{}", uuid::Uuid::new_v4().simple());
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    let db_name = format!("wikicraft_test_{now}_{}", uuid::Uuid::new_v4().simple());
     let admin = sqlx::PgPool::connect(ADMIN_URL).await.expect("postgres reachable (docker container wikicraft-pg)");
+    drop_stale_databases(&admin, now).await;
     sqlx::query(sqlx::AssertSqlSafe(format!("CREATE DATABASE {db_name}"))).execute(&admin).await.unwrap();
     let data = tempfile::tempdir().unwrap();
     let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
