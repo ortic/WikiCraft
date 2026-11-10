@@ -6,7 +6,7 @@ end-of-life (2029-03-28).
 
 - **Spaces & page trees**: unlimited nesting, drag-and-drop reordering, trash with restore, archive, copy, labels, favorites; space templates (team, project, knowledge base, engineering), space categories, personal spaces, space key rename (old links keep working)
 - **Real-time collaboration**: Google-Docs-style co-editing with live cursors (Yjs CRDT; the server speaks the y-websocket protocol via `yrs`)
-- **Rich editor**: slash commands, drag handles, tables (merge, colours, sort by column), task lists, callouts with custom icons, expand blocks, code blocks with syntax highlighting and line numbers, math, mentions, status lozenges, dates, embeds and link previews, file previews, table of contents, child pages, includes, heading links, find & replace
+- **Rich editor**: slash commands, drag handles, tables (merge, colours, sort by column), task lists, callouts with custom icons, expand blocks, code blocks with syntax highlighting and line numbers, math, mentions, status lozenges, dates, decisions with a live decision log, task reports, instructional text in templates, embeds and link previews, file previews, table of contents, child pages, includes, heading links, find & replace
 - **Drawings & images**: Excalidraw sketches stored in the page, image annotation (arrows, boxes, text), text wrap around images, lightbox
 - **Paste anything**: Markdown becomes formatted content, spreadsheet cells become tables, images upload on paste or drop
 - **Version history** with per-block diff and restore; automatic versions when editors leave; "changed since your last visit" banner
@@ -23,7 +23,7 @@ end-of-life (2029-03-28).
 - **AI-ready**: built-in [MCP](https://modelcontextprotocol.io) server — Claude & co. can search, read and write pages with the user's permissions; *Ask the wiki* answers questions from the pages a person can see, with sources (optional, needs an Anthropic API key)
 - **Templates**: built-in (meeting notes, decision record, how-to, retrospective, runbook, PRD), custom space/workspace templates and a default template per space
 - **Notifications**: mentions, comments, watched-page and watched-space updates (in-app and as e-mail digest), per-page muting; a "My tasks" view of task items assigned to you; webhooks with Slack, Microsoft Teams and Google Chat formats
-- **Administration**: announcement banner, feature switches (public links, exports, Ask the wiki, personal spaces), audit log, usage overview
+- **Administration**: workspace name and logo, announcement banner, feature switches (public links, exports, Ask the wiki, personal spaces), audit log, usage overview
 - **Migration-friendly URLs**: old Confluence links (`/display/KEY/Title`, `viewpage.action?pageId=`, Cloud `/wiki/spaces/…/pages/ID`, `/x/` tiny links) redirect to the imported pages
 - **API**: REST + personal API tokens; audit log
 
