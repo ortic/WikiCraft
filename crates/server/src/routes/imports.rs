@@ -502,6 +502,62 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
             )
             .await?
         };
+        // the database's rows are the pages in its folder: the other columns become their
+        // properties, and the "Key: Value" lines Notion writes under their titles go
+        let prefix = format!("{own_dir}/");
+        let mut row_pages: HashMap<String, Option<Uuid>> = HashMap::new();
+        for (path, pid) in &path_index {
+            if let Some(rest) = path.strip_prefix(&prefix)
+                && !rest.contains('/')
+                && is_page(rest)
+            {
+                let stem = rest.rsplit_once('.').map(|(s, _)| s).unwrap_or(rest);
+                // two rows with the same title: neither gets properties
+                row_pages.entry(clean_name(stem).to_lowercase()).and_modify(|v| *v = None).or_insert(Some(*pid));
+            }
+        }
+        if !row_pages.is_empty() {
+            let headers: Vec<String> = rows[0].iter().map(|h| crate::routes::properties::clean_key(h).chars().take(100).collect()).collect();
+            let kinds: Vec<&str> = (0..headers.len()).map(|c| column_kind(rows.iter().skip(1).filter_map(|r| r.get(c)).map(|v| v.trim()))).collect();
+            for r in rows.iter().skip(1).take(5000) {
+                let Some(Some(pid)) = r.first().and_then(|t| row_pages.get(&t.trim().to_lowercase())) else { continue };
+                let mut seen = std::collections::HashSet::new();
+                let props: Vec<crate::routes::properties::PropertyIn> = headers
+                    .iter()
+                    .enumerate()
+                    .skip(1)
+                    .filter(|(_, h)| !h.is_empty() && seen.insert(h.to_lowercase()))
+                    .take(50)
+                    .map(|(c, h)| {
+                        let v = r.get(c).map(|v| v.trim()).unwrap_or("");
+                        let value = match kinds[c] {
+                            _ if v.is_empty() => Value::Null,
+                            "date" => notion_date(v).map(|d| Value::String(d.to_string())).unwrap_or(Value::Null),
+                            _ => Value::String(v.chars().take(5000).collect()),
+                        };
+                        crate::routes::properties::PropertyIn { key: h.clone(), kind: kinds[c].into(), value }
+                    })
+                    .collect();
+                if props.is_empty() {
+                    continue;
+                }
+                if let Err(e) = crate::routes::properties::save(state, &p, user.workspace_id, *pid, props).await {
+                    tracing::warn!("{name}: properties of a row skipped: {e}");
+                    continue;
+                }
+                if let Some((_, _, doc)) = pending_docs.iter_mut().find(|(id, _, _)| id == pid)
+                    && doc
+                        .content
+                        .first()
+                        .is_some_and(|n| n.kind == nodes::PARAGRAPH && is_property_lines(&wikicraft_doc_model::text::plain_text(n), &headers[1..]))
+                {
+                    doc.content.remove(0);
+                    if doc.content.is_empty() {
+                        doc.content.push(Node::paragraph(vec![]));
+                    }
+                }
+            }
+        }
         title_index.entry(title.to_lowercase()).or_insert(id);
         path_index.insert(name.to_string(), id);
         if lower.ends_with("_all.csv") {
@@ -756,6 +812,63 @@ fn front_matter(fm: &str) -> (Option<String>, Vec<String>) {
     (title, labels)
 }
 
+/// A date as Notion writes it (`December 1, 2026`, `2026/12/01`, ISO, with a time, or the start
+/// of a range `… → …`).
+fn notion_date(v: &str) -> Option<chrono::NaiveDate> {
+    let v = v.split('→').next().unwrap_or(v).trim();
+    for f in ["%Y-%m-%d", "%B %d, %Y", "%b %d, %Y", "%Y/%m/%d"] {
+        if let Ok(d) = chrono::NaiveDate::parse_from_str(v, f) {
+            return Some(d);
+        }
+    }
+    for f in ["%B %d, %Y %I:%M %p", "%B %d, %Y %H:%M", "%Y-%m-%d %H:%M", "%Y-%m-%dT%H:%M:%S%.fZ"] {
+        if let Ok(d) = chrono::NaiveDateTime::parse_from_str(v, f) {
+            return Some(d.date());
+        }
+    }
+    None
+}
+
+/// The property type a database column's values fit: number, date, web address, select
+/// (a few short values that repeat) or text.
+fn column_kind<'a>(values: impl Iterator<Item = &'a str>) -> &'static str {
+    let values: Vec<&str> = values.filter(|v| !v.is_empty()).collect();
+    if values.is_empty() {
+        return "text";
+    }
+    if values.iter().all(|v| v.parse::<f64>().is_ok_and(f64::is_finite)) {
+        return "number";
+    }
+    if values.iter().all(|v| notion_date(v).is_some()) {
+        return "date";
+    }
+    if values.iter().all(|v| (v.starts_with("https://") || v.starts_with("http://")) && !v.contains(char::is_whitespace)) {
+        return "url";
+    }
+    let distinct: std::collections::HashSet<String> = values.iter().map(|v| v.to_lowercase()).collect();
+    if values.len() >= 2 && distinct.len() < values.len() && distinct.len() <= 20 && values.iter().all(|v| v.chars().count() <= 40 && !v.contains(',')) {
+        return "select";
+    }
+    "text"
+}
+
+/// Whether a paragraph is only `Key: value` pairs for the given keys (Notion's property lines
+/// under a database row's title; soft line breaks became spaces).
+fn is_property_lines(text: &str, keys: &[String]) -> bool {
+    let keys: Vec<&String> = keys.iter().filter(|k| !k.is_empty()).collect();
+    let mut rest = text.trim();
+    let mut found = 0;
+    while !rest.is_empty() {
+        let Some(k) = keys.iter().filter(|k| rest.strip_prefix(k.as_str()).is_some_and(|r| r.starts_with(':'))).max_by_key(|k| k.len()) else { return false };
+        rest = rest[k.len() + 1..].trim_start();
+        found += 1;
+        // the value runs to the next " Key:"
+        let next = keys.iter().filter_map(|k| rest.find(&format!(" {k}:"))).min();
+        rest = next.map(|i| &rest[i + 1..]).unwrap_or("");
+    }
+    found > 0
+}
+
 fn normalize_path(p: &str) -> String {
     let mut out: Vec<&str> = Vec::new();
     for seg in p.split('/') {
@@ -784,6 +897,22 @@ mod tests {
         assert_eq!(rows[1][2], "multi\nline, with comma");
         assert_eq!(rows[2][0], "Quote \"x\"");
         assert_eq!(rows[2][2], "");
+    }
+
+    #[test]
+    fn notion_database_columns() {
+        assert_eq!(column_kind(["3", "4.5", ""].into_iter()), "number");
+        assert_eq!(column_kind(["December 1, 2026", "2026/12/03", "January 5, 2027 3:00 PM"].into_iter()), "date");
+        assert_eq!(column_kind(["https://a.example", "http://b.example/x"].into_iter()), "url");
+        assert_eq!(column_kind(["Active", "Paused", "Active"].into_iter()), "select");
+        assert_eq!(column_kind(["Active", "Paused"].into_iter()), "text", "no value repeats");
+        assert_eq!(column_kind(["Ben, Bo", "Ann", "Ann"].into_iter()), "text", "multi-select lists stay text");
+        assert_eq!(notion_date("December 1, 2026 → December 5, 2026"), chrono::NaiveDate::from_ymd_opt(2026, 12, 1));
+        let keys = vec!["Status".to_string(), "Owner".to_string(), "Due date".to_string()];
+        assert!(is_property_lines("Status: Active Owner: Ann Lee Due date: December 1, 2026", &keys));
+        assert!(is_property_lines("Owner:", &keys));
+        assert!(!is_property_lines("Status: Active and then some prose. Details: more", &keys[1..]));
+        assert!(!is_property_lines("Details follow.", &keys));
     }
 
     #[test]

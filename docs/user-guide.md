@@ -65,7 +65,8 @@ properties. Editors set its labels, columns and conditions with the filter butto
 `Status = Done; Effort >= 3; Owner ~ Ann` (`=`, `!=`, `~` contains, and `<`, `>`, `<=`, `>=` for
 numbers and dates). Confluence-style properties tables (a two-column table with the names in
 header cells) count as properties too. Markdown files with front matter (`status: draft`,
-`due: 2026-12-01`) get their keys as properties when imported.
+`due: 2026-12-01`) get their keys as properties when imported, and so do the pages of a Notion
+database (from its columns).
 
 ## Templates
 

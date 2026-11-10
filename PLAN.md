@@ -536,7 +536,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P1** Confluence REST API live migration (pull spaces directly with an API token: no export size limits, incremental re-sync) `X(pro)`
 - [x] **P0** Markdown / Markdown-zip (Obsidian vault with wikilinks, front matter) `D O`
 - [x] **P1** HTML files / zip `D` — Admin → Import (same importer as Markdown): pages, folders, attachments, cross-links
-- [~] **P1** Notion export (Markdown + CSV databases, HTML) `D O` (Markdown + CSV; no HTML export format)
+- [~] **P1** Notion export (Markdown + CSV databases, HTML) `D O` (Markdown + CSV: databases become tables, their row pages get the columns as typed page properties (number, date, web address, select, text inferred per column) and lose Notion's `Key: Value` lines; no HTML export format)
 - [~] **P1** DOCX (Word) import as page(s); split by heading `D X` (one page per document; no split)
 - [ ] **P2** PDF import (text + images) `D`
 - [ ] **P2** Google Docs (via export or Drive API)

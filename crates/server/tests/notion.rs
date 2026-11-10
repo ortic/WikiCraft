@@ -26,7 +26,7 @@ async fn notion_export_becomes_a_clean_page_tree() {
         "# Team Wiki\n\nWelcome. Start with [Onboarding](Team%20Wiki%20{a}/Onboarding%20{b}.md) and see [Projects](Team%20Wiki%20{a}/Projects%20{c}.csv).\n"
     );
     let onboarding_md = format!("# Onboarding\n\n![Laptop](Onboarding%20{b}/laptop.png)\n\nBack to [Team Wiki](../Team%20Wiki%20{a}.md).\n");
-    let apollo_md = "# Apollo\n\nStatus: Active\n\nDetails.\n".to_string();
+    let apollo_md = "# Apollo\n\nStatus: Active\nOwner: Ann\nDue: December 1, 2026\n\nDetails.\n".to_string();
     let names = [
         format!("Team Wiki {a}.md"),
         format!("Team Wiki {a}/Onboarding {b}.md"),
@@ -40,7 +40,10 @@ async fn notion_export_becomes_a_clean_page_tree() {
         (&names[1], onboarding_md.as_bytes()),
         (&names[2], &png),
         (&names[3], b"Name,Status\nApollo,Active\n"),
-        (&names[4], b"\xef\xbb\xbfName,Status,Owner\r\nApollo,Active,Ann\r\nBorealis,Paused,\"Ben, Bo\"\r\n"),
+        (
+            &names[4],
+            b"\xef\xbb\xbfName,Status,Owner,Due\r\nApollo,Active,Ann,\"December 1, 2026\"\r\nBorealis,Paused,\"Ben, Bo\",\r\nCassini,Active,Cyd,2027/01/05\r\n",
+        ),
         (&names[5], apollo_md.as_bytes()),
     ]);
     // Notion's download wraps the export in another zip
@@ -78,4 +81,23 @@ async fn notion_export_becomes_a_clean_page_tree() {
     assert!(s.contains("\"type\":\"table\"") && s.contains("Owner") && s.contains("Ben, Bo"), "{s}");
     assert!(s.contains(&format!("/pages/{}", id("Apollo"))), "row links to its page: {s}");
     assert!(!s.contains("wikilink:Borealis") && !s.contains("missing?space=NOTION&title=Borealis"), "rows without pages aren't links");
+
+    // a row page gets the row's columns as typed properties instead of "Key: Value" lines
+    let (_, apollo) = app.get(&owner, &format!("/pages/{}", id("Apollo"))).await;
+    let props: Vec<(String, String, Value)> = apollo["properties"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|p| (p["key"].as_str().unwrap().into(), p["type"].as_str().unwrap().into(), p["value"].clone()))
+        .collect();
+    assert_eq!(
+        props,
+        vec![
+            ("Status".into(), "select".into(), json!("Active")),
+            ("Owner".into(), "text".into(), json!("Ann")),
+            ("Due".into(), "date".into(), json!("2026-12-01")),
+        ]
+    );
+    let s = apollo["content"].to_string();
+    assert!(!s.contains("Status: Active") && s.contains("Details."), "property lines removed: {s}");
 }
