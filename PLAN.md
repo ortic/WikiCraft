@@ -636,7 +636,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P1** Antivirus scanning hook (ClamAV) for uploads `X`
 - [~] **P1** Iframe/embed allowlist; SSRF protection for link unfurling (block private IP ranges, DNS rebinding) (embed allowlist; unfurling not built)
 - [~] **P1** Import hardening: zip-slip, zip bombs, XML entity expansion disabled, per-file and total size limits, timeouts (Confluence zip entry caps incomplete)
-- [~] **P1** Audit log of security-relevant events (logins, permission changes, exports, admin actions) `C D(EE) X B` (exports not audited)
+- [x] **P1** Audit log of security-relevant events (logins, permission changes, exports, admin actions) `C D(EE) X B` — logins, permission and restriction changes, shares, admin actions and settings, space/page exports (`space.exported`, `page.exported` with format), restores, job cancel/retry; Admin → Audit
 - [ ] **P2** Encryption at rest for blobs (SSE-S3/KMS) and DB (deployment guidance); BYOK for SaaS `C`
 - [ ] **P2** Data residency (region pinning) for SaaS `C`
 - [ ] **P2** GDPR tooling: data export per user, deletion/anonymization, DPA-ready docs `C`

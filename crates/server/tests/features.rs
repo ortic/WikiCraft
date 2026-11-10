@@ -489,6 +489,11 @@ async fn feature_switches() {
         "on by default (the viewer list off); ai needs a key"
     );
     assert_eq!(app.get(&member, &export).await.0, 200);
+    // exports are in the audit log
+    let (_, audit) = app.get(&owner, "/admin/audit").await;
+    let ev = audit.as_array().unwrap().iter().find(|e| e["action"] == "page.exported").cloned().unwrap_or_else(|| panic!("{audit}"));
+    assert_eq!(ev["actorName"], "fs");
+    assert_eq!(ev["data"]["format"], "md");
 
     assert_eq!(app.put(&member, "/admin/settings", json!({"exports": false})).await.0, 403);
     assert_eq!(app.put(&owner, "/admin/settings", json!({"export": false})).await.0, 400, "unknown switch");

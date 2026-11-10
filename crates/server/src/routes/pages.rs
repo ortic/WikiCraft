@@ -1582,6 +1582,8 @@ pub async fn export(State(state): State<AppState>, MaybeUser(user): MaybeUser, P
     let ws: Uuid =
         sqlx::query_scalar("SELECT s.workspace_id FROM pages p JOIN spaces s ON s.id = p.space_id WHERE p.id = $1").bind(id).fetch_one(&state.db).await?;
     crate::routes::share::require_exports(&state, ws, p.user.as_ref()).await?;
+    let format = q.format.as_deref().unwrap_or("md");
+    audit::log(&state, ws, p.user_id(), "page.exported", Some("page"), Some(id), json!({"format": format, "tree": q.tree.unwrap_or(false)})).await;
     let (title, content): (String, Value) = sqlx::query_as("SELECT title, content FROM pages WHERE id = $1").bind(id).fetch_one(&state.db).await?;
     let doc = match state.rooms.get(id) {
         Some(r) => r.snapshot(),
