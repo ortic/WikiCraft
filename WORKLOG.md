@@ -4,7 +4,7 @@ Autonomous build session started 2026-11-09 (user asked for ~15 h of work follow
 Since the user's request every change is committed and pushed to `origin/master` (github.com/ortic/WikiCraft). Dev Postgres: docker container `wikicraft-pg` on `127.0.0.1:55432`
 (user/pass/db = `wikicraft`). Port 5432 and 5173 are taken by other tools on this machine.
 
-## Status (2026-11-10, ~03:40 UTC)
+## Status (2026-11-10, ~04:00 UTC)
 
 | Area | State |
 |---|---|
@@ -53,7 +53,7 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   + LibreOffice fixtures); find & replace (Ctrl+F/H); image lightbox; page verification + review requests +
   report; request access; OpenSearch; Slack/Teams/Google Chat webhook formats; "changed since your last visit";
   Ask the wiki (Claude Messages API over raw HTTP, permission-filtered retrieval, mock-API tests).
-- Night, second half (2026-11-10 00:40–03:40 UTC): space key rename with aliases; Word export of a page tree;
+- Night, second half (2026-11-10 00:40–04:00 UTC): space key rename with aliases; Word export of a page tree;
   per-block history diff; phone layout fixes (+ e2e phone test); archive pages; popular pages; space templates
   (team / project / knowledge base / engineering); search filters + comment search + comment editing; code block
   line numbers / wrap; Markdown paste; open sign-up for e-mail domains (confirmation e-mail, no account rows
@@ -65,7 +65,7 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   feature switches (public links, exports, Ask the wiki, personal spaces); space categories; spreadsheet
   (tab-separated) paste; table sort by column; instructional text (template hints, Confluence `ac:placeholder`);
   decision log (`decisionreport`) + `/decision`, `/decision log`, `/task report`; workspace name and logo; activity feed;
-  security review 4 (5 findings, all fixed).
+  security review 4 (5 findings, all fixed); table width modes (normal / wide / full, Confluence `data-layout`).
 - Note: running the whole test suite saturates this WSL machine (load ~100); a parallel demo server then hits DB
   pool timeouts, and the mail test's 4-second wait can flake. Both pass when the machine is idle.
 
