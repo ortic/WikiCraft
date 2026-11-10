@@ -40,7 +40,8 @@ interface ActivityEvent {
 
 /** Who created, edited or commented on what, across the spaces you can see (or what you watch). */
 function ActivityFeed() {
-  const [scope, setScope] = useState<'all' | 'watching'>('all')
+  const [scope, setScope] = useState<'all' | 'watching' | 'following'>('all')
+  const following = useQuery({ queryKey: ['following'], queryFn: () => api.get<{ id: string; name: string }[]>('/me/following'), enabled: scope === 'following' })
   const q = useQuery({ queryKey: ['activity', scope], queryFn: () => api.get<ActivityEvent[]>(`/activity?scope=${scope}&limit=40`) })
   const verb = (e: ActivityEvent) =>
     e.kind === 'created' ? 'created' : e.kind === 'commented' ? 'commented on' : e.count > 1 ? `edited (${e.count} versions)` : 'edited'
@@ -51,11 +52,30 @@ function ActivityFeed() {
       <div className="chips" style={{ margin: '4px 0 12px' }}>
         <button className={`chip${scope === 'all' ? ' active' : ''}`} onClick={() => setScope('all')}>Everything</button>
         <button className={`chip${scope === 'watching' ? ' active' : ''}`} onClick={() => setScope('watching')}>Pages and spaces I watch</button>
+        <button className={`chip${scope === 'following' ? ' active' : ''}`} onClick={() => setScope('following')}>People I follow</button>
       </div>
+      {scope === 'following' && !!following.data?.length && (
+        <div className="row faint small" style={{ gap: 6, flexWrap: 'wrap', margin: '-4px 0 12px' }}>
+          Following
+          {following.data.map((f) => (
+            <Link key={f.id} to={`/people/${f.id}`} className="row" style={{ gap: 4 }}>
+              <Avatar name={f.name} id={f.id} size={18} /> {f.name}
+            </Link>
+          ))}
+        </div>
+      )}
       {!q.data ? (
         <div className="spinner" />
       ) : !q.data.length ? (
-        <div className="empty">{scope === 'watching' ? 'Watch pages or spaces to follow their changes here.' : 'Nothing has happened yet.'}</div>
+        <div className="empty">
+          {scope === 'watching'
+            ? 'Watch pages or spaces to follow their changes here.'
+            : scope === 'following'
+              ? following.data?.length
+                ? 'The people you follow haven’t changed anything you can see lately.'
+                : <>Follow people from their profile (<Link to="/people">People</Link>) to see what they write here.</>
+              : 'Nothing has happened yet.'}
+        </div>
       ) : (
         <ul className="activity">
           {q.data.map((e, i) => (

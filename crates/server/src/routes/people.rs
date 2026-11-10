@@ -118,7 +118,55 @@ pub async fn profile(State(state): State<AppState>, CurrentUser(user): CurrentUs
     o.insert("deactivated".into(), json!(status == "deactivated"));
     o.insert("personalSpaceKey".into(), json!(personal));
     o.insert("recentPages".into(), serde_json::to_value(recent)?);
+    let (following, followers): (bool, i64) = sqlx::query_as(
+        "SELECT EXISTS (SELECT 1 FROM user_follows WHERE follower_id = $2 AND followee_id = $1), (SELECT count(*) FROM user_follows WHERE followee_id = $1)",
+    )
+    .bind(id)
+    .bind(user.id)
+    .fetch_one(&state.db)
+    .await?;
+    o.insert("following".into(), json!(following));
+    o.insert("followers".into(), json!(followers));
     Ok(Json(v))
+}
+
+/// `PUT /people/{id}/follow` — follow someone: their edits and comments show up in Home →
+/// Activity → People I follow (only on pages the follower can see anyway).
+pub async fn follow(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<axum::http::StatusCode> {
+    if id == user.id {
+        return Err(ApiError::bad("you can't follow yourself"));
+    }
+    if user.is_guest() {
+        return Err(ApiError::Forbidden);
+    }
+    let exists: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND workspace_id = $2 AND status = 'active')")
+        .bind(id)
+        .bind(user.workspace_id)
+        .fetch_one(&state.db)
+        .await?;
+    if !exists {
+        return Err(ApiError::NotFound("person"));
+    }
+    sqlx::query("INSERT INTO user_follows (follower_id, followee_id) VALUES ($1, $2) ON CONFLICT DO NOTHING").bind(user.id).bind(id).execute(&state.db).await?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// `DELETE /people/{id}/follow`
+pub async fn unfollow(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<axum::http::StatusCode> {
+    sqlx::query("DELETE FROM user_follows WHERE follower_id = $1 AND followee_id = $2").bind(user.id).bind(id).execute(&state.db).await?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// `GET /me/following` — the people the caller follows, by name.
+pub async fn following(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Vec<Person>>> {
+    Ok(Json(
+        sqlx::query_as::<_, Person>(sqlx::AssertSqlSafe(format!(
+            "SELECT {PERSON} FROM users WHERE id IN (SELECT followee_id FROM user_follows WHERE follower_id = $1) AND status = 'active' ORDER BY lower(name)"
+        )))
+        .bind(user.id)
+        .fetch_all(&state.db)
+        .await?,
+    ))
 }
 
 #[derive(Deserialize)]

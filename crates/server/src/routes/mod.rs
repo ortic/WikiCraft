@@ -93,6 +93,8 @@ pub fn router(state: AppState) -> Router {
         .route("/me/avatar", post(people::upload_avatar).delete(people::delete_avatar).layer(DefaultBodyLimit::max(people::MAX_AVATAR_UPLOAD + (64 << 10))))
         .route("/users/{id}/avatar", get(people::avatar))
         .route("/people/{id}", get(people::profile))
+        .route("/people/{id}/follow", put(people::follow).delete(people::unfollow))
+        .route("/me/following", get(people::following))
         .route("/me/profile", put(people::update_mine))
         .route("/users/{id}", axum::routing::patch(users::update))
         .route("/users/{id}/merge", post(users::merge))

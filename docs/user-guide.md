@@ -6,7 +6,7 @@ Mac) in the app for the keyboard shortcuts.
 ## Finding your way
 
 - **Home** shows the pages you visited recently, your starred pages, open tasks assigned to you
-  and the activity in the spaces you follow.
+  and the activity: everything, what you watch, or what the people you follow did.
 - **Spaces** hold the pages of a team or project, as a tree in the sidebar. Drag pages in the
   tree to reorder or nest them.
 - **Search** (`Ctrl K` / `Cmd K` jumps straight to a page or runs an action: create a page or
@@ -123,7 +123,9 @@ follows the device, including its "more contrast" setting.
 *People* in the sidebar lists everybody with an account: search by name, job, department or
 location, or pick a department. A profile shows what someone does, where they are and their local
 time, their personal space and the pages they worked on lately (only the ones you can see). Click
-an @mention (Ctrl/Cmd+click while editing) or an author's name to open their profile. Fill in
+an @mention (Ctrl/Cmd+click while editing) or an author's name to open their profile. **Follow**
+on a profile puts their edits and comments in *Home → Activity → People I follow* (only on pages
+you can see). Fill in
 yours under *Settings → About you*, where you can also upload a picture (cropped to a square and
 scaled down; photo metadata such as the location is not kept).
 

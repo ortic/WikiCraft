@@ -623,6 +623,26 @@ async fn activity_feed() {
     app.put(&member, &format!("/pages/{a}/watch"), json!({})).await;
     assert_eq!(app.get(&member, "/activity?scope=watching").await.1.as_array().unwrap().len(), 3);
     assert_ne!(app.get(&common::client(), "/activity").await.0, 200);
+
+    // following people: what they did, on pages the follower can see
+    let (_, mm) = app.get(&member, "/me").await;
+    let member_id = mm["user"]["id"].as_str().unwrap().to_string();
+    assert_eq!(app.get(&owner, "/activity?scope=following").await.1, json!([]));
+    assert_eq!(app.put(&member, &format!("/people/{member_id}/follow"), json!({})).await.0, 400, "not yourself");
+    assert_eq!(app.put(&member, &format!("/people/{}/follow", uuid::Uuid::new_v4()), json!({})).await.0, 404);
+    assert_eq!(app.put(&member, &format!("/people/{owner_id}/follow"), json!({})).await.0, 204);
+    assert_eq!(app.put(&member, &format!("/people/{owner_id}/follow"), json!({})).await.0, 204, "idempotent");
+    let (_, prof) = app.get(&member, &format!("/people/{owner_id}")).await;
+    assert_eq!((prof["following"].as_bool(), prof["followers"].as_i64()), (Some(true), Some(1)));
+    assert_eq!(app.get(&owner, &format!("/people/{owner_id}")).await.1["following"], false);
+    let (_, list) = app.get(&member, "/me/following").await;
+    assert_eq!(list.as_array().unwrap().iter().map(|p| p["name"].as_str().unwrap()).collect::<Vec<_>>(), vec!["Owner"]);
+    let (_, feed) = app.get(&member, "/activity?scope=following").await;
+    let feed = feed.as_array().unwrap();
+    assert_eq!(feed.len(), 3, "the owner's edits and pages, not the member's comment nor the restricted page: {feed:?}");
+    assert!(feed.iter().all(|e| e["actorId"] == owner_id && e["pageTitle"] != "Salaries"));
+    assert_eq!(app.delete(&member, &format!("/people/{owner_id}/follow")).await, 204);
+    assert_eq!(app.get(&member, "/activity?scope=following").await.1, json!([]));
 }
 
 #[tokio::test]

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Briefcase, Clock, FileText, Mail, MapPin, Search, Users } from 'lucide-react'
+import { Briefcase, Clock, FileText, Mail, MapPin, Search, UserCheck, UserPlus, Users } from 'lucide-react'
 import { api, formatDate } from '../api'
 import { Avatar, Spinner, useMe, useToast } from '../ui'
 
@@ -20,6 +20,9 @@ export interface Profile extends Person {
   email: string | null
   deactivated: boolean
   personalSpaceKey: string | null
+  /** the viewer follows them (Home → Activity → People I follow) */
+  following?: boolean
+  followers?: number
   recentPages: { id: string; title: string; spaceKey: string; spaceName: string; editedAt: string }[]
 }
 
@@ -91,6 +94,33 @@ export function PeoplePage() {
   )
 }
 
+/** Follow someone: their edits and comments show up in Home → Activity → People I follow. */
+function FollowButton({ person }: { person: Profile }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [busy, setBusy] = useState(false)
+  const toggle = async () => {
+    setBusy(true)
+    try {
+      if (person.following) await api.del(`/people/${person.id}/follow`)
+      else await api.put(`/people/${person.id}/follow`, {})
+      qc.invalidateQueries({ queryKey: ['person', person.id] })
+      qc.invalidateQueries({ queryKey: ['following'] })
+      qc.invalidateQueries({ queryKey: ['activity'] })
+      toast(person.following ? `You no longer follow ${person.name}` : `You follow ${person.name}: Home → Activity → People I follow`)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'That did not work')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <button className={`btn btn-sm${person.following ? '' : ' btn-primary'}`} disabled={busy} onClick={toggle} aria-pressed={!!person.following}>
+      {person.following ? <UserCheck size={14} /> : <UserPlus size={14} />} {person.following ? 'Following' : 'Follow'}
+    </button>
+  )
+}
+
 /** Someone's profile: what they do, where and when they are, what they worked on lately. */
 export function ProfilePage() {
   const { id } = useParams()
@@ -122,6 +152,7 @@ export function ProfilePage() {
         </div>
         <span className="spacer" />
         {isMe && <Link className="btn btn-sm" to="/settings">Edit your profile</Link>}
+        {!isMe && !p.deactivated && me.data?.user?.role !== 'guest' && <FollowButton person={p} />}
       </div>
       {p.bio && <p className="profile-bio">{p.bio}</p>}
       {p.personalSpaceKey && (

@@ -1417,6 +1417,58 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /people/{id}/follow:
+    put:
+      tags:
+      - People
+      summary: 'Follow someone: their edits and comments show in /activity?scope=following (only on pages you can see)'
+      operationId: put_people_id_follow
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '204': *id007
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+      - People
+      summary: Stop following someone
+      operationId: delete_people_id_follow
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '204': *id007
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/following:
+    get:
+      tags:
+      - People
+      summary: The people you follow
+      operationId: get_me_following
+      responses:
+        '200':
+          description: OK
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /people/avatars:
     get:
       tags:
@@ -1910,8 +1962,9 @@ paths:
     patch:
       tags:
       - Spaces
-      summary: Update key (old key keeps working), name, description, icon, category, default role, anonymous access, default
-        template, sidebar shortcuts ([{title, url}], up to 20; url = https://… or a /path in this wiki)
+      summary: 'Update key (old key keeps working), name, description, icon, category, default role, anonymous access, default
+        template, sidebar shortcuts ([{title, url}], up to 20; url = https://… or a /path in this wiki), look ({accentColor?:
+        #rrggbb, hideBlog?: bool}, replaces it)'
       operationId: patch_spaces_key
       parameters:
       - name: key
@@ -5623,7 +5676,7 @@ paths:
       - name: scope
         in: query
         required: false
-        description: all | watching
+        description: all | watching | following
         schema: *id001
       - name: limit
         in: query
@@ -5669,7 +5722,8 @@ paths:
     put:
       tags:
       - Admin
-      summary: Rename the workspace
+      summary: 'Rename the workspace and set its look: accent colour (#rrggbb, "" = built-in), date format (auto, yyyy-mm-dd,
+        dd.mm.yyyy, dd/mm/yyyy, mm/dd/yyyy, d mmm yyyy) and default time zone (IANA, "" = the reader''s browser)'
       operationId: put_admin_workspace
       requestBody:
         required: true
@@ -5679,8 +5733,9 @@ paths:
               type: object
               properties:
                 name: *id001
-              required:
-              - name
+                accentColor: *id001
+                dateFormat: *id001
+                timeZone: *id001
       responses:
         '200':
           description: OK
@@ -5690,6 +5745,15 @@ paths:
                 type: object
                 properties:
                   name: *id001
+                  accentColor:
+                    type:
+                    - string
+                    - 'null'
+                  dateFormat: *id001
+                  timeZone:
+                    type:
+                    - string
+                    - 'null'
         4XX:
           description: Error
           content:

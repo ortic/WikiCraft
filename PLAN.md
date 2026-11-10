@@ -489,7 +489,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Home dashboard: recent pages, starred, drafts, tasks assigned to me `C D O` — recently viewed / updated, activity, popular, starred, Drafts (unpublished), open tasks
 - [x] **P0** Recently viewed / recently edited `C D O`
 - [x] **P1** Starred/favorite pages and spaces `C D O` — pages (sidebar, Home) and spaces (`space_favorites`; star in the directory, starred filter, starred first in directory and sidebar)
-- [ ] **P1** Activity feed (following people/spaces; popular in my org) `C X` — partial: Home → Activity (everything visible, or watched pages and spaces) and Popular; following people not yet
+- [x] **P1** Activity feed (following people/spaces; popular in my org) `C X` — Home → Activity: everything visible, watched pages and spaces, or people I follow (Follow on a profile; their edits and comments on pages the follower can see); Home → Popular
 - [~] **P1** "For you" / popular pages `C` (popular pages; no personalisation)
 - [x] **P1** Command palette (Ctrl/Cmd+K): jump to page/space/action `C O` — pages (search, recently viewed) plus actions for the context (create page / folder / space, go to Home, Spaces, My tasks, blog, trash, space settings, profile, administration, dark mode, shortcuts); `>` lists actions only
 - [x] **P1** Dark mode, theme switching, high-contrast `C D O` — Settings → Appearance (system / light / dark / high contrast); the high-contrast theme also follows the system's "more contrast" setting and is checked against WCAG AAA contrast (7:1) on the main screens in the e2e suite

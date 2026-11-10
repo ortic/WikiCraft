@@ -1,5 +1,6 @@
 //! Activity feed: who created, edited or commented on which page, newest first, limited to
-//! what the caller can see. `scope=watching` keeps pages and spaces the caller watches.
+//! what the caller can see. `scope=watching` keeps pages and spaces the caller watches,
+//! `scope=following` what the people they follow did.
 
 use axum::Json;
 use axum::extract::{Query, State};
@@ -14,7 +15,7 @@ use crate::routes::search::{filter_visible, visible_spaces};
 
 #[derive(Deserialize)]
 pub struct ActivityQuery {
-    /// `all` (default) or `watching`
+    /// `all` (default), `watching` or `following`
     scope: Option<String>,
     limit: Option<i64>,
 }
@@ -39,21 +40,29 @@ pub struct Event {
     count: i64,
 }
 
-/// `GET /api/activity?scope=all|watching&limit=`
+/// `GET /api/activity?scope=all|watching|following&limit=`
 pub async fn feed(State(state): State<AppState>, CurrentUser(user): CurrentUser, Query(q): Query<ActivityQuery>) -> ApiResult<Json<Vec<Event>>> {
     let p = Principal::load(&state, Some(user.clone())).await?;
     let watching = q.scope.as_deref() == Some("watching");
+    // only what the followed people did (looked up before the newest-first cut-off)
+    let actors: Option<Vec<Uuid>> = match q.scope.as_deref() {
+        Some("following") => Some(sqlx::query_scalar("SELECT followee_id FROM user_follows WHERE follower_id = $1").bind(user.id).fetch_all(&state.db).await?),
+        _ => None,
+    };
+    if actors.as_ref().is_some_and(|a| a.is_empty()) {
+        return Ok(Json(Vec::new()));
+    }
     let limit = q.limit.unwrap_or(40).clamp(1, 100) as usize;
     let rows = sqlx::query_as::<_, Event>(
         "WITH ev AS (
             (SELECT CASE WHEN v.version = 1 THEN 'created' ELSE 'edited' END AS kind, v.page_id, v.created_by AS actor_id, v.created_at AS at,
                     v.message AS detail
              FROM page_versions v JOIN pages p ON p.id = v.page_id
-             WHERE p.workspace_id = $1 ORDER BY v.created_at DESC LIMIT 400)
+             WHERE p.workspace_id = $1 AND ($4::uuid[] IS NULL OR v.created_by = ANY($4)) ORDER BY v.created_at DESC LIMIT 400)
             UNION ALL
             (SELECT 'commented', c.page_id, c.author_id, c.created_at, left(c.text_content, 160)
              FROM comments c JOIN pages p ON p.id = c.page_id
-             WHERE p.workspace_id = $1 ORDER BY c.created_at DESC LIMIT 200)
+             WHERE p.workspace_id = $1 AND ($4::uuid[] IS NULL OR c.author_id = ANY($4)) ORDER BY c.created_at DESC LIMIT 200)
          )
          SELECT ev.kind, ev.page_id, p.title AS page_title, p.space_id, s.key AS space_key, s.name AS space_name,
                 ev.actor_id, u.name AS actor_name, ev.at, ev.detail, 1::bigint AS count
@@ -66,6 +75,7 @@ pub async fn feed(State(state): State<AppState>, CurrentUser(user): CurrentUser,
     .bind(user.workspace_id)
     .bind(watching)
     .bind(user.id)
+    .bind(actors)
     .fetch_all(&state.db)
     .await?;
     let spaces = visible_spaces(&state, &p).await?;
