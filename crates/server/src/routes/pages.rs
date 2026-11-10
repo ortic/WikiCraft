@@ -189,6 +189,9 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
         tracing::warn!(page = %id, "mention notifications failed: {e:#}");
     }
     crate::webhooks::emit_page(&state, "page.created", id, Some(user.id), json!({})).await;
+    if let Err(e) = crate::routes::notifications::notify_page_created(&state, id, user.id).await {
+        tracing::warn!("space watch notifications: {e}");
+    }
     Ok((StatusCode::CREATED, Json(json!({ "id": id }))))
 }
 

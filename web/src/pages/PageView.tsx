@@ -212,6 +212,21 @@ export default function PageView() {
                     {p.watching ? <EyeOff size={15} /> : <Eye size={15} />} {p.watching ? 'Stop watching' : 'Watch page'}
                   </div>
                 )}
+                {user && space.data && (
+                  <div
+                    className="menu-item"
+                    onClick={async () => {
+                      setMenu(false)
+                      const watching = (space.data as Space & { watching?: boolean }).watching
+                      await (watching ? api.del(`/spaces/${p.spaceKey}/watch`) : api.put(`/spaces/${p.spaceKey}/watch`))
+                      qc.invalidateQueries({ queryKey: ['space', p.spaceKey] })
+                      toast(watching ? 'You stopped watching this space' : 'You get notified about new and changed pages in this space')
+                    }}
+                  >
+                    {(space.data as Space & { watching?: boolean }).watching ? <EyeOff size={15} /> : <Eye size={15} />}{' '}
+                    {(space.data as Space & { watching?: boolean }).watching ? 'Stop watching the space' : 'Watch the whole space'}
+                  </div>
+                )}
                 {(canEdit || user) && <div className="menu-sep" />}
                 {canEdit && (
                   <div className="menu-item" onClick={() => { setMenu(false); setVerifyOpen(true) }}>

@@ -138,14 +138,33 @@ pub async fn notify_page_mentions(state: &AppState, page_id: Uuid, doc: &Node, a
 
 /// Notifies watchers that a page got a new version.
 pub async fn notify_page_updated(state: &AppState, page_id: Uuid, version: i32, editor: Option<Uuid>) -> anyhow::Result<()> {
+    // watchers of the page and of its space (the list only shows pages they can see)
     sqlx::query(
         "INSERT INTO notifications (id, user_id, kind, page_id, actor_id, data)
-         SELECT gen_random_uuid(), w.user_id, 'page_updated', $1, $2, $3 FROM watches w JOIN users u ON u.id = w.user_id
-         WHERE w.page_id = $1 AND u.status = 'active' AND w.user_id IS DISTINCT FROM $2",
+         SELECT gen_random_uuid(), x.user_id, 'page_updated', $1, $2, $3
+         FROM (SELECT w.user_id FROM watches w WHERE w.page_id = $1
+               UNION SELECT sw.user_id FROM space_watches sw JOIN pages p ON p.space_id = sw.space_id WHERE p.id = $1) x
+         JOIN users u ON u.id = x.user_id
+         WHERE u.status = 'active' AND x.user_id IS DISTINCT FROM $2",
     )
     .bind(page_id)
     .bind(editor)
     .bind(json!({ "version": version }))
+    .execute(&state.db)
+    .await?;
+    Ok(())
+}
+
+/// Tells the people watching a space about a new page in it.
+pub async fn notify_page_created(state: &AppState, page_id: Uuid, creator: Uuid) -> anyhow::Result<()> {
+    sqlx::query(
+        "INSERT INTO notifications (id, user_id, kind, page_id, actor_id, data)
+         SELECT gen_random_uuid(), sw.user_id, 'page_created', $1, $2, '{}'::jsonb
+         FROM space_watches sw JOIN pages p ON p.space_id = sw.space_id JOIN users u ON u.id = sw.user_id
+         WHERE p.id = $1 AND u.status = 'active' AND sw.user_id <> $2",
+    )
+    .bind(page_id)
+    .bind(creator)
     .execute(&state.db)
     .await?;
     Ok(())

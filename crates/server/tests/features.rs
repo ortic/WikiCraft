@@ -265,3 +265,33 @@ async fn saved_searches() {
     assert_eq!(app.delete(&owner, &format!("/me/searches/{id}")).await, 204);
     assert_eq!(app.get(&owner, "/me/searches").await.1.as_array().unwrap().len(), 0);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn watching_a_space() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (fan, _) = app.user(&owner, "fan@acme.test", "member").await;
+    app.post(&owner, "/spaces", json!({"key": "NEWS", "name": "News"})).await;
+    let (_, s) = app.get(&fan, "/spaces/NEWS").await;
+    assert_eq!(s["watching"], false);
+    assert_eq!(app.put(&fan, "/spaces/NEWS/watch", json!({})).await.0, 204);
+    let (_, s) = app.get(&fan, "/spaces/NEWS").await;
+    assert_eq!(s["watching"], true);
+    let (_, pg) = app.post(&owner, "/pages", json!({"spaceKey": "NEWS", "title": "Launch day"})).await;
+    let pg = pg["id"].as_str().unwrap().to_string();
+    app.put(&owner, &format!("/pages/{pg}/content"), json!({"markdown": "It's live."})).await;
+    let (_, n) = app.get(&fan, "/notifications").await;
+    let kinds: Vec<&str> = n["items"].as_array().unwrap().iter().map(|i| i["kind"].as_str().unwrap()).collect();
+    assert!(kinds.contains(&"page_created") && kinds.contains(&"page_updated"), "{n}");
+    // restricted pages stay invisible to space watchers
+    let (_, me) = app.get(&owner, "/me").await;
+    let owner_id = me["user"]["id"].as_str().unwrap().to_string();
+    let (_, secret) = app.post(&owner, "/pages", json!({"spaceKey": "NEWS", "title": "Embargoed"})).await;
+    let secret = secret["id"].as_str().unwrap().to_string();
+    app.put(&owner, &format!("/pages/{secret}/restrictions"), json!({"restrictions": [{"kind": "view", "subjectType": "user", "subjectId": owner_id}]})).await;
+    let (_, n) = app.get(&fan, "/notifications").await;
+    assert!(!n.to_string().contains("Embargoed"));
+    assert_eq!(app.delete(&fan, "/spaces/NEWS/watch").await, 204);
+    let (_, s) = app.get(&fan, "/spaces/NEWS").await;
+    assert_eq!(s["watching"], false);
+}

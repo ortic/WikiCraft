@@ -30,6 +30,8 @@ function describe(n: Notification): string {
       return `${who} asked for access to ${n.pageTitle}`
     case 'verification_request':
       return `${who} asked you to review and verify ${n.pageTitle}`
+    case 'page_created':
+      return `${who} created ${n.pageTitle}`
     case 'page_updated':
       return `${who} updated ${n.pageTitle}${n.data.version ? ` (v${n.data.version})` : ''}`
     default:

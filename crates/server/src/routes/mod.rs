@@ -136,6 +136,7 @@ pub fn router(state: AppState) -> Router {
         .route("/pages/{id}/archive", post(archive::archive))
         .route("/pages/{id}/unarchive", post(archive::unarchive))
         .route("/spaces/{key}/archived", get(archive::list))
+        .route("/spaces/{key}/watch", put(spaces::watch).delete(spaces::unwatch))
         .route("/reports/verification", get(verification::report))
         .route("/ai/status", get(ai::status))
         .route("/ai/ask", post(ai::ask))

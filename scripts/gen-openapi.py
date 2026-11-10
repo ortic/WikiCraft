@@ -146,6 +146,8 @@ op("/pages/{id}/verification", "delete", "Pages", "Remove the verification (edit
 op("/pages/{id}/archive", "post", "Pages", "Archive a page and everything under it (read-only, hidden from tree and search)", res=resp(None, "204", "Archived"))
 op("/pages/{id}/unarchive", "post", "Pages", "Restore an archived page", res=resp(None, "204", "Restored"))
 op("/spaces/{key}/archived", "get", "Spaces", "Archived pages of a space", res=resp(arr(obj({"id": uuid, "title": txt, "archivedAt": txt, "archivedBy": txt, "descendants": num, "canRestore": boolean}))))
+op("/spaces/{key}/watch", "put", "Spaces", "Watch the space (new and updated pages)", res=NO)
+op("/spaces/{key}/watch", "delete", "Spaces", "Stop watching the space", res=NO)
 op("/pages/{id}/access-request", "post", "Pages", "Ask the page's admins for access (always 204; reveals nothing about the page)", req=body(obj({"message": txt})), res=resp(None, "204", "Sent"))
 op("/pages/{id}/verification/request", "post", "Pages", "Ask someone who may edit the page to review and verify it", req=body(obj({"userId": uuid, "note": txt})), res=resp(None, "204", "Requested"))
 op("/comments/{id}/like", "put", "Comments", "Like a comment", res=NO)

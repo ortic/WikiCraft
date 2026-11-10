@@ -199,7 +199,7 @@ pub async fn digests(state: &AppState) -> anyhow::Result<usize> {
         let wanted = match r.preference.as_str() {
             "none" => false,
             "all" => true,
-            _ => !matches!(r.kind.as_str(), "page_updated" | "like"),
+            _ => !matches!(r.kind.as_str(), "page_updated" | "page_created" | "like"),
         };
         if r.read_at.is_none() && wanted && r.status == "active" && r.email.is_some() && r.page_title.is_some() {
             per_user.entry(r.user_id).or_default().push(r);
@@ -228,6 +228,7 @@ pub async fn digests(state: &AppState) -> anyhow::Result<usize> {
                 "comment" => format!("{who} commented on “{title}”"),
                 "reply" => format!("{who} replied to your comment on “{title}”"),
                 "page_updated" => format!("{who} updated “{title}”"),
+                "page_created" => format!("{who} created “{title}”"),
                 "share" => format!("{who} shared “{title}” with you"),
                 "like" => format!("{who} liked “{title}”"),
                 "verification_request" => format!("{who} asked you to review and verify “{title}”"),

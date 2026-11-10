@@ -84,6 +84,8 @@ pub struct SpaceView {
     space: SpaceRow,
     role: Role,
     page_count: i64,
+    /// the caller watches the whole space
+    watching: bool,
 }
 
 /// Lists the spaces visible to the caller.
@@ -106,7 +108,7 @@ pub async fn list(State(state): State<AppState>, MaybeUser(user): MaybeUser) -> 
         let role = space_role(&state, &p, &s.access_row()).await?;
         if role > Role::None {
             let page_count = counts.get(&s.id).copied().unwrap_or(0);
-            out.push(SpaceView { space: s, role, page_count });
+            out.push(SpaceView { space: s, role, page_count, watching: false });
         }
     }
     Ok(Json(out))
@@ -331,7 +333,17 @@ pub async fn get(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path
     let (space, role) = load_space(&state, &p, &key).await?;
     let page_count: i64 =
         sqlx::query_scalar("SELECT count(*) FROM pages WHERE space_id = $1 AND deleted_at IS NULL").bind(space.id).fetch_one(&state.db).await?;
-    Ok(Json(SpaceView { space, role, page_count }))
+    let watching: bool = match &p.user {
+        Some(u) => {
+            sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM space_watches WHERE user_id = $1 AND space_id = $2)")
+                .bind(u.id)
+                .bind(space.id)
+                .fetch_one(&state.db)
+                .await?
+        }
+        None => false,
+    };
+    Ok(Json(SpaceView { space, role, page_count, watching }))
 }
 
 #[derive(Deserialize)]
@@ -614,4 +626,20 @@ pub async fn blog(State(state): State<AppState>, MaybeUser(user): MaybeUser, Pat
         sqlx::query_as("SELECT id, parent_id FROM pages WHERE space_id = $1 AND deleted_at IS NULL").bind(space.id).fetch_all(&state.db).await?;
     let visible = visible_page_ids(&state, &p, space.id, role, &pairs).await?;
     Ok(Json(rows.into_iter().filter(|r| visible.contains(&r.id)).collect()))
+}
+
+/// `PUT /api/spaces/{key}/watch`: notifications for new and updated pages in the space.
+pub async fn watch(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(key): Path<String>) -> ApiResult<StatusCode> {
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    let (space, _) = load_space(&state, &p, &key).await?;
+    sqlx::query("INSERT INTO space_watches (user_id, space_id) VALUES ($1, $2) ON CONFLICT DO NOTHING").bind(user.id).bind(space.id).execute(&state.db).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `DELETE /api/spaces/{key}/watch`
+pub async fn unwatch(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(key): Path<String>) -> ApiResult<StatusCode> {
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    let (space, _) = load_space(&state, &p, &key).await?;
+    sqlx::query("DELETE FROM space_watches WHERE user_id = $1 AND space_id = $2").bind(user.id).bind(space.id).execute(&state.db).await?;
+    Ok(StatusCode::NO_CONTENT)
 }

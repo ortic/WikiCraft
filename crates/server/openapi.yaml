@@ -2448,6 +2448,43 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /spaces/{key}/watch:
+    put:
+      tags:
+      - Spaces
+      summary: Watch the space (new and updated pages)
+      operationId: put_spaces_key_watch
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '204': *id007
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+      - Spaces
+      summary: Stop watching the space
+      operationId: delete_spaces_key_watch
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '204': *id007
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /pages/{id}/access-request:
     post:
       tags:
