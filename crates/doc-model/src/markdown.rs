@@ -297,17 +297,34 @@ pub fn pm_to_markdown(doc: &Node) -> String {
 #[derive(Default)]
 struct MdWriter {
     out: String,
+    /// Use the alternative list marker (`*` / `1)`) for the next list.
+    alt_marker: bool,
+}
+
+/// Lists that Markdown would merge when they follow each other: bullet-style lists all use `-`,
+/// ordered lists all use `.`.
+fn list_family(kind: &str) -> Option<u8> {
+    match kind {
+        nodes::BULLET_LIST | nodes::TASK_LIST | nodes::DECISION_LIST => Some(0),
+        nodes::ORDERED_LIST => Some(1),
+        _ => None,
+    }
 }
 
 impl MdWriter {
     fn blocks(&mut self, content: &[Node], prefix: &str) {
         let mut first = true;
+        let mut prev: Option<(u8, bool)> = None;
         for n in content {
             if !first {
                 self.out.push_str(prefix.trim_end());
                 self.out.push('\n');
             }
             first = false;
+            // adjacent lists of one family need different markers, or they'd become one list
+            let family = list_family(&n.kind);
+            self.alt_marker = matches!((family, prev), (Some(f), Some((pf, alt))) if f == pf && !alt);
+            prev = family.map(|f| (f, self.alt_marker));
             self.block(n, prefix);
         }
     }
@@ -325,7 +342,9 @@ impl MdWriter {
         match n.kind.as_str() {
             nodes::PARAGRAPH => {
                 let s = inline_md(&n.content);
-                self.line(prefix, &s);
+                // leading blanks are insignificant in Markdown, and four of them would start a code block
+                let s: Vec<String> = s.trim_start_matches([' ', '\t']).split('\n').map(escape_block_start).collect();
+                self.line(prefix, &s.join("\n"));
             }
             nodes::HEADING => {
                 let lvl = n.attr_i64("level").unwrap_or(1).clamp(1, 6) as usize;
@@ -346,20 +365,25 @@ impl MdWriter {
             }
             nodes::BULLET_LIST | nodes::ORDERED_LIST | nodes::TASK_LIST | nodes::DECISION_LIST => {
                 let start = n.attr_i64("start").unwrap_or(1);
+                let (bullet, delim) = if std::mem::take(&mut self.alt_marker) { ('*', ')') } else { ('-', '.') };
                 for (i, item) in n.content.iter().enumerate() {
                     let marker = match n.kind.as_str() {
-                        nodes::ORDERED_LIST => format!("{}. ", start + i as i64),
+                        nodes::ORDERED_LIST => format!("{}{delim} ", start + i as i64),
                         nodes::TASK_LIST => {
                             if item.attr_bool("checked").unwrap_or(false) {
-                                "- [x] ".into()
+                                format!("{bullet} [x] ")
                             } else {
-                                "- [ ] ".into()
+                                format!("{bullet} [ ] ")
                             }
                         }
-                        nodes::DECISION_LIST => "- **Decision:** ".into(),
-                        _ => "- ".into(),
+                        nodes::DECISION_LIST => format!("{bullet} **Decision:** "),
+                        _ => format!("{bullet} "),
                     };
-                    let indent = " ".repeat(marker.chars().count());
+                    // continuation lines align with the item's content column, which for task and
+                    // decision items is right after the bullet (`[ ] `/`**Decision:**` are
+                    // content); indenting further would turn the following blocks into code
+                    let width = if n.kind == nodes::ORDERED_LIST { marker.chars().count() } else { 2 };
+                    let indent = " ".repeat(width);
                     let mut sub = MdWriter::default();
                     sub.blocks(&item.content, "");
                     let body = sub.out.trim_end().to_string();
@@ -446,7 +470,7 @@ impl MdWriter {
                     .iter()
                     .map(|c| {
                         let parts: Vec<String> = c.content.iter().map(|b| inline_md(&b.content)).collect();
-                        parts.join("<br>").replace('|', "\\|").replace('\n', " ")
+                        escape_pipes(&parts.join("<br>")).replace('\n', " ")
                     })
                     .collect()
             })
@@ -470,8 +494,19 @@ impl MdWriter {
 
 fn md_escape(s: &str) -> String {
     let mut o = String::with_capacity(s.len());
-    for ch in s.chars() {
-        if matches!(ch, '\\' | '`' | '*' | '_' | '[' | ']' | '<' | '>' | '#' | '|') {
+    let mut chars = s.chars().peekable();
+    while let Some(ch) = chars.next() {
+        let next = chars.peek().copied();
+        let escape = match ch {
+            // `~` strikes through and `$` starts math (both enabled on import)
+            '\\' | '`' | '*' | '_' | '[' | ']' | '<' | '>' | '#' | '|' | '~' | '$' => true,
+            // `==highlight==`
+            '=' => next == Some('='),
+            // entity and character references (`&amp;`, `&#60;`) would be decoded
+            '&' => next.is_some_and(|c| c.is_ascii_alphanumeric() || c == '#'),
+            _ => false,
+        };
+        if escape {
             o.push('\\');
         }
         o.push(ch);
@@ -479,13 +514,71 @@ fn md_escape(s: &str) -> String {
     o
 }
 
+/// Escapes the pipes of a table cell that aren't escaped yet (text was escaped by
+/// [`md_escape`]; code spans and URLs were not).
+fn escape_pipes(s: &str) -> String {
+    let mut o = String::with_capacity(s.len());
+    let mut backslashes = 0;
+    for ch in s.chars() {
+        if ch == '|' && backslashes % 2 == 0 {
+            o.push('\\');
+        }
+        backslashes = if ch == '\\' { backslashes + 1 } else { 0 };
+        o.push(ch);
+    }
+    o
+}
+
+/// Escapes a paragraph line that Markdown would otherwise read as the start of another block:
+/// a list item (`- x`, `+ x`, `1. x`, `1) x`) or a setext underline / thematic break (`---`, `=`).
+fn escape_block_start(line: &str) -> String {
+    let body = line.trim_start_matches([' ', '\t']);
+    let lead = &line[..line.len() - body.len()];
+    let rest = body.get(1..).unwrap_or("");
+    let bullet = (body.starts_with('-') || body.starts_with('+')) && (rest.is_empty() || rest.starts_with([' ', '\t']));
+    let trimmed = body.trim_end();
+    let underline = !trimmed.is_empty() && (trimmed.chars().all(|c| c == '-') || trimmed.chars().all(|c| c == '='));
+    if bullet || underline {
+        return format!("{lead}\\{body}");
+    }
+    let digits = body.bytes().take_while(u8::is_ascii_digit).count();
+    let after = &body[digits..];
+    if (1..=9).contains(&digits) && after.starts_with(['.', ')']) && (after.len() == 1 || after[1..].starts_with([' ', '\t'])) {
+        return format!("{lead}{}\\{after}", &body[..digits]);
+    }
+    line.to_string()
+}
+
 fn html_escape(s: &str) -> String {
     s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;")
 }
 
+/// A link destination: `\`, `(` and `)` escaped, in `<…>` if it contains spaces or brackets.
+fn md_url(u: &str) -> String {
+    let pointy = u.contains(|c: char| c.is_whitespace() || c == '<' || c == '>');
+    let mut o = String::with_capacity(u.len() + 2);
+    if pointy {
+        o.push('<');
+    }
+    for ch in u.chars() {
+        if matches!(ch, '\\' | '(' | ')' | '<' | '>') {
+            o.push('\\');
+        }
+        o.push(ch);
+    }
+    if pointy {
+        o.push('>');
+    }
+    o
+}
+
 fn inline_md(content: &[Node]) -> String {
     let mut s = String::new();
-    for n in content {
+    // a hard break at the start or end of a paragraph has no Markdown form (`\` there is a
+    // literal backslash)
+    let blank = |n: &Node| n.kind == nodes::HARD_BREAK || (n.is_text() && n.marks.is_empty() && n.text.as_deref().is_none_or(|t| t.trim().is_empty()));
+    let end = content.iter().rposition(|n| !blank(n)).map_or(0, |i| i + 1);
+    for n in &content[..end] {
         match n.kind.as_str() {
             nodes::TEXT => {
                 let t = n.text.as_deref().unwrap_or("");
@@ -502,12 +595,13 @@ fn inline_md(content: &[Node]) -> String {
                         marks::ITALIC => format!("_{body}_"),
                         marks::STRIKE => format!("~~{body}~~"),
                         marks::HIGHLIGHT => format!("=={body}=="),
-                        marks::LINK => format!("[{}]({})", body, m.attr_str("href").unwrap_or("")),
+                        marks::LINK => format!("[{}]({})", body, md_url(m.attr_str("href").unwrap_or(""))),
                         _ => body,
                     };
                 }
                 s.push_str(&body);
             }
+            nodes::HARD_BREAK if s.trim().is_empty() => {}
             nodes::HARD_BREAK => s.push_str("\\\n"),
             nodes::IMAGE => s.push_str(&format!("![{}]({})", md_escape(n.attr_str("alt").unwrap_or("")), n.attr_str("src").unwrap_or(""))),
             nodes::MENTION => s.push_str(&format!("@{}", n.attr_str("label").or(n.attr_str("id")).unwrap_or("user"))),
@@ -549,6 +643,72 @@ mod tests {
         assert!(first.contains("**bold**"));
         assert!(first.contains("- [x] done"));
         assert!(first.contains("| h1 | h2 |"));
+    }
+
+    #[test]
+    fn adjacent_lists_stay_separate() {
+        // found by proptest: `- a\n\n- [ ] b` is one (task) list in Markdown
+        let item = |kind: &str, t: &str| Node::new(kind).with_content(vec![Node::paragraph(vec![Node::text(t)])]);
+        let list = |kind: &str, item_kind: &str, t: &str| Node::new(kind).with_content(vec![item(item_kind, t)]);
+        let doc = Node::doc(vec![
+            list(nodes::BULLET_LIST, nodes::LIST_ITEM, "a"),
+            list(nodes::TASK_LIST, nodes::TASK_ITEM, "b"),
+            list(nodes::BULLET_LIST, nodes::LIST_ITEM, "c"),
+            list(nodes::ORDERED_LIST, nodes::LIST_ITEM, "d"),
+            list(nodes::ORDERED_LIST, nodes::LIST_ITEM, "e"),
+        ]);
+        let md = pm_to_markdown(&doc);
+        assert_eq!(md, "- a\n\n* [ ] b\n\n- c\n\n1. d\n\n1) e\n");
+        let back = markdown_to_pm(&md).doc;
+        let kinds: Vec<&str> = back.content.iter().map(|n| n.kind.as_str()).collect();
+        assert_eq!(kinds, vec!["bulletList", "taskList", "bulletList", "orderedList", "orderedList"]);
+        assert_eq!(pm_to_markdown(&back), md);
+    }
+
+    #[test]
+    fn task_item_blocks_are_not_code() {
+        // found by proptest: a second block in a task item was indented 6 spaces (4 past the
+        // item's content column), i.e. it became an indented code block
+        let item = Node::new(nodes::TASK_ITEM).attr("checked", false).with_content(vec![
+            Node::paragraph(vec![Node::text("a")]),
+            Node::paragraph(vec![Node::text("b")]),
+            Node::new(nodes::BULLET_LIST).with_content(vec![Node::new(nodes::LIST_ITEM).with_content(vec![Node::paragraph(vec![Node::text("c")])])]),
+        ]);
+        let doc = Node::doc(vec![Node::new(nodes::TASK_LIST).with_content(vec![item])]);
+        let md = pm_to_markdown(&doc);
+        assert_eq!(md, "- [ ] a\n\n  b\n\n  - c\n");
+        assert_eq!(markdown_to_pm(&md).doc, doc);
+    }
+
+    #[test]
+    fn text_that_looks_like_markup_stays_text() {
+        // found by proptest: entities were decoded, `$x$` became math, `- x` a list, ...
+        for t in ["&amp; &#60;", "$x$", "~~no~~", "==no==", "- no list", "+ no", "1. no", "2) no", "---", "a | b", "Tom & Jerry"] {
+            let doc = Node::doc(vec![Node::paragraph(vec![Node::text(t)])]);
+            let md = pm_to_markdown(&doc);
+            assert_eq!(markdown_to_pm(&md).doc, doc, "{t:?} exported as {md:?}");
+        }
+        // after a hard break, too (`---` would turn the first line into a setext heading)
+        let doc = Node::doc(vec![Node::paragraph(vec![Node::text("a"), Node::new(nodes::HARD_BREAK), Node::text("---")])]);
+        assert_eq!(markdown_to_pm(&pm_to_markdown(&doc)).doc, doc);
+        // a paragraph starting with a tab (or 4 spaces) is not an indented code block
+        let doc = Node::doc(vec![Node::paragraph(vec![Node::text("\tx")])]);
+        assert_eq!(markdown_to_pm(&pm_to_markdown(&doc)).doc.content[0].kind, nodes::PARAGRAPH);
+        // pipes in a table cell are escaped once
+        let cell = |t: &str| Node::new(nodes::TABLE_CELL).with_content(vec![Node::paragraph(vec![Node::text(t)])]);
+        let table = Node::new(nodes::TABLE).with_content(vec![Node::new(nodes::TABLE_ROW).with_content(vec![cell("a|b"), cell("\\|")])]);
+        let md = pm_to_markdown(&Node::doc(vec![table]));
+        assert_eq!(pm_to_markdown(&markdown_to_pm(&md).doc), md);
+        assert!(md.contains("| a\\|b | \\\\\\| |"), "{md}");
+        // link targets with parentheses, backslashes or spaces; trailing hard breaks
+        for href in ["https://example.com/a_(b)", "https://example.com/a\\b", "/pages/a b"] {
+            let doc = Node::doc(vec![Node::paragraph(vec![Node::text_marked("x", vec![Mark::link(href)])])]);
+            assert_eq!(markdown_to_pm(&pm_to_markdown(&doc)).doc, doc, "{href}");
+        }
+        let doc = Node::doc(vec![Node::paragraph(vec![Node::text("a"), Node::new(nodes::HARD_BREAK)])]);
+        assert_eq!(pm_to_markdown(&doc), "a\n");
+        let doc = Node::doc(vec![Node::paragraph(vec![Node::new(nodes::HARD_BREAK), Node::text(" a "), Node::new(nodes::HARD_BREAK), Node::text(" ")])]);
+        assert_eq!(pm_to_markdown(&doc), "a\n");
     }
 
     #[test]
