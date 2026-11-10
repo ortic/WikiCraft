@@ -298,6 +298,21 @@ test('template instructions, decisions and the decision log', async ({ browser }
   await ctx.close()
 })
 
+test('a template asks for its variables before creating the page', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState })
+  const page = await ctx.newPage()
+  await page.goto('/spaces/PRODUCT')
+  await page.getByRole('button', { name: 'Create', exact: true }).click()
+  const dialog = page.locator('.modal')
+  await dialog.getByRole('button', { name: /^Incident postmortem/ }).click()
+  await expect(dialog).toContainText('New page: Incident postmortem')
+  await dialog.getByLabel('Incident').fill('Checkout outage')
+  await dialog.getByRole('button', { name: 'Create page' }).click()
+  await expect(page).toHaveURL(/\/pages\//)
+  await expect(page.locator('textarea.page-title')).toHaveValue('Postmortem: Checkout outage', { timeout: 15_000 })
+  await ctx.close()
+})
+
 test('main screens have no serious accessibility violations (axe, WCAG 2.2 AA)', async ({ browser }) => {
   const problems: string[] = []
   const audit = async (p: Page, name: string) => {

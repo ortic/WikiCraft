@@ -728,3 +728,62 @@ async fn editors_watch_what_they_edit() {
     app.put(&editor, &format!("/pages/{id}/watch"), json!({})).await;
     assert!(watching(&editor).await);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn watching_a_page_and_the_pages_below() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    app.post(&owner, "/spaces", json!({"key": "SUB", "name": "Subtree"})).await;
+    let (bob, _) = app.user(&owner, "bob@acme.test", "member").await;
+    let page = |title: &'static str, parent: Option<String>| {
+        let owner = owner.clone();
+        let app = &app;
+        async move {
+            let (_, p) = app.post(&owner, "/pages", json!({"spaceKey": "SUB", "title": title, "parentId": parent})).await;
+            p["id"].as_str().unwrap().to_string()
+        }
+    };
+    let guide = page("Guide", None).await;
+    let chapter = page("Chapter", Some(guide.clone())).await;
+    let section = page("Section", Some(chapter.clone())).await;
+    let elsewhere = page("Elsewhere", None).await;
+    let bobs = |kind: &'static str| {
+        let bob = bob.clone();
+        let app = &app;
+        async move {
+            let (_, n) = app.get(&bob, "/notifications").await;
+            n["items"].as_array().unwrap().iter().filter(|n| n["kind"] == kind).map(|n| n["pageId"].as_str().unwrap().to_string()).collect::<Vec<_>>()
+        }
+    };
+
+    // a plain watch (no body) is just the page
+    let (st, _) = app.put(&bob, &format!("/pages/{guide}/watch"), json!({})).await;
+    assert_eq!(st, 204);
+    app.put(&owner, &format!("/pages/{section}/content"), json!({"markdown": "one"})).await;
+    assert!(bobs("page_updated").await.is_empty());
+
+    // with the pages below: changes anywhere below and new pages there
+    let (st, _) = app.put(&bob, &format!("/pages/{guide}/watch"), json!({"includeChildren": true})).await;
+    assert_eq!(st, 204);
+    let (_, s) = app.get(&bob, &format!("/pages/{section}")).await;
+    assert_eq!((s["watching"].as_bool(), s["watchedThrough"]["id"].as_str()), (Some(false), Some(guide.as_str())));
+    let (_, g) = app.get(&bob, &format!("/pages/{guide}")).await;
+    assert_eq!(g["watchingChildren"], true);
+    app.put(&owner, &format!("/pages/{section}/content"), json!({"markdown": "two"})).await;
+    app.put(&owner, &format!("/pages/{elsewhere}/content"), json!({"markdown": "not watched"})).await;
+    assert_eq!(bobs("page_updated").await, std::slice::from_ref(&section));
+    let appendix = page("Appendix", Some(chapter.clone())).await;
+    assert_eq!(bobs("page_created").await, std::slice::from_ref(&appendix));
+
+    // stopping to watch one page below opts out of just that page
+    app.delete(&bob, &format!("/pages/{section}/watch")).await;
+    app.put(&owner, &format!("/pages/{section}/content"), json!({"markdown": "three"})).await;
+    app.put(&owner, &format!("/pages/{chapter}/content"), json!({"markdown": "chapter"})).await;
+    assert_eq!(bobs("page_updated").await.iter().filter(|p| **p == section).count(), 1);
+    assert!(bobs("page_updated").await.contains(&chapter));
+
+    // a minor change through the API notifies nobody
+    let before = bobs("page_updated").await.len();
+    app.put(&owner, &format!("/pages/{chapter}/content"), json!({"markdown": "chapter, typo fixed", "minor": true})).await;
+    assert_eq!(bobs("page_updated").await.len(), before);
+}

@@ -95,6 +95,7 @@ export default function History() {
               <div style={{ minWidth: 0 }}>
                 <div>
                   <b>v{v.version}</b> <span className="faint small">{formatDate(v.createdAt)}</span>
+                  {v.minor && <span className="badge" title="Watchers weren't notified about this version">minor</span>}
                 </div>
                 <div className="mi-desc">{v.createdByName ?? 'Unknown'}{v.message ? ` — ${v.message}` : ''}</div>
               </div>

@@ -52,6 +52,12 @@ size.
 retrospective, runbook, product requirements …), plus your space's own templates. Grey
 instructional text in a template disappears when you start typing there.
 
+Templates can ask questions: write `{{Customer}}` (any name in double braces) in the page you save
+as a template, and *Create* asks for the customer before making the page, then puts the answer
+everywhere `{{Customer}}` appears, with its formatting. What you leave empty stays as a grey hint
+in the page. Text in code blocks and inline code is never a question. The built-in templates ask
+for what their title needs (*Postmortem: {{Incident}}*, *How to {{Task}}*, …).
+
 ## History
 
 Every editing session ends in a version. The clock icon shows all versions with what changed
@@ -70,10 +76,15 @@ and can make an earlier one current again.
 ## Watching and notifications
 
 You automatically watch pages you create, edit or are mentioned on (once you stop watching a
-page, editing it doesn't sign you up again). Watch other pages or
-whole spaces from the page menu, and mute a page you no longer care about. The bell lists mentions, replies and
+page, editing it doesn't sign you up again). Watch other pages, a page *and the pages below it*
+(changes and new pages there), or whole spaces from the page menu, and mute a page you no longer
+care about. Stopping to watch one page below a watched one leaves out just that page. The bell lists mentions, replies and
 changes; e-mail summaries of what you missed come a few minutes after, hourly or daily (your
 profile settings).
+
+Fixing a typo? Switch on **Minor change** under the page title while you edit: when everybody who
+edited in that session did, watchers aren't notified and the version is marked *minor* in the
+history.
 
 ## Sharing
 

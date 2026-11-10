@@ -74,10 +74,32 @@ pub async fn mark_read(State(state): State<AppState>, CurrentUser(user): Current
     Ok(StatusCode::NO_CONTENT)
 }
 
-pub async fn watch(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+#[derive(Deserialize, Default)]
+#[serde(rename_all = "camelCase", default)]
+pub struct WatchReq {
+    /// also the pages below it: their changes and new pages
+    include_children: bool,
+}
+
+/// `PUT /pages/{id}/watch` — watch the page (body optional: `{"includeChildren": true}` also
+/// watches everything below it).
+pub async fn watch(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>, body: axum::body::Bytes) -> ApiResult<StatusCode> {
+    let req: WatchReq = if body.iter().all(u8::is_ascii_whitespace) {
+        WatchReq::default()
+    } else {
+        serde_json::from_slice(&body).map_err(|e| crate::error::ApiError::bad(format!("invalid body: {e}")))?
+    };
     let p = Principal::load(&state, Some(user.clone())).await?;
     require_page(&state, &p, id, Need::View).await?;
-    sqlx::query("INSERT INTO watches (user_id, page_id) VALUES ($1, $2) ON CONFLICT DO NOTHING").bind(user.id).bind(id).execute(&state.db).await?;
+    sqlx::query(
+        "INSERT INTO watches (user_id, page_id, include_children) VALUES ($1, $2, $3)
+         ON CONFLICT (user_id, page_id) DO UPDATE SET include_children = EXCLUDED.include_children",
+    )
+    .bind(user.id)
+    .bind(id)
+    .bind(req.include_children)
+    .execute(&state.db)
+    .await?;
     sqlx::query("DELETE FROM page_unwatched WHERE user_id = $1 AND page_id = $2").bind(user.id).bind(id).execute(&state.db).await?;
     Ok(StatusCode::NO_CONTENT)
 }
@@ -165,15 +187,18 @@ pub async fn notify_page_updated(state: &AppState, page_id: Uuid, version: i32, 
     if crate::authz::in_draft(state, page_id).await {
         return Ok(());
     }
-    // watchers of the page and of its space (the list only shows pages they can see)
-    sqlx::query(
-        "INSERT INTO notifications (id, user_id, kind, page_id, actor_id, data)
+    // watchers of the page, of a page above it (with the pages below) and of its space (the
+    // list only shows pages they can see)
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "WITH RECURSIVE {ANCESTORS}
+         INSERT INTO notifications (id, user_id, kind, page_id, actor_id, data)
          SELECT gen_random_uuid(), x.user_id, 'page_updated', $1, $2, $3
          FROM (SELECT w.user_id FROM watches w WHERE w.page_id = $1
+               UNION {SUBTREE_WATCHERS}
                UNION SELECT sw.user_id FROM space_watches sw JOIN pages p ON p.space_id = sw.space_id WHERE p.id = $1) x
          JOIN users u ON u.id = x.user_id
-         WHERE u.status = 'active' AND x.user_id IS DISTINCT FROM $2",
-    )
+         WHERE u.status = 'active' AND x.user_id IS DISTINCT FROM $2"
+    )))
     .bind(page_id)
     .bind(editor)
     .bind(json!({ "version": version }))
@@ -182,17 +207,31 @@ pub async fn notify_page_updated(state: &AppState, page_id: Uuid, version: i32, 
     Ok(())
 }
 
-/// Tells the people watching a space about a new page in it.
+/// `ancestors(id)`: the pages above `$1`.
+const ANCESTORS: &str = "ancestors AS (
+    SELECT parent_id AS id, 1 AS depth FROM pages WHERE id = $1 AND parent_id IS NOT NULL
+    UNION ALL SELECT p.parent_id, a.depth + 1 FROM pages p JOIN ancestors a ON p.id = a.id WHERE p.parent_id IS NOT NULL AND a.depth < 200)";
+
+/// People watching a page above `$1` with the pages below, unless they stopped watching `$1`.
+const SUBTREE_WATCHERS: &str = "SELECT w.user_id FROM watches w JOIN ancestors a ON a.id = w.page_id
+    WHERE w.include_children AND NOT EXISTS (SELECT 1 FROM page_unwatched pu WHERE pu.user_id = w.user_id AND pu.page_id = $1)";
+
+/// Tells the people watching a space (or a page above the new one, with the pages below) about
+/// a new page.
 pub async fn notify_page_created(state: &AppState, page_id: Uuid, creator: Uuid) -> anyhow::Result<()> {
     if crate::authz::in_draft(state, page_id).await {
         return Ok(());
     }
-    sqlx::query(
-        "INSERT INTO notifications (id, user_id, kind, page_id, actor_id, data)
-         SELECT gen_random_uuid(), sw.user_id, 'page_created', $1, $2, '{}'::jsonb
-         FROM space_watches sw JOIN pages p ON p.space_id = sw.space_id JOIN users u ON u.id = sw.user_id
-         WHERE p.id = $1 AND u.status = 'active' AND sw.user_id <> $2",
-    )
+    // watchers of the space and of a page above it (with the pages below)
+    sqlx::query(sqlx::AssertSqlSafe(format!(
+        "WITH RECURSIVE {ANCESTORS}
+         INSERT INTO notifications (id, user_id, kind, page_id, actor_id, data)
+         SELECT gen_random_uuid(), x.user_id, 'page_created', $1, $2, '{{}}'::jsonb
+         FROM (SELECT sw.user_id FROM space_watches sw JOIN pages p ON p.space_id = sw.space_id WHERE p.id = $1
+               UNION {SUBTREE_WATCHERS}) x
+         JOIN users u ON u.id = x.user_id
+         WHERE u.status = 'active' AND x.user_id <> $2"
+    )))
     .bind(page_id)
     .bind(creator)
     .execute(&state.db)

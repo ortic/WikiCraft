@@ -367,7 +367,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Version list, view any version, restore version (creates a new version) `C D X O B`
 - [~] **P1** Visual diff between any two versions (inline + side-by-side, block-aware) `C X B` (paragraph diff vs previous version only)
 - [~] **P1** "What changed since my last visit" highlighting `C` (banner + diff since the last seen version; no inline highlight)
-- [ ] **P1** Minor edit flag (no notifications) `C X`
+- [x] **P1** Minor edit flag (no notifications) `C X` — "Minor change" switch while editing (per person and editing session, `PUT /pages/{id}/minor-edit`): the session's version is minor when everybody who edited it said so, watchers aren't notified, history shows *minor*; `minor` on named versions; webhooks carry it
 - [x] **P1** Personal unpublished drafts (new pages not yet published) and a drafts list `C D` — `pages.draft`: only the creator sees a draft and the pages below it (space admins included; enforced in the central access checks), no mentions / watcher notifications / webhooks until Publish (which also creates a "Published" version); new pages from the Create dialog start as drafts (remembered choice); draft banner + Publish, draft badge in the tree, Drafts on Home, `GET /me/drafts`
 - [ ] **P1** Scheduled publishing `C(apps)`
 - [x] **P1** Attachment versioning (upload a new version of the same file name) `C X` — version history in the attachments panel: download any version, make an earlier one current again (as a new version); `GET /attachments/{id}/versions`
@@ -394,7 +394,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P1** Page templates: global and per space; create from template; template picker with preview `C D X O B` (template picker with preview; space templates only for people who can see the space; workspace templates API only)
 - [~] **P1** Built-in template gallery (meeting notes, decision log, retrospective, how-to, troubleshooting, product
       requirements, project plan, runbook, incident postmortem, onboarding, architecture/arc42, ADR, OKRs) `C` (12 built-ins so far)
-- [~] **P1** Template variables / placeholders (prompt for values on create) `C X` ({date} only; no prompts)
+- [x] **P1** Template variables / placeholders (prompt for values on create) `C X` — `{{Name}}` in a template's title or text: the Create dialog asks for the values (`variables` on `POST /pages`, listed per template); answers keep the text's formatting, unanswered ones become instructional hints (dropped from titles), code is never scanned; built-ins ask for their title; `{date}` as before
 - [ ] **P1** Blueprints: template + index page + labels + naming rule (e.g. meeting notes auto-dated under a parent) `C`
 - [~] **P1** Default template per space / per parent (child pages inherit a template) `C X` (per space)
 - [ ] **P2** Space templates (full page structure) `C X`
@@ -500,7 +500,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 ### 4.15 Notifications & watching
 - [x] **P0** In-app notification center (mentions, comments, replies, shares, task assignments) `C D O`
 - [x] **P1** Email notifications with batching / digest (immediate, hourly, daily) `C DC X O` — per person: a few minutes after (default), at most hourly, or daily; only what's still unread goes out
-- [~] **P1** Watch page / page subtree / space / blog; auto-watch on create/edit `C X` (pages and spaces; auto-watch on create, on edit and when mentioned, unless you stopped watching on purpose; no subtree watch)
+- [~] **P1** Watch page / page subtree / space / blog; auto-watch on create/edit `C X` (pages, page subtrees (changes and new pages below; unwatching one page below opts out of it) and spaces; auto-watch on create, on edit and when mentioned, unless you stopped watching on purpose; no blog-only watch)
 - [x] **P1** Notification preferences per channel and event type `C`
 - [~] **P1** Slack / Microsoft Teams / Mattermost notifications (per user and per space channel) `C O` (per workspace/space channel via webhook formats; not per user)
 - [ ] **P2** Web push notifications (PWA) `C`

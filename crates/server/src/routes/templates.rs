@@ -6,7 +6,7 @@ use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::{Value, json};
 use uuid::Uuid;
-use wikicraft_doc_model::{Node, markdown};
+use wikicraft_doc_model::{Node, markdown, template};
 
 use crate::app::{AppState, new_id};
 use crate::auth::CurrentUser;
@@ -37,7 +37,7 @@ const BUILTINS: &[Builtin] = &[
         name: "Decision record",
         icon: "decision",
         description: "Document an important decision (ADR style)",
-        title: "Decision: ",
+        title: "Decision: {{Decision}}",
         markdown: "> [!NOTE]\n> **Status:** proposed · **Owner:** @ · **Due date:** {date}\n\n## Context\n\n{?What is the issue that we're seeing that is motivating this decision?}\n\n## Options considered\n\n| Option | Pros | Cons |\n| --- | --- | --- |\n| A |  |  |\n| B |  |  |\n\n## Decision\n\n{?What did we decide, and why?}\n\n## Consequences\n\n{?What becomes easier or harder because of this change?}\n",
     },
     Builtin {
@@ -45,7 +45,7 @@ const BUILTINS: &[Builtin] = &[
         name: "How-to article",
         icon: "compass",
         description: "Step-by-step instructions",
-        title: "How to ",
+        title: "How to {{Task}}",
         markdown: "{?Short introduction: what this guide helps you do.}\n\n> [!TIP]\n> Prerequisites: list anything the reader needs first.\n\n## Steps\n\n1. First step\n2. Second step\n3. Third step\n\n## Related articles\n\n- \n",
     },
     Builtin {
@@ -61,7 +61,7 @@ const BUILTINS: &[Builtin] = &[
         name: "Runbook",
         icon: "siren",
         description: "Operational procedure for an alert or incident",
-        title: "Runbook: ",
+        title: "Runbook: {{Service}}",
         markdown: "> [!WARNING]\n> Use this runbook when: describe the alert or symptom.\n\n## Impact\n\nWho is affected and how badly?\n\n## Diagnosis\n\n```bash\n# commands to check the system\n```\n\n## Mitigation\n\n1. \n\n## Escalation\n\n- On-call: @\n",
     },
     Builtin {
@@ -69,7 +69,7 @@ const BUILTINS: &[Builtin] = &[
         name: "Product requirements",
         icon: "clipboard",
         description: "Problem, goals, requirements and open questions",
-        title: "PRD: ",
+        title: "PRD: {{Product or feature}}",
         markdown: "| | |\n| --- | --- |\n| **Owner** | @ |\n| **Status** | Draft |\n| **Target release** | |\n\n## Problem\n\n## Goals\n\n- \n\n## Requirements\n\n| # | Requirement | User story | Importance |\n| --- | --- | --- | --- |\n| 1 |  |  | Must have |\n\n## Out of scope\n\n## Open questions\n\n- [ ] \n",
     },
     Builtin {
@@ -77,7 +77,7 @@ const BUILTINS: &[Builtin] = &[
         name: "Project plan",
         icon: "flag",
         description: "Goals, scope, milestones, risks and the team",
-        title: "Project plan: ",
+        title: "Project plan: {{Project}}",
         markdown: "| Owner | Status | Target date | Budget |\n| --- | --- | --- | --- |\n| @ | Planning | {date} |  |\n\n## Background\n\n{?Why are we doing this? Link the request, the problem or the opportunity.}\n\n## Goals and non-goals\n\n- Goal: \n- Not a goal: \n\n## Scope\n\n| In scope | Out of scope |\n| --- | --- |\n|  |  |\n\n## Milestones\n\n| Milestone | Date | Owner | Done |\n| --- | --- | --- | --- |\n| Kick-off | {date} | @ |  |\n\n## Risks\n\n| Risk | Likelihood | Impact | Mitigation |\n| --- | --- | --- | --- |\n|  |  |  |  |\n\n## Team\n\n- @\n",
     },
     Builtin {
@@ -85,7 +85,7 @@ const BUILTINS: &[Builtin] = &[
         name: "Objectives & key results",
         icon: "chart",
         description: "Quarterly OKRs with owners and progress",
-        title: "OKRs ",
+        title: "OKRs {{Quarter}}",
         markdown: "**Period:** · **Team:** \n\n## Objective 1: \n\n| Key result | Owner | Target | Current | Confidence |\n| --- | --- | --- | --- | --- |\n|  | @ |  |  |  |\n\n## Objective 2: \n\n| Key result | Owner | Target | Current | Confidence |\n| --- | --- | --- | --- | --- |\n|  | @ |  |  |  |\n\n## Notes\n\n- \n",
     },
     Builtin {
@@ -93,7 +93,7 @@ const BUILTINS: &[Builtin] = &[
         name: "Onboarding guide",
         icon: "people",
         description: "First days and weeks for a new team member",
-        title: "Welcome to the team, ",
+        title: "Welcome to the team, {{Name}}",
         markdown: "Welcome! This page helps you find your way in your first weeks.\n\n## Your first day\n\n- [ ] Get your laptop and accounts\n- [ ] Meet your buddy: @\n- [ ] Read the team's working agreements\n\n## Your first week\n\n- [ ] Set up the development environment\n- [ ] Ship a small change\n\n## Who's who\n\n| Person | Role | Ask them about |\n| --- | --- | --- |\n| @ |  |  |\n\n## Useful links\n\n- \n",
     },
     Builtin {
@@ -101,7 +101,7 @@ const BUILTINS: &[Builtin] = &[
         name: "Incident postmortem",
         icon: "shield",
         description: "Blameless review: timeline, impact, root cause, actions",
-        title: "Postmortem: ",
+        title: "Postmortem: {{Incident}}",
         markdown: "> [!WARNING]\n> **Severity:** · **Duration:** · **Incident commander:** @\n\n## Summary\n\nWhat happened, in two sentences.\n\n## Impact\n\nWho was affected and how?\n\n## Timeline\n\n| Time (UTC) | Event |\n| --- | --- |\n|  | Detected |\n|  | Mitigated |\n|  | Resolved |\n\n## Root cause\n\n## What went well\n\n- \n\n## What we'll change\n\n- [ ] \n",
     },
     Builtin {
@@ -109,7 +109,7 @@ const BUILTINS: &[Builtin] = &[
         name: "Architecture overview",
         icon: "server",
         description: "Context, building blocks, decisions and quality goals",
-        title: "Architecture: ",
+        title: "Architecture: {{System}}",
         markdown: "## Context and scope\n\nWhat does the system do, and who and what does it talk to?\n\n```mermaid\nflowchart LR\n  User --> App[Our system]\n  App --> DB[(Database)]\n  App --> Ext[External service]\n```\n\n## Quality goals\n\n| Goal | Scenario |\n| --- | --- |\n| Performance |  |\n| Security |  |\n\n## Building blocks\n\n| Component | Responsibility | Owner |\n| --- | --- | --- |\n|  |  | @ |\n\n## Key decisions\n\n- \n\n## Risks and technical debt\n\n- \n",
     },
     Builtin {
@@ -121,6 +121,12 @@ const BUILTINS: &[Builtin] = &[
         markdown: "**Overall:** On track\n\n## Highlights\n\n- \n\n## Progress\n\n| Workstream | Status | Notes |\n| --- | --- | --- |\n|  | On track |  |\n\n## Blockers and risks\n\n- \n\n## Next week\n\n- [ ] \n",
     },
 ];
+
+fn builtin_doc(b: &Builtin) -> Node {
+    let mut doc = markdown::markdown_to_pm(&fill(b.markdown)).doc;
+    wikicraft_doc_model::node::expand_placeholders(&mut doc);
+    doc
+}
 
 fn fill(s: &str) -> String {
     s.replace("{date}", &chrono::Utc::now().format("%Y-%m-%d").to_string())
@@ -135,6 +141,8 @@ pub struct TemplateItem {
     icon: Option<String>,
     builtin: bool,
     space_key: Option<String>,
+    /// `{{variables}}` the template asks for when a page is created from it
+    variables: Vec<String>,
 }
 
 #[derive(Deserialize)]
@@ -159,23 +167,26 @@ pub async fn list(State(state): State<AppState>, CurrentUser(user): CurrentUser,
             icon: Some(b.icon.into()),
             builtin: true,
             space_key: None,
+            variables: template::variables(Some(b.title), &builtin_doc(b)),
         })
         .collect();
-    let rows: Vec<(Uuid, String, Option<String>, Option<String>, Option<String>)> = sqlx::query_as(
-        "SELECT t.id, t.name, t.description, t.icon, s.key FROM templates t LEFT JOIN spaces s ON s.id = t.space_id
+    type Row = (Uuid, String, Option<String>, Option<String>, Option<String>, Option<String>, Value);
+    let rows: Vec<Row> = sqlx::query_as(
+        "SELECT t.id, t.name, t.description, t.icon, s.key, t.title, t.content FROM templates t LEFT JOIN spaces s ON s.id = t.space_id
          WHERE t.workspace_id = $1 AND (t.space_id IS NULL OR lower(s.key) = lower($2)) ORDER BY lower(t.name)",
     )
     .bind(user.workspace_id)
     .bind(space_key)
     .fetch_all(&state.db)
     .await?;
-    out.extend(rows.into_iter().map(|(id, name, description, icon, space_key)| TemplateItem {
+    out.extend(rows.into_iter().map(|(id, name, description, icon, space_key, title, content)| TemplateItem {
         id: id.to_string(),
         name,
         description,
         icon,
         builtin: false,
         space_key,
+        variables: Node::from_json(&content).map(|doc| template::variables(title.as_deref(), &doc)).unwrap_or_default(),
     }));
     Ok(Json(out))
 }
@@ -202,16 +213,17 @@ pub async fn resolve_for(state: &AppState, p: &Principal, workspace: Uuid, id: &
 /// `GET /templates/{id}/preview` — what a page from the template would look like.
 pub async fn preview(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<String>) -> ApiResult<Json<Value>> {
     let p = Principal::load(&state, Some(user.clone())).await?;
-    let (title, doc) = resolve_for(&state, &p, user.workspace_id, &id).await?;
+    let (title, mut doc) = resolve_for(&state, &p, user.workspace_id, &id).await?;
+    let variables = template::variables(title.as_deref(), &doc);
+    // variables show as the hints they become when nobody answers them
+    template::fill(&mut doc, &Default::default());
     let html = wikicraft_doc_model::html::render(&doc, &wikicraft_doc_model::html::HtmlOptions::default());
-    Ok(Json(json!({ "title": title, "html": html })))
+    Ok(Json(json!({ "title": title, "html": html, "variables": variables })))
 }
 
 pub async fn resolve(state: &AppState, workspace: Uuid, id: &str) -> ApiResult<(Option<String>, Node)> {
     if let Some(b) = BUILTINS.iter().find(|b| b.id == id) {
-        let mut doc = markdown::markdown_to_pm(&fill(b.markdown)).doc;
-        wikicraft_doc_model::node::expand_placeholders(&mut doc);
-        return Ok((Some(fill(b.title)), doc));
+        return Ok((Some(fill(b.title)), builtin_doc(b)));
     }
     let id: Uuid = id.parse().map_err(|_| ApiError::NotFound("template"))?;
     let row: Option<(Option<String>, Value)> =

@@ -14,6 +14,7 @@ import CommentsPanel from '../components/CommentsPanel'
 import AttachmentsPanel from '../components/AttachmentsPanel'
 import RestrictionsDialog from '../components/RestrictionsDialog'
 import ShareDialog from '../components/ShareDialog'
+import MinorEditToggle from '../components/MinorEdit'
 
 type Panel = 'comments' | 'attachments' | null
 
@@ -161,6 +162,12 @@ export default function PageView() {
     qc.invalidateQueries({ queryKey: ['page', p.id] })
     toast(p.watching ? 'You will no longer be notified about changes' : 'You will be notified about changes and comments')
   }
+  const watchWithChildren = async () => {
+    setMenu(false)
+    await api.put(`/pages/${p.id}/watch`, { includeChildren: true })
+    qc.invalidateQueries({ queryKey: ['page', p.id] })
+    toast('You will be notified about this page and the pages below it, including new ones')
+  }
   const saveAsTemplate = async () => {
     setMenu(false)
     const name = window.prompt('Template name', p.title)
@@ -231,8 +238,16 @@ export default function PageView() {
                 )}
                 {user && (
                   <div className="menu-item" onClick={toggleWatch}>
-                    {p.watching ? <EyeOff size={15} /> : <Eye size={15} />} {p.watching ? 'Stop watching' : 'Watch page'}
+                    {p.watching ? <EyeOff size={15} /> : <Eye size={15} />} {p.watching ? (p.watchingChildren ? 'Stop watching this and the pages below' : 'Stop watching') : 'Watch page'}
                   </div>
+                )}
+                {user && !p.watchingChildren && (
+                  <div className="menu-item" onClick={watchWithChildren}>
+                    <Eye size={15} /> {p.watching ? 'Also watch the pages below' : 'Watch page and the pages below'}
+                  </div>
+                )}
+                {user && !p.watching && p.watchedThrough && (
+                  <div className="menu-note faint small">You get updates through “{p.watchedThrough.title}”</div>
                 )}
                 {user && space.data && (
                   <div
@@ -371,6 +386,7 @@ export default function PageView() {
             )}
             <VerificationBadge pageId={p.id} onClick={canEdit ? () => setVerifyOpen(true) : undefined} />
             <PageStatus pageId={p.id} status={p.pageStatus} canEdit={canEdit} open={statusOpen} onOpenChange={setStatusOpen} />
+            {canEdit && !p.draft && p.kind !== 'folder' && <MinorEditToggle pageId={p.id} />}
             {!canEdit && <span className="badge">Read only</span>}
           </div>
           {p.access.archivedPage && (

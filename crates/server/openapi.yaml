@@ -179,6 +179,12 @@ components:
           type: string
           description: alternative to content
         templateId: *id001
+        variables:
+          type: object
+          additionalProperties:
+            type: string
+          description: answers for the template's {{variables}} (by name); a variable without an answer becomes a hint to
+            fill in, an empty answer removes it
       required:
       - spaceKey
     Comment:
@@ -1996,6 +2002,9 @@ paths:
                   $ref: '#/components/schemas/PmNode'
                 markdown: *id001
                 message: *id001
+                minor:
+                  type: boolean
+                  description: 'a minor change: watchers aren''t notified'
       responses:
         '200':
           description: OK
@@ -2221,7 +2230,7 @@ paths:
     get:
       tags:
       - Pages
-      summary: Version history
+      summary: 'Version history (minor: watchers weren''t notified)'
       operationId: get_pages_id_versions
       parameters:
       - name: id
@@ -2255,9 +2264,74 @@ paths:
               type: object
               properties:
                 message: *id001
+                minor:
+                  type: boolean
+                  description: don't notify watchers
       responses:
         '200':
           description: OK
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /pages/{id}/minor-edit:
+    get:
+      tags:
+      - Pages
+      summary: Whether my changes in the open editing session are minor
+      operationId: get_pages_id_minor_edit
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  minor: *id003
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags:
+      - Pages
+      summary: 'Mark my changes in the open editing session as minor: when everybody who edited says so, its version doesn''t
+        notify watchers'
+      operationId: put_pages_id_minor_edit
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                minor: *id003
+              required:
+              - minor
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  minor: *id003
         4XX:
           description: Error
           content:
@@ -2910,13 +2984,21 @@ paths:
     put:
       tags:
       - Pages
-      summary: Watch (notifications)
+      summary: Watch (notifications); with includeChildren also the pages below it, including new ones (body optional)
       operationId: put_pages_id_watch
       parameters:
       - name: id
         in: path
         required: true
         schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                includeChildren: *id003
       responses:
         '204': *id007
         4XX:
@@ -4210,7 +4292,7 @@ paths:
     get:
       tags:
       - Templates
-      summary: Built-in and custom templates
+      summary: Built-in and custom templates, each with the {{variables}} it asks for
       operationId: get_templates
       parameters:
       - name: space
@@ -4221,6 +4303,31 @@ paths:
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: *id001
+                    name: *id001
+                    description:
+                      type:
+                      - string
+                      - 'null'
+                    icon:
+                      type:
+                      - string
+                      - 'null'
+                    builtin: *id003
+                    spaceKey:
+                      type:
+                      - string
+                      - 'null'
+                    variables:
+                      type: array
+                      items: *id001
         4XX:
           description: Error
           content:
@@ -4277,7 +4384,7 @@ paths:
     get:
       tags:
       - Templates
-      summary: What a page from the template looks like (title and rendered HTML)
+      summary: What a page from the template looks like (title and rendered HTML) and the {{variables}} it asks for
       operationId: get_templates_id_preview
       parameters:
       - name: id
@@ -4297,6 +4404,9 @@ paths:
                     - string
                     - 'null'
                   html: *id001
+                  variables:
+                    type: array
+                    items: *id001
         4XX:
           description: Error
           content:

@@ -21,7 +21,7 @@ schemas = {
     "PageAccess": obj({"view": boolean, "comment": boolean, "edit": boolean, "admin": boolean}),
     "Page": obj({"id": uuid, "spaceId": uuid, "spaceKey": txt, "spaceName": txt, "parentId": {"type": ["string", "null"], "format": "uuid"}, "kind": {"enum": ["page", "folder", "blog"]}, "title": txt, "content": S("PmNode"), "version": num, "labels": arr(txt), "restricted": boolean, "createdAt": dt, "updatedAt": dt, "updatedByName": {"type": ["string", "null"]}, "breadcrumbs": arr(obj({"id": uuid, "title": txt})), "access": S("PageAccess")}),
     "PageListItem": obj({"id": uuid, "title": txt, "spaceId": uuid, "spaceKey": txt, "spaceName": txt, "updatedAt": dt, "updatedByName": {"type": ["string", "null"]}}),
-    "NewPage": obj({"spaceKey": txt, "parentId": uuid, "title": txt, "draft": {"type": "boolean", "description": "an unpublished draft only you see until you publish it"}, "kind": {"enum": ["page", "folder", "blog"]}, "content": S("PmNode"), "markdown": {"type": "string", "description": "alternative to content"}, "templateId": txt}, ["spaceKey"]),
+    "NewPage": obj({"spaceKey": txt, "parentId": uuid, "title": txt, "draft": {"type": "boolean", "description": "an unpublished draft only you see until you publish it"}, "kind": {"enum": ["page", "folder", "blog"]}, "content": S("PmNode"), "markdown": {"type": "string", "description": "alternative to content"}, "templateId": txt, "variables": {"type": "object", "additionalProperties": {"type": "string"}, "description": "answers for the template's {{variables}} (by name); a variable without an answer becomes a hint to fill in, an empty answer removes it"}}, ["spaceKey"]),
     "Comment": obj({"id": uuid, "pageId": uuid, "parentId": {"type": ["string", "null"], "format": "uuid"}, "authorId": uuid, "authorName": txt, "content": S("PmNode"), "inline": {"type": ["object", "null"]}, "resolvedAt": {"type": ["string", "null"], "format": "date-time"}, "createdAt": dt, "likeCount": num, "liked": boolean}),
     "Attachment": obj({"id": uuid, "pageId": uuid, "filename": txt, "mediaType": txt, "size": num, "version": num, "createdByName": {"type": ["string", "null"]}, "createdAt": dt}),
     "SearchHit": obj({"pageId": uuid, "title": txt, "snippet": {"type": "string", "description": "HTML with <b> highlights"}, "spaceKey": txt, "spaceName": txt, "score": {"type": "number"}}),
@@ -126,7 +126,7 @@ op("/pages", "post", "Pages", "Create a page", req=body(S("NewPage")), res=resp(
 op("/pages/{id}", "get", "Pages", "A page (content, labels, access)", res=resp(S("Page")), public=True)
 op("/pages/{id}", "patch", "Pages", "Rename; set icon (symbol), cover (gradient:<preset> | attachment | https URL), status, full width", req=body(obj({"title": txt, "icon": txt, "cover": txt, "pageStatus": txt, "fullWidth": boolean})), res=NO)
 op("/pages/{id}", "delete", "Pages", "Move a page and its sub-pages to the trash", res=NO)
-op("/pages/{id}/content", "put", "Pages", "Replace the content (live editors get the change)", req=body(obj({"content": S("PmNode"), "markdown": txt, "message": txt})))
+op("/pages/{id}/content", "put", "Pages", "Replace the content (live editors get the change)", req=body(obj({"content": S("PmNode"), "markdown": txt, "message": txt, "minor": {"type": "boolean", "description": "a minor change: watchers aren't notified"}})))
 op("/pages/{id}/move", "post", "Pages", "Move (parent, position, other space)", req=body(obj({"parentId": uuid, "spaceKey": txt, "position": {"type": "number"}})), res=NO)
 op("/pages/{id}/copy", "post", "Pages", "Copy a page (optionally with sub-pages)", req=body(obj({"includeChildren": boolean, "parentId": uuid})))
 op("/pages/{id}/publish", "post", "Pages", "Publish your unpublished draft: everyone who can see its place in the space sees it", res=NO)
@@ -135,8 +135,10 @@ op("/pages/{id}/viewers", "get", "Pages", "Who viewed the page and when (editors
 op("/pages/{id}/purge", "post", "Pages", "Delete a trashed page for good, with its trashed sub-pages, history, comments and attachments (space admins)", res=resp(obj({"purged": num})))
 op("/pages/{id}/restore", "post", "Pages", "Restore from the trash", res=NO)
 op("/pages/{id}/children", "get", "Pages", "Child pages", query=[q("depth", "levels", num)], public=True)
-op("/pages/{id}/versions", "get", "Pages", "Version history")
-op("/pages/{id}/versions", "post", "Pages", "Save a named version", req=body(obj({"message": txt})))
+op("/pages/{id}/versions", "get", "Pages", "Version history (minor: watchers weren't notified)")
+op("/pages/{id}/versions", "post", "Pages", "Save a named version", req=body(obj({"message": txt, "minor": {"type": "boolean", "description": "don't notify watchers"}})))
+op("/pages/{id}/minor-edit", "get", "Pages", "Whether my changes in the open editing session are minor", res=resp(obj({"minor": boolean})))
+op("/pages/{id}/minor-edit", "put", "Pages", "Mark my changes in the open editing session as minor: when everybody who edited says so, its version doesn't notify watchers", req=body(obj({"minor": boolean}, ["minor"])), res=resp(obj({"minor": boolean})))
 op("/pages/{id}/versions/{version}", "get", "Pages", "A past version")
 op("/pages/{id}/versions/{version}/restore", "post", "Pages", "Restore a version (creates a new one)")
 op("/pages/{id}/restrictions", "get", "Permissions", "Page view/edit restrictions (own and inherited)")
@@ -164,7 +166,7 @@ op("/pages/{id}/access-request", "post", "Pages", "Ask the page's admins for acc
 op("/pages/{id}/verification/request", "post", "Pages", "Ask someone who may edit the page to review and verify it", req=body(obj({"userId": uuid, "note": txt})), res=resp(None, "204", "Requested"))
 op("/comments/{id}/like", "put", "Comments", "Like a comment", res=NO)
 op("/comments/{id}/like", "delete", "Comments", "Remove your like", res=NO)
-op("/pages/{id}/watch", "put", "Pages", "Watch (notifications)", res=NO)
+op("/pages/{id}/watch", "put", "Pages", "Watch (notifications); with includeChildren also the pages below it, including new ones (body optional)", req=body(obj({"includeChildren": boolean})), res=NO)
 op("/pages/{id}/watch", "delete", "Pages", "Stop watching", res=NO)
 op("/pages/{id}/export", "get", "Import & export", "Export one page (Markdown, HTML, Word or JSON)", query=[q("format", "md | html | docx | json"), q("tree", "docx: true = include every descendant page you can see")], public=True)
 op("/pages/{id}/collab", "get", "Pages", "Live collaboration WebSocket (y-websocket protocol)", public=True)
@@ -211,10 +213,10 @@ op("/ai/ask", "post", "Search", "Ask the wiki: an answer from the pages you can 
 op("/reports/verification", "get", "Reports", "Verified pages by state", query=[q("status", "expired | verified | edited"), q("space", "space key")], public=True)
 op("/reports/tasks", "get", "Reports", "Task report (tasks-report-macro)", query=[q("spaces", "keys"), q("labels", "labels"), q("status", "open | done | all")], public=True)
 op("/reports/decisions", "get", "Reports", "Decision log (decisionreport): decision items of the matching pages", query=[q("spaces", "keys"), q("labels", "labels"), q("status", "decided = only decided items"), q("max", "rows")], public=True)
-op("/templates", "get", "Templates", "Built-in and custom templates", query=[q("space", "space key")])
+op("/templates", "get", "Templates", "Built-in and custom templates, each with the {{variables}} it asks for", query=[q("space", "space key")], res=resp(arr(obj({"id": txt, "name": txt, "description": {"type": ["string", "null"]}, "icon": {"type": ["string", "null"]}, "builtin": boolean, "spaceKey": {"type": ["string", "null"]}, "variables": arr(txt)}))))
 op("/templates", "post", "Templates", "Save a template", req=body(obj({"name": txt, "description": txt, "spaceKey": txt, "content": S("PmNode"), "pageId": uuid})))
 op("/templates/{id}", "delete", "Templates", "Delete a template", res=NO)
-op("/templates/{id}/preview", "get", "Templates", "What a page from the template looks like (title and rendered HTML)", res=resp(obj({"title": {"type": ["string", "null"]}, "html": txt})))
+op("/templates/{id}/preview", "get", "Templates", "What a page from the template looks like (title and rendered HTML) and the {{variables}} it asks for", res=resp(obj({"title": {"type": ["string", "null"]}, "html": txt, "variables": arr(txt)})))
 # import / export / jobs
 op("/imports/confluence", "post", "Import & export", "Import a Confluence space export (XML or Cloud CSV zip) as a job", req=multipart({"options": {"type": "string", "description": "JSON ImportOptions"}}), res=resp(obj({"jobId": uuid}), "202", "Queued"))
 op("/imports/confluence/analyze", "post", "Import & export", "Dry run: what an import would create", req=multipart({}))

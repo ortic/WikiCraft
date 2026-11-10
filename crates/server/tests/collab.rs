@@ -281,3 +281,71 @@ async fn old_pages_are_upgraded_in_the_background() {
         }
     }
 }
+
+/// Minor changes: when everybody who edited in a session marked it minor, the session's version
+/// says so and watchers aren't notified; the flag ends with the session.
+#[tokio::test(flavor = "multi_thread")]
+async fn minor_edits_dont_notify_watchers() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (_, space) = app.post(&owner, "/spaces", json!({"key": "MIN", "name": "Minor"})).await;
+    let page = space["homePageId"].as_str().unwrap().to_string();
+    let (bob, _) = app.user(&owner, "bob@acme.test", "member").await;
+    let (st, _) = app.put(&bob, &format!("/pages/{page}/watch"), json!({})).await;
+    assert!(st < 300);
+    let (_, t) = app.post(&owner, "/me/tokens", json!({"name": "ws"})).await;
+    let token = t["token"].as_str().unwrap().to_string();
+    // nobody's editing: nothing to mark
+    let (st, _) = app.put(&owner, &format!("/pages/{page}/minor-edit"), json!({"minor": true})).await;
+    assert_eq!(st, 409);
+
+    // a minor session
+    let mut a = Peer::connect(&app.base, &page, &token).await;
+    let (st, r) = app.put(&owner, &format!("/pages/{page}/minor-edit"), json!({"minor": true})).await;
+    assert_eq!((st, r["minor"].as_bool()), (200, Some(true)));
+    a.append_paragraph("typo fix").await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    drop(a);
+    let (v, minor) = latest_version(&app, &page, 2).await;
+    assert!(minor, "v{v} is minor");
+    tokio::time::sleep(Duration::from_millis(300)).await;
+    assert_eq!(updates_for(&app, &bob).await, 0, "watchers aren't told about minor changes");
+    let (_, versions) = app.get(&owner, &format!("/pages/{page}/versions")).await;
+    assert_eq!(versions[0]["minor"], true);
+
+    // the next session is a normal one again
+    let mut a = Peer::connect(&app.base, &page, &token).await;
+    let (_, r) = app.get(&owner, &format!("/pages/{page}/minor-edit")).await;
+    assert_eq!(r["minor"], false);
+    a.append_paragraph("a real change").await;
+    tokio::time::sleep(Duration::from_millis(200)).await;
+    drop(a);
+    let (_, minor) = latest_version(&app, &page, v + 1).await;
+    assert!(!minor);
+    app.eventually(|| async { (updates_for(&app, &bob).await == 1).then_some(()) }).await;
+
+    // a named version can be minor too
+    app.put(&owner, &format!("/pages/{page}/content"), json!({"markdown": "Rewritten"})).await;
+    let (st, saved) = app.post(&owner, &format!("/pages/{page}/versions"), json!({"message": "cleanup", "minor": true})).await;
+    assert_eq!(st, 200, "{saved}");
+    let (_, versions) = app.get(&owner, &format!("/pages/{page}/versions")).await;
+    assert!(versions.as_array().unwrap().iter().any(|v| v["message"] == "cleanup" && v["minor"] == true), "{versions}");
+}
+
+async fn updates_for(app: &common::TestApp, who: &reqwest::Client) -> usize {
+    let (_, n) = app.get(who, "/notifications").await;
+    n["items"].as_array().unwrap().iter().filter(|n| n["kind"] == "page_updated").count()
+}
+
+/// The newest version of a page once it's at least `min`: (version, minor).
+async fn latest_version(app: &common::TestApp, page: &str, min: i32) -> (i32, bool) {
+    app.eventually(|| async {
+        let row: Option<(i32, bool)> = sqlx::query_as("SELECT version, minor FROM page_versions WHERE page_id = $1::uuid ORDER BY version DESC LIMIT 1")
+            .bind(page)
+            .fetch_optional(&app.state.db)
+            .await
+            .unwrap();
+        row.filter(|r| r.0 >= min)
+    })
+    .await
+}

@@ -113,6 +113,7 @@ pub fn router(state: AppState) -> Router {
         .route("/me/drafts", get(pages::my_drafts))
         .route("/pages/{id}/children", get(pages::children))
         .route("/pages/{id}/versions", get(pages::versions).post(pages::save_version))
+        .route("/pages/{id}/minor-edit", get(pages::get_minor_edit).put(pages::set_minor_edit))
         .route("/pages/{id}/versions/{version}", get(pages::get_version))
         .route("/pages/{id}/versions/{version}/restore", post(pages::restore_version))
         .route("/pages/{id}/restrictions", get(pages::get_restrictions).put(pages::put_restrictions))

@@ -69,6 +69,11 @@ pub async fn insert_page<'e, E: PgExecutor<'e> + Copy>(db: E, mut p: NewPage) ->
 
 /// Snapshot the current content as a new version if it differs from the latest version.
 pub async fn create_version(state: &AppState, page_id: Uuid, editor: Option<Uuid>, message: Option<String>) -> anyhow::Result<Option<i32>> {
+    create_version_with(state, page_id, editor, message, false).await
+}
+
+/// [`create_version`]; a `minor` version doesn't notify the page's watchers.
+pub async fn create_version_with(state: &AppState, page_id: Uuid, editor: Option<Uuid>, message: Option<String>, minor: bool) -> anyhow::Result<Option<i32>> {
     let message_for_hook = message.clone();
     let mut tx = state.db.begin().await?;
     let row: Option<(String, Value, i32)> =
@@ -87,7 +92,7 @@ pub async fn create_version(state: &AppState, page_id: Uuid, editor: Option<Uuid
         return Ok(None);
     }
     let next = latest.map(|l| l.0 + 1).unwrap_or(1);
-    sqlx::query("INSERT INTO page_versions (id, page_id, version, title, content, created_by, message) VALUES ($1, $2, $3, $4, $5, $6, $7)")
+    sqlx::query("INSERT INTO page_versions (id, page_id, version, title, content, created_by, message, minor) VALUES ($1, $2, $3, $4, $5, $6, $7, $8)")
         .bind(new_id())
         .bind(page_id)
         .bind(next)
@@ -95,6 +100,7 @@ pub async fn create_version(state: &AppState, page_id: Uuid, editor: Option<Uuid
         .bind(&content)
         .bind(editor)
         .bind(message)
+        .bind(minor)
         .execute(&mut *tx)
         .await?;
     sqlx::query("UPDATE pages SET version = $2 WHERE id = $1").bind(page_id).bind(next).execute(&mut *tx).await?;
@@ -104,10 +110,10 @@ pub async fn create_version(state: &AppState, page_id: Uuid, editor: Option<Uuid
     {
         tracing::warn!("auto-watch failed: {e}");
     }
-    if let Err(e) = crate::routes::notifications::notify_page_updated(state, page_id, next, editor).await {
+    if !minor && let Err(e) = crate::routes::notifications::notify_page_updated(state, page_id, next, editor).await {
         tracing::warn!("watch notifications failed: {e:#}");
     }
-    crate::webhooks::emit_page(state, "page.updated", page_id, editor, json!({"version": next, "message": message_for_hook})).await;
+    crate::webhooks::emit_page(state, "page.updated", page_id, editor, json!({"version": next, "message": message_for_hook, "minor": minor})).await;
     Ok(Some(next))
 }
 
@@ -140,6 +146,9 @@ pub struct CreatePage {
     /// an unpublished draft only its creator sees until `POST /pages/{id}/publish`
     #[serde(default)]
     draft: bool,
+    /// answers for the template's `{{variables}}`, by name
+    #[serde(default)]
+    variables: std::collections::HashMap<String, String>,
 }
 
 pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUser, Json(req): Json<CreatePage>) -> ApiResult<(StatusCode, Json<Value>)> {
@@ -181,8 +190,9 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
         }
         (None, Some(md), _) => markdown::markdown_to_pm(&md).doc,
         (None, None, Some(t)) => {
-            let (title, doc) = crate::routes::templates::resolve_for(&state, &p, user.workspace_id, t).await?;
-            template_title = title;
+            let (title, mut doc) = crate::routes::templates::resolve_for(&state, &p, user.workspace_id, t).await?;
+            wikicraft_doc_model::template::fill(&mut doc, &req.variables);
+            template_title = title.map(|t| wikicraft_doc_model::template::fill_title(&t, &req.variables));
             doc
         }
         _ => Node::empty_doc(),
@@ -430,11 +440,28 @@ pub async fn get(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path
         Some(u) => changed_since(&state, u.id, id, page.version).await?,
         None => Value::Null,
     };
-    let watching: bool = match &user {
+    // watching it directly (maybe with the pages below), or through a page above it
+    let (watching, watching_children, watched_through): (bool, bool, Option<Value>) = match &user {
         Some(u) => {
-            sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM watches WHERE user_id = $1 AND page_id = $2)").bind(u.id).bind(id).fetch_one(&state.db).await?
+            let direct: Option<bool> = sqlx::query_scalar("SELECT include_children FROM watches WHERE user_id = $1 AND page_id = $2")
+                .bind(u.id)
+                .bind(id)
+                .fetch_optional(&state.db)
+                .await?;
+            let through: Option<(Uuid, String)> = sqlx::query_as(
+                "WITH RECURSIVE up AS (
+                    SELECT parent_id AS id, 1 AS depth FROM pages WHERE id = $2 AND parent_id IS NOT NULL
+                    UNION ALL SELECT p.parent_id, up.depth + 1 FROM pages p JOIN up ON p.id = up.id WHERE p.parent_id IS NOT NULL AND up.depth < 200)
+                 SELECT p.id, p.title FROM up JOIN watches w ON w.page_id = up.id AND w.user_id = $1 AND w.include_children
+                 JOIN pages p ON p.id = up.id ORDER BY up.depth LIMIT 1",
+            )
+            .bind(u.id)
+            .bind(id)
+            .fetch_optional(&state.db)
+            .await?;
+            (direct.is_some(), direct.unwrap_or(false), through.map(|(id, title)| json!({"id": id, "title": title})))
         }
-        None => false,
+        None => (false, false, None),
     };
     let mut v = serde_json::to_value(&page)?;
     let o = v.as_object_mut().expect("object");
@@ -445,6 +472,8 @@ pub async fn get(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path
     o.insert("restricted".into(), json!(restricted));
     o.insert("favorite".into(), json!(favorite));
     o.insert("watching".into(), json!(watching));
+    o.insert("watchingChildren".into(), json!(watching_children));
+    o.insert("watchedThrough".into(), json!(watched_through));
     o.insert("views".into(), json!(views));
     o.insert("viewers".into(), json!(viewers));
     o.insert("commentCount".into(), json!(comment_count));
@@ -518,6 +547,9 @@ pub struct PutContent {
     content: Option<Value>,
     markdown: Option<String>,
     message: Option<String>,
+    /// a minor change: watchers aren't notified
+    #[serde(default)]
+    minor: bool,
 }
 
 /// Replaces the page content (API clients). Live editors receive the change immediately.
@@ -544,7 +576,9 @@ pub async fn put_content(
     let room = state.rooms.get_or_load(&state, id).await?;
     room.replace_content(&doc, Some(user.id));
     crate::collab::persist_with(&state, &room, false).await?;
-    let v = create_version(&state, id, Some(user.id), req.message).await?;
+    // this version takes the session's changes so far: minor if asked, or if everybody said so
+    let minor = room.take_minor() || req.minor;
+    let v = create_version_with(&state, id, Some(user.id), req.message, minor).await?;
     Ok(Json(json!({ "version": v })))
 }
 
@@ -925,13 +959,15 @@ pub struct VersionRow {
     created_by_name: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
     message: Option<String>,
+    /// watchers weren't notified about it
+    minor: bool,
 }
 
 pub async fn versions(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path(id): Path<Uuid>) -> ApiResult<Json<Vec<VersionRow>>> {
     let p = Principal::load(&state, user).await?;
     require_page(&state, &p, id, Need::View).await?;
     let rows = sqlx::query_as::<_, VersionRow>(
-        "SELECT v.version, v.title, v.created_by, u.name AS created_by_name, v.created_at, v.message FROM page_versions v LEFT JOIN users u ON u.id = v.created_by WHERE v.page_id = $1 ORDER BY v.version DESC",
+        "SELECT v.version, v.title, v.created_by, u.name AS created_by_name, v.created_at, v.message, v.minor FROM page_versions v LEFT JOIN users u ON u.id = v.created_by WHERE v.page_id = $1 ORDER BY v.version DESC",
     )
     .bind(id)
     .fetch_all(&state.db)
@@ -942,6 +978,9 @@ pub async fn versions(State(state): State<AppState>, MaybeUser(user): MaybeUser,
 #[derive(Deserialize)]
 pub struct SaveVersion {
     message: Option<String>,
+    /// don't notify watchers about this version
+    #[serde(default)]
+    minor: bool,
 }
 
 pub async fn save_version(
@@ -952,11 +991,42 @@ pub async fn save_version(
 ) -> ApiResult<Json<Value>> {
     let p = Principal::load(&state, Some(user.clone())).await?;
     require_page(&state, &p, id, Need::Edit).await?;
+    let mut minor = req.minor;
     if let Some(room) = state.rooms.get(id) {
         crate::collab::persist_with(&state, &room, false).await?;
+        // the session's changes so far go into this version: minor if everybody said so
+        minor |= room.take_minor();
     }
-    let v = create_version(&state, id, Some(user.id), req.message.filter(|m| !m.trim().is_empty())).await?;
+    let v = create_version_with(&state, id, Some(user.id), req.message.filter(|m| !m.trim().is_empty()), minor).await?;
     Ok(Json(json!({ "version": v })))
+}
+
+#[derive(Deserialize)]
+pub struct MinorEdit {
+    minor: bool,
+}
+
+/// `GET /pages/{id}/minor-edit` — whether my changes in the open editing session are minor.
+pub async fn get_minor_edit(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<Json<Value>> {
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    require_page(&state, &p, id, Need::Edit).await?;
+    let minor = state.rooms.get(id).is_some_and(|r| r.is_minor(user.id));
+    Ok(Json(json!({ "minor": minor })))
+}
+
+/// `PUT /pages/{id}/minor-edit` — marks my changes in the open editing session as minor (or
+/// not): when everybody who edited says so, the session's version doesn't notify watchers.
+pub async fn set_minor_edit(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(req): Json<MinorEdit>,
+) -> ApiResult<Json<Value>> {
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    require_page(&state, &p, id, Need::Edit).await?;
+    let room = state.rooms.get(id).ok_or_else(|| ApiError::Conflict("the page isn't open for editing".into()))?;
+    room.set_minor(user.id, req.minor);
+    Ok(Json(json!({ "minor": req.minor })))
 }
 
 pub async fn get_version(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path((id, version)): Path<(Uuid, i32)>) -> ApiResult<Json<Value>> {

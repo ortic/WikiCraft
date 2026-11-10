@@ -13,6 +13,8 @@ interface Template {
   icon: string | null
   builtin: boolean
   spaceKey: string | null
+  /** `{{variables}}` asked for when a page is created from the template */
+  variables?: string[]
 }
 
 /** "Create" dialog: blank page or one of the templates. */
@@ -41,10 +43,21 @@ export default function TemplatePicker({ spaceKey, parentId, onClose }: { spaceK
   const space = useQuery({ queryKey: ['space', spaceKey], queryFn: () => api.get<{ defaultTemplate?: string | null }>(`/spaces/${spaceKey}`) })
   const def = space.data?.defaultTemplate ?? null
   const ordered = [...(templates.data ?? [])].sort((a, b) => Number(b.id === def) - Number(a.id === def))
-  const create = async (templateId?: string) => {
+  // a template with variables asks for their values first
+  const [filling, setFilling] = useState<Template | null>(null)
+  const [answers, setAnswers] = useState<Record<string, string>>({})
+  const choose = (t: Template) => {
+    if (t.variables?.length) {
+      setAnswers({})
+      setFilling(t)
+    } else {
+      void create(t.id)
+    }
+  }
+  const create = async (templateId?: string, variables?: Record<string, string>) => {
     setBusy(true)
     try {
-      const r = await api.post<{ id: string }>('/pages', { spaceKey, parentId: parentId ?? undefined, templateId, title: templateId ? undefined : 'Untitled', blank: !templateId, draft })
+      const r = await api.post<{ id: string }>('/pages', { spaceKey, parentId: parentId ?? undefined, templateId, title: templateId ? undefined : 'Untitled', blank: !templateId, draft, variables })
       qc.invalidateQueries({ queryKey: ['tree', spaceKey] })
       onClose()
       nav(`/pages/${r.id}?new=1`)
@@ -94,6 +107,36 @@ export default function TemplatePicker({ spaceKey, parentId, onClose }: { spaceK
       )}
     </div>
   )
+  if (filling) {
+    const submit = (e: React.FormEvent) => {
+      e.preventDefault()
+      // only what was filled in: the rest stays a hint in the page
+      const given = (filling.variables ?? []).map((v) => [v, (answers[v] ?? '').trim()]).filter(([, value]) => value)
+      void create(filling.id, Object.fromEntries(given))
+    }
+    return (
+      <Modal
+        title={`New page: ${filling.name}`}
+        onClose={onClose}
+        footer={
+          <>
+            <button type="button" className="btn" onClick={() => setFilling(null)}><ArrowLeft size={14} /> All templates</button>
+            <button type="submit" form="template-variables" className="btn btn-primary" disabled={busy}>{busy ? <Spinner /> : null} Create page</button>
+          </>
+        }
+      >
+        <form id="template-variables" onSubmit={submit}>
+          <p className="muted small" style={{ marginTop: 0 }}>Fill in what this template asks for. Anything you leave empty stays as a hint in the page.</p>
+          {(filling.variables ?? []).map((v, i) => (
+            <div key={v} className="field">
+              <label htmlFor={`template-var-${i}`}>{v}</label>
+              <input id={`template-var-${i}`} className="input" autoFocus={i === 0} maxLength={300} value={answers[v] ?? ''} onChange={(e) => setAnswers((a) => ({ ...a, [v]: e.target.value }))} />
+            </div>
+          ))}
+        </form>
+      </Modal>
+    )
+  }
   if (preview) {
     return (
       <Modal
@@ -103,7 +146,7 @@ export default function TemplatePicker({ spaceKey, parentId, onClose }: { spaceK
         footer={
           <>
             <button className="btn" onClick={() => setPreview(null)}><ArrowLeft size={14} /> All templates</button>
-            <button className="btn btn-primary" disabled={busy} onClick={() => create(preview.id)}>Use this template</button>
+            <button className="btn btn-primary" disabled={busy} onClick={() => choose(preview)}>Use this template</button>
           </>
         }
       >
@@ -130,7 +173,7 @@ export default function TemplatePicker({ spaceKey, parentId, onClose }: { spaceK
       <div className="grid-cards">
         {card('blank', <FilePlus2 size={22} />, 'Blank page', 'Start from scratch', () => create())}
         {card('link', <Link2 size={22} />, 'Link to a website', 'A page-tree item that opens an external page', () => void createLink())}
-        {ordered.map((t) => card(t.id, <SymbolTile value={parseSymbol(t.icon) ? t.icon : 'document:slate'} size={30} />, t.name, t.description, () => create(t.id), t.id === def ? 'space default' : t.builtin ? undefined : t.spaceKey ? 'space' : 'workspace', () => setPreview(t)))}
+        {ordered.map((t) => card(t.id, <SymbolTile value={parseSymbol(t.icon) ? t.icon : 'document:slate'} size={30} />, t.name, t.description, () => choose(t), t.id === def ? 'space default' : t.builtin ? undefined : t.spaceKey ? 'space' : 'workspace', () => setPreview(t)))}
       </div>
     </Modal>
   )

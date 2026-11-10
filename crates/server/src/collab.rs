@@ -114,6 +114,11 @@ pub struct Room {
     system_dirty: AtomicBool,
     edited_since_version: AtomicBool,
     last_editor: Mutex<Option<Uuid>>,
+    /// who changed the page since the last version
+    editors_since_version: Mutex<std::collections::HashSet<Uuid>>,
+    /// editors who said their changes in this session are minor (watchers aren't notified);
+    /// kept on this replica only, cleared when everyone has left
+    minor_editors: Mutex<std::collections::HashSet<Uuid>>,
     last_version_at: Mutex<Instant>,
     next_conn: AtomicU64,
     /// set when the page was trashed / the room evicted: connections close, nothing is persisted
@@ -136,6 +141,8 @@ impl Room {
             system_dirty: AtomicBool::new(false),
             edited_since_version: AtomicBool::new(false),
             last_editor: Mutex::new(None),
+            editors_since_version: Mutex::new(Default::default()),
+            minor_editors: Mutex::new(Default::default()),
             last_version_at: Mutex::new(Instant::now()),
             next_conn: AtomicU64::new(1),
             closed: AtomicBool::new(false),
@@ -236,9 +243,32 @@ impl Room {
         }
         self.dirty.store(true, Ordering::SeqCst);
         self.edited_since_version.store(true, Ordering::SeqCst);
-        if editor.is_some() {
+        if let Some(e) = editor {
             *self.last_editor.lock().expect("lock") = editor;
+            self.editors_since_version.lock().expect("lock").insert(e);
         }
+    }
+
+    /// Marks (or unmarks) `user`'s changes in this editing session as minor.
+    pub fn set_minor(&self, user: Uuid, minor: bool) {
+        let mut m = self.minor_editors.lock().expect("lock");
+        if minor {
+            m.insert(user);
+        } else {
+            m.remove(&user);
+        }
+    }
+
+    pub fn is_minor(&self, user: Uuid) -> bool {
+        self.minor_editors.lock().expect("lock").contains(&user)
+    }
+
+    /// For the version about to be made: whether everybody who changed the page since the last
+    /// version marked their changes as minor. Starts the next round of editors.
+    pub fn take_minor(&self) -> bool {
+        let editors = std::mem::take(&mut *self.editors_since_version.lock().expect("lock"));
+        let minor = self.minor_editors.lock().expect("lock");
+        !editors.is_empty() && editors.iter().all(|e| minor.contains(e))
     }
 
     pub fn connections(&self) -> usize {
@@ -373,8 +403,13 @@ pub async fn persist_with(state: &AppState, room: &Room, auto_version: bool) -> 
     // flush between the last edit and the last disconnect would skip the automatic version
     let due = auto_version && (room.connections() == 0 || room.last_version_at.lock().expect("lock").elapsed() > VERSION_INTERVAL);
     if due && room.edited_since_version.swap(false, Ordering::SeqCst) {
-        crate::routes::pages::create_version(state, room.page_id, editor, None).await?;
+        let minor = room.take_minor();
+        crate::routes::pages::create_version_with(state, room.page_id, editor, None, minor).await?;
         *room.last_version_at.lock().expect("lock") = Instant::now();
+    }
+    if room.connections() == 0 {
+        // the session is over: the next one starts with normal (notified) changes
+        room.minor_editors.lock().expect("lock").clear();
     }
     Ok(())
 }

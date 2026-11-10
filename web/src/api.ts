@@ -136,6 +136,10 @@ export interface Page {
   restricted: boolean
   favorite: boolean
   watching: boolean
+  /** also watching the pages below */
+  watchingChildren?: boolean
+  /** watched through a page above, with the pages below */
+  watchedThrough?: { id: string; title: string } | null
   views: number
   viewers: number
   commentCount: number
@@ -176,6 +180,8 @@ export interface Version {
   createdByName: string | null
   createdAt: string
   message: string | null
+  /** watchers weren't notified about it */
+  minor?: boolean
 }
 
 export interface SearchHit {
