@@ -67,11 +67,19 @@ pub async fn unfurl(State(state): State<AppState>, CurrentUser(user): CurrentUse
             let m = parse(&html);
             json!({ "url": key, "title": m.title, "description": m.description, "siteName": m.site })
         }
-        Err(e) => json!({ "url": key, "title": null, "description": null, "siteName": null, "error": format!("{e}") }),
+        Err(e) => {
+            // the reason stays in the log: telling callers would map internal names and ports
+            tracing::debug!(url = %key, "link preview failed: {e:#}");
+            json!({ "url": key, "title": null, "description": null, "siteName": null, "error": "preview unavailable" })
+        }
     };
     sqlx::query("INSERT INTO link_previews (url, data, fetched_at) VALUES ($1, $2, now()) ON CONFLICT (url) DO UPDATE SET data = $2, fetched_at = now()")
         .bind(&key)
         .bind(&data)
+        .execute(&state.db)
+        .await?;
+    // keep the cache small: drop a batch of expired entries
+    sqlx::query("DELETE FROM link_previews WHERE url IN (SELECT url FROM link_previews WHERE fetched_at < now() - interval '1 day' LIMIT 200)")
         .execute(&state.db)
         .await?;
     Ok(Json(data))
@@ -79,7 +87,7 @@ pub async fn unfurl(State(state): State<AppState>, CurrentUser(user): CurrentUse
 
 async fn fetch(state: &AppState, mut url: openidconnect::url::Url) -> anyhow::Result<String> {
     for _ in 0..=MAX_REDIRECTS {
-        let addr = resolve(&url, state.config.webhook_allow_private).await?;
+        let addr = resolve(&url, state.config.unfurl_allow_private).await?;
         let client = openidconnect::reqwest::Client::builder()
             .redirect(openidconnect::reqwest::redirect::Policy::none())
             .no_proxy()

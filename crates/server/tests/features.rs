@@ -372,11 +372,16 @@ async fn link_previews() {
     assert_eq!(app.get(&owner, "/unfurl?url=file:///etc/passwd").await.0, 400);
     assert_ne!(app.get(&common::client(), &format!("/unfurl?url={base}/post")).await.0, 200, "signed-in only");
 
-    // with the default (no private targets) the local site is refused
-    let strict = common::spawn_with(|c| c.webhook_allow_private = false).await;
+    // with the default (no private targets) the local site is refused, even when webhooks may
+    // reach private addresses, and the reason isn't disclosed
+    let strict = common::spawn_with(|c| {
+        c.unfurl_allow_private = false;
+        c.webhook_allow_private = true;
+    })
+    .await;
     let o = strict.setup().await;
     let (_, r) = strict.get(&o, &format!("/unfurl?url={base}/post")).await;
-    assert!(r["title"].is_null() && r["error"].as_str().unwrap().contains("private"), "{r}");
+    assert!(r["title"].is_null() && r["error"] == "preview unavailable", "{r}");
 }
 
 #[tokio::test]
@@ -406,7 +411,7 @@ async fn announcement_banner() {
     assert_eq!(app.get(&member, "/announcement").await.1, Value::Null);
 }
 
-#[tokio::test]
+#[tokio::test(flavor = "multi_thread")]
 async fn feature_switches() {
     let app = common::spawn().await;
     let owner = app.setup().await;
@@ -421,11 +426,17 @@ async fn feature_switches() {
 
     assert_eq!(app.put(&member, "/admin/settings", json!({"exports": false})).await.0, 403);
     assert_eq!(app.put(&owner, "/admin/settings", json!({"export": false})).await.0, 400, "unknown switch");
+    // an export started before the switch
+    let (st, job) = app.post(&member, "/spaces/FS/export", json!({"format": "markdown"})).await;
+    assert_eq!(st, 202, "{job}");
+    let job = job["jobId"].as_str().unwrap().to_string();
+    app.eventually(|| async { (app.get(&member, &format!("/jobs/{job}")).await.1["status"] == "succeeded").then_some(()) }).await;
     let (st, s) = app.put(&owner, "/admin/settings", json!({"exports": false, "personalSpaces": false})).await;
     assert_eq!(st, 200, "{s}");
     assert_eq!(s, json!({"publicLinks": true, "exports": false, "ai": true, "personalSpaces": false}));
 
-    // members can't export any more, admins still can
+    // ... can't be downloaded after it; members can't export any more, admins still can
+    assert_eq!(app.get(&member, &format!("/jobs/{job}/download")).await.0, 400);
     assert_eq!(app.get(&member, &export).await.0, 400);
     assert_eq!(app.post(&member, "/spaces/FS/export", json!({"format": "markdown"})).await.0, 400);
     assert_eq!(app.get(&owner, &export).await.0, 200);

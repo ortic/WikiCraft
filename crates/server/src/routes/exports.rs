@@ -49,6 +49,8 @@ pub async fn start(
 
 /// `GET /api/jobs/{id}/download` — the export archive (only for the user who requested it).
 pub async fn download(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<Response> {
+    // exports started before an admin turned them off can't be fetched afterwards
+    crate::routes::share::require_exports(&state, user.workspace_id, Some(&user)).await?;
     let result: Option<Value> = sqlx::query_scalar(
         "SELECT result FROM jobs WHERE id = $1 AND workspace_id = $2 AND created_by = $3 AND kind = 'export.space' AND status = 'succeeded'",
     )

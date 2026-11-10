@@ -61,6 +61,7 @@ pub async fn spawn_with(tweak: impl FnOnce(&mut Config)) -> TestApp {
         smtp_url: None,
         session_idle_minutes: 0,
         webhook_allow_private: true,
+        unfurl_allow_private: true,
         mail_from: "WikiCraft <wiki@acme.test>".into(),
         ai_api_key: None,
         ai_model: "claude-opus-5-5".into(),

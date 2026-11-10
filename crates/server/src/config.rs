@@ -75,6 +75,11 @@ pub struct Config {
     #[arg(long, env = "WIKICRAFT_WEBHOOK_ALLOW_PRIVATE", default_value_t = false)]
     pub webhook_allow_private: bool,
 
+    /// Allow link previews of private / loopback addresses (off by default: SSRF protection;
+    /// independent of the webhook setting). Only for closed intranets.
+    #[arg(long, env = "WIKICRAFT_UNFURL_ALLOW_PRIVATE", default_value_t = false)]
+    pub unfurl_allow_private: bool,
+
     /// Sender of e-mails.
     #[arg(long, env = "WIKICRAFT_MAIL_FROM", default_value = "WikiCraft <wikicraft@localhost>")]
     pub mail_from: String,

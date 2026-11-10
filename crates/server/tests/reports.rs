@@ -125,6 +125,7 @@ async fn decision_log_lists_decisions_people_can_see() {
     app.put(&owner, &format!("/pages/{secret}/restrictions"), json!({"restrictions": [{"kind": "view", "subjectType": "user", "subjectId": owner_id}]})).await;
 
     let texts = |v: &Value| v.as_array().unwrap().iter().map(|d| d["text"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+    assert_eq!(app.get(&owner, "/reports/decisions").await.0, 400, "a space is required");
     let (st, all) = app.get(&owner, "/reports/decisions?spaces=ARCH").await;
     assert_eq!(st, 200, "{all}");
     let mut t = texts(&all);

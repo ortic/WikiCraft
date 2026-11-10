@@ -15,7 +15,7 @@ use wikicraft_doc_model::{Node, nodes, text};
 use crate::app::AppState;
 use crate::auth::MaybeUser;
 use crate::authz::Principal;
-use crate::error::ApiResult;
+use crate::error::{ApiError, ApiResult};
 use crate::routes::search::{filter_visible, visible_spaces};
 use crate::routes::spaces::workspace_of;
 
@@ -72,19 +72,6 @@ pub struct ReportPage {
 
 /// Candidate pages (label / space filters in SQL), then permission filtering.
 async fn pages(state: &AppState, p: &Principal, q: &ReportQuery, require_labels: bool, default_max: i64, with_content: bool) -> ApiResult<Vec<ReportPage>> {
-    pages_with(state, p, q, require_labels, default_max, with_content, None).await
-}
-
-/// [`pages`], optionally only pages whose content has a node of type `kind`.
-async fn pages_with(
-    state: &AppState,
-    p: &Principal,
-    q: &ReportQuery,
-    require_labels: bool,
-    default_max: i64,
-    with_content: bool,
-    kind: Option<&str>,
-) -> ApiResult<Vec<ReportPage>> {
     let ws = workspace_of(state, p).await?;
     let labels = q.labels();
     if require_labels && labels.is_empty() {
@@ -114,7 +101,6 @@ async fn pages_with(
            AND (cardinality($3::text[]) = 0 OR (
                 CASE WHEN $4 THEN (SELECT count(DISTINCT l.name) FROM labels l WHERE l.page_id = p.id AND l.name = ANY($3)) = cardinality($3)
                      ELSE EXISTS (SELECT 1 FROM labels l WHERE l.page_id = p.id AND l.name = ANY($3)) END))
-           AND ($7::text IS NULL OR jsonb_path_exists(p.content, '$.** ? (@.type == $k)', jsonb_build_object('k', $7::text)))
          ORDER BY {order} LIMIT 2000"
     )))
     .bind(ws)
@@ -123,7 +109,6 @@ async fn pages_with(
     .bind(q.all_labels())
     .bind(&space_ids)
     .bind(with_content)
-    .bind(kind)
     .fetch_all(&state.db)
     .await?;
     let pairs: Vec<(Uuid, Uuid)> = rows.iter().map(|r| (r.id, r.space_id)).collect();
@@ -247,14 +232,55 @@ pub struct DecisionRow {
     updated_at: chrono::DateTime<chrono::Utc>,
 }
 
-/// Decision items (`decisionItem` blocks) in the visible pages matching `q`, newest pages first.
+/// Decision items (`decisionItem` blocks) in the visible pages of the requested spaces, newest
+/// pages first. Only the decision items leave the database (not whole documents), at most
+/// 300 pages are looked at, and a space is required so a call never scans the whole wiki.
+/// (`strict` mode: lax `.**` visits nodes twice.)
 async fn decisions_for(state: &AppState, p: &Principal, q: &ReportQuery) -> ApiResult<Vec<DecisionRow>> {
     let max = q.max(50) as usize;
+    let spaces = q.spaces();
+    if spaces.is_empty() || spaces.len() > 20 {
+        return Err(ApiError::bad("name 1 to 20 spaces"));
+    }
+    let ws = workspace_of(state, p).await?;
+    let visible_sp = visible_spaces(state, p).await?;
+    let space_ids: Vec<Uuid> = visible_sp.iter().filter(|(s, _)| spaces.contains(&s.key.to_uppercase())).map(|(s, _)| s.id).collect();
+    if space_ids.is_empty() {
+        return Ok(vec![]);
+    }
+    #[derive(sqlx::FromRow)]
+    struct Row {
+        id: Uuid,
+        title: String,
+        space_id: Uuid,
+        space_key: String,
+        updated_at: chrono::DateTime<chrono::Utc>,
+        items: Value,
+    }
+    let rows = sqlx::query_as::<_, Row>(
+        "SELECT p.id, p.title, p.space_id, s.key AS space_key, p.updated_at,
+                jsonb_path_query_array(p.content, 'strict $.** ? (@.type == \"decisionItem\")', '{}', true) AS items
+         FROM pages p JOIN spaces s ON s.id = p.space_id
+         WHERE p.workspace_id = $1 AND p.space_id = ANY($2) AND p.deleted_at IS NULL AND p.archived_at IS NULL AND s.archived_at IS NULL
+           AND (cardinality($3::text[]) = 0 OR EXISTS (SELECT 1 FROM labels l WHERE l.page_id = p.id AND l.name = ANY($3)))
+           AND jsonb_path_exists(p.content, 'strict $.** ? (@.type == \"decisionItem\")', '{}', true)
+         ORDER BY p.updated_at DESC LIMIT 300",
+    )
+    .bind(ws)
+    .bind(&space_ids)
+    .bind(q.labels())
+    .fetch_all(&state.db)
+    .await?;
+    let pairs: Vec<(Uuid, Uuid)> = rows.iter().map(|r| (r.id, r.space_id)).collect();
+    let visible = filter_visible(state, p, &visible_sp, &pairs).await?;
     let mut out = Vec::new();
-    for page in pages_with(state, p, q, false, 500, true, Some(nodes::DECISION_ITEM)).await? {
-        let doc = Node::from_json(&page.content).unwrap_or_default();
+    for page in rows.into_iter().filter(|r| visible.contains(&r.id)) {
         let mut items = Vec::new();
-        collect_decisions(&doc, &mut items);
+        for item in page.items.as_array().into_iter().flatten() {
+            if let Ok(n) = Node::from_json(item) {
+                collect_decisions(&n, &mut items);
+            }
+        }
         for (text, decided) in items {
             if q.status.as_deref() == Some("decided") && !decided {
                 continue;

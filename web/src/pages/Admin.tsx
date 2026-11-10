@@ -242,7 +242,7 @@ function WorkspaceSettings() {
         <input type="checkbox" checked={s.exports} onChange={(e) => set('exports', e.target.checked, e.target.checked ? 'Everyone can export pages and spaces' : 'Exports are limited to administrators')} />
         Allow exports (Word, Markdown, HTML, PDF and space archives)
       </label>
-      <p className="faint small" style={{ margin: '2px 0 12px 24px' }}>When off, only administrators can export; the export menu entries are hidden for everyone else.</p>
+      <p className="faint small" style={{ margin: '2px 0 12px 24px' }}>When off, only administrators can export and the export menus are hidden for everyone else. People can still read, copy and print the pages they can see.</p>
       <label className="row">
         <input type="checkbox" checked={s.ai} onChange={(e) => set('ai', e.target.checked, e.target.checked ? 'Ask the wiki is on' : 'Ask the wiki is off')} />
         Ask the wiki (questions answered by Claude from the pages a person can see)
