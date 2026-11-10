@@ -36,6 +36,47 @@ pub struct ReportQuery {
     /// properties: conditions such as `Status = Done; Effort >= 3`
     #[serde(rename = "where")]
     filter: Option<String>,
+    /// tasks: comma-separated user ids, `me`, or imported Confluence user keys
+    assignees: Option<String>,
+    /// tasks due on or after / before this day (YYYY-MM-DD; Confluence's dd-MM-yyyy too)
+    #[serde(rename = "dueFrom")]
+    due_from: Option<String>,
+    #[serde(rename = "dueTo")]
+    due_to: Option<String>,
+}
+
+fn parse_day(s: &Option<String>) -> ApiResult<Option<chrono::NaiveDate>> {
+    let Some(s) = s.as_deref().map(str::trim).filter(|s| !s.is_empty()) else { return Ok(None) };
+    ["%Y-%m-%d", "%d-%m-%Y", "%d.%m.%Y"]
+        .iter()
+        .find_map(|f| chrono::NaiveDate::parse_from_str(s, f).ok())
+        .map(Some)
+        .ok_or_else(|| ApiError::bad(format!("“{s}” isn't a date (YYYY-MM-DD)")))
+}
+
+/// Task assignees from a report filter: user ids, `me` (`@me`, `currentUser()`), or the user
+/// keys of imported Confluence accounts. None = no filter.
+async fn assignee_ids(state: &AppState, p: &Principal, ws: Uuid, q: &ReportQuery) -> ApiResult<Option<Vec<Uuid>>> {
+    let tokens = list(&q.assignees);
+    if tokens.is_empty() {
+        return Ok(None);
+    }
+    let mut ids = Vec::new();
+    for t in tokens {
+        if matches!(t.to_lowercase().as_str(), "me" | "@me" | "currentuser()" | "@self") {
+            ids.extend(p.user_id());
+        } else if let Ok(id) = t.parse::<Uuid>() {
+            ids.push(id);
+        } else {
+            let found: Option<Uuid> = sqlx::query_scalar("SELECT id FROM users WHERE workspace_id = $1 AND external_ref = $2")
+                .bind(ws)
+                .bind(format!("confluence:{t}"))
+                .fetch_optional(&state.db)
+                .await?;
+            ids.extend(found);
+        }
+    }
+    Ok(Some(ids))
 }
 
 fn list(s: &Option<String>) -> Vec<String> {
@@ -240,6 +281,12 @@ async fn tasks_for(state: &AppState, p: &Principal, q: &ReportQuery) -> ApiResul
     }
     let space_ids: Vec<Uuid> = visible_sp.iter().map(|(s, _)| s.id).collect();
     let status = q.status.clone().unwrap_or_else(|| "open".into());
+    let assignees = assignee_ids(state, p, ws, q).await?;
+    if assignees.as_ref().is_some_and(|a| a.is_empty()) {
+        // asked for people who aren't here
+        return Ok(Json(vec![]));
+    }
+    let (due_from, due_to) = (parse_day(&q.due_from)?, parse_day(&q.due_to)?);
     let rows = sqlx::query_as::<_, TaskReportRow>(
         "SELECT t.page_id, t.idx, t.text, t.done, t.due, t.assignee_id, a.name AS assignee_name, p.title AS page_title, p.space_id, s.key AS space_key
          FROM tasks t JOIN pages p ON p.id = t.page_id JOIN spaces s ON s.id = p.space_id LEFT JOIN users a ON a.id = t.assignee_id
@@ -247,6 +294,8 @@ async fn tasks_for(state: &AppState, p: &Principal, q: &ReportQuery) -> ApiResul
            AND ($2 = 'all' OR t.done = ($2 = 'done'))
            AND (cardinality($3::text[]) = 0 OR upper(s.key) = ANY($3))
            AND (cardinality($4::text[]) = 0 OR EXISTS (SELECT 1 FROM labels l WHERE l.page_id = p.id AND l.name = ANY($4)))
+           AND ($6::uuid[] IS NULL OR t.assignee_id = ANY($6))
+           AND ($7::date IS NULL OR t.due >= $7) AND ($8::date IS NULL OR t.due <= $8)
          ORDER BY t.done, t.due NULLS LAST, p.updated_at DESC, t.idx LIMIT 2000",
     )
     .bind(ws)
@@ -254,6 +303,9 @@ async fn tasks_for(state: &AppState, p: &Principal, q: &ReportQuery) -> ApiResul
     .bind(q.spaces())
     .bind(q.labels())
     .bind(&space_ids)
+    .bind(&assignees)
+    .bind(due_from)
+    .bind(due_to)
     .fetch_all(&state.db)
     .await?;
     let pairs: Vec<(Uuid, Uuid)> = rows.iter().map(|r| (r.page_id, r.space_id)).collect();
@@ -566,9 +618,16 @@ pub async fn snapshot(
                 labels: Some(labels.join(",")),
                 status: Some(status.into()),
                 max: Some(num(&["pageSize"], 20)),
+                assignees: get("assignees").or_else(|| get("assignee")),
+                due_from: get("duedateFrom").or_else(|| get("dueFrom")),
+                due_to: get("duedateTo").or_else(|| get("dueTo")),
                 ..Default::default()
             };
-            let Json(rows) = tasks_for(state, p, &q).await?;
+            // a filter that doesn't parse shows the unfiltered list rather than nothing
+            let Json(rows) = match tasks_for(state, p, &q).await {
+                Ok(r) => r,
+                Err(_) => tasks_for(state, p, &ReportQuery { due_from: None, due_to: None, ..q }).await?,
+            };
             Snapshot {
                 title: format!(
                     "Tasks ({})",

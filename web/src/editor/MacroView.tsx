@@ -227,19 +227,40 @@ interface TaskRow {
   pageTitle: string
 }
 
-function TasksReport({ params, page }: { params: Params; page: Page | undefined }) {
+function TasksReport({ params, page, onParams }: { params: Params; page: Page | undefined; onParams?: (p: Params) => void }) {
   const spec = querySpec(params, page?.spaceKey)
   const spaces = spec.spaces.length ? spec.spaces : page ? [page.spaceKey] : []
   const status = /^complete$/i.test(params.status ?? '') ? 'done' : /all/i.test(params.status ?? '') ? 'all' : 'open'
   const max = Number(params.pageSize ?? 20) || 20
+  const assignees = params.assignees ?? params.assignee ?? ''
+  const dueFrom = params.duedateFrom ?? ''
+  const dueTo = params.duedateTo ?? ''
+  const [editing, setEditing] = useState(false)
   const q = useQuery({
-    queryKey: ['report-tasks', spaces, spec.labels, status, max],
-    queryFn: () => api.get<TaskRow[]>(`/reports/tasks?${qs({ spaces: spaces.join(','), labels: spec.labels.join(','), status, max })}`),
+    queryKey: ['report-tasks', spaces, spec.labels, status, max, assignees, dueFrom, dueTo],
+    queryFn: () =>
+      api.get<TaskRow[]>(`/reports/tasks?${qs({ spaces: spaces.join(','), labels: spec.labels.join(','), status, max, assignees: assignees || undefined, dueFrom: dueFrom || undefined, dueTo: dueTo || undefined })}`),
   })
   const rows = q.data ?? []
+  const detail = [
+    status === 'open' ? 'open tasks' : status === 'done' ? 'completed tasks' : 'all tasks',
+    /^(@?me|currentuser\(\))$/i.test(assignees) ? 'assigned to me' : assignees ? 'by assignee' : '',
+    dueFrom || dueTo ? `due ${dueFrom ? `from ${dueFrom}` : ''}${dueFrom && dueTo ? ' ' : ''}${dueTo ? `until ${dueTo}` : ''}` : '',
+    spaces.length ? `in ${spaces.join(', ')}` : '',
+    spec.labels.length ? `labels: ${spec.labels.join(', ')}` : '',
+  ].filter(Boolean).join(' ')
   return (
     <>
-      <Header icon={<CheckSquare size={13} />} title="Task report" detail={[status === 'open' ? 'open tasks' : status === 'done' ? 'completed tasks' : 'all tasks', spaces.length ? `in ${spaces.join(', ')}` : '', spec.labels.length ? `labels: ${spec.labels.join(', ')}` : ''].filter(Boolean).join(' ')} />
+      <div className="row" style={{ gap: 6 }}>
+        <Header icon={<CheckSquare size={13} />} title="Task report" detail={detail} />
+        <span className="spacer" />
+        {onParams && (
+          <button className="icon-btn" title="Filter tasks" aria-expanded={editing} onClick={() => setEditing(!editing)}>
+            <SlidersHorizontal size={14} />
+          </button>
+        )}
+      </div>
+      {editing && onParams && <TaskFilter params={params} status={status} onSave={(p) => { onParams(p); setEditing(false) }} />}
       {rows.length === 0 ? (
         <Empty q={q} text="No tasks." />
       ) : (
@@ -263,6 +284,47 @@ function TasksReport({ params, page }: { params: Params; page: Page | undefined 
         </div>
       )}
     </>
+  )
+}
+
+/** Editors pick which tasks a task report lists. */
+function TaskFilter({ params, status, onSave }: { params: Params; status: string; onSave: (p: Params) => void }) {
+  const [st, setSt] = useState(status)
+  const [mine, setMine] = useState(/^(@?me|currentuser\(\))$/i.test(params.assignees ?? params.assignee ?? ''))
+  const [from, setFrom] = useState(/^\d{4}-\d{2}-\d{2}$/.test(params.duedateFrom ?? '') ? params.duedateFrom! : '')
+  const [to, setTo] = useState(/^\d{4}-\d{2}-\d{2}$/.test(params.duedateTo ?? '') ? params.duedateTo! : '')
+  const [labels, setLabels] = useState(params.labels ?? params.label ?? '')
+  const save = () => {
+    const next: Params = { ...params, status: st === 'done' ? 'complete' : st === 'all' ? 'all' : 'incomplete', labels: labels.trim(), duedateFrom: from, duedateTo: to }
+    if (mine) next.assignees = 'me'
+    else if (/^(@?me|currentuser\(\))$/i.test(next.assignees ?? '')) delete next.assignees
+    delete next.assignee
+    delete next.label
+    onSave(next)
+  }
+  return (
+    <div className="report-filter">
+      <label className="field">
+        <span>Tasks</span>
+        <select className="select" value={st} onChange={(e) => setSt(e.target.value)}>
+          <option value="open">Open</option>
+          <option value="done">Completed</option>
+          <option value="all">All</option>
+        </select>
+      </label>
+      <label className="row small" style={{ gap: 6 }}>
+        <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> Only tasks assigned to the reader
+      </label>
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+        <label className="field"><span>Due from</span><input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label className="field"><span>Due until</span><input className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+      </div>
+      <label className="field">
+        <span>Pages with these labels <span className="faint">(optional)</span></span>
+        <input className="input" value={labels} onChange={(e) => setLabels(e.target.value)} placeholder="sprint-12, team-a" />
+      </label>
+      <div className="row"><button className="btn btn-primary btn-sm" onClick={save}>Apply</button></div>
+    </div>
   )
 }
 
@@ -449,7 +511,7 @@ export function LiveMacro({ name, params, pageId, onParams }: { name: string; pa
     case 'content-report-table':
       return <PropertiesReport params={params} page={page.data} onParams={onParams} />
     case 'tasks-report-macro':
-      return <TasksReport params={params} page={page.data} />
+      return <TasksReport params={params} page={page.data} onParams={onParams} />
     case 'decisionreport':
       return <DecisionsReport params={params} page={page.data} />
     case 'attachments':

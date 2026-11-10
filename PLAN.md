@@ -335,7 +335,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** `recently-updated` → recent changes block
 - [x] **P1** `widget` / `iframe` / `multimedia` → embed block (with allowlist)
 - [x] **P1** `livesearch` → search box block — search box block (space / label scoped), also `/search box`
-- [~] **P1** `tasks-report-macro` → task report block (by space, assignee, label, status, due) (no assignee filter)
+- [x] **P1** `tasks-report-macro` → task report block (by space, assignee, label, status, due) — `assignees` (user ids, me, imported Confluence user keys), `duedateFrom`/`duedateTo`, labels, status; editors set them in the block (filter button)
 - [x] **P1** `decisionreport` → decisions report block — "Decision log" block (live, permission-filtered, Word export evaluates it); `/decision` and `/decision log` slash commands
 - [x] **P1** `create-from-template` → "create from template" button block — button block creating a page below the current one; Confluence blueprints map to built-in templates, others open the Create dialog; also `/create-page button`
 - [x] **P1** `content-report-table` / blueprint index pages → query table block

@@ -274,3 +274,46 @@ async fn typed_page_properties_panel_search_and_reports() {
 fn urlencode(s: &str) -> String {
     s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn task_reports_filter_by_assignee_and_due_date() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (rita, rita_id) = app.user(&owner, "rita@acme.test", "member").await;
+    let (_, me) = app.get(&owner, "/me").await;
+    let owner_id = me["user"]["id"].as_str().unwrap().to_string();
+    app.post(&owner, "/spaces", json!({"key": "PLAN", "name": "Planning"})).await;
+    let task = |text: &str, who: &str, due: &str| {
+        let mut c = vec![json!({"type": "text", "text": format!("{text} ")})];
+        if !who.is_empty() {
+            c.push(json!({"type": "mention", "attrs": {"id": who, "label": "x"}}));
+        }
+        if !due.is_empty() {
+            c.push(json!({"type": "date", "attrs": {"date": due}}));
+        }
+        json!({"type": "taskItem", "attrs": {"checked": false}, "content": [{"type": "paragraph", "content": c}]})
+    };
+    let doc = json!({"type": "doc", "content": [{"type": "taskList", "content": [
+        task("Book venue", &rita_id, "2026-12-01"),
+        task("Order food", &rita_id, "2027-01-15"),
+        task("Send invites", &owner_id, "2026-12-10"),
+        task("Pick a date", "", ""),
+    ]}]});
+    let (st, _) = app.post(&owner, "/pages", json!({"spaceKey": "PLAN", "title": "Party", "content": doc})).await;
+    assert_eq!(st, 201);
+    let texts = |v: &Value| -> Vec<String> { v.as_array().unwrap().iter().map(|t| t["text"].as_str().unwrap().to_string()).collect() };
+
+    let (_, r) = app.get(&owner, &format!("/reports/tasks?spaces=PLAN&assignees={rita_id}")).await;
+    assert_eq!(texts(&r), vec!["Book venue", "Order food"]);
+    let (_, r) = app.get(&rita, "/reports/tasks?spaces=PLAN&assignees=me").await;
+    assert_eq!(texts(&r), vec!["Book venue", "Order food"], "me = the reader");
+    let (_, r) = app.get(&owner, "/reports/tasks?spaces=PLAN&dueFrom=2026-12-05&dueTo=31-12-2026").await;
+    assert_eq!(texts(&r), vec!["Send invites"], "Confluence's dd-MM-yyyy works too");
+    let (_, r) = app.get(&owner, "/reports/tasks?spaces=PLAN&assignees=unknown-confluence-key").await;
+    assert_eq!(r, json!([]), "unknown people match nothing");
+    assert_eq!(app.get(&owner, "/reports/tasks?spaces=PLAN&dueFrom=soon").await.0, 400);
+    // imported Confluence user keys map to the imported accounts
+    sqlx::query("UPDATE users SET external_ref = 'confluence:ff8080817b' WHERE id = $1::uuid").bind(&rita_id).execute(&app.state.db).await.unwrap();
+    let (_, r) = app.get(&owner, "/reports/tasks?spaces=PLAN&assignees=ff8080817b").await;
+    assert_eq!(texts(&r), vec!["Book venue", "Order food"]);
+}

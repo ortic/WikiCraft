@@ -4916,6 +4916,26 @@ paths:
         required: false
         description: open | done | all
         schema: *id001
+      - name: assignees
+        in: query
+        required: false
+        description: user ids, me, or imported Confluence user keys
+        schema: *id001
+      - name: dueFrom
+        in: query
+        required: false
+        description: YYYY-MM-DD
+        schema: *id001
+      - name: dueTo
+        in: query
+        required: false
+        description: YYYY-MM-DD
+        schema: *id001
+      - name: max
+        in: query
+        required: false
+        description: rows
+        schema: *id005
       responses:
         '200':
           description: OK
