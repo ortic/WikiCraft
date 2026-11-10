@@ -325,7 +325,7 @@ export function ResetPassword() {
 
 /** `/accept-invite?token=…` */
 export function AcceptInvite() {
-  const info = useQuery({ queryKey: ['invite', tokenParam()], queryFn: () => api.get<{ email: string; name: string; workspace: string; passwordLogin: boolean }>(`/auth/invite?token=${encodeURIComponent(tokenParam())}`), retry: false })
+  const info = useQuery({ queryKey: ['invite', tokenParam()], queryFn: () => api.get<{ email: string; name: string; workspace: string; passwordLogin: boolean; signup?: boolean }>(`/auth/invite?token=${encodeURIComponent(tokenParam())}`), retry: false })
   const sso = useQuery({ queryKey: ['auth-providers'], queryFn: () => api.get<{ providers: Provider[] }>('/auth/providers') })
   const [name, setName] = useState<string | null>(null)
   const [password, setPassword] = useState('')
@@ -359,7 +359,7 @@ export function AcceptInvite() {
         ) : (
           <>
             <h1>Join {info.data.workspace}</h1>
-            <p className="muted" style={{ marginTop: 0 }}>You were invited as <b>{info.data.email}</b>.</p>
+            <p className="muted" style={{ marginTop: 0 }}>{info.data.signup ? 'Your address is confirmed: ' : 'You were invited as '}<b>{info.data.email}</b>.</p>
             {redirects.length > 0 && (
               <div className="sso-buttons" style={{ marginBottom: 14 }}>
                 {redirects.map((p) => (

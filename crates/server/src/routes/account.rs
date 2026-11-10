@@ -207,7 +207,16 @@ pub struct TokenQuery {
 
 /// `GET /api/auth/invite?token=` — what the accept page shows.
 pub async fn invite_info(State(state): State<AppState>, Query(q): Query<TokenQuery>) -> ApiResult<Json<Value>> {
-    let (_, email, name, status, workspace) = find_token(&state, &q.token, "invite").await?;
+    let found = find_token(&state, &q.token, "invite").await;
+    if found.is_err()
+        && let Some((_, email, workspace)) = find_signup(&state, &q.token).await?
+    {
+        let name = email.split('@').next().unwrap_or("").to_string();
+        return Ok(Json(
+            json!({ "email": email, "name": name, "workspace": workspace, "passwordLogin": !state.config.disable_password_login, "signup": true }),
+        ));
+    }
+    let (_, email, name, status, workspace) = found?;
     if status != "invited" {
         return Err(ApiError::bad("this invitation was already used"));
     }
@@ -231,7 +240,13 @@ pub async fn accept_invite(State(state): State<AppState>, headers: HeaderMap, Js
     if name.is_empty() || name.chars().count() > 200 {
         return Err(ApiError::bad("please enter your name"));
     }
-    let (id, _, _, status, _) = find_token(&state, &req.token, "invite").await?;
+    let found = find_token(&state, &req.token, "invite").await;
+    if found.is_err()
+        && let Some((ws, email, _)) = find_signup(&state, &req.token).await?
+    {
+        return accept_signup(&state, &headers, &req.token, ws, &email, name, req.password).await;
+    }
+    let (id, _, _, status, _) = found?;
     if status != "invited" {
         return Err(ApiError::bad("this invitation was already used"));
     }
@@ -287,40 +302,39 @@ pub async fn signup(State(state): State<AppState>, Json(req): Json<SignupRequest
     if !domains.iter().any(|d| d.eq_ignore_ascii_case(&domain)) {
         return Err(ApiError::bad(format!("sign-up is open for {} addresses only", domains.iter().map(|d| format!("@{d}")).collect::<Vec<_>>().join(", "))));
     }
-    let existing: Option<(Uuid, String)> =
-        sqlx::query_as("SELECT id, status FROM users WHERE workspace_id = $1 AND lower(email) = $2").bind(ws).bind(&email).fetch_optional(&state.db).await?;
-    let id = match existing {
-        // existing accounts get nothing (no enumeration: the answer is the same)
-        Some((_, s)) if s == "active" || s == "deactivated" => return Ok(StatusCode::NO_CONTENT),
-        // pending invitations and imported authors (placeholders) can be claimed
-        Some((id, s)) => {
-            if s != "invited" {
-                sqlx::query("UPDATE users SET status = 'invited' WHERE id = $1").bind(id).execute(&state.db).await?;
-            }
-            id
-        }
-        None => {
-            let id = new_id();
-            sqlx::query("INSERT INTO users (id, workspace_id, email, name, role, status) VALUES ($1, $2, $3, $4, 'member', 'invited')")
-                .bind(id)
-                .bind(ws)
-                .bind(&email)
-                .bind(email.split('@').next().unwrap_or(&email))
-                .execute(&state.db)
-                .await?;
-            id
-        }
-    };
-    // at most three confirmation mails per address and hour
-    let recent: i64 =
-        sqlx::query_scalar("SELECT count(*) FROM user_tokens WHERE user_id = $1 AND purpose = 'invite' AND created_at > now() - interval '1 hour'")
-            .bind(id)
+    // existing accounts get nothing (the answer is the same, so no enumeration)
+    let active: bool =
+        sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM users WHERE workspace_id = $1 AND lower(email) = $2 AND status IN ('active', 'deactivated'))")
+            .bind(ws)
+            .bind(&email)
             .fetch_one(&state.db)
             .await?;
-    if recent >= 3 {
+    if active {
         return Ok(StatusCode::NO_CONTENT);
     }
-    let token = issue_token(&state, id, "invite", None, SIGNUP_HOURS).await?;
+    // limits: three mails per address and hour, 200 sign-ups per hour overall
+    let (per_address, overall): (i64, i64) = sqlx::query_as(
+        "SELECT count(*) FILTER (WHERE lower(email) = $2), count(*) FROM signup_requests WHERE workspace_id = $1 AND created_at > now() - interval '1 hour'",
+    )
+    .bind(ws)
+    .bind(&email)
+    .fetch_one(&state.db)
+    .await?;
+    if overall >= 200 {
+        return Err(ApiError::bad("too many sign-ups right now; try again in an hour"));
+    }
+    if per_address >= 3 {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+    sqlx::query("DELETE FROM signup_requests WHERE expires_at < now() - interval '30 days'").execute(&state.db).await?;
+    let token = random_token();
+    sqlx::query("INSERT INTO signup_requests (token_hash, workspace_id, email, expires_at) VALUES ($1, $2, $3, now() + make_interval(hours => $4))")
+        .bind(hex::encode(token_hash(&token)))
+        .bind(ws)
+        .bind(&email)
+        .bind(SIGNUP_HOURS)
+        .execute(&state.db)
+        .await?;
     let url = format!("{}/accept-invite?token={token}", base(&state));
     let (text, html) = crate::mail::action_mail(
         "Hi,",
@@ -330,7 +344,7 @@ pub async fn signup(State(state): State<AppState>, Json(req): Json<SignupRequest
         &format!("The link is valid for {SIGNUP_HOURS} hours. If you didn't ask for this, ignore this e-mail."),
     );
     crate::mail::queue(&state, &email, &format!("Confirm your e-mail to join {workspace}"), &text, Some(&html)).await.map_err(ApiError::Internal)?;
-    audit::log(&state, ws, None, "user.signup_requested", Some("user"), Some(id), json!({"email": email})).await;
+    audit::log(&state, ws, None, "user.signup_requested", None, None, json!({"email": email})).await;
     Ok(StatusCode::NO_CONTENT)
 }
 
@@ -366,6 +380,65 @@ pub async fn put_signup_settings(State(state): State<AppState>, CurrentUser(admi
     sqlx::query("UPDATE workspaces SET signup_domains = $2 WHERE id = $1").bind(admin.workspace_id).bind(&domains).execute(&state.db).await?;
     audit::log(&state, admin.workspace_id, Some(admin.id), "workspace.signup_domains", None, None, json!({"domains": domains})).await;
     Ok(Json(json!({ "domains": domains, "mailConfigured": state.config.smtp_url.is_some() })))
+}
+
+/// A valid, unused sign-up token: (workspace, e-mail, workspace name).
+async fn find_signup(state: &AppState, token: &str) -> ApiResult<Option<(Uuid, String, String)>> {
+    Ok(sqlx::query_as(
+        "SELECT r.workspace_id, r.email, w.name FROM signup_requests r JOIN workspaces w ON w.id = r.workspace_id
+         WHERE r.token_hash = $1 AND r.used_at IS NULL AND r.expires_at > now()",
+    )
+    .bind(hex::encode(token_hash(token)))
+    .fetch_optional(&state.db)
+    .await?)
+}
+
+/// Completes a sign-up: the account is created (or a pending invitation / imported author with
+/// that address is claimed) only now, when the address is proven.
+async fn accept_signup(state: &AppState, headers: &HeaderMap, token: &str, ws: Uuid, email: &str, name: &str, password: String) -> ApiResult<Response> {
+    let existing: Option<(Uuid, String)> = sqlx::query_as("SELECT id, status FROM users WHERE workspace_id = $1 AND lower(email) = lower($2)")
+        .bind(ws)
+        .bind(email)
+        .fetch_optional(&state.db)
+        .await?;
+    if matches!(existing.as_ref().map(|e| e.1.as_str()), Some("active" | "deactivated")) {
+        return Err(ApiError::bad("this address already has an account; log in or reset your password"));
+    }
+    let used = sqlx::query("UPDATE signup_requests SET used_at = now() WHERE token_hash = $1 AND used_at IS NULL")
+        .bind(hex::encode(token_hash(token)))
+        .execute(&state.db)
+        .await?
+        .rows_affected();
+    if used == 0 {
+        return Err(ApiError::bad("this link was already used"));
+    }
+    let hash = hash_password(password).await?;
+    let id = match existing {
+        Some((id, _)) => {
+            sqlx::query("UPDATE users SET name = $2, password_hash = $3, status = 'active' WHERE id = $1")
+                .bind(id)
+                .bind(name)
+                .bind(&hash)
+                .execute(&state.db)
+                .await?;
+            id
+        }
+        None => {
+            let id = new_id();
+            sqlx::query("INSERT INTO users (id, workspace_id, email, name, role, status, password_hash) VALUES ($1, $2, $3, $4, 'member', 'active', $5)")
+                .bind(id)
+                .bind(ws)
+                .bind(email)
+                .bind(name)
+                .bind(&hash)
+                .execute(&state.db)
+                .await?;
+            id
+        }
+    };
+    audit::log(state, ws, Some(id), "user.signed_up", Some("user"), Some(id), json!({})).await;
+    let cookie = create_session(state, id, headers).await?;
+    Ok(([(header::SET_COOKIE, cookie)], Json(json!({ "ok": true }))).into_response())
 }
 
 // ---- preferences & admin -------------------------------------------------------------------

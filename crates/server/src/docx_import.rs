@@ -22,9 +22,13 @@ pub struct Imported {
     pub media: Vec<(String, Vec<u8>)>,
 }
 
-const MAX_PART: u64 = 64 << 20;
+/// limits for untrusted input: XML parts, images, text produced, footnote text
+const MAX_PART: u64 = 24 << 20;
 const MAX_IMAGE: u64 = 25 << 20;
 const MAX_MEDIA_TOTAL: u64 = 256 << 20;
+const MAX_IMAGES: usize = 500;
+const MAX_TEXT: usize = 16 << 20;
+const MAX_FOOTNOTE: usize = 20_000;
 const MAX_DEPTH: usize = 12;
 const MONO_FONTS: &[&str] = &[
     "consolas",
@@ -108,6 +112,11 @@ struct Reader<'a> {
     seen_num: std::collections::HashSet<(String, u32)>,
     footnotes: HashMap<String, String>,
     footnote_order: Vec<String>,
+    /// bytes of text still allowed; the import fails when it runs out
+    text_budget: usize,
+    overflow: bool,
+    image_count: usize,
+    media_names: std::collections::HashSet<String>,
     media: Vec<(String, Vec<u8>)>,
     media_by_path: HashMap<String, String>,
     media_total: u64,
@@ -129,6 +138,10 @@ pub fn convert(data: &[u8], media_prefix: &str) -> anyhow::Result<Imported> {
         seen_num: Default::default(),
         footnotes: HashMap::new(),
         footnote_order: Vec::new(),
+        text_budget: MAX_TEXT,
+        overflow: false,
+        image_count: 0,
+        media_names: Default::default(),
         media: Vec::new(),
         media_by_path: HashMap::new(),
         media_total: 0,
@@ -160,6 +173,9 @@ pub fn convert(data: &[u8], media_prefix: &str) -> anyhow::Result<Imported> {
 
     let body = root.find("body").ok_or_else(|| anyhow::anyhow!("document has no body"))?;
     let mut blocks = r.blocks(body, 0);
+    if r.overflow {
+        anyhow::bail!("the document is too large to import (more than {} MB of text)", MAX_TEXT >> 20);
+    }
     if !r.footnote_order.is_empty() {
         blocks.push(Node::new(nodes::HORIZONTAL_RULE));
         for (i, id) in r.footnote_order.clone().iter().enumerate() {
@@ -261,7 +277,9 @@ impl Reader<'_> {
             }
             if let Some(id) = n.at("id") {
                 let text: Vec<String> = n.kids("p").map(|p| text_of(p).trim().to_string()).filter(|t| !t.is_empty()).collect();
-                self.footnotes.insert(id.to_string(), text.join(" "));
+                let text = text.join(" ");
+                let text = if text.chars().count() > MAX_FOOTNOTE { format!("{}…", text.chars().take(MAX_FOOTNOTE).collect::<String>()) } else { text };
+                self.footnotes.insert(id.to_string(), text);
             }
         }
     }
@@ -483,7 +501,7 @@ impl Reader<'_> {
             match local(&c.name) {
                 "t" if !field.in_instr => {
                     let t = c.text();
-                    if !t.is_empty() {
+                    if !t.is_empty() && self.spend(t.len()) {
                         out.push(Node::text_marked(t, ms.clone()));
                     }
                 }
@@ -513,8 +531,18 @@ impl Reader<'_> {
                 }
                 "footnoteReference" => {
                     if let Some(id) = c.at("id") {
-                        self.footnote_order.push(id.to_string());
-                        out.push(Node::text_marked(format!("{}", self.footnote_order.len()), vec![Mark::new(marks::SUPERSCRIPT)]));
+                        // each footnote is listed once; repeated references reuse its number
+                        let n = match self.footnote_order.iter().position(|f| f == id) {
+                            Some(i) => i + 1,
+                            None if self.footnote_order.len() < 5_000 => {
+                                self.footnote_order.push(id.to_string());
+                                self.footnote_order.len()
+                            }
+                            None => continue,
+                        };
+                        if self.spend(8) {
+                            out.push(Node::text_marked(format!("{n}"), vec![Mark::new(marks::SUPERSCRIPT)]));
+                        }
                     }
                 }
                 "sym" => {
@@ -528,6 +556,20 @@ impl Reader<'_> {
                     }
                 }
                 _ => {}
+            }
+        }
+    }
+
+    /// Takes `n` bytes from the text budget; false (and the import fails) once it is spent.
+    fn spend(&mut self, n: usize) -> bool {
+        match self.text_budget.checked_sub(n) {
+            Some(left) => {
+                self.text_budget = left;
+                true
+            }
+            None => {
+                self.overflow = true;
+                false
             }
         }
     }
@@ -595,9 +637,10 @@ impl Reader<'_> {
         let name = match self.media_by_path.get(&path) {
             Some(n) => n.clone(),
             None => {
-                if self.media_total > MAX_MEDIA_TOTAL {
+                if self.media_total > MAX_MEDIA_TOTAL || self.image_count >= MAX_IMAGES {
                     return None;
                 }
+                self.image_count += 1;
                 let f = self.zip.by_name(&path).ok()?;
                 let mut buf = Vec::new();
                 let read = f.take(MAX_IMAGE + 1).read_to_end(&mut buf).ok()? as u64;
@@ -608,10 +651,11 @@ impl Reader<'_> {
                 let base = path.rsplit('/').next().unwrap_or("image").to_string();
                 let mut name = base.clone();
                 let mut i = 1;
-                while self.media.iter().any(|(n, _)| *n == name) {
+                while self.media_names.contains(&name) {
                     i += 1;
                     name = format!("{i}-{base}");
                 }
+                self.media_names.insert(name.clone());
                 self.media.push((name.clone(), buf));
                 self.media_by_path.insert(path, name.clone());
                 name
@@ -1020,6 +1064,35 @@ mod tests {
         assert_eq!(callout_kind("EFF6FF"), "info");
         assert_eq!(callout_kind("F5F3FF"), "note");
         assert!(is_mono("Consolas") && is_mono("Ubuntu Mono") && !is_mono("Calibri"));
+    }
+
+    fn docx(document: &str, footnotes: &str) -> Vec<u8> {
+        use std::io::Write;
+        let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+        let o = zip::write::SimpleFileOptions::default();
+        w.start_file("word/document.xml", o).unwrap();
+        w.write_all(document.as_bytes()).unwrap();
+        w.start_file("word/footnotes.xml", o).unwrap();
+        w.write_all(footnotes.as_bytes()).unwrap();
+        w.finish().unwrap().into_inner()
+    }
+
+    #[test]
+    fn repeated_footnote_references_are_listed_once() {
+        let refs = "<w:r><w:footnoteReference w:id=\"1\"/></w:r>".repeat(20_000);
+        let doc = format!("<w:document xmlns:w=\"w\"><w:body><w:p><w:r><w:t>x</w:t></w:r>{refs}</w:p></w:body></w:document>");
+        let big = "lorem ipsum ".repeat(50_000);
+        let notes = format!("<w:footnotes xmlns:w=\"w\"><w:footnote w:id=\"1\"><w:p><w:r><w:t>{big}</w:t></w:r></w:p></w:footnote></w:footnotes>");
+        let out = convert(&docx(&doc, &notes), "m/").unwrap();
+        let text = wikicraft_doc_model::text::plain_text(&out.doc);
+        assert!(text.len() < 200_000, "footnote text appears once and is capped: {}", text.len());
+    }
+
+    #[test]
+    fn too_much_text_is_refused() {
+        let run = format!("<w:r><w:t>{}</w:t></w:r>", "a".repeat(1 << 20));
+        let doc = format!("<w:document xmlns:w=\"w\"><w:body>{}</w:body></w:document>", format!("<w:p>{run}</w:p>").repeat(17));
+        assert!(convert(&docx(&doc, "<w:footnotes xmlns:w=\"w\"/>"), "m/").is_err());
     }
 
     #[test]

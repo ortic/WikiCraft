@@ -29,7 +29,8 @@ pub struct DocxImage {
 }
 
 /// Images referenced by the document, keyed by their `src`.
-pub type Images = HashMap<String, DocxImage>;
+/// Images for one export, keyed by attachment id (`?query` variants of a URL are one image).
+pub type Images = HashMap<Uuid, DocxImage>;
 
 /// What the export needs besides the document itself.
 pub struct DocxInput<'a> {
@@ -48,8 +49,13 @@ pub struct DocxInput<'a> {
     pub page_id: Option<Uuid>,
 }
 
-const MAX_IMAGES: usize = 60;
+/// per export (a page tree shares them): distinct images loaded, their total size, and how
+/// many times images may be embedded (each embedding carries its own copy)
+const MAX_IMAGES: usize = 100;
 const MAX_IMAGE_BYTES: i64 = 25 << 20;
+const MAX_LOADED_BYTES: usize = 150 << 20;
+const MAX_EMBEDS: usize = 400;
+const MAX_EMBEDDED_BYTES: usize = 300 << 20;
 /// A4 with 2.54 cm margins: 9026 twips = 6.27 in ≈ 600 CSS px
 const TEXT_WIDTH_DXA: i32 = 9026;
 const CONTENT_WIDTH_PX: u32 = 600;
@@ -66,21 +72,25 @@ pub fn attachment_id(src: &str) -> Option<Uuid> {
 /// Loads the attachment images of `doc` that the principal may see (an attachment of another
 /// page only when that page is visible to them). External images are never fetched; they
 /// become links in the document.
-pub async fn load_images(state: &AppState, p: &Principal, doc: &Node) -> Images {
-    let mut srcs: Vec<String> = Vec::new();
+pub async fn load_images(state: &AppState, p: &Principal, doc: &Node, out: &mut Images) {
+    let mut ids: Vec<Uuid> = Vec::new();
     doc.walk(&mut |n| {
         if n.kind == nodes::IMAGE
-            && let Some(s) = n.attr_str("src")
-            && attachment_id(s).is_some()
-            && !srcs.iter().any(|x| x == s)
+            && let Some(id) = n.attr_str("src").and_then(attachment_id)
+            && !ids.contains(&id)
         {
-            srcs.push(s.to_string());
+            ids.push(id);
         }
     });
-    let mut out = Images::new();
+    let mut loaded: usize = out.values().map(|i| i.png.len()).sum();
     let mut allowed: HashMap<Uuid, bool> = HashMap::new();
-    for src in srcs.into_iter().take(MAX_IMAGES) {
-        let Some(id) = attachment_id(&src) else { continue };
+    for id in ids {
+        if out.contains_key(&id) {
+            continue;
+        }
+        if out.len() >= MAX_IMAGES || loaded >= MAX_LOADED_BYTES {
+            break;
+        }
         let row: Option<(Uuid, Option<String>, i64, String)> =
             sqlx::query_as("SELECT page_id, blob_key, size, media_type FROM attachments WHERE id = $1 AND deleted_at IS NULL")
                 .bind(id)
@@ -107,10 +117,10 @@ pub async fn load_images(state: &AppState, p: &Principal, doc: &Node) -> Images 
         let svg = mime.contains("svg");
         let prepared = tokio::task::spawn_blocking(move || if svg { rasterize_svg(&bytes, None) } else { prepare_image(&bytes) }).await;
         if let Ok(Some(img)) = prepared {
-            out.insert(src, img);
+            loaded += img.png.len();
+            out.insert(id, img);
         }
     }
-    out
 }
 
 /// Decodes an uploaded raster image for embedding: PNG as is, everything else re-encoded
@@ -255,6 +265,8 @@ struct Renderer<'a> {
     numberings: Vec<Numbering>,
     icons: HashMap<String, Option<DocxImage>>,
     macro_idx: usize,
+    /// images embedded so far in this export: (count, bytes, icons)
+    embeds: (usize, usize, usize),
 }
 
 // docx-rs always writes its own decimal list as abstract/num 1, so ours start above it
@@ -273,6 +285,7 @@ pub fn render_many(inputs: &[DocxInput]) -> anyhow::Result<Vec<u8>> {
     let mut numberings = vec![Numbering::new(BULLET_NUM, BULLET_ABS)];
     let mut icons: HashMap<String, Option<DocxImage>> = HashMap::new();
     let mut next_bookmark = 1;
+    let mut embeds = (0usize, 0usize, 0usize);
     for (section, input) in inputs.iter().enumerate() {
         let headings = text::headings(input.doc);
         let prefix = if section == 0 { String::new() } else { format!("s{section}") };
@@ -288,6 +301,7 @@ pub fn render_many(inputs: &[DocxInput]) -> anyhow::Result<Vec<u8>> {
             numberings: std::mem::take(&mut numberings),
             icons: std::mem::take(&mut icons),
             macro_idx: 0,
+            embeds,
         };
         let ctx = Ctx { width: TEXT_WIDTH_DXA, ..Default::default() };
         let id = r.bookmark();
@@ -304,6 +318,7 @@ pub fn render_many(inputs: &[DocxInput]) -> anyhow::Result<Vec<u8>> {
         numberings = std::mem::take(&mut r.numberings);
         icons = std::mem::take(&mut r.icons);
         next_bookmark = r.next_bookmark;
+        embeds = r.embeds;
     }
 
     let mut docx = Docx::new()
@@ -399,6 +414,11 @@ impl Renderer<'_> {
     }
 
     fn icon_run(&mut self, key: &str, svg: impl FnOnce() -> Option<String>) -> Option<Run> {
+        // icons are small, but each one is embedded: bounded too (text fallbacks after that)
+        if self.embeds.2 >= 3_000 {
+            return None;
+        }
+        self.embeds.2 += 1;
         self.icon(key, svg).map(|img| Run::new().add_image(pic(&img, ICON_PX, ICON_PX)))
     }
 
@@ -861,8 +881,12 @@ impl Renderer<'_> {
                     };
                     captions.push((c.to_string(), align));
                 }
-                match self.input.images.get(src) {
+                let img = attachment_id(src).and_then(|id| self.input.images.get(&id));
+                // every embedding carries its own copy of the image: bounded per export
+                let img = img.filter(|i| self.embeds.0 < MAX_EMBEDS && self.embeds.1 + i.png.len() <= MAX_EMBEDDED_BYTES);
+                match img {
                     Some(img) => {
+                        self.embeds = (self.embeds.0 + 1, self.embeds.1 + img.png.len(), self.embeds.2);
                         let max = (((ctx.width - ctx.indent).max(1440) as u32) / 15).min(CONTENT_WIDTH_PX);
                         let want = n.attr_i64("width").filter(|w| *w > 0).map(|w| w as u32).unwrap_or(img.w);
                         let w = want.min(max).max(8);

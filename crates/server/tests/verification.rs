@@ -37,8 +37,11 @@ async fn verify_expire_and_request_review() {
     assert_eq!(st, 400);
 
     // viewers ask for a review: only people who may edit can be asked, once while unread
+    // asking someone who can't edit answers the same (it mustn't reveal who may edit) but sends nothing
     let (st, _) = app.post(&viewer, &format!("/pages/{pg}/verification/request"), json!({"userId": viewer_id})).await;
-    assert_eq!(st, 400);
+    assert_eq!(st, 204);
+    let (_, n) = app.get(&viewer, "/notifications").await;
+    assert!(!n["items"].as_array().unwrap().iter().any(|i| i["kind"] == "verification_request"));
     for _ in 0..2 {
         let (st, _) = app.post(&viewer, &format!("/pages/{pg}/verification/request"), json!({"userId": editor_id, "note": "Still current?"})).await;
         assert_eq!(st, 204);

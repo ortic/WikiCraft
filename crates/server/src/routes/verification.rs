@@ -115,9 +115,21 @@ pub async fn request_review(
     .ok_or(ApiError::NotFound("user"))?;
     // only people who could verify the page can be asked (and this doesn't reveal more than
     // "can't review": both cases look the same)
+    // twenty requests per person and hour
+    let recent: i64 = sqlx::query_scalar(
+        "SELECT count(*) FROM notifications WHERE actor_id = $1 AND kind = 'verification_request' AND created_at > now() - interval '1 hour'",
+    )
+    .bind(user.id)
+    .fetch_one(&state.db)
+    .await?;
+    if recent >= 20 {
+        return Err(ApiError::bad("too many review requests; try again later"));
+    }
+    // only people who could verify the page are asked; the answer is the same either way, so
+    // it doesn't tell who may edit the page
     let rp = Principal::load(&state, Some(reviewer.clone())).await?;
     if !page_access(&state, &rp, id).await.map(|(a, _)| a.edit).unwrap_or(false) {
-        return Err(ApiError::bad("this person can't verify the page"));
+        return Ok(StatusCode::NO_CONTENT);
     }
     // one open request per page and reviewer
     let open: bool = sqlx::query_scalar(

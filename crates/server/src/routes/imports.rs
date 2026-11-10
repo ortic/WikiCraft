@@ -241,6 +241,9 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
     let is_docx = |n: &str| n.to_lowercase().ends_with(".docx");
     let mut word: HashMap<String, (Option<String>, Node)> = HashMap::new();
     let docx_files: Vec<(String, Bytes)> = files.iter().filter(|(n, _)| is_docx(n)).cloned().collect();
+    // images extracted from Word files count against one budget for the whole import
+    const MAX_EXTRACTED: usize = 512 << 20;
+    let mut extracted = 0usize;
     for (name, data) in docx_files {
         let file = name.rsplit('/').next().unwrap_or(&name).to_string();
         let prefix = format!("{file}.media/");
@@ -249,6 +252,10 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
             .map_err(|e| ApiError::Internal(e.into()))?
             .map_err(|e| ApiError::bad(format!("{name}: {e}")))?;
         for (img, bytes) in converted.media {
+            extracted += bytes.len();
+            if extracted > MAX_EXTRACTED {
+                return Err(ApiError::bad(format!("the Word files hold more than {} MB of images; import them in smaller batches", MAX_EXTRACTED >> 20)));
+            }
             files.push((format!("{name}.media/{img}"), Bytes::from(bytes)));
         }
         word.insert(name, (converted.title, converted.doc));

@@ -46,6 +46,21 @@ fn summary(event: &str, payload: &Value) -> (String, Option<String>, Option<Stri
     (text, url, Some(title.to_string()))
 }
 
+/// [`summary`] with the actor, page and space names passed through `esc`.
+fn summary_escaped(event: &str, payload: &Value, esc: &dyn Fn(&str) -> String) -> (String, Option<String>, Option<String>) {
+    let mut p = payload.clone();
+    for path in [&["data", "actor", "name"][..], &["data", "space", "name"][..], &["data", "page", "title"][..]] {
+        let mut v = &mut p;
+        for k in path {
+            v = &mut v[*k];
+        }
+        if let Some(s) = v.as_str() {
+            *v = Value::String(esc(s));
+        }
+    }
+    summary(event, &p)
+}
+
 /// The request body for a hook's format.
 pub fn render_body(format: &str, event: &str, payload: &Value) -> Value {
     if format == "json" || !FORMATS.contains(&format) {
@@ -55,12 +70,23 @@ pub fn render_body(format: &str, event: &str, payload: &Value) -> Value {
     let title = title.unwrap_or_default();
     match format {
         "teams" => {
-            // Markdown link inside an Adaptive Card (Teams "Workflows" webhooks)
-            let clean = title.replace(['[', ']'], "");
-            let link = match &url {
-                Some(u) => format!("[{clean}]({u})"),
-                None => clean,
+            // Markdown inside an Adaptive Card (Teams "Workflows" webhooks): names and titles are
+            // user content, so Markdown in them is escaped (no planted links or formatting)
+            let esc = |s: &str| {
+                let mut o = String::with_capacity(s.len());
+                for ch in s.chars() {
+                    if "\\`*_{}[]()#+-.!<>|~".contains(ch) {
+                        o.push('\\');
+                    }
+                    o.push(ch);
+                }
+                o
             };
+            let link = match &url {
+                Some(u) => format!("[{}]({u})", esc(&title)),
+                None => esc(&title),
+            };
+            let (text, _, _) = summary_escaped(event, payload, &esc);
             json!({
                 "type": "message",
                 "attachments": [{
@@ -376,7 +402,16 @@ mod tests {
         let slack = super::render_body("slack", "page.updated", &payload);
         assert_eq!(slack["text"], "Ann updated <https://wiki.test/pages/1|Q3 &lt;plan&gt; &amp; budget> in Finance (version 4)");
         let teams = super::render_body("teams", "page.updated", &payload);
-        assert_eq!(teams["attachments"][0]["content"]["body"][0]["text"], "Ann updated [Q3 <plan> & budget](https://wiki.test/pages/1) in Finance (version 4)");
+        assert_eq!(
+            teams["attachments"][0]["content"]["body"][0]["text"],
+            "Ann updated [Q3 \\<plan\\> & budget](https://wiki.test/pages/1) in Finance (version 4)"
+        );
+        // names can't plant Markdown links in the channel
+        let evil = serde_json::json!({"event": "page.created", "data": {"page": {"title": "T", "url": "https://wiki.test/pages/2"},
+            "space": {"name": "S"}, "actor": {"name": "[Sign in again](https://phish.example)"}}});
+        let card = super::render_body("teams", "page.created", &evil);
+        let text = card["attachments"][0]["content"]["body"][0]["text"].as_str().unwrap();
+        assert!(text.starts_with("\\[Sign in again\\]\\(https://phish\\.example\\)"), "{text}");
         assert_eq!(super::render_body("json", "page.updated", &payload), payload);
         let ping = super::render_body("googlechat", "ping", &serde_json::json!({"event": "ping", "data": {}}));
         assert!(ping["text"].as_str().unwrap().contains("works"));

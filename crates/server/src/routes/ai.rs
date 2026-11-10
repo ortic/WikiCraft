@@ -14,7 +14,7 @@ use axum::extract::State;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
-use wikicraft_doc_model::{html, markdown};
+use wikicraft_doc_model::{html, markdown, marks, nodes};
 
 use crate::app::AppState;
 use crate::auth::{CurrentUser, MaybeUser};
@@ -210,7 +210,8 @@ pub async fn ask(State(state): State<AppState>, CurrentUser(user): CurrentUser, 
     let mut prompt = String::from("<sources>\n");
     for (pi, text) in &context {
         let (_, title, _) = &pages[*pi];
-        prompt.push_str(&format!("<source id=\"{}\" title=\"{}\">\n{}\n</source>\n", pi + 1, xml_attr(title), text.replace("</source>", "</ source>")));
+        // no closing tag inside page text can end its <source> early (any case)
+        prompt.push_str(&format!("<source id=\"{}\" title=\"{}\">\n{}\n</source>\n", pi + 1, xml_attr(title), text.replace("</", "<\u{2060}/")));
     }
     prompt.push_str("</sources>\n\nQuestion: ");
     prompt.push_str(question);
@@ -223,7 +224,15 @@ pub async fn ask(State(state): State<AppState>, CurrentUser(user): CurrentUser, 
         let id = s["pageId"].as_str().unwrap_or("");
         linked = linked.replace(&format!("[{n}]"), &format!("[\\[{n}\\]]({base}/pages/{id})"));
     }
-    let answer_html = html::render(&markdown::markdown_to_pm(&linked).doc, &html::HtmlOptions { heading_ids: false });
+    // the answer may echo text an attacker planted in a page: no images (they would load on
+    // their own, carrying data out) and no links except into this wiki
+    let mut doc = markdown::markdown_to_pm(&linked).doc;
+    let internal = |href: &str| href.starts_with(&format!("{base}/")) || (href.starts_with('/') && !href.starts_with("//"));
+    doc.walk_mut(&mut |n| {
+        n.content.retain(|c| c.kind != nodes::IMAGE);
+        n.marks.retain(|m| m.kind != marks::LINK || m.attr_str("href").is_some_and(internal));
+    });
+    let answer_html = html::render(&doc, &html::HtmlOptions { heading_ids: false });
     // the pages the answer cites (all retrieved pages when it cites none)
     let cited: Vec<Value> = sources.iter().filter(|s| answer.contains(&format!("[{}]", s["n"]))).cloned().collect();
     let sources = if cited.is_empty() { sources } else { cited };

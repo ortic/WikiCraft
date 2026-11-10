@@ -56,6 +56,22 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
 - Note: running the whole test suite saturates this WSL machine (load ~100); a parallel demo server then hits DB
   pool timeouts, and the mail test's 4-second wait can flake. Both pass when the machine is idle.
 
+## Security review 3 (independent review agent, 2026-11-10 night: Word import/export, AI, sign-up, archive, …) — status
+No authorization bypass found; all new read paths check visibility. Fixed:
+1. [x] HIGH docx import: repeated references to a huge footnote multiplied its text (OOM with one ~1 MB upload)
+   → footnotes listed once, capped at 20k chars; 16 MB text budget per document; XML parts capped at 24 MB
+2. [x] MED Word export amplification (same image via `?1`, `?2`; unbounded occurrences; macros × page tree)
+   → images keyed by attachment id and loaded once per export (≤100, ≤150 MB); ≤400 embeddings / 300 MB;
+   ≤3,000 icons; 40 report macros per export; two exports at a time; page-tree export needs sign-in
+3. [x] MED prompt injection could exfiltrate restricted text via images in AI answers → images dropped, only
+   links into the wiki kept; closing tags in page text neutralised in any case
+4. [x] MED docx import: media across a zip of Word files unbounded; O(n³) name collisions → 512 MB per
+   import, 500 images per document, HashSet naming
+5. [x] LOW open sign-up: junk user rows, mail spam, could cancel an admin's invitation → requests live in
+   `signup_requests` (no user until confirmed, invitations untouched), 200 per hour overall
+6. [x] LOW Teams cards: Markdown in names/titles (phishing links) → escaped
+7. [x] LOW review requests revealed who may edit and allowed spam → same answer, 20 per hour
+
 ## Security review 2 (independent review agent, 2026-11-09 evening) — status
 1. [x] HIGH stored XSS: status colour unescaped in server-rendered HTML (public share pages, exports) → allow-list + CSP
 2. [x] HIGH TOTP brute force via fresh challenges / racy attempt counter → per-user limit, atomic counter

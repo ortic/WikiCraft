@@ -191,6 +191,17 @@ async fn open_signup_for_allowed_domains() {
     assert_eq!(app.post(&client(), "/auth/signup", json!({"email": format!("x-{tag}@elsewhere.test")})).await.0, 400);
     let email = format!("newbie@{domain}");
     assert_eq!(app.post(&client(), "/auth/signup", json!({"email": email})).await.0, 204);
+    // no account exists until the address is confirmed
+    let (_, users) = app.get(&owner, "/users").await;
+    assert!(!users.to_string().contains(&email), "{users}");
+    // a sign-up request for an invited address doesn't cancel the admin's invitation
+    let invited = format!("inv@{domain}");
+    let (_, inv) = app.post(&owner, "/users/invite", json!({"email": invited})).await;
+    let invite_url = inv["inviteUrl"].as_str().unwrap().to_string();
+    assert_eq!(app.post(&client(), "/auth/signup", json!({"email": invited})).await.0, 204);
+    let invite_token = invite_url.split("token=").nth(1).unwrap().to_string();
+    let (st, _) = app.get(&client(), &format!("/auth/invite?token={invite_token}")).await;
+    assert_eq!(st, 200, "the invitation still works");
     let text = mail_to(&email, "Confirm your e-mail").await;
     let token = token_in(&text, "/accept-invite");
     let fresh = client();

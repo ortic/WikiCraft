@@ -1028,7 +1028,12 @@ struct DocxPage {
     macros: Vec<Option<crate::routes::reports::Snapshot>>,
 }
 
-async fn docx_page(state: &AppState, p: &Principal, id: Uuid, title: String, doc: Node) -> ApiResult<DocxPage> {
+/// Word exports are memory-heavy: at most two at a time per replica.
+static DOCX_EXPORTS: tokio::sync::Semaphore = tokio::sync::Semaphore::const_new(2);
+/// report macros evaluated per export (a page tree shares the budget)
+const DOCX_MACRO_BUDGET: usize = 40;
+
+async fn docx_page(state: &AppState, p: &Principal, id: Uuid, title: String, doc: Node, macro_budget: &mut usize) -> ApiResult<DocxPage> {
     let (space, space_key, updated_at, updated_by): (String, String, chrono::DateTime<chrono::Utc>, Option<String>) = sqlx::query_as(
         "SELECT s.name, s.key, p.updated_at, u.name FROM pages p JOIN spaces s ON s.id = p.space_id LEFT JOIN users u ON u.id = p.updated_by WHERE p.id = $1",
     )
@@ -1061,8 +1066,13 @@ async fn docx_page(state: &AppState, p: &Principal, id: Uuid, title: String, doc
         }
     });
     let mut macros = Vec::with_capacity(found.len());
-    for (i, (name, params)) in found.iter().enumerate() {
-        let snap = if i < 25 { crate::routes::reports::snapshot(state, p, name, params, id, &space_key, &base).await? } else { None };
+    for (name, params) in found.iter() {
+        let snap = if *macro_budget > 0 {
+            *macro_budget -= 1;
+            crate::routes::reports::snapshot(state, p, name, params, id, &space_key, &base).await?
+        } else {
+            None
+        };
         macros.push(snap);
     }
     let by = updated_by.map(|n| format!(" by {n}")).unwrap_or_default();
@@ -1073,7 +1083,12 @@ async fn docx_page(state: &AppState, p: &Principal, id: Uuid, title: String, doc
 /// The page, or with `tree` the page and every descendant the reader can see (depth first,
 /// at most 200 pages), as one Word document.
 async fn export_docx(state: &AppState, p: &Principal, id: Uuid, title: String, doc: Node, tree: bool) -> ApiResult<Vec<u8>> {
-    let mut pages = vec![docx_page(state, p, id, title, doc).await?];
+    if tree && p.user.is_none() {
+        return Err(ApiError::Unauthorized);
+    }
+    let _slot = DOCX_EXPORTS.acquire().await.map_err(|e| ApiError::Internal(e.into()))?;
+    let mut budget = DOCX_MACRO_BUDGET;
+    let mut pages = vec![docx_page(state, p, id, title, doc, &mut budget).await?];
     if tree {
         let rows: Vec<(Uuid, String, Value)> = sqlx::query_as(
             "WITH RECURSIVE t AS (
@@ -1097,13 +1112,13 @@ async fn export_docx(state: &AppState, p: &Principal, id: Uuid, title: String, d
                 Some(r) => r.snapshot(),
                 None => Node::from_json(&content).unwrap_or_else(|_| Node::empty_doc()),
             };
-            pages.push(docx_page(state, p, cid, ctitle, cdoc).await?);
+            pages.push(docx_page(state, p, cid, ctitle, cdoc, &mut budget).await?);
         }
     }
     // one image map for all pages (each image checked against the reader)
     let mut images = crate::docx::Images::new();
     for pg in &pages {
-        images.extend(crate::docx::load_images(state, p, &pg.doc).await);
+        crate::docx::load_images(state, p, &pg.doc, &mut images).await;
     }
     let base = state.config.base_url.trim_end_matches('/').to_string();
     let bytes = tokio::task::spawn_blocking(move || {
