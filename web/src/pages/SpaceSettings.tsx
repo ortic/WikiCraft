@@ -58,13 +58,15 @@ function Details({ space }: { space: Space }) {
   const [description, setDescription] = useState(space.description ?? '')
   const [icon, setIcon] = useState(space.icon ?? '')
   const [key, setKey] = useState(space.key)
+  const [defaultTemplate, setDefaultTemplate] = useState((space as Space & { defaultTemplate?: string | null }).defaultTemplate ?? '')
+  const templates = useQuery({ queryKey: ['templates', space.key], queryFn: () => api.get<{ id: string; name: string }[]>(`/templates?spaceKey=${encodeURIComponent(space.key)}`) })
   const nav = useNavigate()
   const save = async () => {
     const newKey = key.trim().toUpperCase()
     const renamed = newKey !== space.key
     if (renamed && !confirm(`Change the space key from ${space.key} to ${newKey}? Links with ${space.key} keep working.`)) return
     try {
-      await api.patch(`/spaces/${space.key}`, { name, description, icon, ...(renamed ? { key: newKey } : {}) })
+      await api.patch(`/spaces/${space.key}`, { name, description, icon, defaultTemplate, ...(renamed ? { key: newKey } : {}) })
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Could not save')
       return
@@ -82,6 +84,13 @@ function Details({ space }: { space: Space }) {
         <SymbolPicker value={icon || null} onChange={(v) => setIcon(v ?? '')} />
       </div>
       <div className="field"><label>Description</label><textarea className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} /></div>
+      <div className="field">
+        <label>New pages start from</label>
+        <select className="select" style={{ maxWidth: 360 }} value={defaultTemplate} onChange={(e) => setDefaultTemplate(e.target.value)}>
+          <option value="">A blank page</option>
+          {templates.data?.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+      </div>
       <div className="field">
         <label>Key</label>
         <input className="input" value={key} maxLength={32} onChange={(e) => setKey(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ''))} />

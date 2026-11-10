@@ -22,10 +22,13 @@ export default function TemplatePicker({ spaceKey, parentId, onClose }: { spaceK
   const toast = useToast()
   const [busy, setBusy] = useState(false)
   const templates = useQuery({ queryKey: ['templates', spaceKey], queryFn: () => api.get<Template[]>(`/templates?spaceKey=${encodeURIComponent(spaceKey)}`) })
+  const space = useQuery({ queryKey: ['space', spaceKey], queryFn: () => api.get<{ defaultTemplate?: string | null }>(`/spaces/${spaceKey}`) })
+  const def = space.data?.defaultTemplate ?? null
+  const ordered = [...(templates.data ?? [])].sort((a, b) => Number(b.id === def) - Number(a.id === def))
   const create = async (templateId?: string) => {
     setBusy(true)
     try {
-      const r = await api.post<{ id: string }>('/pages', { spaceKey, parentId: parentId ?? undefined, templateId, title: templateId ? undefined : 'Untitled' })
+      const r = await api.post<{ id: string }>('/pages', { spaceKey, parentId: parentId ?? undefined, templateId, title: templateId ? undefined : 'Untitled', blank: !templateId })
       qc.invalidateQueries({ queryKey: ['tree', spaceKey] })
       onClose()
       nav(`/pages/${r.id}?new=1`)
@@ -50,7 +53,7 @@ export default function TemplatePicker({ spaceKey, parentId, onClose }: { spaceK
     <Modal title="Create a page" onClose={onClose} width={760}>
       <div className="grid-cards">
         {card('blank', <FilePlus2 size={22} />, 'Blank page', 'Start from scratch', () => create())}
-        {templates.data?.map((t) => card(t.id, <SymbolTile value={parseSymbol(t.icon) ? t.icon : 'document:slate'} size={30} />, t.name, t.description, () => create(t.id), t.builtin ? undefined : t.spaceKey ? 'space' : 'workspace'))}
+        {ordered.map((t) => card(t.id, <SymbolTile value={parseSymbol(t.icon) ? t.icon : 'document:slate'} size={30} />, t.name, t.description, () => create(t.id), t.id === def ? 'space default' : t.builtin ? undefined : t.spaceKey ? 'space' : 'workspace'))}
       </div>
     </Modal>
   )

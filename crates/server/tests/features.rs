@@ -295,3 +295,23 @@ async fn watching_a_space() {
     let (_, s) = app.get(&fan, "/spaces/NEWS").await;
     assert_eq!(s["watching"], false);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn space_default_template() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    app.post(&owner, "/spaces", json!({"key": "MTG", "name": "Meetings"})).await;
+    assert_eq!(app.patch(&owner, "/spaces/MTG", json!({"defaultTemplate": "builtin:nope"})).await.0, 400);
+    let (st, s) = app.patch(&owner, "/spaces/MTG", json!({"defaultTemplate": "builtin:meeting-notes"})).await;
+    assert_eq!(st, 200, "{s}");
+    assert_eq!(s["defaultTemplate"], "builtin:meeting-notes");
+    let (_, pg) = app.post(&owner, "/pages", json!({"spaceKey": "MTG", "title": "Sync"})).await;
+    let (_, p) = app.get(&owner, &format!("/pages/{}", pg["id"].as_str().unwrap())).await;
+    assert!(p["content"]["content"].as_array().unwrap().len() > 2, "starts from the template: {p}");
+    let (_, pg) = app.post(&owner, "/pages", json!({"spaceKey": "MTG", "title": "Empty", "blank": true})).await;
+    let (_, p) = app.get(&owner, &format!("/pages/{}", pg["id"].as_str().unwrap())).await;
+    assert!(p["content"]["content"].as_array().unwrap().len() <= 1, "blank stays blank: {p}");
+    app.patch(&owner, "/spaces/MTG", json!({"defaultTemplate": ""})).await;
+    let (_, s) = app.get(&owner, "/spaces/MTG").await;
+    assert!(s["defaultTemplate"].is_null());
+}

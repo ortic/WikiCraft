@@ -123,6 +123,9 @@ pub struct CreatePage {
     kind: Option<String>,
     /// Create from a template (`builtin:*` or a template id).
     template_id: Option<String>,
+    /// an empty page even when the space has a default template
+    #[serde(default)]
+    blank: bool,
 }
 
 pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUser, Json(req): Json<CreatePage>) -> ApiResult<(StatusCode, Json<Value>)> {
@@ -142,7 +145,9 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
         return Err(ApiError::bad("kind must be page, folder or blog"));
     }
     let mut template_title = None;
-    let content = match (req.content, req.markdown, &req.template_id) {
+    // pages start from the space's default template unless asked for something else
+    let template = req.template_id.clone().or_else(|| if req.blank || kind != "page" { None } else { space.default_template.clone() });
+    let content = match (req.content, req.markdown, &template) {
         (Some(c), _, _) => {
             let mut n = Node::from_json(&c)?;
             wikicraft_doc_model::node::sanitize_tree(&mut n);

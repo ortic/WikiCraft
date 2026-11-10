@@ -28,10 +28,12 @@ pub struct SpaceRow {
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
     pub archived_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// the template new pages start from
+    #[sqlx(default)]
+    pub default_template: Option<String>,
 }
 
-pub const SPACE_COLUMNS: &str =
-    "id, workspace_id, key, name, description, icon, home_page_id, default_role, anonymous_access, personal_owner_id, created_at, updated_at, archived_at";
+pub const SPACE_COLUMNS: &str = "id, workspace_id, key, name, description, icon, home_page_id, default_role, anonymous_access, personal_owner_id, created_at, updated_at, archived_at, default_template";
 
 impl SpaceRow {
     pub fn access_row(&self) -> SpaceAccessRow {
@@ -357,6 +359,8 @@ pub struct UpdateSpace {
     default_role: Option<String>,
     anonymous_access: Option<bool>,
     home_page_id: Option<Uuid>,
+    /// template for new pages: a template id, or "" for none
+    default_template: Option<String>,
 }
 
 /// Gives a space a new key and keeps the old one as an alias.
@@ -403,6 +407,17 @@ pub async fn update(
     }
     if req.anonymous_access == Some(true) && !space.anonymous_access && !user.is_admin() {
         return Err(ApiError::bad("only workspace admins can make a space public"));
+    }
+    if let Some(t) = req.default_template.as_deref().filter(|t| !t.is_empty()) {
+        // must resolve (built-in or a template of this workspace)
+        crate::routes::templates::resolve(&state, user.workspace_id, t).await.map_err(|_| ApiError::bad("unknown template"))?;
+    }
+    if let Some(t) = &req.default_template {
+        sqlx::query("UPDATE spaces SET default_template = $2 WHERE id = $1")
+            .bind(space.id)
+            .bind(Some(t.as_str()).filter(|t| !t.is_empty()))
+            .execute(&state.db)
+            .await?;
     }
     let new_key = match req.key.as_deref() {
         Some(k) => Some(validate_key(k)?).filter(|k| *k != space.key),
