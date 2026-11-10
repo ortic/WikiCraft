@@ -218,7 +218,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Pages with unlimited nesting (page tree) `C D X O B`
 - [x] **P0** Drag & drop reorder / move in the tree (with permission checks and link preservation) `C D X O`
 - [x] **P1** Folders (containers without content) `C` — new folder from the tree header, a folder or the command palette; a folder shows its contents (pages, folders, excerpts) with New page / New folder instead of an editor; Confluence Cloud folders import as folders
-- [~] **P1** Blog posts / news per space (date-based, separate from tree, RSS/Atom) `C X` (no RSS/Atom feed)
+- [x] **P1** Blog posts / news per space (date-based, separate from tree, RSS/Atom) `C X` — Atom feed per space blog (`/api/spaces/{key}/blog.atom`: latest 20 visible posts with their text, absolute links, no drafts; anonymous for public spaces, API tokens otherwise)
 - [~] **P1** Live docs (always-live document, no publish step) vs. classic pages (draft → publish) as a per-page mode `C` (live mode only; no draft/publish)
 - [x] **P1** Smart link / embed nodes in the tree (link to an external resource as a tree item) `C` — Create → "Link to a website": a tree item that opens the URL in a new tab (its page shows a link preview)
 - [ ] **P2** Whiteboards as first-class tree items (see §4.10) `C D`

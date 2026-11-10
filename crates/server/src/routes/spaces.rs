@@ -738,3 +738,58 @@ pub async fn unwatch(State(state): State<AppState>, CurrentUser(user): CurrentUs
     sqlx::query("DELETE FROM space_watches WHERE user_id = $1 AND space_id = $2").bind(user.id).bind(space.id).execute(&state.db).await?;
     Ok(StatusCode::NO_CONTENT)
 }
+
+fn xml_escape(s: &str) -> String {
+    s.replace('&', "&amp;").replace('<', "&lt;").replace('>', "&gt;").replace('"', "&quot;").replace('\'', "&apos;")
+}
+
+/// `GET /api/spaces/{key}/blog.atom` — the space's blog as an Atom feed: the latest 20 posts
+/// the reader may see, with their text (no drafts). Public spaces work without signing in;
+/// feed readers can send a (read-only) API token as `Authorization: Bearer …`.
+pub async fn blog_feed(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path(key): Path<String>) -> ApiResult<axum::response::Response> {
+    use axum::response::IntoResponse;
+    let p = Principal::load(&state, user).await?;
+    let (space, role) = load_space(&state, &p, &key).await?;
+    type Row = (Uuid, String, serde_json::Value, chrono::DateTime<chrono::Utc>, chrono::DateTime<chrono::Utc>, Option<String>);
+    let rows: Vec<Row> = sqlx::query_as(
+        "SELECT p.id, p.title, p.content, p.created_at, p.updated_at, u.name FROM pages p LEFT JOIN users u ON u.id = p.created_by
+          WHERE p.space_id = $1 AND p.kind = 'blog' AND p.deleted_at IS NULL AND p.archived_at IS NULL AND NOT p.draft
+          ORDER BY p.created_at DESC LIMIT 60",
+    )
+    .bind(space.id)
+    .fetch_all(&state.db)
+    .await?;
+    let pairs: Vec<(Uuid, Option<Uuid>)> =
+        sqlx::query_as("SELECT id, parent_id FROM pages WHERE space_id = $1 AND deleted_at IS NULL").bind(space.id).fetch_all(&state.db).await?;
+    let visible = visible_page_ids(&state, &p, space.id, role, &pairs).await?;
+    let base = state.config.base_url.trim_end_matches('/').to_string();
+    let posts: Vec<&Row> = rows.iter().filter(|r| visible.contains(&r.0)).take(20).collect();
+    let updated = posts.iter().map(|r| r.4).max().unwrap_or(space.updated_at);
+    let mut out = String::from("<?xml version=\"1.0\" encoding=\"utf-8\"?>\n<feed xmlns=\"http://www.w3.org/2005/Atom\">\n");
+    out.push_str(&format!(
+        "  <title>{} · Blog</title>\n  <id>{base}/spaces/{}/blog</id>\n  <link rel=\"alternate\" type=\"text/html\" href=\"{base}/spaces/{}/blog\"/>\n  <link rel=\"self\" href=\"{base}/api/spaces/{}/blog.atom\"/>\n  <updated>{}</updated>\n",
+        xml_escape(&space.name),
+        xml_escape(&space.key),
+        xml_escape(&space.key),
+        xml_escape(&space.key),
+        updated.to_rfc3339()
+    ));
+    for (id, title, content, created, updated, author) in posts {
+        let doc = wikicraft_doc_model::Node::from_json(content).unwrap_or_else(|_| wikicraft_doc_model::Node::empty_doc());
+        // feed readers need absolute links (images, attachments, pages)
+        let html = wikicraft_doc_model::html::render(&doc, &wikicraft_doc_model::html::HtmlOptions::default())
+            .replace("src=\"/", &format!("src=\"{base}/"))
+            .replace("href=\"/", &format!("href=\"{base}/"));
+        out.push_str(&format!(
+            "  <entry>\n    <title>{}</title>\n    <id>{base}/pages/{id}</id>\n    <link rel=\"alternate\" type=\"text/html\" href=\"{base}/pages/{id}\"/>\n    <published>{}</published>\n    <updated>{}</updated>\n    <author><name>{}</name></author>\n    <content type=\"html\">{}</content>\n  </entry>\n",
+            xml_escape(title),
+            created.to_rfc3339(),
+            updated.to_rfc3339(),
+            xml_escape(author.as_deref().unwrap_or("Unknown")),
+            xml_escape(&html)
+        ));
+    }
+    out.push_str("</feed>\n");
+    Ok(([(axum::http::header::CONTENT_TYPE, "application/atom+xml; charset=utf-8"), (axum::http::header::CACHE_CONTROL, "private, max-age=300")], out)
+        .into_response())
+}

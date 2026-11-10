@@ -1,7 +1,7 @@
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useCanonicalSpaceKey } from '../useCanonicalKey'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { MessageSquare, PenSquare } from 'lucide-react'
+import { MessageSquare, PenSquare, Rss } from 'lucide-react'
 import { api, formatDate, type Space } from '../api'
 import { Avatar, Spinner } from '../ui'
 
@@ -32,6 +32,11 @@ export default function Blog() {
       <div className="row">
         <h1 style={{ margin: 0 }}>{space.data?.name} blog</h1>
         <span className="spacer" />
+        {space.data && (
+          <a className="btn btn-ghost" href={`/api/spaces/${encodeURIComponent(space.data.key)}/blog.atom`} title="Follow this blog in a feed reader (Atom)">
+            <Rss size={15} /> Feed
+          </a>
+        )}
         {canWrite && (
           <button className="btn btn-primary" onClick={write}>
             <PenSquare size={15} /> Write a post

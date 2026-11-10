@@ -107,6 +107,7 @@ pub fn router(state: AppState) -> Router {
         .route("/spaces/{key}/trash", get(spaces::trash))
         .route("/spaces/{key}/trash/empty", post(spaces::empty_trash))
         .route("/spaces/{key}/blog", get(spaces::blog))
+        .route("/spaces/{key}/blog.atom", get(spaces::blog_feed))
         // pages
         .route("/pages", post(pages::create))
         .route("/pages/{id}", get(pages::get).patch(pages::update).delete(pages::trash))

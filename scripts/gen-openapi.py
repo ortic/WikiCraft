@@ -127,6 +127,7 @@ op("/spaces/{key}/permissions", "put", "Spaces", "Replace space role grants", re
 op("/spaces/{key}/trash/empty", "post", "Spaces", "Empty the space's trash: delete every trashed page you can see for good (space admins)", res=resp(obj({"purged": num, "kept": num})))
 op("/spaces/{key}/trash", "get", "Spaces", "Trashed pages")
 op("/spaces/{key}/blog", "get", "Spaces", "Blog posts", public=True)
+op("/spaces/{key}/blog.atom", "get", "Spaces", "The space's blog as an Atom feed (latest 20 posts you can see; public spaces without signing in)", public=True)
 op("/spaces/{key}/export", "post", "Import & export", "Export a space (HTML site, Markdown, backup) as a job", req=body(obj({"format": {"enum": ["html", "markdown", "backup"]}})), res=resp(obj({"jobId": uuid}), "202", "Queued"))
 # pages
 op("/pages", "post", "Pages", "Create a page", req=body(S("NewPage")), res=resp(obj({"id": uuid}), "201", "Created"))

@@ -2040,6 +2040,30 @@ paths:
       - {}
       - session: []
       - token: []
+  /spaces/{key}/blog.atom:
+    get:
+      tags:
+      - Spaces
+      summary: The space's blog as an Atom feed (latest 20 posts you can see; public spaces without signing in)
+      operationId: get_spaces_key_blog_atom
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - {}
+      - session: []
+      - token: []
   /spaces/{key}/export:
     post:
       tags:

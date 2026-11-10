@@ -1007,3 +1007,34 @@ async fn task_reminders_on_the_due_date() {
     let (_, n) = app.get(&bob, "/notifications").await;
     assert!(n["items"].as_array().unwrap().iter().all(|i| i["kind"] != "task_due"));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn blog_atom_feed() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    app.post(&owner, "/spaces", json!({"key": "NEWS", "name": "News & Updates"})).await;
+    let (_, post) = app
+        .post(&owner, "/pages", json!({"spaceKey": "NEWS", "kind": "blog", "title": "Release <2.0>", "markdown": "We shipped. See [the notes](/pages/123)."}))
+        .await;
+    app.post(&owner, "/pages", json!({"spaceKey": "NEWS", "kind": "blog", "title": "Not yet", "markdown": "secret", "draft": true})).await;
+    let feed_url = format!("{}/api/spaces/NEWS/blog.atom", app.base);
+
+    let r = owner.get(&feed_url).send().await.unwrap();
+    assert_eq!(r.status(), 200);
+    assert!(r.headers()["content-type"].to_str().unwrap().starts_with("application/atom+xml"));
+    let xml = r.text().await.unwrap();
+    assert!(xml.starts_with("<?xml") && xml.contains("<feed xmlns=\"http://www.w3.org/2005/Atom\">"));
+    assert!(xml.contains("<title>News &amp; Updates · Blog</title>"));
+    assert!(xml.contains("<title>Release &lt;2.0&gt;</title>"), "titles are escaped");
+    assert!(xml.contains(&format!("{}/pages/{}", app.base, post["id"].as_str().unwrap())));
+    assert!(xml.contains(&format!("href=&quot;{}/pages/123&quot;", app.base)), "links are absolute: {xml}");
+    assert!(!xml.contains("Not yet"), "no drafts");
+
+    // a private space has no anonymous feed; a public one has
+    assert!(reqwest::get(&feed_url).await.unwrap().status().is_client_error());
+    let (st, _) = app.patch(&owner, "/spaces/NEWS", json!({"anonymousAccess": true})).await;
+    assert_eq!(st, 200);
+    let r = reqwest::get(&feed_url).await.unwrap();
+    assert_eq!(r.status(), 200);
+    assert!(r.text().await.unwrap().contains("We shipped."));
+}

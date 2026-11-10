@@ -108,6 +108,12 @@ Fixing a typo? Switch on **Minor change** under the page title while you edit: w
 edited in that session did, watchers aren't notified and the version is marked *minor* in the
 history.
 
+## Blogs
+
+Every space has a blog (sidebar → *Blog*) for news, release notes and announcements; posts start as
+drafts like pages. **Feed** on the blog page is an Atom feed of the latest posts for feed readers:
+public spaces work as is, for others give the feed reader a read-only API token (Settings).
+
 ## Sharing
 
 - **Share → Copy link**: a permanent link that survives renames and moves.
