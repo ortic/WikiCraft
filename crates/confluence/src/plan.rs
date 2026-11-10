@@ -192,22 +192,7 @@ pub struct Planner<'e> {
 /// The export's own site, as seen in its bodies: hosts of absolute links whose page id is in the
 /// export. Exports don't name their site; title links to other sites must not be rewritten.
 fn site_hosts(export: &Export) -> HashSet<String> {
-    let mut hosts = HashSet::new();
-    for b in export.bodies.values() {
-        let mut rest = b.body.as_str();
-        while let Some(i) = rest.find("href=\"http") {
-            rest = &rest[i + 6..];
-            let Some(end) = rest.find('"') else { break };
-            let url = rest[..end].replace("&amp;", "&");
-            rest = &rest[end..];
-            if let Some((host, crate::urls::Target::PageId { id, .. } | crate::urls::Target::Tiny { id })) = crate::urls::parse(&url)
-                && export.contents.contains_key(&id)
-            {
-                hosts.insert(host);
-            }
-        }
-    }
-    hosts
+    export.bodies.site_links().iter().filter(|(_, id)| export.contents.contains_key(id)).map(|(host, _)| host.clone()).collect()
 }
 
 impl<'e> Planner<'e> {
@@ -250,7 +235,7 @@ impl<'e> Planner<'e> {
         }
         // Exports can carry buggy history: the same version number twice. Order by version, then
         // date (then id), and drop exact duplicates (same number, date and body).
-        let body_of = |c: &Content| export.bodies.get(&c.id).map(|b| b.body.as_str());
+        let body_of = |c: &Content| export.bodies.get(&c.id).map(|b| b.body);
         let mut duplicate_versions = 0u64;
         for v in history.values_mut() {
             v.sort_by(|a, b| a.version.cmp(&b.version).then_with(|| a.modified.cmp(&b.modified)).then_with(|| a.id.cmp(&b.id)));
@@ -827,7 +812,7 @@ mod tests {
             status: None,
         });
         for c in contents {
-            ex.bodies.insert(c.id.clone(), Body { content_id: c.id.clone(), kind: BodyKind::Storage, body: format!("<p>{}</p>", c.title) });
+            ex.bodies.insert(Body { content_id: c.id.clone(), kind: BodyKind::Storage, body: format!("<p>{}</p>", c.title) });
             ex.contents.insert(c.id.clone(), c);
         }
         ex

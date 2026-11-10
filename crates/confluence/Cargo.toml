@@ -5,6 +5,7 @@ edition = "2024"
 
 [dependencies]
 base64 = "0.23.1"
+tempfile = "3.27.0"
 csv = "1.4.0"
 flate2 = "1.1.11"
 quick-xml = "0.42.0"

@@ -265,8 +265,8 @@ pub struct Export {
     pub descriptor: BTreeMap<String, String>,
     pub spaces: Vec<Space>,
     pub contents: BTreeMap<String, Content>,
-    /// Best body per content id (storage preferred).
-    pub bodies: HashMap<String, Body>,
+    /// Best body per content id (storage preferred), kept on disk (see [`crate::bodies`]).
+    pub bodies: crate::bodies::BodyStore,
     pub users: HashMap<String, User>,
     pub labellings: Vec<Labelling>,
     pub space_permissions: Vec<SpacePermission>,
@@ -282,7 +282,7 @@ pub struct Export {
 }
 
 impl Export {
-    pub fn body(&self, content_id: &str) -> Option<&Body> {
+    pub fn body(&self, content_id: &str) -> Option<Body> {
         self.bodies.get(content_id)
     }
 
@@ -296,11 +296,8 @@ impl Export {
 
     /// Records a body, preferring storage format over other representations.
     pub(crate) fn add_body(&mut self, body: Body) {
-        match self.bodies.get(&body.content_id) {
-            Some(existing) if existing.kind == BodyKind::Storage && body.kind != BodyKind::Storage => {}
-            _ => {
-                self.bodies.insert(body.content_id.clone(), body);
-            }
+        if !(self.bodies.kind(&body.content_id) == Some(BodyKind::Storage) && body.kind != BodyKind::Storage) {
+            self.bodies.insert(body);
         }
     }
 

@@ -7,6 +7,7 @@
 //! println!("{} pages", plan.report.counts.get("pages").unwrap_or(&0));
 //! ```
 
+pub mod bodies;
 pub mod csv_export;
 pub mod dom;
 pub mod entities;
@@ -65,6 +66,9 @@ pub fn read(source: &Source) -> Result<Export, Error> {
         return Err(Error::Format("this looks like a Confluence HTML export; use the HTML importer".into()));
     } else {
         return Err(Error::Format("neither entities.xml nor content.csv found".into()));
+    }
+    if let Some(e) = export.bodies.take_error() {
+        return Err(Error::Io(std::io::Error::new(e.kind(), format!("storing page bodies in a temporary file: {e}"))));
     }
     if export.spaces.is_empty() {
         export.read_warnings.push("export contains no space".into());
