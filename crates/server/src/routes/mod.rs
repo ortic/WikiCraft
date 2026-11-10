@@ -87,6 +87,7 @@ pub fn router(state: AppState) -> Router {
         // users & groups
         .route("/users", get(users::list).post(users::create))
         .route("/users/{id}", axum::routing::patch(users::update))
+        .route("/users/{id}/merge", post(users::merge))
         .route("/groups", get(users::list_groups).post(users::create_group))
         .route("/groups/{id}", delete(users::delete_group))
         .route("/groups/{id}/members", post(users::add_member))

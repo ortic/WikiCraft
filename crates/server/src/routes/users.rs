@@ -272,3 +272,187 @@ pub async fn remove_member(State(state): State<AppState>, CurrentUser(admin): Cu
     audit::log(&state, admin.workspace_id, Some(admin.id), "group.remove_member", Some("group"), Some(id), json!({"userId": user_id})).await;
     Ok(StatusCode::NO_CONTENT)
 }
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct MergeUser {
+    into_user_id: Uuid,
+}
+
+/// Rows of `table` whose `column` is `from` now point at `to`. Where that would duplicate a row
+/// the target already has (likes, watches, permissions …), the placeholder's row is dropped.
+async fn repoint(tx: &mut sqlx::PgConnection, table: &str, column: &str, extra: &str, from: Uuid, to: Uuid) -> ApiResult<u64> {
+    let ident = |s: &str| format!("\"{}\"", s.replace('"', ""));
+    let (t, c) = (ident(table), ident(column));
+    sqlx::query("SAVEPOINT repoint").execute(&mut *tx).await?;
+    let bulk = sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE {t} SET {c} = $2 WHERE {c} = $1 {extra}"))).bind(from).bind(to).execute(&mut *tx).await;
+    match bulk {
+        Ok(r) => {
+            sqlx::query("RELEASE SAVEPOINT repoint").execute(&mut *tx).await?;
+            return Ok(r.rows_affected());
+        }
+        Err(sqlx::Error::Database(e)) if e.code().as_deref() == Some("23505") => {
+            sqlx::query("ROLLBACK TO SAVEPOINT repoint").execute(&mut *tx).await?;
+        }
+        Err(e) => return Err(e.into()),
+    }
+    // row by row: move what doesn't collide, drop the duplicates
+    let rows: Vec<String> =
+        sqlx::query_scalar(sqlx::AssertSqlSafe(format!("SELECT ctid::text FROM {t} WHERE {c} = $1 {extra}"))).bind(from).fetch_all(&mut *tx).await?;
+    let mut moved = 0;
+    for ctid in rows {
+        sqlx::query("SAVEPOINT repoint_row").execute(&mut *tx).await?;
+        match sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE {t} SET {c} = $2 WHERE ctid = $1::tid"))).bind(&ctid).bind(to).execute(&mut *tx).await {
+            Ok(_) => {
+                moved += 1;
+                sqlx::query("RELEASE SAVEPOINT repoint_row").execute(&mut *tx).await?;
+            }
+            Err(sqlx::Error::Database(e)) if e.code().as_deref() == Some("23505") => {
+                sqlx::query("ROLLBACK TO SAVEPOINT repoint_row").execute(&mut *tx).await?;
+                sqlx::query(sqlx::AssertSqlSafe(format!("DELETE FROM {t} WHERE ctid = $1::tid"))).bind(&ctid).execute(&mut *tx).await?;
+            }
+            Err(e) => return Err(e.into()),
+        }
+    }
+    Ok(moved)
+}
+
+/// `POST /users/{id}/merge` — an imported author (placeholder) turns out to be an existing
+/// person: everything the placeholder authored, owned, liked, watched or was granted moves to
+/// that account, mentions of it in pages, versions, comments and templates point at the person,
+/// and later imports map the Confluence account to them. The placeholder is removed.
+pub async fn merge(
+    State(state): State<AppState>,
+    CurrentUser(me): CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(req): Json<MergeUser>,
+) -> ApiResult<Json<serde_json::Value>> {
+    require_admin(&me)?;
+    let source = crate::routes::auth::load_user(&state, me.workspace_id, id).await?;
+    let target = crate::routes::auth::load_user(&state, me.workspace_id, req.into_user_id).await?;
+    if source.status != "placeholder" {
+        return Err(ApiError::bad("only imported placeholder users can be merged into another account"));
+    }
+    if target.status == "placeholder" || target.id == source.id {
+        return Err(ApiError::bad("merge into a real account"));
+    }
+    let (from, to) = (source.id, target.id);
+    let mut tx = state.db.begin().await?;
+    // every foreign key to users (new tables are covered automatically)
+    let fks: Vec<(String, String)> = sqlx::query_as(
+        "SELECT kcu.table_name::text, kcu.column_name::text
+           FROM information_schema.referential_constraints rc
+           JOIN information_schema.key_column_usage kcu ON kcu.constraint_name = rc.constraint_name AND kcu.constraint_schema = rc.constraint_schema
+           JOIN information_schema.constraint_column_usage ccu ON ccu.constraint_name = rc.constraint_name AND ccu.constraint_schema = rc.constraint_schema
+          WHERE ccu.table_name = 'users' AND ccu.column_name = 'id' AND kcu.table_schema = current_schema() AND kcu.table_name <> 'users'
+          ORDER BY 1, 2",
+    )
+    .fetch_all(&mut *tx)
+    .await?;
+    let mut moved = serde_json::Map::new();
+    for (table, column) in &fks {
+        let n = repoint(&mut tx, table, column, "", from, to).await?;
+        if n > 0 {
+            moved.insert(format!("{table}.{column}"), json!(n));
+        }
+    }
+    // references without a foreign key
+    for table in ["space_permissions", "page_restrictions"] {
+        let n = repoint(&mut tx, table, "subject_id", "AND subject_type = 'user'", from, to).await?;
+        if n > 0 {
+            moved.insert(format!("{table}.subject_id"), json!(n));
+        }
+    }
+    repoint(&mut tx, "audit_events", "actor_id", "", from, to).await?;
+    repoint(&mut tx, "import_mappings", "target_id", "AND source_type = 'user'", from, to).await?;
+    // the Confluence account now maps to the person (unless they already carry another one)
+    let ext: Option<String> = sqlx::query_scalar("SELECT external_ref FROM users WHERE id = $1").bind(from).fetch_one(&mut *tx).await?;
+    sqlx::query("UPDATE users SET external_ref = NULL WHERE id = $1").bind(from).execute(&mut *tx).await?;
+    sqlx::query("UPDATE users SET external_ref = COALESCE(external_ref, $2) WHERE id = $1").bind(to).bind(ext).execute(&mut *tx).await?;
+
+    // mentions in stored documents (JSON and the pages' Yjs state)
+    let (from_s, to_s) = (from.to_string(), to.to_string());
+    let like = format!("%{from_s}%");
+    let mut pages_changed: Vec<Uuid> = Vec::new();
+    let pages: Vec<(Uuid, serde_json::Value, Option<Vec<u8>>)> =
+        sqlx::query_as("SELECT id, content, ydoc FROM pages WHERE workspace_id = $1 AND content::text LIKE $2 FOR UPDATE")
+            .bind(me.workspace_id)
+            .bind(&like)
+            .fetch_all(&mut *tx)
+            .await?;
+    for (pid, content, ystate) in pages {
+        let mut doc = wikicraft_doc_model::Node::from_json(&content)?;
+        if wikicraft_doc_model::node::replace_mentions(&mut doc, &from_s, &to_s, &target.name) == 0 {
+            continue;
+        }
+        let ystate = match ystate.filter(|b| !b.is_empty()) {
+            Some(bytes) => {
+                let y = wikicraft_doc_model::ydoc::new_doc();
+                wikicraft_doc_model::ydoc::apply_update(&y, &bytes).map_err(|e| ApiError::Internal(anyhow::anyhow!("{e}")))?;
+                wikicraft_doc_model::ydoc::replace_mentions(&y, &from_s, &to_s, &target.name);
+                doc = wikicraft_doc_model::ydoc::doc_to_pm(&y);
+                Some(wikicraft_doc_model::ydoc::encode_state(&y))
+            }
+            None => None,
+        };
+        sqlx::query("UPDATE pages SET content = $2, ydoc = COALESCE($3, ydoc) WHERE id = $1")
+            .bind(pid)
+            .bind(doc.to_json())
+            .bind(ystate)
+            .execute(&mut *tx)
+            .await?;
+        pages_changed.push(pid);
+    }
+    for (table, filter) in [
+        ("page_versions", "page_id IN (SELECT id FROM pages WHERE workspace_id = $1)"),
+        ("comments", "page_id IN (SELECT id FROM pages WHERE workspace_id = $1)"),
+        ("templates", "workspace_id = $1"),
+    ] {
+        let rows: Vec<(Uuid, serde_json::Value)> =
+            sqlx::query_as(sqlx::AssertSqlSafe(format!("SELECT id, content FROM {table} WHERE {filter} AND content::text LIKE $2")))
+                .bind(me.workspace_id)
+                .bind(&like)
+                .fetch_all(&mut *tx)
+                .await?;
+        let mut n = 0;
+        for (rid, content) in rows {
+            let mut doc = wikicraft_doc_model::Node::from_json(&content)?;
+            if wikicraft_doc_model::node::replace_mentions(&mut doc, &from_s, &to_s, &target.name) > 0 {
+                sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE {table} SET content = $2 WHERE id = $1")))
+                    .bind(rid)
+                    .bind(doc.to_json())
+                    .execute(&mut *tx)
+                    .await?;
+                n += 1;
+            }
+        }
+        if n > 0 {
+            moved.insert(format!("{table}.mentions"), json!(n));
+        }
+    }
+    if !pages_changed.is_empty() {
+        moved.insert("pages.mentions".into(), json!(pages_changed.len()));
+    }
+    sqlx::query("DELETE FROM users WHERE id = $1").bind(from).execute(&mut *tx).await?;
+    tx.commit().await?;
+
+    // pages open right now: their live document gets the same change (it would otherwise be
+    // saved over the rewritten one); a no-op where the room was loaded after the commit
+    for pid in &pages_changed {
+        if let Some(room) = state.rooms.get(*pid) {
+            room.system_change(|d| wikicraft_doc_model::ydoc::replace_mentions(d, &from_s, &to_s, &target.name) > 0);
+        }
+        state.search.enqueue(*pid);
+    }
+    audit::log(
+        &state,
+        me.workspace_id,
+        Some(me.id),
+        "user.merge",
+        Some("user"),
+        Some(to),
+        json!({"placeholder": source.name, "into": target.name, "moved": moved}),
+    )
+    .await;
+    Ok(Json(json!({"mergedInto": to, "moved": moved})))
+}

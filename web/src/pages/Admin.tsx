@@ -340,6 +340,7 @@ function UsersAdmin() {
   const [showPlaceholders, setShowPlaceholders] = useState(false)
   const users = useQuery({ queryKey: ['admin-users', showPlaceholders], queryFn: () => api.get<UserRow[]>(`/users?include_placeholders=${showPlaceholders}`) })
   const [invite, setInvite] = useState(false)
+  const [merging, setMerging] = useState<UserRow | null>(null)
   const update = async (id: string, body: Record<string, unknown>) => {
     try {
       await api.patch(`/users/${id}`, body)
@@ -399,6 +400,11 @@ function UsersAdmin() {
               </td>
               <td className="faint small">{formatDate(u.lastLoginAt) || 'never'}</td>
               <td>
+                {u.status === 'placeholder' && (
+                  <button className="btn btn-ghost small" title="This imported author is someone who has an account: move their pages, comments and mentions to it" onClick={() => setMerging(u)}>
+                    Merge into…
+                  </button>
+                )}
                 {u.role !== 'owner' && u.status === 'active' && (
                   <button className="btn btn-ghost small" title="Reset two-factor authentication (e.g. lost phone); signs the person out" onClick={async () => {
                     if (!confirm(`Reset two-factor authentication for ${u.name}? They'll be signed out and can sign in with their password only.`)) return
@@ -411,7 +417,62 @@ function UsersAdmin() {
         </tbody>
       </table>
       {invite && <AddUserDialog onClose={() => setInvite(false)} />}
+      {merging && <MergeUserDialog placeholder={merging} onClose={() => setMerging(null)} />}
     </div>
+  )
+}
+
+/** Imported author (placeholder) → an existing account: authorship, likes, permissions and
+ *  mentions move over, later imports map the Confluence account to that person. */
+function MergeUserDialog({ placeholder, onClose }: { placeholder: UserRow; onClose: () => void }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const people = useQuery({ queryKey: ['admin-users', false], queryFn: () => api.get<UserRow[]>('/users?include_placeholders=false') })
+  const norm = (s: string) => s.toLowerCase().replace(/[^a-z0-9]/g, '')
+  const options = (people.data ?? []).filter((u) => u.status !== 'placeholder')
+  const guess = options.find((u) => norm(u.name) === norm(placeholder.name) || (!!placeholder.email && u.email?.toLowerCase() === placeholder.email.toLowerCase()))
+  const [into, setInto] = useState<string>('')
+  const target = into || guess?.id || ''
+  const [busy, setBusy] = useState(false)
+  const merge = async () => {
+    const t = options.find((u) => u.id === target)
+    if (!t) return
+    setBusy(true)
+    try {
+      await api.post(`/users/${placeholder.id}/merge`, { intoUserId: t.id })
+      qc.invalidateQueries({ queryKey: ['admin-users'] })
+      toast(`${placeholder.name} merged into ${t.name}`)
+      onClose()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Merge failed')
+      setBusy(false)
+    }
+  }
+  return (
+    <Modal
+      title={`Merge “${placeholder.name}”`}
+      onClose={onClose}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" disabled={!target || busy} onClick={merge}>{busy ? 'Merging…' : 'Merge'}</button>
+        </>
+      }
+    >
+      <p className="small muted" style={{ marginTop: 0 }}>
+        Everything this imported author wrote, owned, liked, watched or was granted moves to the account you pick, and mentions of them
+        point to that person. Later imports of the same Confluence account map to them too. The imported author is removed; this can't be undone.
+      </p>
+      <div className="field">
+        <label htmlFor="merge-into">Merge into</label>
+        <select id="merge-into" className="select" value={target} onChange={(e) => setInto(e.target.value)}>
+          <option value="">Choose a person…</option>
+          {options.map((u) => (
+            <option key={u.id} value={u.id}>{u.name}{u.email ? ` (${u.email})` : ''}</option>
+          ))}
+        </select>
+      </div>
+    </Modal>
   )
 }
 

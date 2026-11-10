@@ -231,6 +231,32 @@ fn marks_to_attrs(marks: &[Mark]) -> Attrs {
     attrs
 }
 
+/// Points mentions of user `from` at user `to` (with `to`'s name as the label), as live Yjs
+/// attribute changes that merge with concurrent edits. Returns how many mentions changed.
+pub fn replace_mentions(doc: &Doc, from: &str, to: &str, label: &str) -> usize {
+    let frag = doc.get_or_insert_xml_fragment(FIELD);
+    let mut hits: Vec<XmlElementRef> = Vec::new();
+    {
+        let txn = doc.transact();
+        for d in frag.successors(&txn) {
+            if let XmlOut::Element(el) = d
+                && el.tag().as_ref() == nodes::MENTION
+                && matches!(el.get_attribute(&txn, "id"), Some(Out::Any(Any::String(s))) if &*s == from)
+            {
+                hits.push(el);
+            }
+        }
+    }
+    if !hits.is_empty() {
+        let mut txn = doc.transact_mut();
+        for el in &hits {
+            el.insert_attribute(&mut txn, "id", Any::String(to.into()));
+            el.insert_attribute(&mut txn, "label", Any::String(label.into()));
+        }
+    }
+    hits.len()
+}
+
 /// Plain-text helper on a Yjs doc (useful for quick checks).
 pub fn doc_plain_text(doc: &Doc) -> String {
     let frag = doc.get_or_insert_xml_fragment(FIELD);
@@ -282,6 +308,22 @@ mod tests {
         let small = Node::doc(vec![Node::paragraph(vec![Node::text("x")])]);
         write_pm(&doc, &small);
         assert_eq!(doc_to_pm(&doc), small);
+    }
+
+    #[test]
+    fn mentions_are_repointed() {
+        let mention = |id: &str, label: &str| Node::new(nodes::MENTION).attr("id", id).attr("label", label);
+        let pm = Node::doc(vec![Node::paragraph(vec![Node::text("hi "), mention("old", "Confluence user 1"), Node::text(" and "), mention("other", "Bo")])]);
+        let doc = new_doc();
+        write_pm(&doc, &pm);
+        assert_eq!(replace_mentions(&doc, "old", "new", "Ada"), 1);
+        assert_eq!(replace_mentions(&doc, "old", "new", "Ada"), 0);
+        let back = doc_to_pm(&doc);
+        assert_eq!(back.content[0].content[1], mention("new", "Ada"));
+        assert_eq!(back.content[0].content[3], mention("other", "Bo"));
+        let mut json = pm.clone();
+        assert_eq!(crate::node::replace_mentions(&mut json, "old", "new", "Ada"), 1);
+        assert_eq!(json, back);
     }
 
     #[test]

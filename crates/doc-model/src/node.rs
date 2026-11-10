@@ -30,6 +30,19 @@ pub struct Mark {
     pub attrs: Map<String, Value>,
 }
 
+/// Points mentions of user `from` at user `to` (label: `to`'s name); returns how many changed.
+pub fn replace_mentions(doc: &mut Node, from: &str, to: &str, label: &str) -> usize {
+    let mut n = 0;
+    doc.walk_mut(&mut |node| {
+        if node.kind == nodes::MENTION && node.attr_str("id") == Some(from) {
+            node.attrs.insert("id".into(), Value::String(to.into()));
+            node.attrs.insert("label".into(), Value::String(label.into()));
+            n += 1;
+        }
+    });
+    n
+}
+
 /// Node type names (Tiptap defaults + WikiCraft custom nodes).
 pub mod nodes {
     pub const DOC: &str = "doc";

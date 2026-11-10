@@ -1367,6 +1367,44 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /users/{id}/merge:
+    post:
+      tags:
+      - Users
+      summary: 'Merge an imported placeholder user into an existing account: authorship, permissions, likes, watches and mentions
+        move to it (admins)'
+      operationId: post_users_id_merge
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                intoUserId: *id002
+              required:
+              - intoUserId
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mergedInto: *id002
+                  moved: *id006
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /users/{id}/reset-mfa:
     post:
       tags:

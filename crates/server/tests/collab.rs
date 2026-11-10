@@ -154,3 +154,88 @@ async fn block_ids() {
     let block = id_of(&replaced, "Last paragraph.").unwrap();
     assert!(html.contains(&format!("<p id=\"block-{block}\">Last paragraph.</p>")), "{html}");
 }
+
+/// An imported author (placeholder) merged into the real person: authorship, likes,
+/// permissions, mentions (stored and in an open editing session) and the Confluence account
+/// mapping move over; the placeholder disappears.
+#[tokio::test(flavor = "multi_thread")]
+async fn merging_a_placeholder_user() {
+    use wikicraft_doc_model::ydoc;
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let db = &app.state.db;
+    let (_, space) = app.post(&owner, "/spaces", json!({"key": "MRG", "name": "Merge", "defaultRole": "viewer"})).await;
+    let space_id = space["id"].as_str().unwrap().to_string();
+    let (ada, ada_id) = app.user(&owner, "ada@acme.test", "member").await;
+    let ws: uuid::Uuid = sqlx::query_scalar("SELECT workspace_id FROM spaces WHERE id = $1::uuid").bind(&space_id).fetch_one(db).await.unwrap();
+    let ph = uuid::Uuid::now_v7();
+    sqlx::query("INSERT INTO users (id, workspace_id, name, role, status, external_ref) VALUES ($1, $2, 'Confluence user 9f3a', 'member', 'placeholder', 'confluence:9f3a')")
+        .bind(ph)
+        .bind(ws)
+        .execute(db)
+        .await
+        .unwrap();
+    let mention = json!({"type": "mention", "attrs": {"id": ph.to_string(), "label": "Confluence user 9f3a"}});
+    let content = json!({"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "Ask "}, mention]}]});
+    let (st, page) = app.post(&owner, "/pages", json!({"spaceKey": "MRG", "title": "Runbook", "content": content})).await;
+    assert_eq!(st, 201, "{page}");
+    let pid = page["id"].as_str().unwrap().to_string();
+    // the placeholder wrote the page, liked it (as Ada did), and had a space role
+    sqlx::query("UPDATE pages SET created_by = $2, updated_by = $2 WHERE id = $1::uuid").bind(&pid).bind(ph).execute(db).await.unwrap();
+    sqlx::query("INSERT INTO page_likes (page_id, user_id) VALUES ($1::uuid, $2)").bind(&pid).bind(ph).execute(db).await.unwrap();
+    app.put(&ada, &format!("/pages/{pid}/like"), json!({})).await;
+    sqlx::query("INSERT INTO space_permissions (space_id, subject_type, subject_id, role) VALUES ($1::uuid, 'user', $2, 'editor')")
+        .bind(&space_id)
+        .bind(ph)
+        .execute(db)
+        .await
+        .unwrap();
+
+    // someone has the page open while the merge happens
+    let (_, t) = app.post(&owner, "/me/tokens", json!({"name": "ws"})).await;
+    let mut peer = Peer::connect(&app.base, &pid, t["token"].as_str().unwrap()).await;
+    assert!(peer.text().contains("@Confluence user 9f3a") || peer.text().contains("Confluence user 9f3a"), "{}", peer.text());
+
+    // only admins, only placeholders, only into real accounts
+    let (st, _) = app.post(&ada, &format!("/users/{ph}/merge"), json!({"intoUserId": ada_id})).await;
+    assert_eq!(st, 403);
+    let (st, _) = app.post(&owner, &format!("/users/{ada_id}/merge"), json!({"intoUserId": ph})).await;
+    assert_eq!(st, 400);
+    let (st, res) = app.post(&owner, &format!("/users/{ph}/merge"), json!({"intoUserId": ada_id})).await;
+    assert_eq!(st, 200, "{res}");
+    assert_eq!(res["moved"]["pages.mentions"], 1, "{res}");
+
+    let gone: bool = sqlx::query_scalar("SELECT NOT EXISTS (SELECT 1 FROM users WHERE id = $1)").bind(ph).fetch_one(db).await.unwrap();
+    assert!(gone);
+    let (created_by, ext): (uuid::Uuid, Option<String>) =
+        sqlx::query_as("SELECT p.created_by, u.external_ref FROM pages p JOIN users u ON u.id = p.created_by WHERE p.id = $1::uuid")
+            .bind(&pid)
+            .fetch_one(db)
+            .await
+            .unwrap();
+    assert_eq!(created_by.to_string(), ada_id);
+    assert_eq!(ext.as_deref(), Some("confluence:9f3a"), "re-imports map the Confluence account to Ada");
+    let likes: i64 = sqlx::query_scalar("SELECT count(*) FROM page_likes WHERE page_id = $1::uuid").bind(&pid).fetch_one(db).await.unwrap();
+    assert_eq!(likes, 1, "the duplicate like is dropped");
+    let role: String = sqlx::query_scalar("SELECT role FROM space_permissions WHERE space_id = $1::uuid AND subject_id = $2::uuid")
+        .bind(&space_id)
+        .bind(&ada_id)
+        .fetch_one(db)
+        .await
+        .unwrap();
+    assert_eq!(role, "editor");
+
+    // the open session sees the mention change, and what it saves keeps it
+    peer.wait_for_text("ada").await;
+    let live = ydoc::doc_to_pm(&peer.doc).to_json().to_string();
+    assert!(live.contains(&ada_id) && !live.contains(&ph.to_string()), "{live}");
+    let updated_at: chrono::DateTime<chrono::Utc> =
+        sqlx::query_scalar("SELECT updated_at FROM pages WHERE id = $1::uuid").bind(&pid).fetch_one(db).await.unwrap();
+    drop(peer);
+    wikicraft::collab::flush_all(&app.state).await;
+    let (_, p) = app.get(&owner, &format!("/pages/{pid}")).await;
+    let stored = p["content"].to_string();
+    assert!(stored.contains(&ada_id) && stored.contains("\"label\":\"ada\""), "{stored}");
+    let after: chrono::DateTime<chrono::Utc> = sqlx::query_scalar("SELECT updated_at FROM pages WHERE id = $1::uuid").bind(&pid).fetch_one(db).await.unwrap();
+    assert_eq!(after, updated_at, "a merge isn't an edit");
+}

@@ -110,6 +110,8 @@ pub struct Room {
     tx: broadcast::Sender<(u64, Arc<Vec<u8>>)>,
     conns: AtomicUsize,
     dirty: AtomicBool,
+    /// changed by the server itself (see [`Room::system_change`]): saved, but not an edit
+    system_dirty: AtomicBool,
     edited_since_version: AtomicBool,
     last_editor: Mutex<Option<Uuid>>,
     last_version_at: Mutex<Instant>,
@@ -131,6 +133,7 @@ impl Room {
             tx,
             conns: AtomicUsize::new(0),
             dirty: AtomicBool::new(false),
+            system_dirty: AtomicBool::new(false),
             edited_since_version: AtomicBool::new(false),
             last_editor: Mutex::new(None),
             last_version_at: Mutex::new(Instant::now()),
@@ -165,6 +168,24 @@ impl Room {
         let msg = Message::Sync(SyncMessage::Update(update)).encode_v1();
         let _ = self.tx.send((0, Arc::new(msg)));
         self.mark_edited(editor);
+    }
+
+    /// A change made by the server itself (e.g. mentions re-pointed after merging users): applied
+    /// to the live document, sent to clients and other replicas, and saved without counting as
+    /// an edit (no `updated_at`, editor, version or notifications). `f` returns whether it changed
+    /// anything.
+    pub fn system_change(&self, f: impl FnOnce(&yrs::Doc) -> bool) -> bool {
+        let update = self.with_doc(|doc| {
+            let before: StateVector = doc.transact().state_vector();
+            f(doc).then(|| doc.transact().encode_state_as_update_v1(&before))
+        });
+        let Some(update) = update else { return false };
+        self.publish(crate::cluster::KIND_DOC, &update);
+        let _ = self.tx.send((0, Arc::new(Message::Sync(SyncMessage::Update(update)).encode_v1())));
+        if !self.closed.load(Ordering::SeqCst) {
+            self.system_dirty.store(true, Ordering::SeqCst);
+        }
+        true
     }
 
     fn publish(&self, kind: i16, payload: &[u8]) {
@@ -287,7 +308,7 @@ impl Rooms {
     }
 
     fn remove_if_idle(&self, page_id: Uuid) {
-        self.map.remove_if(&page_id, |_, r| r.connections() == 0 && !r.dirty.load(Ordering::SeqCst));
+        self.map.remove_if(&page_id, |_, r| r.connections() == 0 && !r.dirty.load(Ordering::SeqCst) && !r.system_dirty.load(Ordering::SeqCst));
     }
 
     pub fn all(&self) -> Vec<Arc<Room>> {
@@ -338,9 +359,13 @@ pub async fn persist_with(state: &AppState, room: &Room, auto_version: bool) -> 
     if room.closed.load(Ordering::SeqCst) {
         return Ok(());
     }
+    let system = room.system_dirty.swap(false, Ordering::SeqCst);
     let editor = *room.last_editor.lock().expect("lock");
-    if dirty {
-        save(state, room, editor).await?;
+    if (dirty || system)
+        && let Err(e) = save(state, room, editor, dirty).await
+    {
+        room.system_dirty.fetch_or(system, Ordering::SeqCst); // retry next tick
+        return Err(e);
     }
     // the version is due even when the periodic flush already stored the content: otherwise a
     // flush between the last edit and the last disconnect would skip the automatic version
@@ -354,13 +379,16 @@ pub async fn persist_with(state: &AppState, room: &Room, auto_version: bool) -> 
 
 /// Writes the room's document to the page row (Yjs state, ProseMirror JSON, plain text) and
 /// updates search, tasks and mentions. On failure the room stays dirty for the next tick.
-async fn save(state: &AppState, room: &Room, editor: Option<Uuid>) -> anyhow::Result<()> {
+/// `edited`: people changed it (else only [`Room::system_change`]s): bumps `updated_at` and
+/// notifies mentioned people.
+async fn save(state: &AppState, room: &Room, editor: Option<Uuid>, edited: bool) -> anyhow::Result<()> {
     let res: anyhow::Result<Node> = async {
         let mut tx = state.db.begin().await?;
         if state.relay.is_some() {
             // other replicas persist the same page: merge their stored state first (row lock
             // serializes writers), so nobody overwrites anybody and missed relays heal here
-            let stored: Option<Option<Vec<u8>>> = sqlx::query_scalar("SELECT ydoc FROM pages WHERE id = $1 FOR UPDATE").bind(room.page_id).fetch_optional(&mut *tx).await?;
+            let stored: Option<Option<Vec<u8>>> =
+                sqlx::query_scalar("SELECT ydoc FROM pages WHERE id = $1 FOR UPDATE").bind(room.page_id).fetch_optional(&mut *tx).await?;
             if let Some(Some(stored)) = stored
                 && let Some(diff) = room.merge_stored(&stored)
             {
@@ -368,14 +396,20 @@ async fn save(state: &AppState, room: &Room, editor: Option<Uuid>) -> anyhow::Re
             }
         }
         let (bytes, pm) = room.with_doc(|d| (ydoc::encode_state(d), ydoc::doc_to_pm(d)));
-        sqlx::query("UPDATE pages SET ydoc = $1, content = $2, text_content = $3, updated_at = now(), updated_by = COALESCE($4, updated_by) WHERE id = $5 AND deleted_at IS NULL")
-            .bind(bytes)
-            .bind(pm.to_json())
-            .bind(text::plain_text(&pm))
-            .bind(editor)
-            .bind(room.page_id)
-            .execute(&mut *tx)
-            .await?;
+        sqlx::query(
+            "UPDATE pages SET ydoc = $1, content = $2, text_content = $3,
+                 updated_at = CASE WHEN $6 THEN now() ELSE updated_at END,
+                 updated_by = CASE WHEN $6 THEN COALESCE($4, updated_by) ELSE updated_by END
+             WHERE id = $5 AND deleted_at IS NULL",
+        )
+        .bind(bytes)
+        .bind(pm.to_json())
+        .bind(text::plain_text(&pm))
+        .bind(editor)
+        .bind(room.page_id)
+        .bind(edited)
+        .execute(&mut *tx)
+        .await?;
         tx.commit().await?;
         Ok(pm)
     }
@@ -383,7 +417,9 @@ async fn save(state: &AppState, room: &Room, editor: Option<Uuid>) -> anyhow::Re
     let pm = match res {
         Ok(pm) => pm,
         Err(e) => {
-            room.dirty.store(true, Ordering::SeqCst); // retry next tick
+            if edited {
+                room.dirty.store(true, Ordering::SeqCst); // retry next tick
+            }
             return Err(e);
         }
     };
@@ -393,7 +429,7 @@ async fn save(state: &AppState, room: &Room, editor: Option<Uuid>) -> anyhow::Re
     {
         tracing::warn!("task indexing failed: {e}");
     }
-    if let Err(e) = crate::routes::notifications::notify_page_mentions(state, room.page_id, &pm, editor).await {
+    if edited && let Err(e) = crate::routes::notifications::notify_page_mentions(state, room.page_id, &pm, editor).await {
         tracing::warn!("mention notifications failed: {e:#}");
     }
     Ok(())
