@@ -106,6 +106,8 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   convert cleanly; it found 5 bugs (plain tables named `.csv.gz`, Cloud backup attachment files named by
   `FILESTORE_ID`, untyped wiki-markup bodies imported empty, unresolved wiki-markup links and images, duplicate
   history versions) and verified the CSV tables we had only guessed. Confluence watches and favourites imported.
+- Template variables (`{{Name}}`, asked for in the Create dialog), minor changes (no watcher notifications), watching
+  a page and the pages below. The axe check caught 3:1 contrast on the tree's draft badge.
 - Note: running the whole test suite saturates this WSL machine (load ~100); a parallel demo server then hits DB
   pool timeouts, and the mail test's 4-second wait can flake. Both pass when the machine is idle.
 
