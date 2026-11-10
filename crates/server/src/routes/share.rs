@@ -40,12 +40,8 @@ pub const SWITCHES: [&str; 4] = ["publicLinks", "exports", "ai", "personalSpaces
 /// Whether the workspace switch `key` (one of [`SWITCHES`]) is on.
 pub async fn switch_on(state: &AppState, ws: Uuid, key: &str) -> ApiResult<bool> {
     debug_assert!(SWITCHES.contains(&key));
-    let v: Option<bool> = sqlx::query_scalar("SELECT (settings->>$2)::boolean FROM workspaces WHERE id = $1")
-        .bind(ws)
-        .bind(key)
-        .fetch_optional(&state.db)
-        .await?
-        .flatten();
+    let v: Option<bool> =
+        sqlx::query_scalar("SELECT (settings->>$2)::boolean FROM workspaces WHERE id = $1").bind(ws).bind(key).fetch_optional(&state.db).await?.flatten();
     Ok(v.unwrap_or(true))
 }
 
@@ -167,7 +163,11 @@ pub async fn get_settings(State(state): State<AppState>, CurrentUser(user): Curr
     Ok(Json(Value::Object(switches(&state, user.workspace_id).await?)))
 }
 
-pub async fn put_settings(State(state): State<AppState>, CurrentUser(user): CurrentUser, Json(req): Json<serde_json::Map<String, Value>>) -> ApiResult<Json<Value>> {
+pub async fn put_settings(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Json(req): Json<serde_json::Map<String, Value>>,
+) -> ApiResult<Json<Value>> {
     require_admin(&user)?;
     for (key, v) in &req {
         let (Some(key), Some(v)) = (SWITCHES.iter().find(|k| *k == key), v.as_bool()) else {

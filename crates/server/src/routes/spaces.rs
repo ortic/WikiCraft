@@ -36,8 +36,7 @@ pub struct SpaceRow {
     pub category: Option<String>,
 }
 
-pub const SPACE_COLUMNS: &str =
-    "id, workspace_id, key, name, description, icon, home_page_id, default_role, anonymous_access, personal_owner_id, created_at, updated_at, archived_at, default_template, category";
+pub const SPACE_COLUMNS: &str = "id, workspace_id, key, name, description, icon, home_page_id, default_role, anonymous_access, personal_owner_id, created_at, updated_at, archived_at, default_template, category";
 
 impl SpaceRow {
     pub fn access_row(&self) -> SpaceAccessRow {

@@ -15,11 +15,8 @@ const LEVELS: [&str; 3] = ["info", "warning", "success"];
 
 /// `GET /api/announcement` → `{text, level, id}` or `null`.
 pub async fn get(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Value>> {
-    let a: Option<Value> = sqlx::query_scalar("SELECT settings->'announcement' FROM workspaces WHERE id = $1")
-        .bind(user.workspace_id)
-        .fetch_optional(&state.db)
-        .await?
-        .flatten();
+    let a: Option<Value> =
+        sqlx::query_scalar("SELECT settings->'announcement' FROM workspaces WHERE id = $1").bind(user.workspace_id).fetch_optional(&state.db).await?.flatten();
     Ok(Json(a.unwrap_or(Value::Null)))
 }
 

@@ -1,8 +1,8 @@
 pub mod access_request;
 pub mod account;
 pub mod admin;
-pub mod announcement;
 pub mod ai;
+pub mod announcement;
 pub mod archive;
 pub mod attachments;
 pub mod auth;

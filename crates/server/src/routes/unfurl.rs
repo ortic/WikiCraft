@@ -237,9 +237,8 @@ mod tests {
         assert_eq!(m.title.as_deref(), Some("Release notes \u{2014} v2.1"));
         assert_eq!(m.description.as_deref(), Some("What's new in 2.1"));
         assert_eq!(m.site.as_deref(), Some("Acme Docs"));
-        let m = super::parse(
-            r#"<meta property="og:title" content=""><title> Real title </title><meta property="og:description" content="Chapter&amp;nbsp;13">"#,
-        );
+        let m =
+            super::parse(r#"<meta property="og:title" content=""><title> Real title </title><meta property="og:description" content="Chapter&amp;nbsp;13">"#);
         assert_eq!(m.title.as_deref(), Some("Real title"), "empty og:title falls back to <title>");
         assert_eq!(m.description.as_deref(), Some("Chapter 13"), "double-escaped entities");
         let m = super::parse("<title>Only a <b>title</b></title>");
