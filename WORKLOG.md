@@ -69,6 +69,13 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
 - Bug found by CI (04:20): the automatic version on the last disconnect was skipped whenever the 2-second background
   save had already stored the content, so history could miss whole editing sessions. Fixed in `4aaac2f`; the collab test
   now runs the background save before everyone leaves and fails without the fix.
+- Delegated to subagents (user request at ~04:27 UTC, each in its own git worktree, merged after review):
+  PLAN.md audit of the 31 open P0 lines (16 ticked with evidence, 12 partial; found that archived Confluence pages
+  were imported as live pages → fixed in `53c565b`); HTML / Confluence HTML export import (`80eab4a`); accessibility
+  (axe checks in the e2e suite, contrast/labels/avatar colours fixed, `d01692f`, `7895b6a`); property tests for the
+  doc model (`fa33950`: 9 properties, 7 Markdown export bugs fixed, 2 left documented under an ignored property).
+- GitHub Actions stopped starting jobs at ~04:49 UTC: "recent account payments have failed or your spending limit
+  needs to be increased" (billing setting on the GitHub account). Later commits were verified locally only.
 - Note: running the whole test suite saturates this WSL machine (load ~100); a parallel demo server then hits DB
   pool timeouts, and the mail test's 4-second wait can flake. Both pass when the machine is idle.
 

@@ -15,7 +15,7 @@ end-of-life (2029-03-28).
 - **Permissions**: workspace roles, space roles (viewer/commenter/editor/admin) for users and groups, page view/edit restrictions (view restrictions are inherited, like Confluence), anonymous access, guests
 - **Search**: full-text (tantivy or Postgres) with snippets, permission-aware, filters (type, label, contributor, date), comments indexed, saved searches, browser search (OpenSearch)
 - **Confluence import**: classic XML exports *and* the new Cloud CSV exports, with history, attachments, comments (incl. inline), labels, restrictions, authors, macro mapping, link rewriting and a dry-run report
-- **Markdown / Obsidian import**: zip of Markdown files with images and `[[wikilinks]]`
+- **Markdown / Obsidian / Notion / HTML import**: zip of Markdown or HTML files (including Confluence's HTML space export) with images, attachments and links between pages
 - **Word**: import .docx (headings, lists, tables, images, footnotes) and export pages or whole page trees to .docx
 - **Export & backup**: single pages as Word/Markdown/HTML/PDF; whole spaces as a browsable static HTML site, a Markdown folder tree (re-importable) or a full backup that restores into a new space
 - **Sign-in**: local accounts, OpenID Connect (Microsoft Entra ID, Google, GitLab, Okta, Keycloak, Authentik, …), GitHub, LDAP / Active Directory and SAML 2.0 — several at once, with just-in-time provisioning, domain rules, group sync and account linking

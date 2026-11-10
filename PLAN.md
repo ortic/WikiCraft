@@ -531,11 +531,11 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 
 - [x] **P0** **Confluence space export, classic XML** (`entities.xml` + `attachments/<containerId>/<attachmentId>/<version>`; Server/DC and older Cloud) `D X`
 - [x] **P0** **Confluence Cloud CSV space export** (`exportFormat=csv`: `spaces.csv`, `content.csv`, `bodycontent.csv`, users …; used by current Cloud exports) **new, verify all files**
-- [ ] **P1** Confluence HTML export (fallback when XML/CSV isn't available) `D`
+- [x] **P1** Confluence HTML export (fallback when XML/CSV isn't available) `D` — hierarchy from breadcrumbs, attachment names; macros arrive flattened, no authors/comments/labels
 - [~] **P1** Confluence site / full backup import (multiple spaces, users, groups, global permissions) `X` (multi-space + users; no global permissions)
 - [ ] **P1** Confluence REST API live migration (pull spaces directly with an API token: no export size limits, incremental re-sync) `X(pro)`
 - [x] **P0** Markdown / Markdown-zip (Obsidian vault with wikilinks, front matter) `D O`
-- [ ] **P1** HTML files / zip `D`
+- [x] **P1** HTML files / zip `D` — Admin → Import (same importer as Markdown): pages, folders, attachments, cross-links
 - [~] **P1** Notion export (Markdown + CSV databases, HTML) `D O` (Markdown + CSV; no HTML export format)
 - [~] **P1** DOCX (Word) import as page(s); split by heading `D X` (one page per document; no split)
 - [ ] **P2** PDF import (text + images) `D`
@@ -609,7 +609,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** Responsive web UI usable on phones (read, comment, light edit) `C D O`
 - [ ] **P2** PWA: installable, push notifications, offline reading of starred pages
 - [ ] **P3** Native mobile apps (iOS/Android) `C`
-- [ ] **P1** WCAG 2.2 AA compliance target; automated axe checks in CI `C`
+- [ ] **P1** WCAG 2.2 AA compliance target; automated axe checks in CI `C` — partial: axe (critical/serious, WCAG 2.x A/AA) on the main screens in the e2e suite, all fixed; admin/space dialogs not covered yet
 
 ### 4.25 Administration
 - [x] **P0** Admin console: users (invite, deactivate, reset MFA, change role), groups, spaces overview `C D X B`
@@ -662,7 +662,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P0** CI: fmt, clippy (pedantic for core crates), nextest, sqlx offline check, frontend lint/typecheck/test (fmt/clippy/tests/typecheck; no nextest or frontend lint)
 - [~] **P0** Integration tests with `testcontainers` (Postgres, MinIO) (local Postgres/MinIO, not testcontainers)
 - [ ] **P0** Snapshot tests (`insta`) for doc-model conversions and importers (golden fixtures, §6.4) — partial: assert-based unit tests in `doc-model` / `confluence` plus real-export runs (`crates/confluence/tests/real_exports.rs`, `crates/server/tests/confluence_import.rs`) / `insta` is a dev-dependency but there are no snapshot tests and no committed golden fixtures
-- [ ] **P1** Property tests (`proptest`) for the tree ops, permission inheritance and CRDT convergence
+- [ ] **P1** Property tests (`proptest`) for the tree ops, permission inheritance and CRDT convergence — partial: doc model (Yjs round trip, CRDT convergence, Markdown, HTML safety); tree ops and permissions not yet
 - [ ] **P1** E2E with Playwright (multi-browser co-editing scenarios)
 - [ ] **P1** Load tests (collab WebSocket fan-out, search, page tree)
 - [ ] **P1** Fuzzing (`cargo-fuzz`) for importers, Markdown/HTML parsers, upload handling
