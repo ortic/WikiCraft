@@ -300,7 +300,9 @@ table.list tr:hover td { background: var(--bg-soft); }
 
 @media (max-width: 860px) {
   .mobile-only { display: inline-flex; }
-  .shell { grid-template-columns: 1fr; }
+  /* minmax(0, …): wide content (code, tables, diagrams) scrolls inside its block instead of widening the page */
+  .shell { grid-template-columns: minmax(0, 1fr); }
+  .main, .topbar { min-width: 0; }
   .sidebar { display: none; }
   .shell.sidebar-open .sidebar { display: flex; position: fixed; top: 48px; bottom: 0; left: 0; width: 85vw; z-index: 40; box-shadow: var(--shadow); }
   .topbar .logo { width: auto; }
@@ -532,3 +534,26 @@ kbd { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 1px 6p
 .ai-source { display: inline-flex; align-items: center; gap: 5px; padding: 3px 9px; border: 1px solid var(--border); border-radius: 999px; font-size: 12.5px; color: var(--text-soft); text-decoration: none; }
 .ai-source:hover { background: var(--bg-hover); color: var(--text); }
 .ai-source-n { font-weight: 700; color: var(--accent-text); }
+
+/* phones: compact top bar */
+@media (max-width: 600px) {
+  .topbar { gap: 4px; padding: 0 8px; }
+  .search-trigger { min-width: 0; }
+  .search-trigger .kbd, .search-trigger .search-label { display: none; }
+  .search-trigger { flex: 0 0 auto; width: 32px; padding: 0; justify-content: center; }
+  .create-btn { padding: 0 8px; }
+  .create-btn .create-label { display: none; }
+}
+.history-grid { display: grid; grid-template-columns: 300px minmax(0, 1fr); gap: 20px; align-items: start; }
+.search-form { flex-wrap: wrap; }
+.search-form .input { flex: 1 1 260px; min-width: 0; }
+@media (max-width: 760px) {
+  .history-grid { grid-template-columns: minmax(0, 1fr); }
+  .history-grid > .card:first-child { max-height: 200px !important; }
+}
+@media (max-width: 600px) {
+  .tabs { overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; }
+  .tabs .tab { flex: 0 0 auto; }
+  table.list { display: block; overflow-x: auto; }
+  .search-form .select { flex: 1 1 140px; width: auto !important; }
+}

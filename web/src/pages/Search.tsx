@@ -74,7 +74,7 @@ export default function SearchPage() {
   return (
     <div className="content-pad">
       <form
-        className="row"
+        className="row search-form"
         onSubmit={(e) => {
           e.preventDefault()
           setParams({ q: input, ...(space ? { space } : {}) })

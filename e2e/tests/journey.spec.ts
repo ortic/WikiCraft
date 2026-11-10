@@ -216,3 +216,15 @@ test('find and replace in the editor', async ({ browser }) => {
   await expect(page.locator('.find-bar')).toHaveCount(0)
   await ctx.close()
 })
+
+test('phone layout never scrolls sideways', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState, viewport: { width: 390, height: 844 } })
+  const page = await ctx.newPage()
+  for (const url of ['/', pageUrl, '/search?q=mobile', '/spaces', '/admin/users', '/settings', `${pageUrl}/history`]) {
+    await page.goto(url)
+    await page.waitForLoadState('networkidle').catch(() => {})
+    const { sw, cw } = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }))
+    expect(sw, `${url} is ${sw}px wide on a ${cw}px screen`).toBeLessThanOrEqual(cw)
+  }
+  await ctx.close()
+})

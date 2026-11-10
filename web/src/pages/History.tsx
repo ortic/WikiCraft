@@ -86,7 +86,7 @@ export default function History() {
         <ArrowLeft size={15} /> Back to page
       </Link>
       <h1 style={{ marginTop: 0 }}>History · {page.data?.title}</h1>
-      <div style={{ display: 'grid', gridTemplateColumns: '300px 1fr', gap: 20, alignItems: 'start' }}>
+      <div className="history-grid">
         <div className="card" style={{ padding: 6, maxHeight: '75vh', overflowY: 'auto' }}>
           {versions.isLoading && <Spinner />}
           {versions.data?.map((v) => (

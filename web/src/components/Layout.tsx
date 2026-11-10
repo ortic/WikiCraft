@@ -73,12 +73,12 @@ export default function Layout() {
           <Logo />
         </Link>
         <button className="search-trigger" onClick={() => setSearch(true)}>
-          <Search size={15} /> <span>Search pages…</span> <span className="spacer" /> <span className="kbd">Ctrl K</span>
+          <Search size={15} /> <span className="search-label">Search pages…</span> <span className="spacer" /> <span className="kbd">Ctrl K</span>
         </button>
         <span className="spacer" />
         {user && current && current.role !== 'viewer' && current.role !== 'commenter' && (
-          <button className="btn btn-primary" onClick={() => setCreatePage(true)}>
-            <Plus size={15} /> Create
+          <button className="btn btn-primary create-btn" onClick={() => setCreatePage(true)} aria-label="Create">
+            <Plus size={15} /> <span className="create-label">Create</span>
           </button>
         )}
         {user && <NotificationsMenu />}
