@@ -52,6 +52,21 @@ Tables have a toolbar for rows, columns, header rows, merged cells, cell colours
 width (normal, wide, full). Images can be resized, aligned, captioned, annotated and opened full
 size.
 
+### Page properties
+
+Properties are typed fields above the page body: *Status*, *Owner*, *Due date* and so on. **More
+(…) → Add property** adds one; pick a type: text, select, number, date, person, web address or
+page. A name already used in the space brings its type along, and select properties offer the
+values used before. Click a property's name to change or remove it. Properties are searchable,
+copied with the page, and part of exports (a table in HTML, front matter in Markdown).
+
+`/properties` inserts a **properties report**: a table of the pages in this space and their
+properties. Editors set its labels, columns and conditions with the filter button, for example
+`Status = Done; Effort >= 3; Owner ~ Ann` (`=`, `!=`, `~` contains, and `<`, `>`, `<=`, `>=` for
+numbers and dates). Confluence-style properties tables (a two-column table with the names in
+header cells) count as properties too. Markdown files with front matter (`status: draft`,
+`due: 2026-12-01`) get their keys as properties when imported.
+
 ## Templates
 
 *Create* offers blank pages and templates (meeting notes, decision record, how-to,

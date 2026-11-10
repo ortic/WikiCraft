@@ -163,7 +163,8 @@ impl SearchIndex {
                 sqlx::query(
                     "UPDATE pages p SET search_vec =
                         setweight(to_tsvector('simple', p.title), 'A') ||
-                        setweight(to_tsvector('simple', coalesce((SELECT string_agg(name, ' ') FROM labels l WHERE l.page_id = p.id), '')), 'B') ||
+                        setweight(to_tsvector('simple', coalesce((SELECT string_agg(name, ' ') FROM labels l WHERE l.page_id = p.id), '') || ' ' ||
+                            coalesce((SELECT string_agg(key || ' ' || left(text_value, 2000), ' ') FROM page_properties pp WHERE pp.page_id = p.id), '')), 'B') ||
                         setweight(to_tsvector('simple', left(p.text_content || ' ' || coalesce((SELECT string_agg(filename || ' ' || coalesce(left(text_content, 20000), ''), ' ')
                             FROM attachments a WHERE a.page_id = p.id AND a.deleted_at IS NULL), '') || ' ' || coalesce((SELECT string_agg(left(c.text_content, 5000), ' ')
                             FROM comments c WHERE c.page_id = p.id AND c.deleted_at IS NULL), ''), 300000)), 'C')
@@ -181,7 +182,8 @@ impl SearchIndex {
     async fn tantivy_index_batch(&self, db: &PgPool, ids: Vec<Uuid>) -> anyhow::Result<()> {
         let rows = sqlx::query_as::<_, IndexRow>(
             "SELECT p.id, p.space_id, p.title, p.text_content, p.deleted_at IS NOT NULL AS deleted,
-                    (SELECT string_agg(name, ' ') FROM labels l WHERE l.page_id = p.id) AS labels,
+                    concat_ws(' ', (SELECT string_agg(name, ' ') FROM labels l WHERE l.page_id = p.id),
+                        (SELECT string_agg(key || ' ' || left(text_value, 2000), ' ') FROM page_properties pp WHERE pp.page_id = p.id)) AS labels,
                     (SELECT string_agg(filename || ' ' || coalesce(left(text_content, 20000), ''), ' ') FROM attachments a WHERE a.page_id = p.id AND a.deleted_at IS NULL) AS attachments,
                     (SELECT string_agg(left(c.text_content, 5000), ' ') FROM comments c WHERE c.page_id = p.id AND c.deleted_at IS NULL) AS comments
              FROM pages p WHERE p.id = ANY($1)",

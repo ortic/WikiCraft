@@ -136,6 +136,8 @@ export interface Page {
   ownerId?: string | null
   breadcrumbs: { id: string; title: string }[]
   labels: string[]
+  /** typed key/value fields shown above the body */
+  properties?: PageProperty[]
   likes?: { count: number; liked: boolean; names: string[] }
   access: PageAccess
   restricted: boolean
@@ -150,6 +152,17 @@ export interface Page {
   commentCount: number
   /** an unpublished draft: only its creator sees it */
   draft?: boolean
+}
+
+export type PropertyType = 'text' | 'number' | 'date' | 'user' | 'select' | 'url' | 'page'
+
+export interface PageProperty {
+  key: string
+  type: PropertyType
+  /** text, select, url and date strings, numbers, user and page ids; null = empty */
+  value: string | number | null
+  /** the person's name or the linked page's title (null when gone or not visible) */
+  label: string | null
 }
 
 export interface Comment {

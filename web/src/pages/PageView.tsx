@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate, FileText, BadgeCheck, UserCheck, Archive, RotateCcw, UserCog, CircleDot, FolderInput } from 'lucide-react'
+import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate, FileText, BadgeCheck, UserCheck, Archive, RotateCcw, UserCog, CircleDot, FolderInput, ListPlus } from 'lucide-react'
 import { NoAccess, OwnerDialog, RequestReviewDialog, VerificationBadge, VerifyDialog } from '../components/Verification'
 import { ApiError, api, formatDate, type Page, type Space } from '../api'
 import { PageDecor } from '../components/PageDecor'
@@ -17,6 +17,7 @@ import ShareDialog from '../components/ShareDialog'
 import MinorEditToggle from '../components/MinorEdit'
 import DraftBanner from '../components/DraftBanner'
 import PlacePicker from '../components/PlacePicker'
+import { PageProperties } from '../components/PageProperties'
 
 type Panel = 'comments' | 'attachments' | null
 
@@ -35,6 +36,7 @@ export default function PageView() {
   const [presence, setPresence] = useState<Presence[]>([])
   const [menu, setMenu] = useState(false)
   const [statusOpen, setStatusOpen] = useState(false)
+  const [addingProp, setAddingProp] = useState(false)
   const [copyOpen, setCopyOpen] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
   const [restrictions, setRestrictions] = useState(false)
@@ -274,6 +276,11 @@ export default function PageView() {
                   </div>
                 )}
                 {canEdit && (
+                  <div className="menu-item" onClick={() => { setMenu(false); setAddingProp(true) }}>
+                    <ListPlus size={15} /> Add property
+                  </div>
+                )}
+                {canEdit && (
                   <div className="menu-item" onClick={() => { setMenu(false); setVerifyOpen(true) }}>
                     <BadgeCheck size={15} /> Verify page…
                   </div>
@@ -392,6 +399,7 @@ export default function PageView() {
             {canEdit && !p.draft && p.kind !== 'folder' && <MinorEditToggle pageId={p.id} />}
             {!canEdit && <span className="badge">Read only</span>}
           </div>
+          <PageProperties page={p} canEdit={canEdit} adding={addingProp} onAddingDone={() => setAddingProp(false)} />
           {p.access.archivedPage && (
             <div className="archived-banner">
               <Archive size={15} />

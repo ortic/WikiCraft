@@ -70,6 +70,22 @@ async fn export_and_restore_a_space() {
     let (st, _) = app.put(&owner, &format!("/pages/{guide}/content"), json!({"markdown": format!("Start with [the setup](/pages/{setup}#install).")})).await;
     assert_eq!(st, 200);
     app.put(&owner, &format!("/pages/{guide}/labels"), json!({"labels": ["howto"]})).await;
+    let (_, me) = app.get(&owner, "/me").await;
+    let (st, _) = app
+        .put(
+            &owner,
+            &format!("/pages/{guide}/properties"),
+            json!({"properties": [
+                {"key": "Status", "type": "select", "value": "Draft"},
+                {"key": "Effort", "type": "number", "value": 3},
+                {"key": "Due", "type": "date", "value": "2026-12-01"},
+                {"key": "Reviewer", "type": "user", "value": me["user"]["id"]},
+                {"key": "Next", "type": "page", "value": setup},
+                {"key": "Spec", "type": "url", "value": "https://example.com/spec"}
+            ]}),
+        )
+        .await;
+    assert_eq!(st, 200);
     let (st, _) = app.post(&owner, &format!("/pages/{guide}/comments"), json!({"text": "Looks good"})).await;
     assert_eq!(st, 201);
     let (_, secret) = app.post(&owner, "/pages", json!({"spaceKey": "DOC", "parentId": home, "title": "Secret plans", "markdown": "kumquat"})).await;
@@ -99,6 +115,8 @@ async fn export_and_restore_a_space() {
     let guide_html = entry(&mut z, &guide_file);
     assert!(guide_html.contains("href=\"Setup-%20step%201-2.html#install\""), "{guide_html}");
     assert!(guide_html.contains("howto"), "labels shown");
+    assert!(guide_html.contains("<table class=\"properties\"><tr><th>Status</th><td>Draft</td></tr>"), "properties shown: {guide_html}");
+    assert!(guide_html.contains("<a href=\"https://example.com/spec\">"), "{guide_html}");
     let depth = setup_file.matches('/').count();
     let setup_html = entry(&mut z, &setup_file);
     assert!(setup_html.contains(&format!("src=\"{}_attachments/{att}/diagram.png\"", "../".repeat(depth))), "{setup_html}");
@@ -122,6 +140,12 @@ async fn export_and_restore_a_space() {
     let text = entry(&mut z, &guide_md);
     assert!(text.starts_with("---\ntitle: \"Guide\"\nlabels: [\"howto\"]\n") && text.contains("\n# Guide\n"), "{text}");
     assert!(text.contains("Setup-%20step%201-2.md#install"), "{text}");
+    assert!(
+        text.contains(
+            "properties: {\"Status\": \"Draft\", \"Effort\": 3, \"Due\": \"2026-12-01\", \"Reviewer\": \"Owner\", \"Next\": \"Setup: step 1/2\", \"Spec\": \"https://example.com/spec\"}\n"
+        ),
+        "{text}"
+    );
     let raw = z.into_inner().into_inner();
     app.post(&owner, "/spaces", json!({"key": "MD", "name": "Markdown copy"})).await;
     let form = reqwest::multipart::Form::new().text("spaceKey", "MD").part("file", reqwest::multipart::Part::bytes(raw).file_name("docs.zip"));
@@ -135,6 +159,10 @@ async fn export_and_restore_a_space() {
     assert!(!g["content"].to_string().contains("howto"), "front matter isn't body text");
     let (_, labels) = app.get(&owner, &format!("/pages/{md_guide}/labels")).await;
     assert!(labels.to_string().contains("howto"), "labels come back from front matter: {labels}");
+    let types: Vec<(String, String)> =
+        g["properties"].as_array().unwrap().iter().map(|p| (p["key"].as_str().unwrap().into(), p["type"].as_str().unwrap().into())).collect();
+    let want = [("Status", "text"), ("Effort", "number"), ("Due", "date"), ("Reviewer", "text"), ("Next", "text"), ("Spec", "url")];
+    assert_eq!(types, want.map(|(k, t)| (k.to_string(), t.to_string())), "properties come back from front matter (types inferred)");
     let (_, s) = app.get(&owner, &format!("/pages/{md_setup}")).await;
     assert!(s["content"].to_string().contains("/api/attachments/"), "image re-imported as attachment");
 

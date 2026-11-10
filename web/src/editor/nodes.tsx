@@ -652,13 +652,13 @@ export const DecisionItem = Node.create({
   },
 })
 
-function MacroView({ node, extension }: ReactNodeViewProps) {
+function MacroView({ node, extension, editor, updateAttributes }: ReactNodeViewProps) {
   const params = (node.attrs.params as Record<string, string> | null) ?? {}
   const name = node.attrs.name as string
   if (LIVE_MACROS.has(name)) {
     return (
       <NodeViewWrapper className="block-card live-macro" contentEditable={false} data-macro={name}>
-        <LiveMacro name={name} params={params} pageId={extension.options.pageId as string} />
+        <LiveMacro name={name} params={params} pageId={extension.options.pageId as string} onParams={editor.isEditable ? (p) => updateAttributes({ params: p }) : undefined} />
       </NodeViewWrapper>
     )
   }

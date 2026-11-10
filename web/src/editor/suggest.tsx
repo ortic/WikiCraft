@@ -7,7 +7,7 @@ import { PluginKey } from '@tiptap/pm/state'
 import { EMOTICONS, Emoticon } from '../icons'
 import { forwardRef, useEffect, useImperativeHandle, useState, type ReactNode } from 'react'
 import {
-  Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Quote, Code2, Minus, Table, Info, AlertTriangle, CheckCircle2, XCircle, ChevronRight,
+  Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Table2, Quote, Code2, Minus, Table, Info, AlertTriangle, CheckCircle2, XCircle, ChevronRight,
   UserRound, Hash, ListTree, CalendarDays, Tag, Sigma, Image as ImageIcon, Link2, Columns2, Paperclip, StickyNote, FileText, FilePlus2, PenTool, Workflow, Columns3, PanelLeft, PanelRight, Search,
   MessageSquareDashed, Milestone,
 } from 'lucide-react'
@@ -170,6 +170,7 @@ export function slashItems(onImage: (editor: Editor) => void, onAttachment: (edi
     { group: 'Macros', title: 'Status', icon: ic(Tag), keywords: 'lozenge label', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'status', attrs: { text: 'IN PROGRESS', color: 'blue' } }).run() },
     { group: 'Macros', title: 'Decision', description: 'Record a decision (shows up in decision logs)', icon: ic(Milestone), keywords: 'decided adr choice', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'decisionList', content: [{ type: 'decisionItem', attrs: { state: 'DECIDED' }, content: [{ type: 'paragraph' }] }] }).run() },
     { group: 'Macros', title: 'Decision log', description: 'Decisions recorded in this space', icon: ic(Milestone), keywords: 'decisions report decisionreport', command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'macro', attrs: { name: 'decisionreport', params: {} } }, { type: 'paragraph' }]).run() },
+    { group: 'Macros', title: 'Properties report', description: 'Pages in this space and their properties, as a table', icon: ic(Table2), keywords: 'page properties report detailssummary query table database', command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'macro', attrs: { name: 'detailssummary', params: { spaces: '@self' } } }, { type: 'paragraph' }]).run() },
     { group: 'Macros', title: 'Task report', description: 'Open tasks in this space', icon: ic(ListChecks), keywords: 'tasks report todo', command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'macro', attrs: { name: 'tasks-report-macro', params: {} } }, { type: 'paragraph' }]).run() },
     { group: 'Macros', title: 'Search box', description: 'Search this space (or the wiki) from the page', icon: ic(Search), keywords: 'livesearch search find', command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'macro', attrs: { name: 'livesearch', params: { spaceKey: '@self' } } }, { type: 'paragraph' }]).run() },
     { group: 'Macros', title: 'Create-page button', description: 'A button that creates a page below this one, from a template', icon: ic(FilePlus2), keywords: 'create from template button new page', command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'macro', attrs: { name: 'create-from-template', params: {} } }, { type: 'paragraph' }]).run() },

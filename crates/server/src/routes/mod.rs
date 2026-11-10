@@ -18,6 +18,7 @@ pub mod notifications;
 pub mod openapi;
 pub mod pages;
 pub mod people;
+pub mod properties;
 pub mod reports;
 pub mod search;
 pub mod security;
@@ -107,6 +108,7 @@ pub fn router(state: AppState) -> Router {
         .route("/spaces/{key}/trash", get(spaces::trash))
         .route("/spaces/{key}/trash/empty", post(spaces::empty_trash))
         .route("/spaces/{key}/blog", get(spaces::blog))
+        .route("/spaces/{key}/properties", get(properties::space_keys))
         .route("/spaces/{key}/blog.atom", get(spaces::blog_feed))
         // pages
         .route("/pages", post(pages::create))
@@ -127,6 +129,7 @@ pub fn router(state: AppState) -> Router {
         .route("/pages/{id}/versions/{version}/restore", post(pages::restore_version))
         .route("/pages/{id}/restrictions", get(pages::get_restrictions).put(pages::put_restrictions))
         .route("/pages/{id}/labels", get(pages::get_labels).put(pages::put_labels))
+        .route("/pages/{id}/properties", get(properties::get).put(properties::put))
         .route("/pages/{id}/favorite", put(pages::favorite).delete(pages::unfavorite))
         .route("/pages/{id}/watch", put(notifications::watch).delete(notifications::unwatch))
         .route("/notifications", get(notifications::list))

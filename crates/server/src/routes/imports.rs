@@ -420,6 +420,13 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
         for l in fm_labels.iter().filter_map(|l| crate::routes::pages::normalize_label(l)).take(50) {
             sqlx::query("INSERT INTO labels (page_id, name) VALUES ($1, $2) ON CONFLICT DO NOTHING").bind(id).bind(l).execute(&state.db).await?;
         }
+        // other front matter keys become page properties
+        let fm_props = imported.front_matter.as_deref().map(crate::routes::properties::from_front_matter).unwrap_or_default();
+        if !fm_props.is_empty()
+            && let Err(e) = crate::routes::properties::save(state, &p, user.workspace_id, id, fm_props).await
+        {
+            tracing::warn!("{name}: front matter properties skipped: {e}");
+        }
         title_index.insert(title.to_lowercase(), id);
         title_index.insert(stem.to_lowercase(), id);
         title_index.insert(clean_name(stem).to_lowercase(), id);

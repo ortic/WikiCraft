@@ -161,7 +161,7 @@
 - [x] **P0** `comment` (page / inline with anchor + thread + resolved state), `reaction` — reactions are likes (`page_likes`, `comment_likes`); the emoji `reactions` table is unused
 - [x] **P0** `user`, `group`, `group_member`, `identity` (external IdP links), `session`, `api_token`
 - [ ] **P0** `acl_entry` (subject: user/group/anonymous/guest/role × resource: workspace/space/node × permission × allow/deny × inherit) — partial: role-based grants instead of generic ACL rows: workspace roles, `space_permissions` (user/group → role), space default role and anonymous access, page view (inherited) / edit restrictions / no deny entries, no per-permission matrix
-- [ ] **P1** `label`, `node_label`, `page_property` (typed key/values), `link` (outgoing link graph for backlinks and broken-link reports)
+- [ ] **P1** `label`, `node_label`, `page_property` (typed key/values), `link` (outgoing link graph for backlinks and broken-link reports) — partial: `page_property` (`page_properties`, typed, migration 0043)
 - [ ] **P1** `watch`, `notification`, `notification_preference`, `mention`
 - [ ] **P1** `template`, `blueprint`
 - [ ] **P1** `audit_event` (append-only, hash-chained for tamper evidence in P2)
@@ -403,8 +403,8 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 
 ### 4.9 Structured content: labels, properties, databases
 - [~] **P1** Labels/tags on pages, blog posts and attachments; label autocomplete; label pages (all content with label X) `C X O B` (pages and blog posts; autocomplete by usage over the pages you can see, `GET /labels?q=`; not on attachments)
-- [ ] **P1** Page properties (typed key/value: text, number, date, user, select, URL, page link) shown in a properties panel `C X N`
-- [~] **P1** Properties report: query table across pages (filter by space, label, property) `C` (space + label filters; no property filters)
+- [x] **P1** Page properties (typed key/value: text, number, date, user, select, URL, page link) shown in a properties panel `C X N` — panel above the body (page menu → Add property; names used in the space bring their type, select values are suggested); validated per type, searchable, copied with the page, in HTML/Markdown exports and backups; Markdown front matter keys become properties on import; `GET/PUT /api/pages/{id}/properties`, `GET /api/spaces/{key}/properties`. No history of property changes yet (P2 below)
+- [x] **P1** Properties report: query table across pages (filter by space, label, property) `C` — page properties plus Confluence properties tables; `where` conditions (`Status = Done; Effort >= 3`, `!=`, `~`, `<`…); `/properties` inserts one, editors set labels, columns and conditions in the block; people, pages and web addresses stay links (also in exports)
 - [ ] **P2** **Databases** `C D N X`
   - [ ] Field types: text, rich text, number, currency, date, checkbox, select, multi-select, user, page link, URL, email, attachment, formula, rollup, relation, created/updated by/at
   - [ ] Views: table, board/kanban (incl. swimlanes), list/cards, calendar, timeline/gantt, gallery

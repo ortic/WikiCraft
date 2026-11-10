@@ -619,6 +619,7 @@ pub async fn get(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path
     let o = v.as_object_mut().expect("object");
     o.insert("breadcrumbs".into(), serde_json::to_value(crumbs)?);
     o.insert("labels".into(), json!(labels));
+    o.insert("properties".into(), serde_json::to_value(crate::routes::properties::load(&state, &p, id).await?)?);
     o.insert("changedSince".into(), changed_since);
     o.insert("access".into(), serde_json::to_value(access)?);
     o.insert("restricted".into(), json!(restricted));
@@ -971,6 +972,13 @@ pub async fn copy(
         )
         .await?;
         sqlx::query("INSERT INTO labels (page_id, name) SELECT $2, name FROM labels WHERE page_id = $1").bind(src).bind(new).execute(&state.db).await?;
+        sqlx::query(
+            "INSERT INTO page_properties (page_id, position, key, kind, value, text_value) SELECT $2, position, key, kind, value, text_value FROM page_properties WHERE page_id = $1",
+        )
+        .bind(src)
+        .bind(new)
+        .execute(&state.db)
+        .await?;
         for ((_, filename, media_type, size, blob_key, text), (_, new_att)) in attachments.iter().zip(&renamed) {
             sqlx::query(
                 "INSERT INTO attachments (id, workspace_id, page_id, filename, media_type, size, blob_key, version, text_content, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9)",

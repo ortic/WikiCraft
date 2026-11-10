@@ -103,6 +103,29 @@ components:
         comment: *id003
         edit: *id003
         admin: *id003
+    PropertyType:
+      type: string
+      enum:
+      - text
+      - number
+      - date
+      - user
+      - select
+      - url
+      - page
+    PageProperty:
+      type: object
+      properties:
+        key: *id001
+        type:
+          $ref: '#/components/schemas/PropertyType'
+        value:
+          description: string, number or null (user and page properties hold ids)
+        label:
+          type:
+          - string
+          - 'null'
+          description: the person's name or the linked page's title, when visible
     Page:
       type: object
       properties:
@@ -128,6 +151,10 @@ components:
         labels:
           type: array
           items: *id001
+        properties:
+          type: array
+          items:
+            $ref: '#/components/schemas/PageProperty'
         restricted: *id003
         createdAt: &id004
           type: string
@@ -2793,6 +2820,122 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /pages/{id}/properties:
+    get:
+      tags:
+      - Pages
+      summary: Page properties (typed key/value fields)
+      operationId: get_pages_id_properties
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  properties:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PageProperty'
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - {}
+      - session: []
+      - token: []
+    put:
+      tags:
+      - Pages
+      summary: 'Replace the page properties. Values: text, select and url strings, numbers, YYYY-MM-DD dates, user ids, page
+        ids; null = empty'
+      operationId: put_pages_id_properties
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                properties:
+                  type: array
+                  items:
+                    type: object
+                    properties:
+                      key: *id001
+                      type:
+                        $ref: '#/components/schemas/PropertyType'
+                      value: {}
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  properties:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/PageProperty'
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /spaces/{key}/properties:
+    get:
+      tags:
+      - Spaces
+      summary: Property names used in a space (most used first) with their common values, for suggestions
+      operationId: get_spaces_key_properties
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    key: *id001
+                    type:
+                      $ref: '#/components/schemas/PropertyType'
+                    pages: *id005
+                    values:
+                      type: array
+                      items: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - {}
+      - session: []
+      - token: []
   /pages/{id}/favorite:
     put:
       tags:
@@ -4404,7 +4547,7 @@ paths:
     get:
       tags:
       - Reports
-      summary: Page properties report (detailssummary)
+      summary: 'Page properties report (detailssummary): page properties and properties tables of the matching pages'
       operationId: get_reports_properties
       parameters:
       - name: labels
@@ -4417,6 +4560,16 @@ paths:
         required: false
         description: comma-separated keys
         schema: *id001
+      - name: where
+        in: query
+        required: false
+        description: conditions such as Status = Done; Effort >= 3 (=, !=, ~ contains, <, <=, >, >=)
+        schema: *id001
+      - name: max
+        in: query
+        required: false
+        description: rows
+        schema: *id005
       responses:
         '200':
           description: OK

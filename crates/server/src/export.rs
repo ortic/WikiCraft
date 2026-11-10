@@ -27,6 +27,7 @@ use crate::app::{AppState, new_id};
 use crate::auth::{USER_COLUMNS, User};
 use crate::authz::{Principal, Role, space_role, visible_page_ids};
 use crate::routes::pages::{NewPage, insert_page};
+use crate::routes::properties::Property;
 
 pub const BACKUP_FORMAT: &str = "wikicraft-space-backup";
 /// How long finished export archives are kept.
@@ -75,6 +76,7 @@ struct Page {
     row: PageRow,
     doc: Node,
     labels: Vec<String>,
+    props: Vec<Property>,
     /// path inside the archive without extension, e.g. `Engineering/Runbooks/index`
     path: String,
 }
@@ -123,10 +125,25 @@ pub struct BackupPage {
     pub full_width: bool,
     #[serde(default)]
     pub labels: Vec<String>,
+    #[serde(default)]
+    pub properties: Vec<BackupProperty>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub created_by: Option<String>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
     pub updated_by: Option<String>,
+}
+
+/// A page property; `text` is the readable value (a person's name, a page's title), used
+/// when the person or page doesn't exist where the backup is restored.
+#[derive(Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackupProperty {
+    pub key: String,
+    #[serde(rename = "type")]
+    pub kind: String,
+    pub value: Option<Value>,
+    #[serde(default)]
+    pub text: String,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -206,6 +223,7 @@ pub async fn run_export(state: &AppState, job_id: Uuid, actor: Uuid, input: &Val
     {
         labels.entry(page).or_default().push(label);
     }
+    let mut props = crate::routes::properties::load_many(state, &p, &ids).await?;
     let attachments = sqlx::query_as::<_, AttachmentRow>(
         "SELECT a.id, a.page_id, a.filename, a.media_type, a.size, a.blob_key, a.created_at, u.email AS created_by
          FROM attachments a LEFT JOIN users u ON u.id = a.created_by WHERE a.page_id = ANY($1) AND a.deleted_at IS NULL ORDER BY a.created_at",
@@ -222,7 +240,8 @@ pub async fn run_export(state: &AppState, job_id: Uuid, actor: Uuid, input: &Val
             None => Node::from_json(&row.content).unwrap_or_else(|_| Node::empty_doc()),
         };
         let labels = labels.remove(&row.id).unwrap_or_default();
-        pages.push(Page { row, doc, labels, path: String::new() });
+        let props = props.remove(&row.id).unwrap_or_default();
+        pages.push(Page { row, doc, labels, props, path: String::new() });
     }
     assign_paths(&mut pages);
 
@@ -313,6 +332,11 @@ pub async fn run_export(state: &AppState, job_id: Uuid, actor: Uuid, input: &Val
                             page_status: pg.row.page_status.clone(),
                             full_width: pg.row.full_width,
                             labels: pg.labels.clone(),
+                            properties: pg
+                                .props
+                                .iter()
+                                .map(|pr| BackupProperty { key: pr.key.clone(), kind: pr.kind.clone(), value: pr.value.clone(), text: pr.display() })
+                                .collect(),
                             created_at: pg.row.created_at,
                             created_by: pg.row.created_by.clone(),
                             updated_at: pg.row.updated_at,
@@ -540,6 +564,21 @@ fn markdown_page(pg: &Page, doc: &Node) -> String {
     if !pg.labels.is_empty() {
         out.push_str(&format!("labels: {}\n", serde_json::to_string(&pg.labels).unwrap_or_default()));
     }
+    if !pg.props.is_empty() {
+        // a flow mapping in page order, readable and re-importable (types are inferred on import)
+        let fields: Vec<String> = pg
+            .props
+            .iter()
+            .map(|pr| {
+                let v = match (pr.kind.as_str(), &pr.value) {
+                    ("number", Some(n)) => n.clone(),
+                    _ => Value::String(pr.display()),
+                };
+                format!("{}: {v}", Value::String(pr.key.clone()))
+            })
+            .collect();
+        out.push_str(&format!("properties: {{{}}}\n", fields.join(", ")));
+    }
     out.push_str(&format!("created: {}\nupdated: {}\n---\n\n", pg.row.created_at.to_rfc3339(), pg.row.updated_at.to_rfc3339()));
     out.push_str(&format!("# {}\n\n", pg.row.title.replace('\n', " ")));
     out.push_str(&markdown::pm_to_markdown(doc));
@@ -579,13 +618,30 @@ fn html_page(pg: &Page, doc: &Node, file: &str, by_id: &HashMap<Uuid, &Page>, ex
     } else {
         format!("<p class=\"labels\">{}</p>", pg.labels.iter().map(|l| format!("<span>{}</span>", e(l))).collect::<String>())
     };
+    let props = if pg.props.is_empty() {
+        String::new()
+    } else {
+        let rows: String = pg
+            .props
+            .iter()
+            .map(|pr| {
+                let text = e(&pr.display());
+                let cell = match (pr.kind.as_str(), pr.value.as_ref().and_then(Value::as_str)) {
+                    ("url", Some(u)) => format!("<a href=\"{}\">{text}</a>", e(u)),
+                    _ => text,
+                };
+                format!("<tr><th>{}</th><td>{cell}</td></tr>", e(&pr.key))
+            })
+            .collect();
+        format!("<table class=\"properties\">{rows}</table>")
+    };
     let meta = format!(
         "Last updated {}{}",
         pg.row.updated_at.format("%Y-%m-%d"),
         pg.row.updated_by_name.as_deref().map(|u| format!(" by {}", e(u))).unwrap_or_default()
     );
     format!(
-        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{title} · {space}</title><link rel=\"stylesheet\" href=\"{css}\"></head><body><header><nav class=\"crumbs\">{crumbs}</nav></header><main class=\"{width}\"><h1>{title}</h1><p class=\"meta\">{meta}</p>{labels}<article>{body}</article>{children}</main></body></html>",
+        "<!doctype html><html lang=\"en\"><head><meta charset=\"utf-8\"><meta name=\"viewport\" content=\"width=device-width,initial-scale=1\"><title>{title} · {space}</title><link rel=\"stylesheet\" href=\"{css}\"></head><body><header><nav class=\"crumbs\">{crumbs}</nav></header><main class=\"{width}\"><h1>{title}</h1><p class=\"meta\">{meta}</p>{labels}{props}<article>{body}</article>{children}</main></body></html>",
         title = e(&pg.row.title),
         space = e(space_name),
         css = e(&css),
@@ -593,6 +649,55 @@ fn html_page(pg: &Page, doc: &Node, file: &str, by_id: &HashMap<Uuid, &Page>, ex
         width = if pg.row.full_width { "wide" } else { "" },
         body = html::render(doc, &html::HtmlOptions { heading_ids: true }),
     )
+}
+
+/// Page properties from a backup: people and pages that don't exist here become text.
+async fn restore_properties(state: &AppState, ws: Uuid, page: Uuid, props: &[BackupProperty], page_ids: &HashMap<Uuid, Uuid>) -> anyhow::Result<()> {
+    let id_of = |v: &Option<Value>| v.as_ref().and_then(Value::as_str).and_then(|s| Uuid::parse_str(s).ok());
+    let mut seen = HashSet::new();
+    for (i, pr) in props.iter().take(50).enumerate() {
+        let key = crate::routes::properties::clean_key(&pr.key);
+        if key.is_empty() || key.chars().count() > 100 || !seen.insert(key.to_lowercase()) {
+            continue;
+        }
+        let as_text = |t: &str| ("text".to_string(), (!t.is_empty()).then(|| Value::String(t.to_string())), t.to_string());
+        let (kind, value, text) = match pr.kind.as_str() {
+            "user" => match id_of(&pr.value) {
+                Some(id) => {
+                    let name: Option<String> =
+                        sqlx::query_scalar("SELECT name FROM users WHERE id = $1 AND workspace_id = $2").bind(id).bind(ws).fetch_optional(&state.db).await?;
+                    match name {
+                        Some(n) => ("user".into(), pr.value.clone(), n),
+                        None => as_text(&pr.text),
+                    }
+                }
+                None => as_text(&pr.text),
+            },
+            "page" => match id_of(&pr.value).and_then(|id| page_ids.get(&id)) {
+                Some(new) => ("page".into(), Some(Value::String(new.to_string())), String::new()),
+                None => as_text(&pr.text),
+            },
+            k if crate::routes::properties::KINDS.contains(&k) => {
+                let text = match &pr.value {
+                    Some(Value::String(s)) => s.clone(),
+                    Some(v @ Value::Number(_)) => v.to_string(),
+                    _ => String::new(),
+                };
+                (k.to_string(), pr.value.clone().filter(|v| !v.is_null()), text)
+            }
+            _ => as_text(&pr.text),
+        };
+        sqlx::query("INSERT INTO page_properties (page_id, position, key, kind, value, text_value) VALUES ($1, $2, $3, $4, $5, $6) ON CONFLICT DO NOTHING")
+            .bind(page)
+            .bind(i as i32)
+            .bind(&key)
+            .bind(kind)
+            .bind(value)
+            .bind(text)
+            .execute(&state.db)
+            .await?;
+    }
+    Ok(())
 }
 
 fn html_index(space_name: &str, description: Option<&str>, pages: &[Page], home: Option<Uuid>) -> String {
@@ -658,7 +763,7 @@ fn html_index(space_name: &str, description: Option<&str>, pages: &[Page], home:
 const STYLE: &str = "body{margin:0;font:16px/1.65 system-ui,-apple-system,'Segoe UI',sans-serif;color:#1f2328;background:#fff}
 header{border-bottom:1px solid #e5e7eb;padding:10px 24px;font-size:14px}header a{color:#57606a;text-decoration:none}header a:hover{color:#2563eb}header span{color:#9ca3af;margin:0 4px}
 main{max-width:860px;margin:0 auto;padding:24px}main.wide{max-width:none}h1{font-size:2rem;line-height:1.25;margin:.4em 0 .2em}
-.meta{color:#6b7280;font-size:13px;margin:0 0 1rem}.lead{font-size:1.1rem;color:#4b5563}.labels span{display:inline-block;background:#eef2ff;color:#3730a3;border-radius:999px;padding:1px 10px;font-size:12px;margin-right:6px}
+.meta{color:#6b7280;font-size:13px;margin:0 0 1rem}.lead{font-size:1.1rem;color:#4b5563}.properties{border-collapse:collapse;margin:0 0 1rem;font-size:14px}.properties th{text-align:left;color:#6b7280;font-weight:500;padding:3px 16px 3px 0;vertical-align:top}.properties td{padding:3px 0}.labels span{display:inline-block;background:#eef2ff;color:#3730a3;border-radius:999px;padding:1px 10px;font-size:12px;margin-right:6px}
 a{color:#2563eb}pre{background:#f6f8fa;padding:12px 16px;border-radius:8px;overflow:auto}code{font:13px ui-monospace,SFMono-Regular,Menlo,monospace;background:#f6f8fa;padding:.1em .3em;border-radius:4px}pre code{padding:0;background:none}
 table{border-collapse:collapse;margin:1rem 0}td,th{border:1px solid #d0d7de;padding:6px 10px;vertical-align:top}th{background:#f6f8fa}
 img{max-width:100%;height:auto}.image-block{display:block;margin:1rem 0}.image-block.align-none{display:inline-block;margin:0}.image-block.align-center{text-align:center}.image-block.align-right{text-align:right}.image-block.align-wrap-left{float:left;margin:.3em 1.2em .6em 0;max-width:50%}.image-block.align-wrap-right{float:right;margin:.3em 0 .6em 1.2em;max-width:50%}h1,h2,h3,table,pre{clear:both}.image-caption{display:block;color:#6b7280;font-size:.9em;margin-top:4px}blockquote{margin:1rem 0;padding:0 1rem;border-left:4px solid #d0d7de;color:#57606a}
@@ -809,6 +914,7 @@ pub async fn run_restore(state: &AppState, job_id: Uuid, actor: Uuid, archive: &
                 .execute(&state.db)
                 .await?;
         }
+        restore_properties(state, user.workspace_id, page_ids[&pg.id], &pg.properties, &page_ids).await?;
         if i % 100 == 0 {
             progress(state, job_id, json!({"phase": "pages", "done": i, "total": m.pages.len()})).await;
         }

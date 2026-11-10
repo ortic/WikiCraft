@@ -5,10 +5,11 @@
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
-import { CheckSquare, Clock, Download, FilePlus2, FileText, ListTree, Milestone, Paperclip, Puzzle, Search, Table2, Tag } from 'lucide-react'
+import { CheckSquare, Clock, Download, FilePlus2, FileText, ListTree, Milestone, Paperclip, Puzzle, Search, SlidersHorizontal, Table2, Tag } from 'lucide-react'
 import TemplatePicker from '../components/TemplatePicker'
 import { useToast } from '../ui'
-import { api, formatBytes, formatDate, type Attachment, type Page } from '../api'
+import { api, formatBytes, formatDate, type Attachment, type Page, type PageProperty } from '../api'
+import { PropertyValue } from '../components/PageProperties'
 
 type Params = Record<string, string>
 
@@ -115,25 +116,41 @@ function PageList({ params, page, mode }: { params: Params; page: Page | undefin
   )
 }
 
-function PropertiesReport({ params, page }: { params: Params; page: Page | undefined }) {
+function PropertiesReport({ params, page, onParams }: { params: Params; page: Page | undefined; onParams?: (p: Params) => void }) {
   const spec = querySpec(params, page?.spaceKey)
   const max = Number(params.pageSize ?? params.max ?? params.maxResults ?? 100) || 100
+  const where = (params.where ?? '').trim()
+  const enabled = spec.labels.length > 0 || !!where || spec.spaces.length > 0
+  const [editing, setEditing] = useState(false)
   const q = useQuery({
-    queryKey: ['report-props', spec.labels, spec.spaces, max],
-    queryFn: () => api.get<{ columns: string[]; rows: { page: ReportPage; properties: Record<string, string> }[] }>(`/reports/properties?${qs({ labels: spec.labels.join(','), spaces: spec.spaces.join(','), max, sort: 'title' })}`),
-    enabled: spec.labels.length > 0,
+    queryKey: ['report-props', spec.labels, spec.spaces, where, max],
+    queryFn: () =>
+      api.get<{ columns: string[]; rows: { page: ReportPage; properties: Record<string, string>; values?: Record<string, PageProperty> }[] }>(
+        `/reports/properties?${qs({ labels: spec.labels.join(','), spaces: spec.spaces.join(','), where: where || undefined, max, sort: 'title' })}`,
+      ),
+    enabled,
   })
   const headings = csv(params.headings)
   const columns = headings.length ? headings : (q.data?.columns ?? []).slice(0, 8)
-  const value = (props: Record<string, string>, col: string) => props[col] ?? Object.entries(props).find(([k]) => k.toLowerCase() === col.toLowerCase())?.[1] ?? ''
+  const find = <T,>(m: Record<string, T> | undefined, col: string): T | undefined => (m ? m[col] ?? Object.entries(m).find(([k]) => k.toLowerCase() === col.toLowerCase())?.[1] : undefined)
   const rows = q.data?.rows ?? []
+  const detail = [spec.labels.length ? `label: ${spec.labels.join(', ')}` : '', spec.spaces.length ? `in ${spec.spaces.join(', ')}` : '', where ? `where ${where}` : ''].filter(Boolean).join(' · ')
   return (
     <>
-      <Header icon={<Table2 size={13} />} title="Page properties report" detail={spec.labels.length ? `label: ${spec.labels.join(', ')}` : undefined} />
-      {!spec.labels.length ? (
-        <div className="faint small">No label in this report.</div>
+      <div className="row" style={{ gap: 6 }}>
+        <Header icon={<Table2 size={13} />} title="Page properties report" detail={detail || undefined} />
+        <span className="spacer" />
+        {onParams && (
+          <button className="icon-btn" title="Filter and columns" aria-expanded={editing} onClick={() => setEditing(!editing)}>
+            <SlidersHorizontal size={14} />
+          </button>
+        )}
+      </div>
+      {editing && onParams && <ReportFilter params={params} onSave={(p) => { onParams(p); setEditing(false) }} />}
+      {!enabled ? (
+        <div className="faint small">No label, space or filter in this report.</div>
       ) : rows.length === 0 ? (
-        <Empty q={q} text="No pages with page properties and this label." />
+        <Empty q={q} text={spec.labels.length ? 'No pages with page properties and this label.' : 'No pages with matching properties.'} />
       ) : (
         <div className="macro-table-wrap">
           <table className="macro-table">
@@ -149,9 +166,10 @@ function PropertiesReport({ params, page }: { params: Params; page: Page | undef
               {rows.map((r) => (
                 <tr key={r.page.id}>
                   <td><Link to={`/pages/${r.page.id}`}>{r.page.title}</Link></td>
-                  {columns.map((c) => (
-                    <td key={c}>{value(r.properties, c)}</td>
-                  ))}
+                  {columns.map((c) => {
+                    const typed = find(r.values, c)
+                    return <td key={c}>{typed && typed.value !== null ? <PropertyValue prop={typed} /> : find(r.properties, c) ?? ''}</td>
+                  })}
                 </tr>
               ))}
             </tbody>
@@ -159,6 +177,43 @@ function PropertiesReport({ params, page }: { params: Params; page: Page | undef
         </div>
       )}
     </>
+  )
+}
+
+/** Editors set which pages a properties report shows and which columns. */
+function ReportFilter({ params, onSave }: { params: Params; onSave: (p: Params) => void }) {
+  const [labels, setLabels] = useState(params.labels ?? params.label ?? '')
+  const [where, setWhere] = useState(params.where ?? '')
+  const [headings, setHeadings] = useState(params.headings ?? '')
+  const [allSpaces, setAllSpaces] = useState(params.spaces === '@all')
+  const save = () => {
+    const next: Params = { ...params, labels: labels.trim(), where: where.trim(), headings: headings.trim(), spaces: allSpaces ? '@all' : params.spaces && params.spaces !== '@all' ? params.spaces : '@self' }
+    delete next.label
+    delete next.cql
+    onSave(next)
+  }
+  return (
+    <div className="report-filter" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); save() } }}>
+      <label className="field">
+        <span>Pages with these labels <span className="faint">(optional, comma-separated)</span></span>
+        <input className="input" value={labels} onChange={(e) => setLabels(e.target.value)} placeholder="project, active" />
+      </label>
+      <label className="field">
+        <span>Where</span>
+        <input className="input" value={where} onChange={(e) => setWhere(e.target.value)} placeholder="Status = Done; Effort >= 3; Owner ~ Ann" />
+        <span className="faint small">Conditions on properties, separated by semicolons: = equal, != not equal, ~ contains, &lt; &gt; &lt;= &gt;= for numbers and dates (YYYY-MM-DD).</span>
+      </label>
+      <label className="field">
+        <span>Columns <span className="faint">(optional, comma-separated property names)</span></span>
+        <input className="input" value={headings} onChange={(e) => setHeadings(e.target.value)} placeholder="Status, Owner, Due" />
+      </label>
+      <label className="row small" style={{ gap: 6 }}>
+        <input type="checkbox" checked={allSpaces} onChange={(e) => setAllSpaces(e.target.checked)} /> All spaces (not only this one)
+      </label>
+      <div className="row" style={{ gap: 6, marginTop: 8 }}>
+        <button className="btn btn-primary btn-sm" onClick={save}>Apply</button>
+      </div>
+    </div>
   )
 }
 
@@ -383,7 +438,7 @@ function CreateFromTemplate({ params, page }: { params: Params; page?: Page }) {
 }
 
 /** Live view for a supported macro; `null` for macros without one. */
-export function LiveMacro({ name, params, pageId }: { name: string; params: Params; pageId: string }) {
+export function LiveMacro({ name, params, pageId, onParams }: { name: string; params: Params; pageId: string; onParams?: (p: Params) => void }) {
   const page = useQuery({ queryKey: ['page', pageId], queryFn: () => api.get<Page>(`/pages/${pageId}`), enabled: !!pageId, staleTime: 60_000 })
   switch (name) {
     case 'contentbylabel':
@@ -392,7 +447,7 @@ export function LiveMacro({ name, params, pageId }: { name: string; params: Para
       return <PageList params={params} page={page.data} mode="recent" />
     case 'detailssummary':
     case 'content-report-table':
-      return <PropertiesReport params={params} page={page.data} />
+      return <PropertiesReport params={params} page={page.data} onParams={onParams} />
     case 'tasks-report-macro':
       return <TasksReport params={params} page={page.data} />
     case 'decisionreport':

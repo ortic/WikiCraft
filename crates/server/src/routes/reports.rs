@@ -16,6 +16,7 @@ use crate::app::AppState;
 use crate::auth::MaybeUser;
 use crate::authz::Principal;
 use crate::error::{ApiError, ApiResult};
+use crate::routes::properties::{self as page_props, Property};
 use crate::routes::search::{filter_visible, visible_spaces};
 use crate::routes::spaces::workspace_of;
 
@@ -32,6 +33,9 @@ pub struct ReportQuery {
     max: Option<i64>,
     /// tasks: `open` (default) | `done` | `all`
     status: Option<String>,
+    /// properties: conditions such as `Status = Done; Effort >= 3`
+    #[serde(rename = "where")]
+    filter: Option<String>,
 }
 
 fn list(s: &Option<String>) -> Vec<String> {
@@ -71,7 +75,7 @@ pub struct ReportPage {
 }
 
 /// Candidate pages (label / space filters in SQL), then permission filtering.
-async fn pages(state: &AppState, p: &Principal, q: &ReportQuery, require_labels: bool, default_max: i64, with_content: bool) -> ApiResult<Vec<ReportPage>> {
+async fn pages(state: &AppState, p: &Principal, q: &ReportQuery, require_labels: bool, max: i64, with_content: bool) -> ApiResult<Vec<ReportPage>> {
     let ws = workspace_of(state, p).await?;
     let labels = q.labels();
     if require_labels && labels.is_empty() {
@@ -90,7 +94,6 @@ async fn pages(state: &AppState, p: &Principal, q: &ReportQuery, require_labels:
         Some("created") | Some("creation") => "p.created_at DESC",
         _ => "p.updated_at DESC",
     };
-    let max = q.max(default_max);
     let rows = sqlx::query_as::<_, ReportPage>(sqlx::AssertSqlSafe(format!(
         "SELECT p.id, p.title, p.kind, p.space_id, s.key AS space_key, s.name AS space_name, p.created_at, p.updated_at, u.name AS updated_by_name,
                 COALESCE((SELECT array_agg(l.name ORDER BY l.name) FROM labels l WHERE l.page_id = p.id), '{{}}') AS labels,
@@ -120,7 +123,7 @@ async fn pages(state: &AppState, p: &Principal, q: &ReportQuery, require_labels:
 /// `GET /api/reports/pages?labels=&spaces=&operator=&sort=&max=` (contentbylabel, recently-updated)
 pub async fn pages_report(State(state): State<AppState>, MaybeUser(user): MaybeUser, Query(q): Query<ReportQuery>) -> ApiResult<Json<Vec<ReportPage>>> {
     let p = Principal::load(&state, user).await?;
-    Ok(Json(pages(&state, &p, &q, false, 20, false).await?))
+    Ok(Json(pages(&state, &p, &q, false, q.max(20), false).await?))
 }
 
 /// Key/value pairs of a page's properties table: the first table whose rows all have two
@@ -146,27 +149,64 @@ pub fn properties(doc: &Node) -> Vec<(String, String)> {
     out
 }
 
-/// `GET /api/reports/properties?labels=&spaces=&max=` (detailssummary / content-report-table)
-pub async fn properties_report(State(state): State<AppState>, MaybeUser(user): MaybeUser, Query(q): Query<ReportQuery>) -> ApiResult<Json<Value>> {
-    let p = Principal::load(&state, user).await?;
-    let rows = pages(&state, &p, &q, true, 100, true).await?;
-    let mut columns: Vec<String> = Vec::new();
-    let mut seen: HashSet<String> = HashSet::new();
+/// A properties report row: the page, its properties as text (page properties first, then
+/// the ones in its properties table) and its typed page properties.
+type PropertyRow = (ReportPage, Vec<(String, String)>, Vec<Property>);
+
+/// Pages of a properties report: by label (Confluence's report needs one) or, with
+/// `where` conditions or spaces, any page that has properties.
+async fn property_rows(state: &AppState, p: &Principal, q: &ReportQuery) -> ApiResult<Vec<PropertyRow>> {
+    let conds = q.filter.as_deref().map(page_props::parse_conditions).unwrap_or_default();
+    let by_label = !q.labels().is_empty();
+    if !by_label && conds.is_empty() && q.spaces().is_empty() {
+        return Ok(vec![]);
+    }
+    let max = q.max(100);
+    // filtering happens after loading, so load more candidates
+    let candidates = if conds.is_empty() && by_label { max } else { 2000 };
+    let rows = pages(state, p, q, false, candidates, true).await?;
+    let ids: Vec<Uuid> = rows.iter().map(|r| r.id).collect();
+    let mut typed_by_page = page_props::load_many(state, p, &ids).await?;
     let mut out = Vec::new();
     for r in rows {
+        let typed = typed_by_page.remove(&r.id).unwrap_or_default();
         // the live document is newer than the stored content
         let doc = match state.rooms.get(r.id) {
             Some(room) => room.snapshot(),
             None => Node::from_json(&r.content).unwrap_or_else(|_| Node::empty_doc()),
         };
-        let props = properties(&doc);
+        let mut props: Vec<(String, String)> = typed.iter().map(|t| (t.key.clone(), t.display())).collect();
+        for (k, v) in properties(&doc) {
+            if !props.iter().any(|(x, _)| x.eq_ignore_ascii_case(&k)) {
+                props.push((k, v));
+            }
+        }
+        if (!by_label && props.is_empty()) || !page_props::matches(&props, &conds) {
+            continue;
+        }
+        out.push((r, props, typed));
+        if out.len() >= max as usize {
+            break;
+        }
+    }
+    Ok(out)
+}
+
+/// `GET /api/reports/properties?labels=&spaces=&where=&max=` (detailssummary / content-report-table)
+pub async fn properties_report(State(state): State<AppState>, MaybeUser(user): MaybeUser, Query(q): Query<ReportQuery>) -> ApiResult<Json<Value>> {
+    let p = Principal::load(&state, user).await?;
+    let mut columns: Vec<String> = Vec::new();
+    let mut seen: HashSet<String> = HashSet::new();
+    let mut out = Vec::new();
+    for (r, props, typed) in property_rows(&state, &p, &q).await? {
         for (k, _) in &props {
             if seen.insert(k.to_lowercase()) {
                 columns.push(k.clone());
             }
         }
         let map: serde_json::Map<String, Value> = props.into_iter().map(|(k, v)| (k, Value::String(v))).collect();
-        out.push(json!({ "page": r, "properties": map }));
+        let values: serde_json::Map<String, Value> = typed.into_iter().map(|t| (t.key.clone(), json!(t))).collect();
+        out.push(json!({ "page": r, "properties": map, "values": values }));
     }
     Ok(Json(json!({ "columns": columns, "rows": out })))
 }
@@ -432,9 +472,9 @@ pub async fn snapshot(
                 operator: all.then(|| "all".into()),
                 sort: Some(sort.into()),
                 max: Some(num(&["max", "maxResults"], if recent { 15 } else { 20 })),
-                status: None,
+                ..Default::default()
             };
-            let mut rows: Vec<ReportPage> = pages(state, p, &q, false, 20, false).await?.into_iter().filter(|r| recent || r.id != page_id).collect();
+            let mut rows: Vec<ReportPage> = pages(state, p, &q, false, q.max(20), false).await?.into_iter().filter(|r| recent || r.id != page_id).collect();
             if get("reverse").as_deref() == Some("true") {
                 rows.reverse();
             }
@@ -460,7 +500,8 @@ pub async fn snapshot(
             }
         }
         "detailssummary" | "content-report-table" => {
-            if labels.is_empty() {
+            let filter = get("where").filter(|w| !w.trim().is_empty());
+            if labels.is_empty() && filter.is_none() && spaces.is_empty() {
                 return Ok(None);
             }
             let q = ReportQuery {
@@ -468,38 +509,42 @@ pub async fn snapshot(
                 spaces: Some(spaces.join(",")),
                 sort: Some("title".into()),
                 max: Some(num(&["pageSize", "max", "maxResults"], 100)),
+                filter,
                 ..Default::default()
             };
-            let rows = pages(state, p, &q, true, 100, true).await?;
             let mut columns: Vec<String> = Vec::new();
             let mut table = Vec::new();
-            for r in rows {
-                let doc = match state.rooms.get(r.id) {
-                    Some(room) => room.snapshot(),
-                    None => Node::from_json(&r.content).unwrap_or_else(|_| Node::empty_doc()),
-                };
-                let props = properties(&doc);
+            for (r, props, typed) in property_rows(state, p, &q).await? {
                 for (k, _) in &props {
                     if !columns.iter().any(|c| c.eq_ignore_ascii_case(k)) {
                         columns.push(k.clone());
                     }
                 }
-                table.push((r, props));
+                table.push((r, props, typed));
             }
             let headings = list(&get("headings"));
             let columns: Vec<String> = if headings.is_empty() { columns.into_iter().take(8).collect() } else { headings };
             Snapshot {
-                title: format!("Page properties: {}", labels.join(", ")),
+                title: if labels.is_empty() { "Page properties".into() } else { format!("Page properties: {}", labels.join(", ")) },
                 header: std::iter::once("Page".to_string()).chain(columns.iter().cloned()).collect(),
                 rows: table
                     .into_iter()
-                    .map(|(r, props)| {
+                    .map(|(r, props, typed)| {
                         std::iter::once((r.title.clone(), link(r.id)))
-                            .chain(
-                                columns
-                                    .iter()
-                                    .map(|c| (props.iter().find(|(k, _)| k.eq_ignore_ascii_case(c)).map(|(_, v)| v.clone()).unwrap_or_default(), None)),
-                            )
+                            .chain(columns.iter().map(|c| {
+                                let text = props.iter().find(|(k, _)| k.eq_ignore_ascii_case(c)).map(|(_, v)| v.clone()).unwrap_or_default();
+                                // web addresses, people and visible pages stay links
+                                let target = typed.iter().find(|t| t.key.eq_ignore_ascii_case(c)).and_then(|t| {
+                                    let v = t.value.as_ref()?.as_str()?;
+                                    match t.kind.as_str() {
+                                        "url" => Some(v.to_string()),
+                                        "user" => Some(format!("{base}/people/{v}")),
+                                        "page" if t.label.is_some() => Some(format!("{base}/pages/{v}")),
+                                        _ => None,
+                                    }
+                                });
+                                (text, target)
+                            }))
                             .collect()
                     })
                     .collect(),

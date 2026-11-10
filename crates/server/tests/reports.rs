@@ -135,3 +135,142 @@ async fn decision_log_lists_decisions_people_can_see() {
     assert_eq!(texts(&decided), vec!["Use Postgres full-text search for several replicas"], "restricted page and undecided item left out");
     assert_eq!(decided[0]["pageTitle"], "Search backend");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn typed_page_properties_panel_search_and_reports() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, member_id) = app.user(&owner, "rita@acme.test", "member").await;
+    let (guest, _) = app.user(&owner, "gus@acme.test", "guest").await;
+    app.post(&owner, "/spaces", json!({"key": "PRJ", "name": "Projects"})).await;
+    let mut ids = std::collections::HashMap::new();
+    for title in ["Apollo", "Borealis", "Secret", "Plain"] {
+        let (_, page) = app.post(&owner, "/pages", json!({"spaceKey": "PRJ", "title": title})).await;
+        ids.insert(title, page["id"].as_str().unwrap().to_string());
+    }
+    let (_, me) = app.get(&owner, "/me").await;
+    let owner_id = me["user"]["id"].as_str().unwrap().to_string();
+    app.put(
+        &owner,
+        &format!("/pages/{}/restrictions", ids["Secret"]),
+        json!({"restrictions": [{"kind": "view", "subjectType": "user", "subjectId": owner_id}]}),
+    )
+    .await;
+
+    // every type, stored normalised
+    let path = |t: &str| format!("/pages/{}/properties", ids[t]);
+    let (st, r) = app
+        .put(
+            &owner,
+            &path("Apollo"),
+            json!({"properties": [
+                {"key": "Status", "type": "select", "value": "Done"},
+                {"key": "  Effort ", "type": "number", "value": "12"},
+                {"key": "Due", "type": "date", "value": "2026-12-01"},
+                {"key": "Lead", "type": "user", "value": member_id},
+                {"key": "Spec", "type": "url", "value": "https://example.com/spec"},
+                {"key": "Parent project", "type": "page", "value": ids["Secret"]},
+                {"key": "Notes", "type": "text", "value": "kumquat harvest"},
+                {"key": "Budget", "type": "number", "value": null}
+            ]}),
+        )
+        .await;
+    assert_eq!(st, 200, "{r}");
+    let props = r["properties"].as_array().unwrap();
+    assert_eq!(props.len(), 8);
+    assert_eq!(props[1], json!({"key": "Effort", "type": "number", "value": 12, "label": null}));
+    assert_eq!(props[3]["label"], "rita");
+    assert_eq!(props[5]["label"], "Secret", "the owner sees the linked page's title");
+    assert_eq!(props[7]["value"], Value::Null, "a property can be empty");
+
+    // page view: the member sees the properties, but not the title of a page they can't open
+    let (_, page) = app.get(&member, &format!("/pages/{}", ids["Apollo"])).await;
+    let props = page["properties"].as_array().unwrap();
+    assert_eq!(props[0]["value"], "Done");
+    assert_eq!(props[5]["value"], ids["Secret"].as_str());
+    assert_eq!(props[5]["label"], Value::Null);
+
+    // validation
+    for (bad, why) in [
+        (json!([{"key": "X", "type": "colour", "value": "red"}]), "unknown type"),
+        (json!([{"key": "X", "type": "number", "value": "lots"}]), "not a number"),
+        (json!([{"key": "X", "type": "date", "value": "1.12.2026"}]), "not ISO"),
+        (json!([{"key": "X", "type": "url", "value": "javascript:alert(1)"}]), "not a web address"),
+        (json!([{"key": "X", "type": "user", "value": ids["Plain"]}]), "not a person"),
+        (json!([{"key": "X", "type": "page", "value": owner_id}]), "not a page"),
+        (json!([{"key": "X", "type": "text", "value": "a"}, {"key": "x", "type": "text", "value": "b"}]), "duplicate key"),
+        (json!([{"key": " ", "type": "text", "value": "a"}]), "empty key"),
+    ] {
+        let (st, _) = app.put(&owner, &path("Borealis"), json!({ "properties": bad })).await;
+        assert_eq!(st, 400, "{why}");
+    }
+    // the member can't link a page they can't see; the guest can't edit at all
+    let (st, _) = app.put(&member, &path("Borealis"), json!({"properties": [{"key": "P", "type": "page", "value": ids["Secret"]}]})).await;
+    assert_eq!(st, 400);
+    let (st, _) = app.put(&guest, &path("Borealis"), json!({"properties": [{"key": "Status", "type": "select", "value": "Open"}]})).await;
+    assert!(st == 403 || st == 404, "{st}");
+    let (st, _) = app
+        .put(
+            &member,
+            &path("Borealis"),
+            json!({"properties": [{"key": "Status", "type": "select", "value": "Open"}, {"key": "Effort", "type": "number", "value": 2.5}]}),
+        )
+        .await;
+    assert_eq!(st, 200);
+
+    // searchable by value
+    let hits = app
+        .eventually(|| async {
+            let (_, h) = app.get(&member, "/search?q=kumquat").await;
+            (!h.as_array().unwrap().is_empty()).then_some(h)
+        })
+        .await;
+    assert_eq!(hits[0]["title"], "Apollo");
+
+    // suggestions for the space: most used names first, with their values
+    let (_, keys) = app.get(&member, "/spaces/PRJ/properties").await;
+    let status = keys.as_array().unwrap().iter().find(|k| k["key"] == "Status").unwrap();
+    assert_eq!(status["type"], "select");
+    assert_eq!(status["pages"], 2);
+    assert_eq!(status["values"], json!(["Done", "Open"]));
+
+    // properties report: pages with properties in a space, typed values first, then filters
+    let (_, r) = app.get(&member, "/reports/properties?spaces=PRJ").await;
+    let rows = r["rows"].as_array().unwrap();
+    assert_eq!(rows.len(), 2, "pages without properties are left out: {r}");
+    assert_eq!(r["columns"][0], "Status");
+    let apollo = rows.iter().find(|x| x["page"]["title"] == "Apollo").unwrap();
+    assert_eq!(apollo["properties"]["Lead"], "rita");
+    assert_eq!(apollo["properties"]["Parent project"], "", "hidden page title stays hidden");
+    assert_eq!(apollo["values"]["Spec"]["type"], "url");
+    let titles_where = |w: &'static str| {
+        let app = &app;
+        let member = &member;
+        async move {
+            let (_, r) = app.get(member, &format!("/reports/properties?spaces=PRJ&where={}", urlencode(w))).await;
+            let mut t: Vec<String> = r["rows"].as_array().unwrap().iter().map(|x| x["page"]["title"].as_str().unwrap().to_string()).collect();
+            t.sort();
+            t
+        }
+    };
+    assert_eq!(titles_where("Status = done").await, vec!["Apollo"]);
+    assert_eq!(titles_where("Effort >= 3").await, vec!["Apollo"], "numbers compare as numbers (12 >= 3, 2.5 < 3)");
+    assert_eq!(titles_where("Effort < 10; Status != Done").await, vec!["Borealis"]);
+    assert_eq!(titles_where("Due < 2027-01-01").await, vec!["Apollo"]);
+    assert_eq!(titles_where("Lead ~ rit").await, vec!["Apollo"]);
+    // with a label, the Confluence-style report keeps working alongside typed properties
+    app.put(&owner, &format!("/pages/{}/labels", ids["Borealis"]), json!({"labels": ["project"]})).await;
+    let (_, r) = app.get(&member, "/reports/properties?labels=project").await;
+    assert_eq!(r["rows"].as_array().unwrap().len(), 1);
+    assert_eq!(r["rows"][0]["properties"]["Effort"], "2.5");
+
+    // copies keep their properties
+    let (st, copy) = app.post(&owner, &format!("/pages/{}/copy", ids["Apollo"]), json!({})).await;
+    assert_eq!(st, 201, "{copy}");
+    let (_, c) = app.get(&owner, &format!("/pages/{}/properties", copy["id"].as_str().unwrap())).await;
+    assert_eq!(c["properties"].as_array().unwrap().len(), 8);
+}
+
+fn urlencode(s: &str) -> String {
+    s.bytes().map(|b| if b.is_ascii_alphanumeric() || b"-_.~".contains(&b) { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
+}

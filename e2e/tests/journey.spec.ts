@@ -458,6 +458,54 @@ test('a page moves to another space from the page menu', async ({ browser }) => 
   await ctx.close()
 })
 
+test('page properties: typed values in a panel, and a properties report that filters by them', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState })
+  const page = await ctx.newPage()
+  await page.goto('/')
+  const [launch, overview] = await page.evaluate(async () => {
+    const h = { 'content-type': 'application/json', 'x-wikicraft': '1' }
+    const create = async (title: string) => (await (await fetch('/api/pages', { method: 'POST', headers: h, body: JSON.stringify({ spaceKey: 'PRODUCT', title, markdown: title }) })).json()).id as string
+    const hiring = await create('Hiring plan')
+    await fetch(`/api/pages/${hiring}/properties`, { method: 'PUT', headers: h, body: JSON.stringify({ properties: [{ key: 'Status', type: 'select', value: 'Open' }, { key: 'Effort', type: 'number', value: 2 }] }) })
+    return [await create('Launch plan'), await create('Plans overview')]
+  })
+  await page.goto(`/pages/${launch}`)
+  await page.getByRole('button', { name: 'More' }).click()
+  await page.getByText('Add property').click()
+  // a name already used in the space brings its type and values along
+  await page.getByLabel('Property name').fill('Status')
+  await expect(page.getByLabel('Property type')).toHaveValue('select')
+  await page.getByLabel('Value').fill('Done')
+  await page.getByRole('button', { name: 'Save' }).click()
+  const props = page.getByRole('table', { name: 'Page properties' })
+  await expect(props.locator('.prop-chip')).toHaveText('Done')
+  await props.getByRole('button', { name: 'Add property' }).click()
+  await page.getByLabel('Property name').fill('Effort')
+  await page.getByLabel('Property type').selectOption('number')
+  await page.getByLabel('Value').fill('5')
+  await page.getByLabel('Value').press('Enter')
+  await expect(props.getByRole('row')).toHaveCount(2)
+  await expect(props).toContainText(/Effort\s*5/)
+
+  await page.goto(`/pages/${overview}`)
+  const editor = page.locator('.ProseMirror[contenteditable="true"]')
+  await expect(editor).toBeVisible({ timeout: 20_000 })
+  await editor.click()
+  await page.keyboard.press('End')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('/properties')
+  await page.keyboard.press('Enter')
+  const report = page.locator('[data-macro="detailssummary"]')
+  await expect(report.locator('tbody')).toContainText('Hiring plan')
+  await expect(report.locator('tbody')).toContainText('Launch plan')
+  await report.getByRole('button', { name: 'Filter and columns' }).click()
+  await report.getByPlaceholder('Status = Done').fill('Effort >= 3')
+  await report.getByRole('button', { name: 'Apply' }).click()
+  await expect(report.locator('tbody tr')).toHaveCount(1)
+  await expect(report.locator('tbody')).toContainText('Launch plan')
+  await ctx.close()
+})
+
 test('the high-contrast theme meets WCAG AAA contrast (7:1) on the main screens', async ({ browser }) => {
   const ctx = await browser.newContext({ storageState: ownerState })
   await ctx.addInitScript(() => localStorage.setItem('wc-theme', 'contrast'))
