@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { SymbolTile, parseSymbol } from '../icons'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { FilePlus2 } from 'lucide-react'
+import { FilePlus2, Link2 } from 'lucide-react'
 import { api } from '../api'
 import { Modal, useToast } from '../ui'
 
@@ -38,6 +38,22 @@ export default function TemplatePicker({ spaceKey, parentId, onClose }: { spaceK
       setBusy(false)
     }
   }
+  const createLink = async () => {
+    const url = window.prompt('Address of the website (https://…)')?.trim()
+    if (!url) return
+    const title = window.prompt('Name in the page tree (leave empty to use the site name)')?.trim()
+    setBusy(true)
+    try {
+      await api.post<{ id: string }>('/pages', { spaceKey, parentId: parentId ?? undefined, kind: 'link', url, title: title || undefined })
+      qc.invalidateQueries({ queryKey: ['tree', spaceKey] })
+      toast('Link added to the page tree')
+      onClose()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not add the link')
+    } finally {
+      setBusy(false)
+    }
+  }
   const card = (key: string, icon: React.ReactNode, name: string, desc: string | null, onClick: () => void, badge?: string) => (
     <button key={key} className="space-card" style={{ textAlign: 'left', cursor: 'pointer', alignItems: 'flex-start' }} disabled={busy} onClick={onClick}>
       <span style={{ width: 32, display: 'flex', justifyContent: 'center' }}>{icon}</span>
@@ -53,6 +69,7 @@ export default function TemplatePicker({ spaceKey, parentId, onClose }: { spaceK
     <Modal title="Create a page" onClose={onClose} width={760}>
       <div className="grid-cards">
         {card('blank', <FilePlus2 size={22} />, 'Blank page', 'Start from scratch', () => create())}
+        {card('link', <Link2 size={22} />, 'Link to a website', 'A page-tree item that opens an external page', () => void createLink())}
         {ordered.map((t) => card(t.id, <SymbolTile value={parseSymbol(t.icon) ? t.icon : 'document:slate'} size={30} />, t.name, t.description, () => create(t.id), t.id === def ? 'space default' : t.builtin ? undefined : t.spaceKey ? 'space' : 'workspace'))}
       </div>
     </Modal>

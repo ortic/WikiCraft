@@ -126,6 +126,8 @@ pub struct CreatePage {
     /// an empty page even when the space has a default template
     #[serde(default)]
     blank: bool,
+    /// kind `link`: the external page the tree item points to (http/https)
+    url: Option<String>,
 }
 
 pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUser, Json(req): Json<CreatePage>) -> ApiResult<(StatusCode, Json<Value>)> {
@@ -140,10 +142,22 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
             return Err(ApiError::bad("parent page belongs to another space"));
         }
     }
-    let kind = req.kind.unwrap_or_else(|| "page".into());
-    if !matches!(kind.as_str(), "page" | "folder" | "blog") {
-        return Err(ApiError::bad("kind must be page, folder or blog"));
+    let kind = req.kind.clone().unwrap_or_else(|| "page".into());
+    if !matches!(kind.as_str(), "page" | "folder" | "blog" | "link") {
+        return Err(ApiError::bad("kind must be page, folder, blog or link"));
     }
+    // a link in the page tree: its content is a single link preview of the URL
+    let mut link_title = None;
+    let req = if kind == "link" {
+        let url = req.url.as_deref().map(str::trim).unwrap_or_default();
+        let parsed = openidconnect::url::Url::parse(url).ok().filter(|u| matches!(u.scheme(), "http" | "https") && u.host_str().is_some() && url.len() <= 2000);
+        let Some(parsed) = parsed else { return Err(ApiError::bad("a link needs an http(s) URL")) };
+        link_title = parsed.host_str().map(|h| h.trim_start_matches("www.").to_string());
+        let doc = json!({"type": "doc", "content": [{"type": "embed", "attrs": {"url": parsed.as_str()}}]});
+        CreatePage { content: Some(doc), markdown: None, template_id: None, blank: true, ..req }
+    } else {
+        req
+    };
     let mut template_title = None;
     // pages start from the space's default template unless asked for something else
     let template = req.template_id.clone().or_else(|| if req.blank || kind != "page" { None } else { space.default_template.clone() });
@@ -166,6 +180,7 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
         .map(|t| t.trim().to_string())
         .filter(|t| !t.is_empty())
         .or(template_title.map(|t| t.trim().to_string()).filter(|t| !t.is_empty()))
+        .or(link_title)
         .unwrap_or_else(|| "Untitled".into());
     let position = next_position(&state, space.id, req.parent_id).await?;
     let doc = content.clone();

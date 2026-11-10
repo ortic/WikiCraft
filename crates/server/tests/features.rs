@@ -548,3 +548,22 @@ async fn activity_feed() {
     assert_eq!(app.get(&member, "/activity?scope=watching").await.1.as_array().unwrap().len(), 3);
     assert_ne!(app.get(&common::client(), "/activity").await.0, 200);
 }
+
+#[tokio::test]
+async fn links_in_the_page_tree() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    app.post(&owner, "/spaces", json!({"key": "LNK", "name": "Links"})).await;
+    let (st, r) = app.post(&owner, "/pages", json!({"spaceKey": "LNK", "kind": "link", "url": "https://www.example.com/status"})).await;
+    assert_eq!(st, 201, "{r}");
+    let id = r["id"].as_str().unwrap();
+    assert_eq!(app.post(&owner, "/pages", json!({"spaceKey": "LNK", "kind": "link", "url": "javascript:alert(1)"})).await.0, 400);
+    assert_eq!(app.post(&owner, "/pages", json!({"spaceKey": "LNK", "kind": "link"})).await.0, 400);
+    let (_, tree) = app.get(&owner, "/spaces/LNK/tree").await;
+    let item = tree["nodes"].as_array().or(tree.as_array()).unwrap().iter().find(|n| n["id"] == id).cloned().unwrap_or_else(|| panic!("{tree}"));
+    assert_eq!(item["kind"], "link");
+    assert_eq!(item["title"], "example.com", "named after the site");
+    assert_eq!(item["url"], "https://www.example.com/status");
+    let (_, page) = app.get(&owner, &format!("/pages/{id}")).await;
+    assert_eq!(page["content"]["content"][0]["type"], "embed", "the page shows a link preview");
+}

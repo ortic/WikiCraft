@@ -482,6 +482,10 @@ pub struct TreeNode {
     pub icon: Option<String>,
     pub position: f64,
     pub restricted: bool,
+    /// kind `link`: where the tree item leads
+    #[sqlx(default)]
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub url: Option<String>,
     #[serde(skip)]
     #[sqlx(default)]
     pub archived: bool,
@@ -493,7 +497,8 @@ pub async fn tree(State(state): State<AppState>, MaybeUser(user): MaybeUser, Pat
     let (space, role) = load_space(&state, &p, &key).await?;
     let rows = sqlx::query_as::<_, TreeNode>(
         "SELECT p.id, p.parent_id, p.title, p.kind, p.icon, p.position,
-                EXISTS (SELECT 1 FROM page_restrictions r WHERE r.page_id = p.id) AS restricted, p.archived_at IS NOT NULL AS archived
+                EXISTS (SELECT 1 FROM page_restrictions r WHERE r.page_id = p.id) AS restricted, p.archived_at IS NOT NULL AS archived,
+                CASE WHEN p.kind = 'link' THEN p.content->'content'->0->'attrs'->>'url' END AS url
          FROM pages p WHERE p.space_id = $1 AND p.deleted_at IS NULL AND p.kind <> 'blog' ORDER BY p.position, lower(p.title)",
     )
     .bind(space.id)

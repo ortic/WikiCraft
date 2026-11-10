@@ -2,7 +2,7 @@ import { useMemo, useState, type DragEvent } from 'react'
 import { LineIcon, parseSymbol } from '../icons'
 import { useMatch, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronRight, ChevronDown, FileText, Folder, Plus, Lock } from 'lucide-react'
+import { ChevronRight, ChevronDown, FileText, Folder, Plus, Lock, Link2, ExternalLink } from 'lucide-react'
 import { api, type Space, type TreeNode } from '../api'
 import { useToast } from '../ui'
 
@@ -87,7 +87,7 @@ export default function SpaceTree({ space }: { space: Space }) {
           <div
             className={`tree-row ${active === n.id ? 'active' : ''} ${dropCls}`}
             style={{ paddingLeft: 4 + depth * 14 }}
-            onClick={() => nav(`/pages/${n.id}`)}
+            onClick={() => (n.kind === 'link' && n.url ? window.open(n.url, '_blank', 'noopener,noreferrer') : nav(`/pages/${n.id}`))}
             draggable={canEdit && n.id !== tree.data?.homePageId}
             onDragStart={(e) => {
               setDrag(n.id)
@@ -117,10 +117,11 @@ export default function SpaceTree({ space }: { space: Space }) {
             >
               {kids?.length ? isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} /> : null}
             </span>
-            {parseSymbol(n.icon) ? <LineIcon group="symbols" name={parseSymbol(n.icon)!.name} size={14} style={{ flex: 'none' }} /> : n.kind === 'folder' ? <Folder size={14} style={{ flex: 'none' }} /> : <FileText size={14} style={{ flex: 'none', opacity: 0.7 }} />}
+            {parseSymbol(n.icon) ? <LineIcon group="symbols" name={parseSymbol(n.icon)!.name} size={14} style={{ flex: 'none' }} /> : n.kind === 'folder' ? <Folder size={14} style={{ flex: 'none' }} /> : n.kind === 'link' ? <Link2 size={14} style={{ flex: 'none', opacity: 0.8 }} /> : <FileText size={14} style={{ flex: 'none', opacity: 0.7 }} />}
             <span className="title" style={{ marginLeft: 6 }}>
               {n.title || 'Untitled'}
             </span>
+            {n.kind === 'link' && <ExternalLink size={11} className="faint" style={{ flex: 'none' }} aria-label="opens in a new tab" />}
             {n.restricted && <Lock size={12} className="faint" />}
             {canEdit && (
               <span className="actions">

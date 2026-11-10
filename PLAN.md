@@ -220,7 +220,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P1** Folders (containers without content) `C` (API only; no create UI)
 - [~] **P1** Blog posts / news per space (date-based, separate from tree, RSS/Atom) `C X` (no RSS/Atom feed)
 - [~] **P1** Live docs (always-live document, no publish step) vs. classic pages (draft → publish) as a per-page mode `C` (live mode only; no draft/publish)
-- [ ] **P1** Smart link / embed nodes in the tree (link to an external resource as a tree item) `C`
+- [x] **P1** Smart link / embed nodes in the tree (link to an external resource as a tree item) `C` — Create → "Link to a website": a tree item that opens the URL in a new tab (its page shows a link preview)
 - [ ] **P2** Whiteboards as first-class tree items (see §4.10) `C D`
 - [ ] **P2** Databases as first-class tree items (see §4.9) `C D`
 - [x] **P1** Page emoji / icon and cover image `C D O` (SVG symbol icons by design)

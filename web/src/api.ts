@@ -81,6 +81,8 @@ export interface TreeNode {
   icon: string | null
   position: number
   restricted: boolean
+  /** kind `link`: the external page this tree item opens */
+  url?: string
 }
 
 export interface PageAccess {
