@@ -788,6 +788,7 @@ pub async fn run_restore(state: &AppState, job_id: Uuid, actor: Uuid, archive: &
                 created_by: person(&pg.created_by).or(Some(user.id)),
                 created_at: Some(pg.created_at),
                 source_ref: None,
+                draft: false,
             },
         )
         .await

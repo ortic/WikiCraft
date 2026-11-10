@@ -111,16 +111,30 @@ fn parse_id(s: &str) -> Result<Uuid, ApiError> {
 }
 
 impl WikiMcp {
-    async fn user(&self, parts: &axum::http::request::Parts) -> Result<CurrentUser, ApiError> {
+    async fn authenticate(&self, parts: &axum::http::request::Parts) -> Result<(CurrentUser, crate::auth::TokenScope), ApiError> {
         let mut parts = parts.clone();
         parts.extensions.clear();
         // bearer tokens only: cookie sessions would need the CSRF header
         if !parts.headers.get(axum::http::header::AUTHORIZATION).and_then(|v| v.to_str().ok()).is_some_and(|v| v.starts_with("Bearer ")) {
             return Err(ApiError::Unauthorized);
         }
-        match MaybeUser::from_request_parts(&mut parts, &self.state).await?.0 {
-            Some(u) => Ok(CurrentUser(u)),
-            None => Err(ApiError::Unauthorized),
+        // every MCP call is a POST: the tools check the token's scope themselves
+        parts.extensions.insert(crate::auth::ScopeCheckedByCaller);
+        let user = MaybeUser::from_request_parts(&mut parts, &self.state).await?.0.ok_or(ApiError::Unauthorized)?;
+        let scope = parts.extensions.get::<crate::auth::TokenScope>().copied().unwrap_or(crate::auth::TokenScope::Write);
+        Ok((CurrentUser(user), scope))
+    }
+
+    /// For the reading tools.
+    async fn user(&self, parts: &axum::http::request::Parts) -> Result<CurrentUser, ApiError> {
+        Ok(self.authenticate(parts).await?.0)
+    }
+
+    /// For the tools that change something: not with a read-only token.
+    async fn writer(&self, parts: &axum::http::request::Parts) -> Result<CurrentUser, ApiError> {
+        match self.authenticate(parts).await? {
+            (_, crate::auth::TokenScope::Read) => Err(ApiError::Denied("this API token is read-only".into())),
+            (u, _) => Ok(u),
         }
     }
 
@@ -270,7 +284,7 @@ impl WikiMcp {
 
     #[tool(description = "Create a new page from Markdown. Returns the new page id and URL.")]
     async fn create_page(&self, Extension(parts): Extension<axum::http::request::Parts>, Parameters(a): Parameters<CreatePageArgs>) -> ToolResult {
-        let user = match self.user(&parts).await {
+        let user = match self.writer(&parts).await {
             Ok(u) => u,
             Err(e) => return api_err(e),
         };
@@ -287,7 +301,7 @@ impl WikiMcp {
 
     #[tool(description = "Replace the content of a page with Markdown (creates a new version; people editing live see the change).")]
     async fn update_page(&self, Extension(parts): Extension<axum::http::request::Parts>, Parameters(a): Parameters<UpdatePageArgs>) -> ToolResult {
-        let user = match self.user(&parts).await {
+        let user = match self.writer(&parts).await {
             Ok(u) => u,
             Err(e) => return api_err(e),
         };
@@ -305,7 +319,7 @@ impl WikiMcp {
 
     #[tool(description = "Append Markdown to the end of a page (keeps existing content).")]
     async fn append_to_page(&self, Extension(parts): Extension<axum::http::request::Parts>, Parameters(a): Parameters<AppendArgs>) -> ToolResult {
-        let user = match self.user(&parts).await {
+        let user = match self.writer(&parts).await {
             Ok(u) => u,
             Err(e) => return api_err(e),
         };
@@ -329,7 +343,7 @@ impl WikiMcp {
 
     #[tool(description = "Add a comment to a page.")]
     async fn add_comment(&self, Extension(parts): Extension<axum::http::request::Parts>, Parameters(a): Parameters<CommentArgs>) -> ToolResult {
-        let user = match self.user(&parts).await {
+        let user = match self.writer(&parts).await {
             Ok(u) => u,
             Err(e) => return api_err(e),
         };

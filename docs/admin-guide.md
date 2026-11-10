@@ -57,8 +57,8 @@ The first visit shows the setup wizard: workspace name and the **owner** account
 else is configured afterwards:
 
 - *Administration → Overview*: workspace name and logo, announcement banner, sharing and feature
-  switches (public links, exports, *Ask the wiki*, personal spaces), how long trashed pages are
-  kept, e-mail status and a test message, usage numbers.
+  switches (public links, exports, *Ask the wiki*, personal spaces, who viewed a page), how long
+  trashed pages are kept, e-mail status and a test message, usage numbers.
 - *Administration → Users / Groups*: people and groups.
 - *Administration → Import*: Confluence, Word, Markdown, HTML, Notion and Obsidian imports, space
   backups.
@@ -71,6 +71,9 @@ member directory).
 
 **Space roles**, per user or group: *viewer*, *commenter*, *editor*, *admin*. Each space has a
 default role for all members (or *none* for a private space) and optional anonymous read access.
+
+**Drafts** are the exception to all of this: an unpublished draft (and what's below it) is only
+visible to the person who created it, space and workspace admins included, until they publish it.
 
 **Page restrictions** narrow this down per page: *view* restrictions apply to the page and
 everything below it (as in Confluence), *edit* restrictions to the page itself. *Inspect
@@ -106,7 +109,9 @@ Things worth deciding up front:
   existing one (or claims an imported author) by verified e-mail.
 
 People can turn on two-factor authentication (TOTP) under their profile; it also applies after
-SSO sign-ins.
+SSO sign-ins. *Administration → Overview → Two-factor authentication* can require it for
+administrators or for everyone: until they've set it up, those people only see the setup screen.
+API tokens are separate credentials and keep working.
 
 ## E-mail
 
@@ -174,9 +179,10 @@ take a database backup first. Live editors reconnect on their own.
 - [ ] HTTPS in front, `WIKICRAFT_BASE_URL` with `https://`, `WIKICRAFT_SECURE_COOKIES=true`.
 - [ ] Secrets (database password, SMTP, SSO client secrets, AI key) from your secret store via
       environment variables or mounted files, not in images or the repository.
-- [ ] SSO with `allowedDomains`, password sign-in off once SSO works, 2FA for admins.
+- [ ] SSO with `allowedDomains`, password sign-in off once SSO works, two-factor required for admins.
 - [ ] Public links and exports: switch them off under *Sharing and features* if your data must
       not leave the wiki.
+- [ ] Read-only API tokens for integrations and AI assistants that only need to read.
 - [ ] Webhook and link-preview targets on private networks stay blocked unless you need them
       (`WIKICRAFT_WEBHOOK_ALLOW_PRIVATE`, `WIKICRAFT_UNFURL_ALLOW_PRIVATE`).
 - [ ] Database backups tested by restoring them somewhere.

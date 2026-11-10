@@ -165,6 +165,9 @@ components:
         spaceKey: *id001
         parentId: *id002
         title: *id001
+        draft:
+          type: boolean
+          description: an unpublished draft only you see until you publish it
         kind:
           enum:
           - page
@@ -982,7 +985,8 @@ paths:
     post:
       tags:
       - Account
-      summary: Create a personal API token (shown once)
+      summary: Create a personal API token (shown once). A read scope allows no changes (GET, Markdown conversion, Ask the
+        wiki; MCP read tools)
       operationId: post_me_tokens
       requestBody:
         required: true
@@ -993,6 +997,10 @@ paths:
               properties:
                 name: *id001
                 expiresInDays: *id005
+                scope:
+                  enum:
+                  - write
+                  - read
       responses:
         '200':
           description: OK
@@ -2050,6 +2058,85 @@ paths:
       responses:
         '200':
           description: OK
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /pages/{id}/publish:
+    post:
+      tags:
+      - Pages
+      summary: 'Publish your unpublished draft: everyone who can see its place in the space sees it'
+      operationId: post_pages_id_publish
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '204': *id007
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/drafts:
+    get:
+      tags:
+      - Account
+      summary: My unpublished drafts
+      operationId: get_me_drafts
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: *id002
+                    title: *id001
+                    spaceKey: *id001
+                    spaceName: *id001
+                    updatedAt: *id004
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /pages/{id}/viewers:
+    get:
+      tags:
+      - Pages
+      summary: Who viewed the page and when (editors; only when an admin turned on the viewer list)
+      operationId: get_pages_id_viewers
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    userId: *id002
+                    name: *id001
+                    lastViewed:
+                      type: string
+                      format: date
+                    views: *id005
         4XX:
           description: Error
           content:
@@ -4186,6 +4273,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /templates/{id}/preview:
+    get:
+      tags:
+      - Templates
+      summary: What a page from the template looks like (title and rendered HTML)
+      operationId: get_templates_id_preview
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  title:
+                    type:
+                    - string
+                    - 'null'
+                  html: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /imports/confluence:
     post:
       tags:
@@ -4529,6 +4646,15 @@ paths:
                     minimum: 0
                     maximum: 3650
                     description: days pages stay in the trash before they are deleted for good; 0 = forever
+                  viewerList:
+                    type: boolean
+                    description: editors can see who viewed a page (default off)
+                  requireTwoFactor:
+                    enum:
+                    - 'off'
+                    - admins
+                    - everyone
+                    description: who must set up two-factor authentication before using the wiki
         4XX:
           description: Error
           content:

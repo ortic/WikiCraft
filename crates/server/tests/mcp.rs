@@ -119,3 +119,54 @@ async fn mcp_tools_respect_permissions() {
         assert!(a["result"]["isError"] == true || a.get("error").is_some(), "{a}");
     }
 }
+
+/// Read-only tokens: reading works (REST and MCP), changing anything doesn't.
+#[tokio::test(flavor = "multi_thread")]
+async fn read_only_tokens() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    app.post(&owner, "/spaces", json!({"key": "RO", "name": "Read only"})).await;
+    let (_, page) = app.post(&owner, "/pages", json!({"spaceKey": "RO", "title": "Handbook", "markdown": "quokkaline rules"})).await;
+    let page_id = page["id"].as_str().unwrap().to_string();
+    let (st, t) = app.post(&owner, "/me/tokens", json!({"name": "assistant", "scope": "read"})).await;
+    assert_eq!(st, 200, "{t}");
+    assert_eq!(t["scope"], "read");
+    assert_eq!(app.post(&owner, "/me/tokens", json!({"name": "x", "scope": "admin"})).await.0, 400);
+    let token = t["token"].as_str().unwrap().to_string();
+    let c = reqwest::Client::new();
+
+    // REST: reads and read-like POSTs pass, changes are refused
+    let r = c.get(app.url(&format!("/pages/{page_id}"))).bearer_auth(&token).send().await.unwrap();
+    assert_eq!(r.status(), 200);
+    let r = c.post(app.url("/markdown")).bearer_auth(&token).json(&json!({"markdown": "**x**"})).send().await.unwrap();
+    assert_eq!(r.status(), 200, "converting Markdown changes nothing");
+    let r = c.post(app.url("/pages")).bearer_auth(&token).json(&json!({"spaceKey": "RO", "title": "Nope"})).send().await.unwrap();
+    assert_eq!(r.status(), 403);
+    assert!(r.text().await.unwrap().contains("read-only"));
+    let r = c.delete(app.url(&format!("/pages/{page_id}"))).bearer_auth(&token).send().await.unwrap();
+    assert_eq!(r.status(), 403);
+    let (_, list) = app.get(&owner, "/me/tokens").await;
+    assert_eq!(list[0]["scope"], "read");
+
+    // MCP: one POST endpoint, read tools work, write tools refuse
+    let url = app.url("/mcp");
+    let (st, sid, _) = rpc(&c, &url, &token, None, json!({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"protocolVersion": "2025-06-18", "capabilities": {}, "clientInfo": {"name": "test", "version": "1"}}})).await;
+    assert_eq!(st, 200);
+    let sid = sid.unwrap();
+    rpc(&c, &url, &token, Some(&sid), json!({"jsonrpc": "2.0", "method": "notifications/initialized"})).await;
+    let (_, _, got) = rpc(
+        &c,
+        &url,
+        &token,
+        Some(&sid),
+        json!({"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": {"name": "get_page", "arguments": {"page_id": page_id}}}),
+    )
+    .await;
+    assert!(tool_text(got.as_ref().unwrap()).contains("quokkaline"), "{got:?}");
+    let (_, _, denied) = rpc(&c, &url, &token, Some(&sid), json!({"jsonrpc": "2.0", "id": 3, "method": "tools/call", "params": {"name": "create_page", "arguments": {"space_key": "RO", "title": "Sneaky", "markdown": "nope"}}})).await;
+    let denied = denied.unwrap();
+    assert!(denied["result"]["isError"] == true || denied.get("error").is_some(), "{denied}");
+    assert!(denied.to_string().contains("read-only"), "{denied}");
+    let (_, tree) = app.get(&owner, "/spaces/RO/tree").await;
+    assert!(!tree.to_string().contains("Sneaky"));
+}

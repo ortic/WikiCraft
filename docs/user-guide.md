@@ -20,6 +20,10 @@ Mac) in the app for the keyboard shortcuts.
 
 ## Writing
 
+New pages start as **private drafts**: only you see them (and pages you add below them) until
+you press **Publish**; nobody is notified before that. Your drafts are listed on Home. Untick
+*Start as a private draft* in the Create dialog to publish right away.
+
 Click into a page you may edit and start typing: there's no edit mode and no "save" button.
 Everyone on the page edits together and sees each other's cursors; click a person's avatar to
 jump to where they are.
@@ -65,7 +69,8 @@ and can make an earlier one current again.
 
 ## Watching and notifications
 
-You automatically watch pages you create and pages you are mentioned on. Watch other pages or
+You automatically watch pages you create, edit or are mentioned on (once you stop watching a
+page, editing it doesn't sign you up again). Watch other pages or
 whole spaces from the page menu, and mute a page you no longer care about. The bell lists mentions, replies and
 changes; e-mail summaries of what you missed come a few minutes after, hourly or daily (your
 profile settings).

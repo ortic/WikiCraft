@@ -167,6 +167,7 @@ pub async fn apply(state: &AppState, id: &str, ws: Uuid, space: Uuid, home: Uuid
                     created_by: Some(actor),
                     created_at: None,
                     source_ref: None,
+                    draft: false,
                 },
             )
             .await?;

@@ -118,9 +118,10 @@ export default function SpaceTree({ space }: { space: Space }) {
               {kids?.length ? isOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} /> : null}
             </span>
             {parseSymbol(n.icon) ? <LineIcon group="symbols" name={parseSymbol(n.icon)!.name} size={14} style={{ flex: 'none' }} /> : n.kind === 'folder' ? <Folder size={14} style={{ flex: 'none' }} /> : n.kind === 'link' ? <Link2 size={14} style={{ flex: 'none', opacity: 0.8 }} /> : <FileText size={14} style={{ flex: 'none', opacity: 0.7 }} />}
-            <span className="title" style={{ marginLeft: 6 }}>
+            <span className={`title${n.draft ? ' tree-draft' : ''}`} style={{ marginLeft: 6 }}>
               {n.title || 'Untitled'}
             </span>
+            {n.draft && <span className="tree-draft-badge">draft</span>}
             {n.kind === 'link' && <ExternalLink size={11} className="faint" style={{ flex: 'none' }} aria-label="opens in a new tab" />}
             {n.restricted && <Lock size={12} className="faint" />}
             {canEdit && (

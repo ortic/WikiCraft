@@ -432,7 +432,11 @@ async fn feature_switches() {
     let export = format!("/pages/{}/export?format=md", page["id"].as_str().unwrap());
 
     let (_, f) = app.get(&member, "/features").await;
-    assert_eq!(f, json!({"publicLinks": true, "exports": true, "ai": false, "personalSpaces": true}), "on by default; ai needs a key");
+    assert_eq!(
+        f,
+        json!({"publicLinks": true, "exports": true, "ai": false, "personalSpaces": true, "viewerList": false}),
+        "on by default (the viewer list off); ai needs a key"
+    );
     assert_eq!(app.get(&member, &export).await.0, 200);
 
     assert_eq!(app.put(&member, "/admin/settings", json!({"exports": false})).await.0, 403);
@@ -444,7 +448,10 @@ async fn feature_switches() {
     app.eventually(|| async { (app.get(&member, &format!("/jobs/{job}")).await.1["status"] == "succeeded").then_some(()) }).await;
     let (st, s) = app.put(&owner, "/admin/settings", json!({"exports": false, "personalSpaces": false})).await;
     assert_eq!(st, 200, "{s}");
-    assert_eq!(s, json!({"publicLinks": true, "exports": false, "ai": true, "personalSpaces": false, "trashRetentionDays": 0}));
+    assert_eq!(
+        s,
+        json!({"publicLinks": true, "exports": false, "ai": true, "personalSpaces": false, "trashRetentionDays": 0, "viewerList": false, "requireTwoFactor": "off"})
+    );
 
     // ... can't be downloaded after it; members can't export any more, admins still can
     assert_eq!(app.get(&member, &format!("/jobs/{job}/download")).await.0, 400);
@@ -577,4 +584,147 @@ async fn links_in_the_page_tree() {
     assert_eq!(item["url"], "https://www.example.com/status");
     let (_, page) = app.get(&owner, &format!("/pages/{id}")).await;
     assert_eq!(page["content"]["content"][0]["type"], "embed", "the page shows a link preview");
+}
+
+/// Who viewed a page: off until an admin turns it on, then for the page's editors only.
+#[tokio::test(flavor = "multi_thread")]
+async fn page_viewer_list() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (reader, _) = app.user(&owner, "reader@acme.test", "member").await;
+    app.post(&owner, "/spaces", json!({"key": "VW", "name": "Views", "defaultRole": "viewer"})).await;
+    let (_, page) = app.post(&owner, "/pages", json!({"spaceKey": "VW", "title": "Holiday policy"})).await;
+    let id = page["id"].as_str().unwrap().to_string();
+    app.get(&reader, &format!("/pages/{id}")).await;
+    app.get(&reader, &format!("/pages/{id}")).await;
+    app.get(&owner, &format!("/pages/{id}")).await;
+    assert_eq!(app.get(&owner, &format!("/pages/{id}/viewers")).await.0, 403, "off by default");
+    let (_, f) = app.get(&owner, "/features").await;
+    assert_eq!(f["viewerList"], false);
+    let (st, s) = app.put(&owner, "/admin/settings", json!({"viewerList": true})).await;
+    assert_eq!((st, &s["viewerList"]), (200, &json!(true)));
+    let (st, list) = app.get(&owner, &format!("/pages/{id}/viewers")).await;
+    assert_eq!(st, 200, "{list}");
+    let rows: Vec<(String, i64)> = list.as_array().unwrap().iter().map(|r| (r["name"].as_str().unwrap().to_string(), r["views"].as_i64().unwrap())).collect();
+    assert!(rows.contains(&("reader".to_string(), 2)), "{list}");
+    assert_eq!(rows.len(), 2);
+    assert_eq!(app.get(&reader, &format!("/pages/{id}/viewers")).await.0, 403, "readers don't see who else read it");
+}
+
+/// Unpublished drafts: only the creator sees them (and what's below), space admins included;
+/// nobody is notified until they're published.
+#[tokio::test(flavor = "multi_thread")]
+async fn unpublished_drafts() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (_, me) = app.get(&owner, "/me").await;
+    let owner_id = me["user"]["id"].as_str().unwrap().to_string();
+    let (writer, _) = app.user(&owner, "writer@acme.test", "member").await;
+    app.post(&owner, "/spaces", json!({"key": "DRF", "name": "Drafts", "defaultRole": "editor"})).await;
+    let content = json!({"type": "doc", "content": [{"type": "paragraph", "content": [
+        {"type": "text", "text": "zephyrine plan for "}, {"type": "mention", "attrs": {"id": owner_id, "label": "Owner"}}]}]});
+    let (st, d) = app.post(&writer, "/pages", json!({"spaceKey": "DRF", "title": "Reorg proposal", "content": content, "draft": true})).await;
+    assert_eq!(st, 201, "{d}");
+    let draft = d["id"].as_str().unwrap().to_string();
+    let (_, child) = app.post(&writer, "/pages", json!({"spaceKey": "DRF", "title": "Reorg appendix", "parentId": draft})).await;
+    let child = child["id"].as_str().unwrap().to_string();
+
+    // the writer sees it, marked as a draft
+    let (_, p) = app.get(&writer, &format!("/pages/{draft}")).await;
+    assert_eq!(p["draft"], true);
+    let (_, tree) = app.get(&writer, "/spaces/DRF/tree").await;
+    let mine: Vec<(String, bool)> = tree["nodes"].as_array().unwrap().iter().map(|n| (n["title"].as_str().unwrap().to_string(), n["draft"] == true)).collect();
+    assert!(mine.contains(&("Reorg proposal".into(), true)) && mine.contains(&("Reorg appendix".into(), false)), "{tree}");
+    let (_, drafts) = app.get(&writer, "/me/drafts").await;
+    assert_eq!(drafts.as_array().unwrap().len(), 1);
+
+    // nobody else does, not even the workspace owner; no notification yet
+    for id in [&draft, &child] {
+        assert_eq!(app.get(&owner, &format!("/pages/{id}")).await.0, 404);
+    }
+    let (_, tree) = app.get(&owner, "/spaces/DRF/tree").await;
+    assert!(!tree.to_string().contains("Reorg"), "{tree}");
+    app.eventually(|| async { (app.get(&writer, "/search?q=zephyrine").await.1.as_array().map(Vec::len) == Some(1)).then_some(()) }).await;
+    let (_, hits) = app.get(&owner, "/search?q=zephyrine").await;
+    assert_eq!(hits, json!([]), "not in anyone else's search");
+    let mentions: i64 = sqlx::query_scalar("SELECT count(*) FROM notifications WHERE kind = 'page_mention'").fetch_one(&app.state.db).await.unwrap();
+    assert_eq!(mentions, 0);
+    assert_eq!(app.post(&owner, &format!("/pages/{draft}/publish"), json!({})).await.0, 404, "only its creator can publish it");
+
+    // public links: a draft can't be shared, and a shared page's sub-pages skip drafts
+    assert_eq!(app.post(&writer, &format!("/pages/{draft}/share-links"), json!({})).await.0, 400);
+    let (_, parent) = app.post(&writer, "/pages", json!({"spaceKey": "DRF", "title": "Team page"})).await;
+    let parent = parent["id"].as_str().unwrap().to_string();
+    let (_, hidden) = app.post(&writer, "/pages", json!({"spaceKey": "DRF", "title": "Salary bands", "parentId": parent, "draft": true})).await;
+    let hidden = hidden["id"].as_str().unwrap().to_string();
+    let (st, link) = app.post(&writer, &format!("/pages/{parent}/share-links"), json!({"includeChildren": true})).await;
+    assert_eq!(st, 201, "{link}");
+    let token = link["token"].as_str().unwrap();
+    let anon = reqwest::Client::new();
+    assert_eq!(anon.get(app.url(&format!("/public/{token}/pages/{hidden}"))).send().await.unwrap().status(), 404);
+    let shared = anon.get(app.url(&format!("/public/{token}"))).send().await.unwrap().text().await.unwrap();
+    assert!(!shared.contains("Salary bands"), "{shared}");
+
+    // published: everyone sees it and what's below, and the mention arrives
+    assert_eq!(app.post(&writer, &format!("/pages/{draft}/publish"), json!({})).await.0, 204);
+    assert_eq!(app.get(&owner, &format!("/pages/{draft}")).await.0, 200);
+    assert_eq!(app.get(&owner, &format!("/pages/{child}")).await.0, 200);
+    let mentions: i64 = sqlx::query_scalar("SELECT count(*) FROM notifications WHERE kind = 'page_mention'").fetch_one(&app.state.db).await.unwrap();
+    assert_eq!(mentions, 1);
+    let (_, versions) = app.get(&writer, &format!("/pages/{draft}/versions")).await;
+    assert!(versions.to_string().contains("Published"), "{versions}");
+    let (_, drafts) = app.get(&writer, "/me/drafts").await;
+    let titles: Vec<&str> = drafts.as_array().unwrap().iter().map(|d| d["title"].as_str().unwrap()).collect();
+    assert_eq!(titles, ["Salary bands"], "only the other draft is left");
+    assert_eq!(app.post(&writer, &format!("/pages/{draft}/publish"), json!({})).await.0, 400, "already published");
+}
+
+/// Template previews; a space's templates are only for people who can see the space.
+#[tokio::test(flavor = "multi_thread")]
+async fn template_preview_and_space_templates() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (outsider, _) = app.user(&owner, "out@acme.test", "member").await;
+    app.post(&owner, "/spaces", json!({"key": "SEC", "name": "Secret", "defaultRole": "none"})).await;
+    app.post(&outsider, "/spaces", json!({"key": "OPEN", "name": "Open"})).await;
+    let (_, p) = app.post(&owner, "/pages", json!({"spaceKey": "SEC", "title": "Merger checklist", "markdown": "# Merger\n\nconfidential-term-sheet"})).await;
+    let (st, t) = app.post(&owner, "/templates", json!({"name": "Merger checklist", "pageId": p["id"], "spaceKey": "SEC"})).await;
+    assert_eq!(st, 201, "{t}");
+    let tid = t["id"].as_str().unwrap().to_string();
+
+    let (st, pv) = app.get(&owner, &format!("/templates/{tid}/preview")).await;
+    assert_eq!(st, 200, "{pv}");
+    assert!(pv["html"].as_str().unwrap().contains("confidential-term-sheet"));
+    let (_, builtin) = app.get(&outsider, "/templates/builtin:meeting-notes/preview").await;
+    assert!(builtin["html"].as_str().unwrap_or_default().contains("<h2"), "{builtin}");
+
+    // the outsider can't list, preview or use it
+    let (_, list) = app.get(&outsider, "/templates?spaceKey=SEC").await;
+    assert!(!list.to_string().contains("Merger"), "{list}");
+    assert_eq!(app.get(&outsider, &format!("/templates/{tid}/preview")).await.0, 404);
+    let (st, _) = app.post(&outsider, "/pages", json!({"spaceKey": "OPEN", "title": "Copy", "templateId": tid})).await;
+    assert_eq!(st, 404, "a template from a space you can't see");
+}
+
+/// Editing a page means watching it, unless you stopped watching it on purpose.
+#[tokio::test(flavor = "multi_thread")]
+async fn editors_watch_what_they_edit() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (editor, _) = app.user(&owner, "ed@acme.test", "member").await;
+    app.post(&owner, "/spaces", json!({"key": "AW", "name": "Auto watch", "defaultRole": "editor"})).await;
+    let (_, page) = app.post(&owner, "/pages", json!({"spaceKey": "AW", "title": "Runbook", "markdown": "v1"})).await;
+    let id = page["id"].as_str().unwrap().to_string();
+    let watching = |c: &reqwest::Client| {
+        let (app, c, id) = (&app, c.clone(), id.clone());
+        async move { app.get(&c, &format!("/pages/{id}")).await.1["watching"] == true }
+    };
+    assert!(!watching(&editor).await);
+    assert_eq!(app.put(&editor, &format!("/pages/{id}/content"), json!({"markdown": "v2"})).await.0, 200);
+    assert!(watching(&editor).await, "editing signs you up");
+    assert_eq!(app.delete(&editor, &format!("/pages/{id}/watch")).await, 204);
+    app.put(&editor, &format!("/pages/{id}/content"), json!({"markdown": "v3"})).await;
+    assert!(!watching(&editor).await, "stopping on purpose sticks");
+    app.put(&editor, &format!("/pages/{id}/watch"), json!({})).await;
+    assert!(watching(&editor).await);
 }

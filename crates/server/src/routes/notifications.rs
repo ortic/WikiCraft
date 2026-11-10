@@ -78,17 +78,41 @@ pub async fn watch(State(state): State<AppState>, CurrentUser(user): CurrentUser
     let p = Principal::load(&state, Some(user.clone())).await?;
     require_page(&state, &p, id, Need::View).await?;
     sqlx::query("INSERT INTO watches (user_id, page_id) VALUES ($1, $2) ON CONFLICT DO NOTHING").bind(user.id).bind(id).execute(&state.db).await?;
+    sqlx::query("DELETE FROM page_unwatched WHERE user_id = $1 AND page_id = $2").bind(user.id).bind(id).execute(&state.db).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 
 pub async fn unwatch(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
     sqlx::query("DELETE FROM watches WHERE user_id = $1 AND page_id = $2").bind(user.id).bind(id).execute(&state.db).await?;
+    // remembered, so editing the page later doesn't sign them up again
+    sqlx::query("INSERT INTO page_unwatched (user_id, page_id) SELECT $1, $2 WHERE EXISTS (SELECT 1 FROM pages WHERE id = $2) ON CONFLICT DO NOTHING")
+        .bind(user.id)
+        .bind(id)
+        .execute(&state.db)
+        .await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// People who edit a page watch it from then on, unless they stopped watching it on purpose.
+pub async fn auto_watch(state: &AppState, page_id: Uuid, editor: Uuid) -> sqlx::Result<()> {
+    sqlx::query(
+        "INSERT INTO watches (user_id, page_id) SELECT $1, $2
+          WHERE NOT EXISTS (SELECT 1 FROM page_unwatched WHERE user_id = $1 AND page_id = $2)
+         ON CONFLICT DO NOTHING",
+    )
+    .bind(editor)
+    .bind(page_id)
+    .execute(&state.db)
+    .await?;
+    Ok(())
 }
 
 /// Notifies users newly @mentioned in a page body (each user once per page) and adds them as
 /// watchers. Users who can't view the page are skipped.
 pub async fn notify_page_mentions(state: &AppState, page_id: Uuid, doc: &Node, actor: Option<Uuid>) -> anyhow::Result<()> {
+    if crate::authz::in_draft(state, page_id).await {
+        return Ok(()); // mentioned people are told when the draft is published
+    }
     let mut ids: HashSet<Uuid> = HashSet::new();
     doc.walk(&mut |n| {
         if n.kind == nodes::MENTION
@@ -138,6 +162,9 @@ pub async fn notify_page_mentions(state: &AppState, page_id: Uuid, doc: &Node, a
 
 /// Notifies watchers that a page got a new version.
 pub async fn notify_page_updated(state: &AppState, page_id: Uuid, version: i32, editor: Option<Uuid>) -> anyhow::Result<()> {
+    if crate::authz::in_draft(state, page_id).await {
+        return Ok(());
+    }
     // watchers of the page and of its space (the list only shows pages they can see)
     sqlx::query(
         "INSERT INTO notifications (id, user_id, kind, page_id, actor_id, data)
@@ -157,6 +184,9 @@ pub async fn notify_page_updated(state: &AppState, page_id: Uuid, version: i32, 
 
 /// Tells the people watching a space about a new page in it.
 pub async fn notify_page_created(state: &AppState, page_id: Uuid, creator: Uuid) -> anyhow::Result<()> {
+    if crate::authz::in_draft(state, page_id).await {
+        return Ok(());
+    }
     sqlx::query(
         "INSERT INTO notifications (id, user_id, kind, page_id, actor_id, data)
          SELECT gen_random_uuid(), sw.user_id, 'page_created', $1, $2, '{}'::jsonb

@@ -55,6 +55,8 @@ export interface User {
 export interface Me {
   user: User | null
   workspace: { id: string; name: string; logoVersion?: string | null } | null
+  /** the workspace requires two-factor authentication and it isn't set up yet */
+  mustSetUpTwoFactor?: boolean
 }
 
 export interface Space {
@@ -85,6 +87,8 @@ export interface TreeNode {
   restricted: boolean
   /** kind `link`: the external page this tree item opens */
   url?: string
+  /** your unpublished draft */
+  draft?: boolean
 }
 
 export interface PageAccess {
@@ -135,6 +139,8 @@ export interface Page {
   views: number
   viewers: number
   commentCount: number
+  /** an unpublished draft: only its creator sees it */
+  draft?: boolean
 }
 
 export interface Comment {

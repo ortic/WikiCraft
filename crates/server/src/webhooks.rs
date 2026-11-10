@@ -172,6 +172,9 @@ pub async fn page_data(state: &AppState, page: Uuid, actor: Option<Uuid>) -> Opt
 
 /// Convenience: emit a page event with the standard payload, plus `extra` fields.
 pub async fn emit_page(state: &AppState, event: &str, page: Uuid, actor: Option<Uuid>, extra: Value) {
+    if crate::authz::in_draft(state, page).await {
+        return; // drafts are private until published (`page.created` then)
+    }
     if let Some((ws, space, mut data)) = page_data(state, page, actor).await {
         if let (Some(d), Some(e)) = (data.as_object_mut(), extra.as_object()) {
             d.extend(e.clone());

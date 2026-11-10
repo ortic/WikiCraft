@@ -1,5 +1,7 @@
+import { useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import SecuritySettings from './components/SecuritySettings'
 import { api } from './api'
 import { ToastProvider, useMe, Spinner } from './ui'
 import Layout from './components/Layout'
@@ -48,6 +50,13 @@ export default function App() {
   if (!user && loc.pathname === '/signup') return <Signup />
   if (!user && loc.pathname === '/login') return <Login />
   if (!user && !publicPath) return <Navigate to={`/login?next=${encodeURIComponent(loc.pathname + loc.search)}`} replace />
+  // the workspace requires two-factor authentication: set it up before anything else
+  if (user && me.data?.mustSetUpTwoFactor)
+    return (
+      <ToastProvider>
+        <TwoFactorRequired />
+      </ToastProvider>
+    )
   return (
     <ToastProvider>
       <Routes>
@@ -70,5 +79,39 @@ export default function App() {
         </Route>
       </Routes>
     </ToastProvider>
+  )
+}
+
+/** Shown instead of the app until the person sets up two-factor authentication. */
+function TwoFactorRequired() {
+  const qc = useQueryClient()
+  const me = useMe()
+  const mfa = useQuery({ queryKey: ['mfa'], queryFn: () => api.get<{ enabled: boolean }>('/me/mfa') })
+  useEffect(() => {
+    if (mfa.data?.enabled) qc.invalidateQueries({ queryKey: ['me'] })
+  }, [mfa.data?.enabled, qc])
+  return (
+    <div className="auth">
+      <div className="auth-card" style={{ maxWidth: 640 }}>
+        <h1 style={{ marginTop: 0 }}>Set up two-factor authentication</h1>
+        <p className="muted">
+          {me.data?.workspace?.name ?? 'This wiki'} asks everyone in your role to protect their account with a second step: a code from an authenticator app
+          (for example 1Password, Bitwarden, Google or Microsoft Authenticator). It takes a minute.
+        </p>
+        <SecuritySettings />
+        <p className="small">
+          <a
+            href="/login"
+            onClick={async (e) => {
+              e.preventDefault()
+              await api.post('/auth/logout')
+              location.href = '/login'
+            }}
+          >
+            Sign out
+          </a>
+        </p>
+      </div>
+    </div>
   )
 }

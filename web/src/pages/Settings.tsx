@@ -11,6 +11,7 @@ interface Token {
   createdAt: string
   expiresAt: string | null
   lastUsedAt: string | null
+  scope?: 'read' | 'write'
 }
 
 export default function Settings() {
@@ -21,6 +22,7 @@ export default function Settings() {
   const [name, setName] = useState(user?.name ?? '')
   const [password, setPassword] = useState('')
   const [tokenName, setTokenName] = useState('')
+  const [tokenScope, setTokenScope] = useState<'read' | 'write'>('write')
   const [newToken, setNewToken] = useState<string | null>(null)
   const tokens = useQuery({ queryKey: ['tokens'], queryFn: () => api.get<Token[]>('/me/tokens') })
   if (!user) return null
@@ -66,14 +68,21 @@ export default function Settings() {
 
       <div className="card" style={{ marginBottom: 16 }}>
         <h3 style={{ marginTop: 0 }} className="row"><KeyRound size={17} /> Personal API tokens</h3>
-        <p className="muted small" style={{ marginTop: 0 }}>Tokens act with your permissions. Use them for scripts (<code>Authorization: Bearer …</code>) and AI assistants.</p>
-        <div className="row" style={{ marginBottom: 12 }}>
-          <input className="input" style={{ maxWidth: 300 }} placeholder="Token name, e.g. Claude Desktop" value={tokenName} onChange={(e) => setTokenName(e.target.value)} />
+        <p className="muted small" style={{ marginTop: 0 }}>
+          Tokens act with your permissions. Use them for scripts (<code>Authorization: Bearer …</code>) and AI assistants; a read-only token can search and read
+          but never change anything.
+        </p>
+        <div className="row" style={{ marginBottom: 12, flexWrap: 'wrap' }}>
+          <input className="input" style={{ maxWidth: 300 }} placeholder="Token name, e.g. Claude Desktop" aria-label="Token name" value={tokenName} onChange={(e) => setTokenName(e.target.value)} />
+          <select className="select" style={{ width: 'auto' }} value={tokenScope} onChange={(e) => setTokenScope(e.target.value as 'read' | 'write')} aria-label="What the token may do">
+            <option value="write">Read and write</option>
+            <option value="read">Read only</option>
+          </select>
           <button
             className="btn"
             disabled={!tokenName.trim()}
             onClick={async () => {
-              const r = await api.post<{ token: string }>('/me/tokens', { name: tokenName.trim() })
+              const r = await api.post<{ token: string }>('/me/tokens', { name: tokenName.trim(), scope: tokenScope })
               setNewToken(r.token)
               setTokenName('')
               qc.invalidateQueries({ queryKey: ['tokens'] })
@@ -97,7 +106,7 @@ export default function Settings() {
           <tbody>
             {tokens.data?.map((t) => (
               <tr key={t.id}>
-                <td><b>{t.name}</b></td>
+                <td><b>{t.name}</b> {t.scope === 'read' && <span className="badge">read only</span>}</td>
                 <td className="faint small">created {formatDate(t.createdAt)}</td>
                 <td className="faint small">{t.lastUsedAt ? `used ${formatDate(t.lastUsedAt)}` : 'never used'}</td>
                 <td style={{ width: 40 }}>

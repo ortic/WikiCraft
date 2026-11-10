@@ -45,6 +45,14 @@ pub async fn switch_on(state: &AppState, ws: Uuid, key: &str) -> ApiResult<bool>
     Ok(v.unwrap_or(true))
 }
 
+/// Whether editors may see who viewed a page (off unless an admin turns it on: it's about
+/// people's reading habits).
+pub async fn viewer_list_on(state: &AppState, ws: Uuid) -> ApiResult<bool> {
+    let v: Option<bool> =
+        sqlx::query_scalar("SELECT (settings->>'viewerList')::boolean FROM workspaces WHERE id = $1").bind(ws).fetch_optional(&state.db).await?.flatten();
+    Ok(v.unwrap_or(false))
+}
+
 async fn links_enabled(state: &AppState, ws: Uuid) -> ApiResult<bool> {
     switch_on(state, ws, "publicLinks").await
 }
@@ -103,6 +111,9 @@ pub async fn create(
     }
     if restricted(&state, page).await? {
         return Err(ApiError::bad("pages with view restrictions can't be shared publicly"));
+    }
+    if crate::authz::in_draft(&state, page).await {
+        return Err(ApiError::bad("publish the draft before sharing it publicly"));
     }
     let id = new_id();
     let token = random_token();
@@ -164,6 +175,10 @@ pub async fn get_settings(State(state): State<AppState>, CurrentUser(user): Curr
     let days: Option<i32> =
         sqlx::query_scalar("SELECT (settings->>'trashRetentionDays')::int FROM workspaces WHERE id = $1").bind(user.workspace_id).fetch_one(&state.db).await?;
     out.insert("trashRetentionDays".into(), json!(days.unwrap_or(0)));
+    out.insert("viewerList".into(), json!(viewer_list_on(&state, user.workspace_id).await?));
+    let mfa: Option<String> =
+        sqlx::query_scalar("SELECT settings->>'requireTwoFactor' FROM workspaces WHERE id = $1").bind(user.workspace_id).fetch_one(&state.db).await?;
+    out.insert("requireTwoFactor".into(), json!(mfa.unwrap_or_else(|| "off".into())));
     Ok(Json(Value::Object(out)))
 }
 
@@ -174,6 +189,30 @@ pub async fn put_settings(
 ) -> ApiResult<Json<Value>> {
     require_admin(&user)?;
     for (key, v) in &req {
+        if key == "requireTwoFactor" {
+            // who must use two-factor authentication: nobody extra, admins, or everyone
+            let v = v
+                .as_str()
+                .filter(|v| matches!(*v, "off" | "admins" | "everyone"))
+                .ok_or_else(|| ApiError::bad("requireTwoFactor must be off, admins or everyone"))?;
+            sqlx::query("UPDATE workspaces SET settings = settings || jsonb_build_object('requireTwoFactor', $2::text) WHERE id = $1")
+                .bind(user.workspace_id)
+                .bind(v)
+                .execute(&state.db)
+                .await?;
+            audit::log(&state, user.workspace_id, Some(user.id), "workspace.settings", None, None, json!({ "requireTwoFactor": v })).await;
+            continue;
+        }
+        if key == "viewerList" {
+            let on = v.as_bool().ok_or_else(|| ApiError::bad("viewerList must be true or false"))?;
+            sqlx::query("UPDATE workspaces SET settings = settings || jsonb_build_object('viewerList', $2::boolean) WHERE id = $1")
+                .bind(user.workspace_id)
+                .bind(on)
+                .execute(&state.db)
+                .await?;
+            audit::log(&state, user.workspace_id, Some(user.id), "workspace.settings", None, None, json!({ "viewerList": on })).await;
+            continue;
+        }
         if key == "trashRetentionDays" {
             // days a page stays in the trash before it's deleted for good; 0 = forever
             let days = v.as_i64().filter(|d| (0..=3650).contains(d)).ok_or_else(|| ApiError::bad("trashRetentionDays must be 0 (keep forever) to 3650"))?;
@@ -212,6 +251,7 @@ pub async fn features(State(state): State<AppState>, CurrentUser(user): CurrentU
     if user.is_guest() {
         f.insert("personalSpaces".into(), Value::Bool(false));
     }
+    f.insert("viewerList".into(), Value::Bool(viewer_list_on(&state, user.workspace_id).await?));
     Ok(Json(Value::Object(f)))
 }
 
@@ -244,20 +284,20 @@ async fn resolve(state: &AppState, token: &str) -> ApiResult<Shared> {
     .fetch_optional(&state.db)
     .await?;
     let (link_id, ws, root, children) = row.ok_or(ApiError::NotFound("page"))?;
-    // switched off, or restricted after the link was made: fail closed
-    if !links_enabled(state, ws).await? || restricted(state, root).await? {
+    // switched off, restricted or moved into a draft after the link was made: fail closed
+    if !links_enabled(state, ws).await? || restricted(state, root).await? || crate::authz::in_draft(state, root).await {
         return Err(ApiError::NotFound("page"));
     }
     let mut pages = HashSet::from([root]);
     if children {
-        // descend, but never into a page with its own view restriction
+        // descend, but never into a page with its own view restriction or an unpublished draft
         let ids: Vec<Uuid> = sqlx::query_scalar(
             "WITH RECURSIVE sub AS (
-                SELECT id FROM pages WHERE parent_id = $1 AND deleted_at IS NULL AND kind <> 'blog'
+                SELECT id FROM pages WHERE parent_id = $1 AND deleted_at IS NULL AND kind <> 'blog' AND NOT draft
                   AND NOT EXISTS (SELECT 1 FROM page_restrictions r WHERE r.page_id = pages.id AND r.kind = 'view')
                 UNION
                 SELECT c.id FROM pages c JOIN sub ON c.parent_id = sub.id
-                WHERE c.deleted_at IS NULL AND NOT EXISTS (SELECT 1 FROM page_restrictions r WHERE r.page_id = c.id AND r.kind = 'view'))
+                WHERE c.deleted_at IS NULL AND NOT c.draft AND NOT EXISTS (SELECT 1 FROM page_restrictions r WHERE r.page_id = c.id AND r.kind = 'view'))
              SELECT id FROM sub LIMIT 5000",
         )
         .bind(root)

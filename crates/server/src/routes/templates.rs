@@ -144,6 +144,12 @@ pub struct ListQuery {
 }
 
 pub async fn list(State(state): State<AppState>, CurrentUser(user): CurrentUser, Query(q): Query<ListQuery>) -> ApiResult<Json<Vec<TemplateItem>>> {
+    // a space's own templates only for people who can see the space
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    let space_key = match &q.space_key {
+        Some(k) if load_space(&state, &p, k).await.is_ok() => k.clone(),
+        _ => String::new(),
+    };
     let mut out: Vec<TemplateItem> = BUILTINS
         .iter()
         .map(|b| TemplateItem {
@@ -160,7 +166,7 @@ pub async fn list(State(state): State<AppState>, CurrentUser(user): CurrentUser,
          WHERE t.workspace_id = $1 AND (t.space_id IS NULL OR lower(s.key) = lower($2)) ORDER BY lower(t.name)",
     )
     .bind(user.workspace_id)
-    .bind(q.space_key.unwrap_or_default())
+    .bind(space_key)
     .fetch_all(&state.db)
     .await?;
     out.extend(rows.into_iter().map(|(id, name, description, icon, space_key)| TemplateItem {
@@ -175,6 +181,32 @@ pub async fn list(State(state): State<AppState>, CurrentUser(user): CurrentUser,
 }
 
 /// Resolves a template id to (title, content).
+/// [`resolve`] for a person: a space template only if they can see its space.
+pub async fn resolve_for(state: &AppState, p: &Principal, workspace: Uuid, id: &str) -> ApiResult<(Option<String>, Node)> {
+    if let Ok(tid) = id.parse::<Uuid>() {
+        let space: Option<Option<Uuid>> = sqlx::query_scalar("SELECT space_id FROM templates WHERE id = $1 AND workspace_id = $2")
+            .bind(tid)
+            .bind(workspace)
+            .fetch_optional(&state.db)
+            .await?;
+        if let Some(Some(space_id)) = space {
+            let sa = crate::authz::load_space_access(state, space_id).await?;
+            if crate::authz::space_role(state, p, &sa).await? == Role::None {
+                return Err(ApiError::NotFound("template"));
+            }
+        }
+    }
+    resolve(state, workspace, id).await
+}
+
+/// `GET /templates/{id}/preview` — what a page from the template would look like.
+pub async fn preview(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<String>) -> ApiResult<Json<Value>> {
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    let (title, doc) = resolve_for(&state, &p, user.workspace_id, &id).await?;
+    let html = wikicraft_doc_model::html::render(&doc, &wikicraft_doc_model::html::HtmlOptions::default());
+    Ok(Json(json!({ "title": title, "html": html })))
+}
+
 pub async fn resolve(state: &AppState, workspace: Uuid, id: &str) -> ApiResult<(Option<String>, Node)> {
     if let Some(b) = BUILTINS.iter().find(|b| b.id == id) {
         let mut doc = markdown::markdown_to_pm(&fill(b.markdown)).doc;

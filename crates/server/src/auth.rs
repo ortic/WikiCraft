@@ -135,18 +135,37 @@ pub fn session_token(headers: &HeaderMap) -> Option<&str> {
     cookie_value(headers, SESSION_COOKIE)
 }
 
-async fn user_from_session(state: &AppState, token: &str) -> Result<Option<User>, ApiError> {
-    let user = sqlx::query_as::<_, User>(sqlx::AssertSqlSafe(
-        "SELECT u.id, u.workspace_id, u.email, u.name, u.role, u.status, u.avatar_url FROM sessions s JOIN users u ON u.id = s.user_id
-         WHERE s.token_hash = $1 AND s.expires_at > now() AND u.status = 'active'
-           AND ($2 = 0 OR s.last_seen_at > now() - make_interval(mins => $2))"
-            .to_string(),
-    ))
+/// Set on requests of people who must set up two-factor authentication before anything else
+/// (workspace setting `requireTwoFactor`).
+#[derive(Debug, Clone, Copy)]
+pub struct MustEnrollTwoFactor;
+
+/// What such a session may still do: see who it is, set up two-factor, sign out.
+fn allowed_before_enrollment(method: &Method, path: &str) -> bool {
+    let p = path.trim_end_matches('/');
+    let p = p.strip_prefix("/api/v1").or_else(|| p.strip_prefix("/api")).unwrap_or(p);
+    matches!(p, "/me" | "/features" | "/auth/logout" | "/me/mfa" | "/me/mfa/setup" | "/me/mfa/enable")
+        || (method == Method::GET && matches!(p, "/setup" | "/me/sessions"))
+}
+
+async fn user_from_session(state: &AppState, token: &str) -> Result<Option<(User, bool)>, ApiError> {
+    type Row = (Uuid, Uuid, Option<String>, String, String, String, Option<String>, bool);
+    let row: Option<Row> = sqlx::query_as(
+        "SELECT u.id, u.workspace_id, u.email, u.name, u.role, u.status, u.avatar_url,
+                u.totp_enabled_at IS NULL AND (COALESCE(w.settings->>'requireTwoFactor', 'off') = 'everyone'
+                    OR (COALESCE(w.settings->>'requireTwoFactor', 'off') = 'admins' AND u.role IN ('owner', 'admin'))) AS must_enroll
+           FROM sessions s JOIN users u ON u.id = s.user_id JOIN workspaces w ON w.id = u.workspace_id
+          WHERE s.token_hash = $1 AND s.expires_at > now() AND u.status = 'active'
+            AND ($2 = 0 OR s.last_seen_at > now() - make_interval(mins => $2))",
+    )
     .bind(token_hash(token))
     // last_seen_at moves in 5-minute steps, so idle timeouts are accurate to ~5 minutes
     .bind(state.config.session_idle_minutes.min(i32::MAX as u64) as i32)
     .fetch_optional(&state.db)
     .await?;
+    let user = row.map(|(id, workspace_id, email, name, role, status, avatar_url, must_enroll)| {
+        (User { id, workspace_id, email, name, role, status, avatar_url }, must_enroll)
+    });
     if user.is_some() {
         // sliding activity timestamp (cheap, best effort)
         let _ = sqlx::query("UPDATE sessions SET last_seen_at = now() WHERE token_hash = $1 AND last_seen_at < now() - interval '5 minutes'")
@@ -157,18 +176,36 @@ async fn user_from_session(state: &AppState, token: &str) -> Result<Option<User>
     Ok(user)
 }
 
-async fn user_from_api_token(state: &AppState, token: &str) -> Result<Option<User>, ApiError> {
-    let user = sqlx::query_as::<_, User>(
-        "SELECT u.id, u.workspace_id, u.email, u.name, u.role, u.status, u.avatar_url FROM api_tokens t JOIN users u ON u.id = t.user_id
+/// What the API token of a request may do (in the request extensions for token requests).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum TokenScope {
+    Read,
+    Write,
+}
+
+/// Marks a request whose caller enforces the token scope itself (the MCP server: one POST
+/// carries read and write tools alike).
+#[derive(Debug, Clone, Copy)]
+pub struct ScopeCheckedByCaller;
+
+/// POST endpoints that only read (conversions, questions), open to read-only tokens.
+fn reads_only(path: &str) -> bool {
+    let p = path.trim_end_matches('/');
+    p.ends_with("/markdown") || p.ends_with("/ai/ask")
+}
+
+async fn user_from_api_token(state: &AppState, token: &str) -> Result<Option<(User, TokenScope)>, ApiError> {
+    let row: Option<(Uuid, Uuid, Option<String>, String, String, String, Option<String>, String)> = sqlx::query_as(
+        "SELECT u.id, u.workspace_id, u.email, u.name, u.role, u.status, u.avatar_url, t.scope FROM api_tokens t JOIN users u ON u.id = t.user_id
          WHERE t.token_hash = $1 AND (t.expires_at IS NULL OR t.expires_at > now()) AND u.status = 'active'",
     )
     .bind(token_hash(token))
     .fetch_optional(&state.db)
     .await?;
-    if user.is_some() {
-        let _ = sqlx::query("UPDATE api_tokens SET last_used_at = now() WHERE token_hash = $1").bind(token_hash(token)).execute(&state.db).await;
-    }
-    Ok(user)
+    let Some((id, workspace_id, email, name, role, status, avatar_url, scope)) = row else { return Ok(None) };
+    let _ = sqlx::query("UPDATE api_tokens SET last_used_at = now() WHERE token_hash = $1").bind(token_hash(token)).execute(&state.db).await;
+    let user = User { id, workspace_id, email, name, role, status, avatar_url };
+    Ok(Some((user, if scope == "read" { TokenScope::Read } else { TokenScope::Write })))
 }
 
 /// The authenticated user, if any. Never fails for anonymous requests.
@@ -190,11 +227,18 @@ impl FromRequestParts<AppState> for MaybeUser {
         if let Some(auth) = parts.headers.get(header::AUTHORIZATION).and_then(|v| v.to_str().ok())
             && let Some(tok) = auth.strip_prefix("Bearer ").map(str::trim)
         {
-            let user = user_from_api_token(state, tok).await?;
-            if user.is_none() {
+            let Some((user, scope)) = user_from_api_token(state, tok).await? else {
                 return Err(ApiError::Unauthorized);
+            };
+            if scope == TokenScope::Read
+                && is_mutating(&parts.method)
+                && parts.extensions.get::<ScopeCheckedByCaller>().is_none()
+                && !reads_only(parts.uri.path())
+            {
+                return Err(ApiError::Denied("this API token is read-only".into()));
             }
-            let mu = MaybeUser(user);
+            parts.extensions.insert(scope);
+            let mu = MaybeUser(Some(user));
             parts.extensions.insert(mu.clone());
             return Ok(mu);
         }
@@ -205,6 +249,17 @@ impl FromRequestParts<AppState> for MaybeUser {
         if user.is_some() && is_mutating(&parts.method) && parts.headers.get(CSRF_HEADER).is_none() && !is_websocket(&parts.headers) {
             return Err(ApiError::BadRequest(format!("missing {CSRF_HEADER} header")));
         }
+        let user = match user {
+            Some((u, true)) => {
+                if !allowed_before_enrollment(&parts.method, parts.uri.path()) {
+                    return Err(ApiError::Denied("two-factor authentication is required on this wiki: set it up first".into()));
+                }
+                parts.extensions.insert(MustEnrollTwoFactor);
+                Some(u)
+            }
+            Some((u, false)) => Some(u),
+            None => None,
+        };
         let mu = MaybeUser(user);
         parts.extensions.insert(mu.clone());
         Ok(mu)

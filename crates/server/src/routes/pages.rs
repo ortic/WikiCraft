@@ -27,6 +27,8 @@ pub struct NewPage {
     pub created_by: Option<Uuid>,
     pub created_at: Option<chrono::DateTime<chrono::Utc>>,
     pub source_ref: Option<String>,
+    /// an unpublished draft only its creator sees
+    pub draft: bool,
 }
 
 /// Inserts a page (and its first version). Returns the id.
@@ -35,8 +37,8 @@ pub async fn insert_page<'e, E: PgExecutor<'e> + Copy>(db: E, mut p: NewPage) ->
     let plain = text::plain_text(&p.content);
     let content = p.content.to_json();
     sqlx::query(
-        "INSERT INTO pages (id, workspace_id, space_id, parent_id, kind, title, content, text_content, position, created_by, updated_by, created_at, updated_at, source_ref)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, COALESCE($11, now()), COALESCE($11, now()), $12)",
+        "INSERT INTO pages (id, workspace_id, space_id, parent_id, kind, title, content, text_content, position, created_by, updated_by, created_at, updated_at, source_ref, draft)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $10, COALESCE($11, now()), COALESCE($11, now()), $12, $13)",
     )
     .bind(p.id)
     .bind(p.workspace_id)
@@ -50,6 +52,7 @@ pub async fn insert_page<'e, E: PgExecutor<'e> + Copy>(db: E, mut p: NewPage) ->
     .bind(p.created_by)
     .bind(p.created_at)
     .bind(&p.source_ref)
+    .bind(p.draft)
     .execute(db)
     .await?;
     sqlx::query("INSERT INTO page_versions (id, page_id, version, title, content, created_by, created_at) VALUES ($1, $2, 1, $3, $4, $5, COALESCE($6, now()))")
@@ -96,6 +99,11 @@ pub async fn create_version(state: &AppState, page_id: Uuid, editor: Option<Uuid
         .await?;
     sqlx::query("UPDATE pages SET version = $2 WHERE id = $1").bind(page_id).bind(next).execute(&mut *tx).await?;
     tx.commit().await?;
+    if let Some(editor) = editor
+        && let Err(e) = crate::routes::notifications::auto_watch(state, page_id, editor).await
+    {
+        tracing::warn!("auto-watch failed: {e}");
+    }
     if let Err(e) = crate::routes::notifications::notify_page_updated(state, page_id, next, editor).await {
         tracing::warn!("watch notifications failed: {e:#}");
     }
@@ -129,6 +137,9 @@ pub struct CreatePage {
     blank: bool,
     /// kind `link`: the external page the tree item points to (http/https)
     url: Option<String>,
+    /// an unpublished draft only its creator sees until `POST /pages/{id}/publish`
+    #[serde(default)]
+    draft: bool,
 }
 
 pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUser, Json(req): Json<CreatePage>) -> ApiResult<(StatusCode, Json<Value>)> {
@@ -170,7 +181,7 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
         }
         (None, Some(md), _) => markdown::markdown_to_pm(&md).doc,
         (None, None, Some(t)) => {
-            let (title, doc) = crate::routes::templates::resolve(&state, user.workspace_id, t).await?;
+            let (title, doc) = crate::routes::templates::resolve_for(&state, &p, user.workspace_id, t).await?;
             template_title = title;
             doc
         }
@@ -185,6 +196,7 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
         .unwrap_or_else(|| "Untitled".into());
     let position = next_position(&state, space.id, req.parent_id).await?;
     let doc = content.clone();
+    let draft = req.draft && matches!(kind.as_str(), "page" | "blog");
     let id = insert_page(
         &state.db,
         NewPage {
@@ -199,6 +211,7 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
             created_by: Some(user.id),
             created_at: None,
             source_ref: None,
+            draft,
         },
     )
     .await?;
@@ -206,14 +219,73 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
     sqlx::query("INSERT INTO watches (user_id, page_id) VALUES ($1, $2) ON CONFLICT DO NOTHING").bind(user.id).bind(id).execute(&state.db).await?;
     // content created through the API: index its tasks and notify mentioned people right away
     crate::routes::tasks::index_page(&mut *state.db.acquire().await?, id, &doc).await?;
-    if let Err(e) = crate::routes::notifications::notify_page_mentions(&state, id, &doc, Some(user.id)).await {
-        tracing::warn!(page = %id, "mention notifications failed: {e:#}");
-    }
-    crate::webhooks::emit_page(&state, "page.created", id, Some(user.id), json!({})).await;
-    if let Err(e) = crate::routes::notifications::notify_page_created(&state, id, user.id).await {
-        tracing::warn!("space watch notifications: {e}");
+    if !draft {
+        announce_new_page(&state, id, &doc, user.id).await;
     }
     Ok((StatusCode::CREATED, Json(json!({ "id": id }))))
+}
+
+/// Mentions, watchers and webhooks learn about a page once others can see it: at creation, or
+/// when its draft is published.
+async fn announce_new_page(state: &AppState, id: Uuid, doc: &Node, actor: Uuid) {
+    if let Err(e) = crate::routes::notifications::notify_page_mentions(state, id, doc, Some(actor)).await {
+        tracing::warn!(page = %id, "mention notifications failed: {e:#}");
+    }
+    crate::webhooks::emit_page(state, "page.created", id, Some(actor), json!({})).await;
+    if let Err(e) = crate::routes::notifications::notify_page_created(state, id, actor).await {
+        tracing::warn!("space watch notifications: {e}");
+    }
+}
+
+/// `POST /pages/{id}/publish` — makes an unpublished draft visible to everyone who can see its
+/// place in the space (its creator only).
+pub async fn publish(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    require_page(&state, &p, id, Need::Edit).await?;
+    let published = sqlx::query("UPDATE pages SET draft = false, updated_at = now(), updated_by = $2 WHERE id = $1 AND draft AND created_by = $2")
+        .bind(id)
+        .bind(user.id)
+        .execute(&state.db)
+        .await?;
+    if published.rows_affected() == 0 {
+        return Err(ApiError::bad("this page isn't your unpublished draft"));
+    }
+    // the content as it is now, from the live session if one is open
+    if let Some(room) = state.rooms.get(id) {
+        crate::collab::persist_with(&state, &room, false).await.map_err(ApiError::Internal)?;
+    }
+    if let Err(e) = create_version(&state, id, Some(user.id), Some("Published".into())).await {
+        tracing::warn!(page = %id, "version on publish failed: {e:#}");
+    }
+    let content: Value = sqlx::query_scalar("SELECT content FROM pages WHERE id = $1").bind(id).fetch_one(&state.db).await?;
+    let doc = Node::from_json(&content).unwrap_or_else(|_| Node::empty_doc());
+    state.search.enqueue(id);
+    announce_new_page(&state, id, &doc, user.id).await;
+    audit::log(&state, user.workspace_id, Some(user.id), "page.publish", Some("page"), Some(id), json!({})).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct DraftRow {
+    id: Uuid,
+    title: String,
+    space_key: String,
+    space_name: String,
+    updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// `GET /me/drafts` — my unpublished drafts, last edited first.
+pub async fn my_drafts(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Vec<DraftRow>>> {
+    Ok(Json(
+        sqlx::query_as::<_, DraftRow>(
+            "SELECT p.id, p.title, s.key AS space_key, s.name AS space_name, p.updated_at FROM pages p JOIN spaces s ON s.id = p.space_id
+              WHERE p.draft AND p.created_by = $1 AND p.deleted_at IS NULL ORDER BY p.updated_at DESC LIMIT 100",
+        )
+        .bind(user.id)
+        .fetch_all(&state.db)
+        .await?,
+    ))
 }
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -233,6 +305,9 @@ pub struct PageRow {
     pub status: String,
     pub page_status: Option<String>,
     pub full_width: bool,
+    /// an unpublished draft (only its creator sees it)
+    #[sqlx(default)]
+    pub draft: bool,
     pub created_by: Option<Uuid>,
     pub created_by_name: Option<String>,
     /// responsible person: the owner if set, else the creator
@@ -247,7 +322,7 @@ pub struct PageRow {
     pub deleted_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-const PAGE_SELECT: &str = "SELECT p.id, p.space_id, s.key AS space_key, s.name AS space_name, p.parent_id, p.kind, p.title, p.icon, p.cover, p.content, p.version, p.status, p.page_status, p.full_width,
+const PAGE_SELECT: &str = "SELECT p.id, p.space_id, s.key AS space_key, s.name AS space_name, p.parent_id, p.kind, p.title, p.icon, p.cover, p.content, p.version, p.status, p.page_status, p.full_width, p.draft,
     p.created_by, cu.name AS created_by_name, COALESCE(p.owner_id, p.created_by) AS owner_id, COALESCE(ou.name, cu.name) AS owner_name,
     p.created_at, p.updated_by, uu.name AS updated_by_name, p.updated_at, p.deleted_at
     FROM pages p JOIN spaces s ON s.id = p.space_id LEFT JOIN users cu ON cu.id = p.created_by LEFT JOIN users uu ON uu.id = p.updated_by
@@ -673,6 +748,7 @@ pub async fn copy(
                 created_by: Some(user.id),
                 created_at: None,
                 source_ref: None,
+                draft: false,
             },
         )
         .await?;
@@ -1252,4 +1328,34 @@ pub async fn set_owner(
     sqlx::query("UPDATE pages SET owner_id = $2 WHERE id = $1").bind(id).bind(new_owner.id).execute(&state.db).await?;
     audit::log(&state, user.workspace_id, Some(user.id), "page.owner", Some("page"), Some(id), json!({"owner": new_owner.id})).await;
     Ok(Json(json!({ "ownerId": new_owner.id, "ownerName": new_owner.name })))
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct ViewerRow {
+    user_id: Uuid,
+    name: String,
+    last_viewed: chrono::NaiveDate,
+    views: i64,
+}
+
+/// `GET /pages/{id}/viewers` — who read the page and when (people who can edit it, when an admin
+/// turned the viewer list on).
+pub async fn viewers(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<Json<Vec<ViewerRow>>> {
+    if !crate::routes::share::viewer_list_on(&state, user.workspace_id).await? {
+        return Err(ApiError::Forbidden);
+    }
+    let p = Principal::load(&state, Some(user)).await?;
+    require_page(&state, &p, id, Need::Edit).await?;
+    Ok(Json(
+        sqlx::query_as::<_, ViewerRow>(
+            "SELECT v.user_id, u.name, max(v.day) AS last_viewed, sum(v.views)::bigint AS views
+               FROM page_views v JOIN users u ON u.id = v.user_id
+              WHERE v.page_id = $1 AND u.status <> 'placeholder'
+              GROUP BY v.user_id, u.name ORDER BY max(v.day) DESC, lower(u.name) LIMIT 200",
+        )
+        .bind(id)
+        .fetch_all(&state.db)
+        .await?,
+    ))
 }

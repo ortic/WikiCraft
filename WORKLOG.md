@@ -92,7 +92,12 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   dialog, comment filters, label suggestions. Trash: delete forever, empty trash, retention period (unused files
   are removed from storage; a test caught that content-addressed files need their hashed path). Folders (view +
   create), starred spaces, command palette actions. The axe check caught 22 px buttons side by side (WCAG 2.2
-  target size).
+  target size). Attachment version history; notification e-mails a few minutes after / hourly / daily. "Who viewed"
+  (opt-in). Unpublished drafts: hidden from everyone but the creator in the central access checks (page_access,
+  visible_page_ids, filter_visible), notifications and webhooks held back until Publish. Read-only API tokens
+  (REST mutating requests refused, MCP write tools refuse; read-like POSTs such as Markdown conversion allowed).
+  Template previews in the Create dialog; found and fixed: templates of a space you can't see were listed and could
+  be used to create pages (their content leaked).
 - Note: running the whole test suite saturates this WSL machine (load ~100); a parallel demo server then hits DB
   pool timeouts, and the mail test's 4-second wait can flake. Both pass when the machine is idle.
 

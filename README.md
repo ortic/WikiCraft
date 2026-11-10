@@ -273,7 +273,8 @@ claude mcp add --transport http wikicraft https://your-wiki/api/mcp --header "Au
 
 Tools: `search`, `get_page` (Markdown), `list_spaces`, `list_children`, `recent_changes`,
 `create_page`, `update_page`, `append_to_page`, `add_comment`. Every call runs through the same
-authorization checks as the UI.
+authorization checks as the UI. Give an assistant that should only read a **read-only** token
+(`{"scope": "read"}` when creating it): the writing tools then refuse.
 
 ## Ask the wiki
 

@@ -108,6 +108,9 @@ pub fn router(state: AppState) -> Router {
         .route("/pages/{id}/copy", post(pages::copy))
         .route("/pages/{id}/restore", post(pages::restore))
         .route("/pages/{id}/purge", post(pages::purge))
+        .route("/pages/{id}/viewers", get(pages::viewers))
+        .route("/pages/{id}/publish", post(pages::publish))
+        .route("/me/drafts", get(pages::my_drafts))
         .route("/pages/{id}/children", get(pages::children))
         .route("/pages/{id}/versions", get(pages::versions).post(pages::save_version))
         .route("/pages/{id}/versions/{version}", get(pages::get_version))
@@ -122,6 +125,7 @@ pub fn router(state: AppState) -> Router {
         .route("/notifications/read", post(notifications::mark_read))
         .route("/templates", get(templates::list).post(templates::create))
         .route("/templates/{id}", delete(templates::delete))
+        .route("/templates/{id}/preview", get(templates::preview))
         .route("/pages/{id}/export", get(pages::export))
         .route("/pages/{id}/collab", get(crate::collab::ws_handler))
         // comments

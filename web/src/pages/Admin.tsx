@@ -216,10 +216,10 @@ function AnnouncementSettings() {
 function WorkspaceSettings() {
   const qc = useQueryClient()
   const toast = useToast()
-  const settings = useQuery({ queryKey: ['admin-settings'], queryFn: () => api.get<Features & { trashRetentionDays: number }>('/admin/settings') })
+  const settings = useQuery({ queryKey: ['admin-settings'], queryFn: () => api.get<Features & { trashRetentionDays: number; viewerList: boolean; requireTwoFactor: 'off' | 'admins' | 'everyone' }>('/admin/settings') })
   const [retention, setRetention] = useState<string | null>(null)
   if (!settings.data) return null
-  const set = async (key: keyof Features, on: boolean, message: string) => {
+  const set = async (key: keyof Features | 'viewerList', on: boolean, message: string) => {
     try {
       await api.put('/admin/settings', { [key]: on })
       qc.invalidateQueries({ queryKey: ['admin-settings'] })
@@ -254,6 +254,37 @@ function WorkspaceSettings() {
         Personal spaces (a private space per person for drafts and notes)
       </label>
       <p className="faint small" style={{ margin: '2px 0 12px 24px' }}>Turning this off stops new personal spaces; existing ones stay.</p>
+      <label className="row">
+        <input type="checkbox" checked={s.viewerList} onChange={(e) => set('viewerList', e.target.checked, e.target.checked ? 'Editors can see who viewed a page' : 'Viewer lists are off')} />
+        Show who viewed a page (to the people who can edit it)
+      </label>
+      <p className="faint small" style={{ margin: '2px 0 12px 24px' }}>Off by default: it shows people's reading habits. View counts are always shown.</p>
+      <div className="field">
+        <label htmlFor="require-2fa">Two-factor authentication</label>
+        <select
+          id="require-2fa"
+          className="select"
+          style={{ maxWidth: 360 }}
+          value={s.requireTwoFactor}
+          onChange={async (e) => {
+            const v = e.target.value
+            if (v !== 'off' && !confirm('People in this group who haven\'t set up two-factor authentication have to do so before they can continue — you too, if you haven\'t. Continue?')) return
+            try {
+              await api.put('/admin/settings', { requireTwoFactor: v })
+              qc.invalidateQueries({ queryKey: ['admin-settings'] })
+              qc.invalidateQueries({ queryKey: ['me'] })
+              toast(v === 'off' ? 'Two-factor authentication is optional' : v === 'admins' ? 'Administrators must use two-factor authentication' : 'Everyone must use two-factor authentication')
+            } catch (err) {
+              toast(err instanceof Error ? err.message : 'Could not save')
+            }
+          }}
+        >
+          <option value="off">Optional (everyone decides)</option>
+          <option value="admins">Required for administrators</option>
+          <option value="everyone">Required for everyone</option>
+        </select>
+        <p className="faint small" style={{ margin: '4px 0 0' }}>Applies to sign-ins with passwords and single sign-on; API tokens are separate.</p>
+      </div>
       <div className="field" style={{ marginBottom: 0 }}>
         <label htmlFor="trash-retention">Trash</label>
         <div className="row">

@@ -200,6 +200,7 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
             created_by: Some(user.id),
             created_at: None,
             source_ref: None,
+            draft: false,
         },
     )
     .await?;
@@ -331,6 +332,7 @@ pub async fn create_my_space(State(state): State<AppState>, CurrentUser(user): C
             created_by: Some(user.id),
             created_at: None,
             source_ref: None,
+            draft: false,
         },
     )
     .await?;
@@ -499,6 +501,10 @@ pub struct TreeNode {
     #[serde(skip)]
     #[sqlx(default)]
     pub archived: bool,
+    /// your unpublished draft (other people's never appear)
+    #[sqlx(default)]
+    #[serde(skip_serializing_if = "std::ops::Not::not")]
+    pub draft: bool,
 }
 
 /// Flat list of all pages in a space the caller can see (client builds the tree).
@@ -507,7 +513,7 @@ pub async fn tree(State(state): State<AppState>, MaybeUser(user): MaybeUser, Pat
     let (space, role) = load_space(&state, &p, &key).await?;
     let rows = sqlx::query_as::<_, TreeNode>(
         "SELECT p.id, p.parent_id, p.title, p.kind, p.icon, p.position,
-                EXISTS (SELECT 1 FROM page_restrictions r WHERE r.page_id = p.id) AS restricted, p.archived_at IS NOT NULL AS archived,
+                EXISTS (SELECT 1 FROM page_restrictions r WHERE r.page_id = p.id) AS restricted, p.archived_at IS NOT NULL AS archived, p.draft,
                 CASE WHEN p.kind = 'link' THEN p.content->'content'->0->'attrs'->>'url' END AS url
          FROM pages p WHERE p.space_id = $1 AND p.deleted_at IS NULL AND p.kind <> 'blog' ORDER BY p.position, lower(p.title)",
     )

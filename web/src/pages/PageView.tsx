@@ -8,6 +8,7 @@ import { PageDecor } from '../components/PageDecor'
 import { ErrorBox, Modal, Spinner, useFeatures, useMe, useToast } from '../ui'
 import { PageStatus } from '../components/PageStatus'
 import { FolderView } from '../components/FolderView'
+import { PageViews } from '../components/Viewers'
 import Editor, { PresenceAvatars, type Presence } from '../editor/Editor'
 import CommentsPanel from '../components/CommentsPanel'
 import AttachmentsPanel from '../components/AttachmentsPanel'
@@ -141,6 +142,17 @@ export default function PageView() {
   const copy = () => {
     setMenu(false)
     setCopyOpen(true)
+  }
+  const publish = async () => {
+    try {
+      await api.post(`/pages/${p.id}/publish`)
+      qc.invalidateQueries({ queryKey: ['page', p.id] })
+      qc.invalidateQueries({ queryKey: ['tree', p.spaceKey] })
+      qc.invalidateQueries({ queryKey: ['drafts'] })
+      toast('Published: everyone who can see this space can read it now')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not publish')
+    }
   }
   const toggleWatch = async () => {
     setMenu(false)
@@ -307,6 +319,14 @@ export default function PageView() {
           {space.data?.archivedAt && (
             <div className="archived-banner">This space was archived on {formatDate(space.data.archivedAt)} and is read-only.</div>
           )}
+          {p.draft && (
+            <div className="draft-banner" role="status">
+              <b>Draft</b>
+              <span>Only you can see this page{p.kind === 'blog' ? ' post' : ''} and the pages below it. Publish it when it's ready.</span>
+              <span className="spacer" />
+              <button className="btn btn-primary btn-sm" onClick={publish}>Publish</button>
+            </div>
+          )}
           <PageDecor page={p} canEdit={canEdit} onChange={() => qc.invalidateQueries({ queryKey: ['page', p.id] })} />
           <textarea
             ref={titleRef}
@@ -339,7 +359,7 @@ export default function PageView() {
             {p.views > 0 && (
               <>
                 <span>·</span>
-                <span title={`${p.viewers} people`}>{p.views} views</span>
+                <PageViews pageId={p.id} views={p.views} viewers={p.viewers} canSeeWho={!!features.viewerList && canEdit} />
               </>
             )}
             {p.kind === 'blog' && <span className="badge badge-accent">Blog post</span>}

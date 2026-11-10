@@ -334,6 +334,7 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
                 created_by: Some(user.id),
                 created_at: None,
                 source_ref: None,
+                draft: false,
             },
         )
         .await?;
@@ -392,6 +393,7 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
                     created_by: Some(user.id),
                     created_at: None,
                     source_ref: None,
+                    draft: false,
                 },
             )
             .await?;
@@ -472,6 +474,7 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
                     created_by: Some(user.id),
                     created_at: None,
                     source_ref: None,
+                    draft: false,
                 },
             )
             .await?

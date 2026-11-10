@@ -21,7 +21,7 @@ schemas = {
     "PageAccess": obj({"view": boolean, "comment": boolean, "edit": boolean, "admin": boolean}),
     "Page": obj({"id": uuid, "spaceId": uuid, "spaceKey": txt, "spaceName": txt, "parentId": {"type": ["string", "null"], "format": "uuid"}, "kind": {"enum": ["page", "folder", "blog"]}, "title": txt, "content": S("PmNode"), "version": num, "labels": arr(txt), "restricted": boolean, "createdAt": dt, "updatedAt": dt, "updatedByName": {"type": ["string", "null"]}, "breadcrumbs": arr(obj({"id": uuid, "title": txt})), "access": S("PageAccess")}),
     "PageListItem": obj({"id": uuid, "title": txt, "spaceId": uuid, "spaceKey": txt, "spaceName": txt, "updatedAt": dt, "updatedByName": {"type": ["string", "null"]}}),
-    "NewPage": obj({"spaceKey": txt, "parentId": uuid, "title": txt, "kind": {"enum": ["page", "folder", "blog"]}, "content": S("PmNode"), "markdown": {"type": "string", "description": "alternative to content"}, "templateId": txt}, ["spaceKey"]),
+    "NewPage": obj({"spaceKey": txt, "parentId": uuid, "title": txt, "draft": {"type": "boolean", "description": "an unpublished draft only you see until you publish it"}, "kind": {"enum": ["page", "folder", "blog"]}, "content": S("PmNode"), "markdown": {"type": "string", "description": "alternative to content"}, "templateId": txt}, ["spaceKey"]),
     "Comment": obj({"id": uuid, "pageId": uuid, "parentId": {"type": ["string", "null"], "format": "uuid"}, "authorId": uuid, "authorName": txt, "content": S("PmNode"), "inline": {"type": ["object", "null"]}, "resolvedAt": {"type": ["string", "null"], "format": "date-time"}, "createdAt": dt, "likeCount": num, "liked": boolean}),
     "Attachment": obj({"id": uuid, "pageId": uuid, "filename": txt, "mediaType": txt, "size": num, "version": num, "createdByName": {"type": ["string", "null"]}, "createdAt": dt}),
     "SearchHit": obj({"pageId": uuid, "title": txt, "snippet": {"type": "string", "description": "HTML with <b> highlights"}, "spaceKey": txt, "spaceName": txt, "score": {"type": "number"}}),
@@ -82,7 +82,7 @@ op("/auth/oidc/login", "get", "Auth", "Legacy single-OIDC login", public=True)
 op("/auth/oidc/callback", "get", "Auth", "Legacy single-OIDC callback", public=True)
 op("/me", "get", "Account", "Current user and workspace", res=resp(obj({"user": {"oneOf": [S("User"), {"type": "null"}]}, "workspace": obj({"id": uuid, "name": txt})})), public=True)
 op("/me/tokens", "get", "Account", "Personal API tokens")
-op("/me/tokens", "post", "Account", "Create a personal API token (shown once)", req=body(obj({"name": txt, "expiresInDays": num})))
+op("/me/tokens", "post", "Account", "Create a personal API token (shown once). A read scope allows no changes (GET, Markdown conversion, Ask the wiki; MCP read tools)", req=body(obj({"name": txt, "expiresInDays": num, "scope": {"enum": ["write", "read"]}})))
 op("/me/tokens/{id}", "delete", "Account", "Delete a personal API token", res=NO)
 op("/me/preferences", "get", "Account", "Notification e-mail preference")
 op("/me/preferences", "put", "Account", "Set notification preferences (only the fields sent change)", req=body(obj({"emailNotifications": {"enum": ["all", "important", "none"]}, "emailDigest": {"enum": ["soon", "hourly", "daily"], "description": "how often notification e-mails go out"}, "muted": arr(txt)})))
@@ -129,6 +129,9 @@ op("/pages/{id}", "delete", "Pages", "Move a page and its sub-pages to the trash
 op("/pages/{id}/content", "put", "Pages", "Replace the content (live editors get the change)", req=body(obj({"content": S("PmNode"), "markdown": txt, "message": txt})))
 op("/pages/{id}/move", "post", "Pages", "Move (parent, position, other space)", req=body(obj({"parentId": uuid, "spaceKey": txt, "position": {"type": "number"}})), res=NO)
 op("/pages/{id}/copy", "post", "Pages", "Copy a page (optionally with sub-pages)", req=body(obj({"includeChildren": boolean, "parentId": uuid})))
+op("/pages/{id}/publish", "post", "Pages", "Publish your unpublished draft: everyone who can see its place in the space sees it", res=NO)
+op("/me/drafts", "get", "Account", "My unpublished drafts", res=resp(arr(obj({"id": uuid, "title": txt, "spaceKey": txt, "spaceName": txt, "updatedAt": dt}))))
+op("/pages/{id}/viewers", "get", "Pages", "Who viewed the page and when (editors; only when an admin turned on the viewer list)", res=resp(arr(obj({"userId": uuid, "name": txt, "lastViewed": {"type": "string", "format": "date"}, "views": num}))))
 op("/pages/{id}/purge", "post", "Pages", "Delete a trashed page for good, with its trashed sub-pages, history, comments and attachments (space admins)", res=resp(obj({"purged": num})))
 op("/pages/{id}/restore", "post", "Pages", "Restore from the trash", res=NO)
 op("/pages/{id}/children", "get", "Pages", "Child pages", query=[q("depth", "levels", num)], public=True)
@@ -211,6 +214,7 @@ op("/reports/decisions", "get", "Reports", "Decision log (decisionreport): decis
 op("/templates", "get", "Templates", "Built-in and custom templates", query=[q("space", "space key")])
 op("/templates", "post", "Templates", "Save a template", req=body(obj({"name": txt, "description": txt, "spaceKey": txt, "content": S("PmNode"), "pageId": uuid})))
 op("/templates/{id}", "delete", "Templates", "Delete a template", res=NO)
+op("/templates/{id}/preview", "get", "Templates", "What a page from the template looks like (title and rendered HTML)", res=resp(obj({"title": {"type": ["string", "null"]}, "html": txt})))
 # import / export / jobs
 op("/imports/confluence", "post", "Import & export", "Import a Confluence space export (XML or Cloud CSV zip) as a job", req=multipart({"options": {"type": "string", "description": "JSON ImportOptions"}}), res=resp(obj({"jobId": uuid}), "202", "Queued"))
 op("/imports/confluence/analyze", "post", "Import & export", "Dry run: what an import would create", req=multipart({}))
@@ -226,7 +230,7 @@ op("/admin/reindex", "post", "Admin", "Rebuild the search index")
 op("/admin/spaces", "get", "Admin", "All spaces incl. archived, with size and activity")
 op("/admin/spaces/{key}", "delete", "Admin", "Permanently delete an archived space", req=body(obj({"confirm": {"type": "string", "description": "the space key"}})), res=NO)
 op("/admin/spaces/{key}/unarchive", "post", "Admin", "Restore an archived space", res=NO)
-SWITCHES = obj({"publicLinks": boolean, "exports": boolean, "ai": boolean, "personalSpaces": boolean, "trashRetentionDays": {"type": "integer", "minimum": 0, "maximum": 3650, "description": "days pages stay in the trash before they are deleted for good; 0 = forever"}})
+SWITCHES = obj({"publicLinks": boolean, "exports": boolean, "ai": boolean, "personalSpaces": boolean, "trashRetentionDays": {"type": "integer", "minimum": 0, "maximum": 3650, "description": "days pages stay in the trash before they are deleted for good; 0 = forever"}, "viewerList": {"type": "boolean", "description": "editors can see who viewed a page (default off)"}, "requireTwoFactor": {"enum": ["off", "admins", "everyone"], "description": "who must set up two-factor authentication before using the wiki"}})
 op("/admin/settings", "get", "Admin", "Workspace switches (public links, exports, Ask the wiki, personal spaces) and the trash retention period", res=resp(SWITCHES))
 op("/admin/settings", "put", "Admin", "Turn workspace switches on or off (only the ones named change)", req=body(SWITCHES), res=resp(SWITCHES))
 op("/features", "get", "Admin", "The switches as they apply to the caller (admins can always export)", res=resp(SWITCHES))

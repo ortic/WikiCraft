@@ -194,3 +194,41 @@ async fn an_active_factor_cant_be_replaced_with_just_a_session() {
     let (st, body) = app.post(&eve, "/me/mfa/setup", json!({})).await;
     assert_eq!(st, 400, "{body}");
 }
+
+/// A workspace can require two-factor authentication: until it's set up, a session can only
+/// enrol (or sign out); API tokens are separate credentials.
+#[tokio::test(flavor = "multi_thread")]
+async fn required_two_factor() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, _) = app.user(&owner, "mem@acme.test", "member").await;
+    let (_, t) = app.post(&member, "/me/tokens", json!({"name": "ci"})).await;
+    let token = t["token"].as_str().unwrap().to_string();
+    assert_eq!(app.put(&owner, "/admin/settings", json!({"requireTwoFactor": "sometimes"})).await.0, 400);
+    let (st, s) = app.put(&owner, "/admin/settings", json!({"requireTwoFactor": "admins"})).await;
+    assert_eq!((st, &s["requireTwoFactor"]), (200, &json!("admins")), "{s}");
+    // from now on the owner can't change settings (e.g. switch it off again) before enrolling
+    assert_eq!(app.put(&owner, "/admin/settings", json!({"requireTwoFactor": "off"})).await.0, 403);
+
+    // admins: blocked until enrolled; members aren't affected yet
+    let (st, err) = app.get(&owner, "/spaces").await;
+    assert_eq!(st, 403);
+    assert!(err["message"].as_str().unwrap().contains("two-factor"));
+    let (_, me) = app.get(&owner, "/me").await;
+    assert_eq!(me["mustSetUpTwoFactor"], true);
+    assert_eq!(app.get(&member, "/spaces").await.0, 200);
+    enrol(&app, &owner).await;
+    assert_eq!(app.get(&owner, "/spaces").await.0, 200);
+    let (_, me) = app.get(&owner, "/me").await;
+    assert_eq!(me["mustSetUpTwoFactor"], false);
+
+    // everyone
+    let (st, _) = app.put(&owner, "/admin/settings", json!({"requireTwoFactor": "everyone"})).await;
+    assert_eq!(st, 200);
+    assert_eq!(app.get(&member, "/spaces").await.0, 403);
+    assert_eq!(app.post(&member, "/pages", json!({"spaceKey": "X", "title": "y"})).await.0, 403);
+    let r = reqwest::Client::new().get(app.url("/spaces")).bearer_auth(&token).send().await.unwrap();
+    assert_eq!(r.status(), 200, "API tokens are separate credentials");
+    enrol(&app, &member).await;
+    assert_eq!(app.get(&member, "/spaces").await.0, 200);
+}

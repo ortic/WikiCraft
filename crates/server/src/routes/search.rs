@@ -47,12 +47,15 @@ pub async fn filter_visible(
         if role == Role::None {
             continue;
         }
-        let any_restrictions: bool =
-            sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM page_restrictions r JOIN pages p ON p.id = r.page_id WHERE p.space_id = $1 AND r.kind = 'view')")
-                .bind(space)
-                .fetch_one(&state.db)
-                .await?;
-        if !any_restrictions || role == Role::Admin {
+        let (any_restrictions, any_drafts): (bool, bool) = sqlx::query_as(
+            "SELECT EXISTS (SELECT 1 FROM page_restrictions r JOIN pages p ON p.id = r.page_id WHERE p.space_id = $1 AND r.kind = 'view'),
+                    EXISTS (SELECT 1 FROM pages WHERE space_id = $1 AND draft AND created_by IS DISTINCT FROM $2)",
+        )
+        .bind(space)
+        .bind(p.user_id())
+        .fetch_one(&state.db)
+        .await?;
+        if !any_drafts && (!any_restrictions || role == Role::Admin) {
             out.extend(ids);
             continue;
         }

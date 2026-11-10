@@ -79,11 +79,12 @@ function ActivityFeed() {
 
 export default function Home() {
   const me = useMe()
-  const [tab, setTab] = useState<'viewed' | 'updated' | 'activity' | 'popular' | 'starred'>('viewed')
+  const [tab, setTab] = useState<'viewed' | 'updated' | 'activity' | 'popular' | 'starred' | 'drafts'>('viewed')
   const [create, setCreate] = useState(false)
   const spaces = useQuery({ queryKey: ['spaces'], queryFn: () => api.get<Space[]>('/spaces') })
   const recent = useQuery({ queryKey: ['recent'], queryFn: () => api.get<{ viewed: PageListItem[]; updated: PageListItem[] }>('/recent'), enabled: !!me.data?.user })
   const favs = useQuery({ queryKey: ['favorites'], queryFn: () => api.get<PageListItem[]>('/favorites'), enabled: !!me.data?.user })
+  const drafts = useQuery({ queryKey: ['drafts'], queryFn: () => api.get<PageListItem[]>('/me/drafts'), enabled: !!me.data?.user })
   const popular = useQuery({
     queryKey: ['popular'],
     queryFn: () => api.get<(PageListItem & { views: number; viewers: number })[]>('/popular?days=30'),
@@ -161,6 +162,11 @@ export default function Home() {
             <button className={`tab ${tab === 'starred' ? 'active' : ''}`} onClick={() => setTab('starred')}>
               <Star size={13} /> Starred
             </button>
+            {!!drafts.data?.length && (
+              <button className={`tab ${tab === 'drafts' ? 'active' : ''}`} onClick={() => setTab('drafts')}>
+                <PencilLine size={13} /> Drafts ({drafts.data.length})
+              </button>
+            )}
           </div>
           {tab === 'viewed' && <PageList items={recent.data?.viewed} empty="Pages you visit show up here." timeLabel={(p) => formatDate(p.at)} />}
           {tab === 'updated' && <PageList items={recent.data?.updated} empty="Nothing updated yet." timeLabel={(p) => `${p.updatedByName ?? ''} · ${formatDate(p.updatedAt)}`} />}
@@ -176,6 +182,7 @@ export default function Home() {
             />
           )}
           {tab === 'starred' && <PageList items={favs.data} empty="Star pages to find them quickly." timeLabel={(p) => formatDate(p.updatedAt)} />}
+          {tab === 'drafts' && <PageList items={drafts.data} empty="No unpublished drafts." timeLabel={(p) => `edited ${formatDate(p.updatedAt)}`} />}
         </>
       )}
       {create && <CreateSpaceDialog onClose={() => setCreate(false)} />}

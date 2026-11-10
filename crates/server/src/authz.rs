@@ -170,6 +170,8 @@ struct ChainRow {
     space_id: Uuid,
     deleted: bool,
     archived: bool,
+    /// an unpublished draft by someone else (hides it and everything below it)
+    foreign_draft: bool,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -184,12 +186,15 @@ struct RestrictionRow {
 pub async fn page_access(state: &AppState, p: &Principal, page_id: Uuid) -> ApiResult<(PageAccess, Uuid)> {
     let chain = sqlx::query_as::<_, ChainRow>(
         "WITH RECURSIVE chain AS (
-            SELECT id, parent_id, space_id, deleted_at IS NOT NULL AS deleted, archived_at IS NOT NULL AS archived, 0 AS depth FROM pages WHERE id = $1
+            SELECT id, parent_id, space_id, deleted_at IS NOT NULL AS deleted, archived_at IS NOT NULL AS archived,
+                   draft AND created_by IS DISTINCT FROM $2 AS foreign_draft, 0 AS depth FROM pages WHERE id = $1
             UNION ALL
-            SELECT p.id, p.parent_id, p.space_id, p.deleted_at IS NOT NULL, p.archived_at IS NOT NULL, c.depth + 1 FROM pages p JOIN chain c ON p.id = c.parent_id WHERE c.depth < 200
-         ) SELECT id, depth, space_id, deleted, archived FROM chain",
+            SELECT p.id, p.parent_id, p.space_id, p.deleted_at IS NOT NULL, p.archived_at IS NOT NULL,
+                   p.draft AND p.created_by IS DISTINCT FROM $2, c.depth + 1 FROM pages p JOIN chain c ON p.id = c.parent_id WHERE c.depth < 200
+         ) SELECT id, depth, space_id, deleted, archived, foreign_draft FROM chain",
     )
     .bind(page_id)
+    .bind(p.user_id())
     .fetch_all(&state.db)
     .await?;
     let Some(first) = chain.iter().find(|c| c.depth == 0) else { return Err(ApiError::NotFound("page")) };
@@ -201,7 +206,8 @@ pub async fn page_access(state: &AppState, p: &Principal, page_id: Uuid) -> ApiR
     let space = load_space_access(state, space_id).await?;
     let role = space_role(state, p, &space).await?;
     let mut access = PageAccess { space_role: Some(role), ..Default::default() };
-    if role == Role::None {
+    if role == Role::None || chain.iter().any(|c| c.foreign_draft) {
+        // someone else's unpublished draft: not even space admins see it
         return Ok((access, space_id));
     }
     let ids: Vec<Uuid> = chain.iter().map(|c| c.id).collect();
@@ -275,19 +281,21 @@ pub async fn visible_page_ids(state: &AppState, p: &Principal, space_id: Uuid, r
     if role == Role::None {
         return Ok(HashSet::new());
     }
-    if role == Role::Admin {
+    // other people's unpublished drafts are hidden from everyone, space admins included
+    let mut denied_here: HashSet<Uuid> = foreign_drafts(state, p, space_id).await?;
+    let restrictions = if role == Role::Admin {
+        Vec::new()
+    } else {
+        sqlx::query_as::<_, RestrictionRow>(
+            "SELECT r.page_id, r.kind, r.subject_type, r.subject_id FROM page_restrictions r JOIN pages p ON p.id = r.page_id WHERE p.space_id = $1 AND r.kind = 'view'",
+        )
+        .bind(space_id)
+        .fetch_all(&state.db)
+        .await?
+    };
+    if restrictions.is_empty() && denied_here.is_empty() {
         return Ok(pages.iter().map(|(id, _)| *id).collect());
     }
-    let restrictions = sqlx::query_as::<_, RestrictionRow>(
-        "SELECT r.page_id, r.kind, r.subject_type, r.subject_id FROM page_restrictions r JOIN pages p ON p.id = r.page_id WHERE p.space_id = $1 AND r.kind = 'view'",
-    )
-    .bind(space_id)
-    .fetch_all(&state.db)
-    .await?;
-    if restrictions.is_empty() {
-        return Ok(pages.iter().map(|(id, _)| *id).collect());
-    }
-    let mut denied_here: HashSet<Uuid> = HashSet::new();
     let mut by_page: HashMap<Uuid, Vec<&RestrictionRow>> = HashMap::new();
     for r in &restrictions {
         by_page.entry(r.page_id).or_default().push(r);
@@ -312,6 +320,34 @@ pub async fn visible_page_ids(state: &AppState, p: &Principal, space_id: Uuid, r
         v
     }
     Ok(pages.iter().filter(|(id, _)| visible(*id, &parent, &denied_here, &mut memo, 0)).map(|(id, _)| *id).collect())
+}
+
+/// Whether the page or a page above it is an unpublished draft (only its creator sees it, so
+/// nobody else is notified about it and webhooks stay quiet).
+pub async fn in_draft(state: &AppState, page_id: Uuid) -> bool {
+    sqlx::query_scalar::<_, Option<bool>>(
+        "WITH RECURSIVE up AS (
+            SELECT id, parent_id, draft, 0 AS depth FROM pages WHERE id = $1
+            UNION ALL SELECT p.id, p.parent_id, p.draft, up.depth + 1 FROM pages p JOIN up ON p.id = up.parent_id WHERE up.depth < 200
+         ) SELECT bool_or(draft) FROM up",
+    )
+    .bind(page_id)
+    .fetch_one(&state.db)
+    .await
+    .ok()
+    .flatten()
+    .unwrap_or(false)
+}
+
+/// Unpublished drafts in a space that belong to someone other than `p`.
+pub async fn foreign_drafts(state: &AppState, p: &Principal, space_id: Uuid) -> ApiResult<HashSet<Uuid>> {
+    Ok(sqlx::query_scalar("SELECT id FROM pages WHERE space_id = $1 AND draft AND created_by IS DISTINCT FROM $2")
+        .bind(space_id)
+        .bind(p.user_id())
+        .fetch_all(&state.db)
+        .await?
+        .into_iter()
+        .collect())
 }
 
 /// The pages among `ids` that are archived or under an archived page.

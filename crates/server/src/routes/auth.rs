@@ -153,7 +153,11 @@ pub async fn logout(State(state): State<AppState>, headers: HeaderMap) -> ApiRes
     Ok(([(header::SET_COOKIE, session_cookie("", 0, state.config.secure_cookies))], StatusCode::NO_CONTENT).into_response())
 }
 
-pub async fn me(State(state): State<AppState>, MaybeUser(user): MaybeUser) -> ApiResult<Json<Value>> {
+pub async fn me(
+    State(state): State<AppState>,
+    MaybeUser(user): MaybeUser,
+    enroll: Option<axum::Extension<crate::auth::MustEnrollTwoFactor>>,
+) -> ApiResult<Json<Value>> {
     let ws: Option<(Uuid, String)> = match &user {
         Some(u) => sqlx::query_as("SELECT id, name FROM workspaces WHERE id = $1").bind(u.workspace_id).fetch_optional(&state.db).await?,
         None => sqlx::query_as("SELECT id, name FROM workspaces ORDER BY created_at LIMIT 1").fetch_optional(&state.db).await?,
@@ -165,6 +169,8 @@ pub async fn me(State(state): State<AppState>, MaybeUser(user): MaybeUser) -> Ap
     Ok(Json(json!({
         "user": user,
         "workspace": ws.map(|(id, name)| json!({"id": id, "name": name, "logoVersion": logo})),
+        // the workspace requires two-factor authentication and this person hasn't set it up
+        "mustSetUpTwoFactor": enroll.is_some(),
     })))
 }
 
@@ -176,14 +182,17 @@ pub struct TokenRow {
     created_at: chrono::DateTime<chrono::Utc>,
     expires_at: Option<chrono::DateTime<chrono::Utc>>,
     last_used_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// `read` or `write`
+    scope: String,
 }
 
 pub async fn list_tokens(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Vec<TokenRow>>> {
-    let rows =
-        sqlx::query_as::<_, TokenRow>("SELECT id, name, created_at, expires_at, last_used_at FROM api_tokens WHERE user_id = $1 ORDER BY created_at DESC")
-            .bind(user.id)
-            .fetch_all(&state.db)
-            .await?;
+    let rows = sqlx::query_as::<_, TokenRow>(
+        "SELECT id, name, created_at, expires_at, last_used_at, scope FROM api_tokens WHERE user_id = $1 ORDER BY created_at DESC",
+    )
+    .bind(user.id)
+    .fetch_all(&state.db)
+    .await?;
     Ok(Json(rows))
 }
 
@@ -192,22 +201,29 @@ pub async fn list_tokens(State(state): State<AppState>, CurrentUser(user): Curre
 pub struct CreateToken {
     name: String,
     expires_in_days: Option<i32>,
+    /// `write` (default: everything you may do) or `read` (no changes)
+    scope: Option<String>,
 }
 
 /// Creates a personal API token. The plaintext token is returned once.
 pub async fn create_token(State(state): State<AppState>, CurrentUser(user): CurrentUser, Json(req): Json<CreateToken>) -> ApiResult<Json<Value>> {
+    let scope = req.scope.as_deref().unwrap_or("write");
+    if !matches!(scope, "read" | "write") {
+        return Err(ApiError::bad("scope must be read or write"));
+    }
     let token = format!("{API_TOKEN_PREFIX}{}", random_token());
     let id = new_id();
-    sqlx::query("INSERT INTO api_tokens (id, user_id, name, token_hash, expires_at) VALUES ($1, $2, $3, $4, CASE WHEN $5::int IS NULL THEN NULL ELSE now() + make_interval(days => $5::int) END)")
+    sqlx::query("INSERT INTO api_tokens (id, user_id, name, token_hash, expires_at, scope) VALUES ($1, $2, $3, $4, CASE WHEN $5::int IS NULL THEN NULL ELSE now() + make_interval(days => $5::int) END, $6)")
         .bind(id)
         .bind(user.id)
         .bind(req.name.trim())
         .bind(token_hash(&token))
         .bind(req.expires_in_days)
+        .bind(scope)
         .execute(&state.db)
         .await?;
-    audit::log(&state, user.workspace_id, Some(user.id), "token.create", Some("token"), Some(id), json!({"name": req.name})).await;
-    Ok(Json(json!({ "id": id, "token": token })))
+    audit::log(&state, user.workspace_id, Some(user.id), "token.create", Some("token"), Some(id), json!({"name": req.name, "scope": scope})).await;
+    Ok(Json(json!({ "id": id, "token": token, "scope": scope })))
 }
 
 pub async fn delete_token(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {

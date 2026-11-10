@@ -368,7 +368,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P1** Visual diff between any two versions (inline + side-by-side, block-aware) `C X B` (paragraph diff vs previous version only)
 - [~] **P1** "What changed since my last visit" highlighting `C` (banner + diff since the last seen version; no inline highlight)
 - [ ] **P1** Minor edit flag (no notifications) `C X`
-- [ ] **P1** Personal unpublished drafts (new pages not yet published) and a drafts list `C D`
+- [x] **P1** Personal unpublished drafts (new pages not yet published) and a drafts list `C D` — `pages.draft`: only the creator sees a draft and the pages below it (space admins included; enforced in the central access checks), no mentions / watcher notifications / webhooks until Publish (which also creates a "Published" version); new pages from the Create dialog start as drafts (remembered choice); draft banner + Publish, draft badge in the tree, Drafts on Home, `GET /me/drafts`
 - [ ] **P1** Scheduled publishing `C(apps)`
 - [x] **P1** Attachment versioning (upload a new version of the same file name) `C X` — version history in the attachments panel: download any version, make an earlier one current again (as a new version); `GET /attachments/{id}/versions`
 - [ ] **P2** Version retention rules (keep N versions / X days; per space) `C DC`
@@ -391,7 +391,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P3** Annotations on attachments (PDF comments)
 
 ### 4.8 Templates & blueprints
-- [~] **P1** Page templates: global and per space; create from template; template picker with preview `C D X O B` (no preview; workspace templates API only)
+- [~] **P1** Page templates: global and per space; create from template; template picker with preview `C D X O B` (template picker with preview; space templates only for people who can see the space; workspace templates API only)
 - [~] **P1** Built-in template gallery (meeting notes, decision log, retrospective, how-to, troubleshooting, product
       requirements, project plan, runbook, incident postmortem, onboarding, architecture/arc42, ADR, OKRs) `C` (12 built-ins so far)
 - [~] **P1** Template variables / placeholders (prompt for values on create) `C X` ({date} only; no prompts)
@@ -476,8 +476,8 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** OIDC (Google, Microsoft Entra ID, Okta, Keycloak, Authentik, GitLab) `C D X B O`
 - [x] **P1** SAML 2.0 SSO `C D X B`
 - [x] **P1** LDAP / Active Directory (bind auth + group sync) `DC D X B`
-- [~] **P1** MFA: TOTP, WebAuthn/passkeys, recovery codes; enforce per workspace/group `C D` (TOTP + recovery codes; no passkeys or enforcement)
-- [~] **P1** Personal API tokens (scoped, expiring) and OAuth2 apps (authorization code + PKCE) `C D X O B` (unscoped tokens; no OAuth2 apps)
+- [~] **P1** MFA: TOTP, WebAuthn/passkeys, recovery codes; enforce per workspace/group `C D` (TOTP + recovery codes; required for admins or everyone as a workspace setting, enforced on every session incl. SSO; no passkeys)
+- [~] **P1** Personal API tokens (scoped, expiring) and OAuth2 apps (authorization code + PKCE) `C D X O B` (read-only or read/write scope and expiry; read-only tokens also limit the MCP tools; no OAuth2 apps)
 - [~] **P1** User profiles (avatar, title, department, timezone, language, bio) and people directory `C X` (name/password only; no directory)
 - [ ] **P2** SCIM 2.0 provisioning (users + groups) `C D`
 - [x] **P2** JIT provisioning + group mapping from IdP claims `C D`
@@ -486,7 +486,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P2** Login policies: IP allowlists, session duration, device trust `C(Guard)`
 
 ### 4.14 Navigation, home & personalization
-- [~] **P0** Home dashboard: recent pages, starred, drafts, tasks assigned to me `C D O` (no drafts; personal space for unpublished work)
+- [x] **P0** Home dashboard: recent pages, starred, drafts, tasks assigned to me `C D O` — recently viewed / updated, activity, popular, starred, Drafts (unpublished), open tasks
 - [x] **P0** Recently viewed / recently edited `C D O`
 - [x] **P1** Starred/favorite pages and spaces `C D O` — pages (sidebar, Home) and spaces (`space_favorites`; star in the directory, starred filter, starred first in directory and sidebar)
 - [ ] **P1** Activity feed (following people/spaces; popular in my org) `C X` — partial: Home → Activity (everything visible, or watched pages and spaces) and Popular; following people not yet
@@ -500,7 +500,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 ### 4.15 Notifications & watching
 - [x] **P0** In-app notification center (mentions, comments, replies, shares, task assignments) `C D O`
 - [x] **P1** Email notifications with batching / digest (immediate, hourly, daily) `C DC X O` — per person: a few minutes after (default), at most hourly, or daily; only what's still unread goes out
-- [~] **P1** Watch page / page subtree / space / blog; auto-watch on create/edit `C X` (pages only; auto-watch on create)
+- [~] **P1** Watch page / page subtree / space / blog; auto-watch on create/edit `C X` (pages and spaces; auto-watch on create, on edit and when mentioned, unless you stopped watching on purpose; no subtree watch)
 - [x] **P1** Notification preferences per channel and event type `C`
 - [~] **P1** Slack / Microsoft Teams / Mattermost notifications (per user and per space channel) `C O` (per workspace/space channel via webhook formats; not per user)
 - [ ] **P2** Web push notifications (PWA) `C`
@@ -520,7 +520,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P2** Broken-link report and orphaned-page report per space `X`
 
 ### 4.17 Analytics & insights
-- [~] **P1** Page views count and unique viewers ("who viewed", privacy-configurable) `C` (counts only; no viewer list)
+- [x] **P1** Page views count and unique viewers ("who viewed", privacy-configurable) `C` — counts for everyone; who viewed and when for the page's editors once an admin turns on the viewer list (off by default)
 - [ ] **P2** Page insights: views over time, readers, engagement, time on page `C`
 - [ ] **P2** Space and workspace analytics (most viewed, most active users, top contributors) `C`
 - [ ] **P2** Search analytics `C`
