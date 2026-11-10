@@ -370,7 +370,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P1** Minor edit flag (no notifications) `C X`
 - [ ] **P1** Personal unpublished drafts (new pages not yet published) and a drafts list `C D`
 - [ ] **P1** Scheduled publishing `C(apps)`
-- [~] **P1** Attachment versioning (upload a new version of the same file name) `C X` (versions stored; no history UI)
+- [x] **P1** Attachment versioning (upload a new version of the same file name) `C X` — version history in the attachments panel: download any version, make an earlier one current again (as a new version); `GET /attachments/{id}/versions`
 - [ ] **P2** Version retention rules (keep N versions / X days; per space) `C DC`
 - [ ] **P2** Version history for page properties, labels, permissions (audit-backed)
 - [ ] **P2** Delete specific versions (admin, for sensitive data) `C X`
@@ -499,7 +499,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 
 ### 4.15 Notifications & watching
 - [x] **P0** In-app notification center (mentions, comments, replies, shares, task assignments) `C D O`
-- [~] **P1** Email notifications with batching / digest (immediate, hourly, daily) `C DC X O` (2-minute digest; no hourly/daily choice)
+- [x] **P1** Email notifications with batching / digest (immediate, hourly, daily) `C DC X O` — per person: a few minutes after (default), at most hourly, or daily; only what's still unread goes out
 - [~] **P1** Watch page / page subtree / space / blog; auto-watch on create/edit `C X` (pages only; auto-watch on create)
 - [x] **P1** Notification preferences per channel and event type `C`
 - [~] **P1** Slack / Microsoft Teams / Mattermost notifications (per user and per space channel) `C O` (per workspace/space channel via webhook formats; not per user)

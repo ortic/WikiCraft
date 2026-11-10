@@ -1,6 +1,6 @@
 import { useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Paperclip, Upload, Trash2, X, FileText, Image as ImageIcon } from 'lucide-react'
+import { Paperclip, Upload, Trash2, X, FileText, Image as ImageIcon, History, RotateCcw } from 'lucide-react'
 import { api, formatBytes, formatDate, type Attachment, type Page } from '../api'
 import { useToast } from '../ui'
 
@@ -9,6 +9,7 @@ export default function AttachmentsPanel({ page, onClose }: { page: Page; onClos
   const toast = useToast()
   const input = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
+  const [history, setHistory] = useState<string | null>(null)
   const list = useQuery({ queryKey: ['attachments', page.id], queryFn: () => api.get<Attachment[]>(`/pages/${page.id}/attachments`) })
   const upload = async (files: FileList | null) => {
     if (!files?.length) return
@@ -49,8 +50,17 @@ export default function AttachmentsPanel({ page, onClose }: { page: Page; onClos
               {a.filename}
             </a>
             <div className="faint small">
-              {formatBytes(a.size)} · v{a.version} · {formatDate(a.createdAt)}
+              {formatBytes(a.size)} ·{' '}
+              {a.version > 1 ? (
+                <button type="button" className="link-btn" aria-expanded={history === a.id} onClick={() => setHistory(history === a.id ? null : a.id)}>
+                  <History size={11} /> v{a.version}
+                </button>
+              ) : (
+                <>v{a.version}</>
+              )}{' '}
+              · {formatDate(a.createdAt)}
             </div>
+            {history === a.id && <VersionList attachmentId={a.id} current={a.version} canEdit={page.access.edit} onRestored={() => qc.invalidateQueries({ queryKey: ['attachments', page.id] })} />}
           </div>
           {page.access.edit && (
             <button
@@ -69,5 +79,59 @@ export default function AttachmentsPanel({ page, onClose }: { page: Page; onClos
       ))}
       {list.data?.length === 0 && <div className="empty">No attachments.</div>}
     </aside>
+  )
+}
+
+interface VersionRow {
+  version: number
+  size: number
+  mediaType: string
+  createdByName: string | null
+  createdAt: string
+}
+
+/** Earlier versions of an attachment: download any, make one current again (a new version). */
+function VersionList({ attachmentId, current, canEdit, onRestored }: { attachmentId: string; current: number; canEdit: boolean; onRestored: () => void }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const versions = useQuery({ queryKey: ['attachment-versions', attachmentId, current], queryFn: () => api.get<VersionRow[]>(`/attachments/${attachmentId}/versions`) })
+  return (
+    <ul className="attachment-versions">
+      {versions.data?.map((v) => (
+        <li key={v.version} className="row small">
+          <a href={v.version === current ? `/api/attachments/${attachmentId}/content` : `/api/attachments/${attachmentId}/versions/${v.version}/content`} target="_blank" rel="noreferrer">
+            v{v.version}
+          </a>
+          <span className="faint">
+            {formatBytes(v.size)} · {formatDate(v.createdAt)}
+            {v.createdByName ? ` · ${v.createdByName}` : ''}
+          </span>
+          <span className="spacer" />
+          {v.version === current ? (
+            <span className="badge">current</span>
+          ) : (
+            canEdit && (
+              <button
+                type="button"
+                className="link-btn"
+                title="Make this version the current one (as a new version)"
+                onClick={async () => {
+                  try {
+                    const r = await api.post<{ version: number }>(`/attachments/${attachmentId}/versions/${v.version}/restore`)
+                    qc.invalidateQueries({ queryKey: ['attachment-versions', attachmentId] })
+                    onRestored()
+                    toast(`v${v.version} is current again (as v${r.version})`)
+                  } catch (e) {
+                    toast(e instanceof Error ? e.message : 'Could not restore it')
+                  }
+                }}
+              >
+                <RotateCcw size={11} /> Make current
+              </button>
+            )
+          )}
+        </li>
+      ))}
+    </ul>
   )
 }

@@ -52,7 +52,9 @@ instructional text in a template disappears when you start typing there.
 
 Every editing session ends in a version. The clock icon shows all versions with what changed
 (per block) and lets you restore an older one; restoring creates a new version, nothing is lost.
-After you've been away, a banner offers *what changed since your last visit*.
+After you've been away, a banner offers *what changed since your last visit*. Uploading a file with
+the same name as an attachment adds a new version of it; the attachments panel lists the versions
+and can make an earlier one current again.
 
 ## Comments and tasks
 
@@ -65,7 +67,8 @@ After you've been away, a banner offers *what changed since your last visit*.
 
 You automatically watch pages you create and pages you are mentioned on. Watch other pages or
 whole spaces from the page menu, and mute a page you no longer care about. The bell lists mentions, replies and
-changes; e-mail digests summarize what you missed.
+changes; e-mail summaries of what you missed come a few minutes after, hourly or daily (your
+profile settings).
 
 ## Sharing
 

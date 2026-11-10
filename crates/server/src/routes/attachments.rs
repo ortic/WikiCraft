@@ -213,3 +213,110 @@ pub async fn delete(State(state): State<AppState>, CurrentUser(user): CurrentUse
     state.search.enqueue(page_id);
     Ok(StatusCode::NO_CONTENT)
 }
+
+#[derive(Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct VersionRow {
+    version: i32,
+    size: i64,
+    media_type: String,
+    created_by_name: Option<String>,
+    created_at: chrono::DateTime<chrono::Utc>,
+}
+
+async fn page_of(state: &AppState, id: Uuid) -> ApiResult<Uuid> {
+    sqlx::query_scalar("SELECT page_id FROM attachments WHERE id = $1 AND deleted_at IS NULL")
+        .bind(id)
+        .fetch_optional(&state.db)
+        .await?
+        .ok_or(ApiError::NotFound("attachment"))
+}
+
+/// `GET /attachments/{id}/versions` — every uploaded version, newest first.
+pub async fn versions(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path(id): Path<Uuid>) -> ApiResult<Json<Vec<VersionRow>>> {
+    let page_id = page_of(&state, id).await?;
+    let p = Principal::load(&state, user).await?;
+    require_page(&state, &p, page_id, Need::View).await?;
+    Ok(Json(
+        sqlx::query_as::<_, VersionRow>(
+            "SELECT v.version, v.size, v.media_type, u.name AS created_by_name, v.created_at FROM attachment_versions v
+               LEFT JOIN users u ON u.id = v.created_by WHERE v.attachment_id = $1 ORDER BY v.version DESC",
+        )
+        .bind(id)
+        .fetch_all(&state.db)
+        .await?,
+    ))
+}
+
+/// `GET /attachments/{id}/versions/{version}/content` — an earlier version of the file.
+pub async fn download_version(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path((id, version)): Path<(Uuid, i32)>) -> ApiResult<Response> {
+    let row: Option<(Uuid, String, String, Option<String>, i64)> = sqlx::query_as(
+        "SELECT a.page_id, a.filename, v.media_type, v.blob_key, v.size FROM attachment_versions v JOIN attachments a ON a.id = v.attachment_id
+          WHERE v.attachment_id = $1 AND v.version = $2 AND a.deleted_at IS NULL",
+    )
+    .bind(id)
+    .bind(version)
+    .fetch_optional(&state.db)
+    .await?;
+    let (page_id, filename, media_type, key, size) = row.ok_or(ApiError::NotFound("attachment version"))?;
+    let p = Principal::load(&state, user).await?;
+    require_page(&state, &p, page_id, Need::View).await?;
+    serve(&state, filename, media_type, key, size).await
+}
+
+/// `POST /attachments/{id}/versions/{version}/restore` — makes an earlier version current again
+/// (as a new version, so nothing is lost).
+pub async fn restore_version(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path((id, version)): Path<(Uuid, i32)>,
+) -> ApiResult<Json<serde_json::Value>> {
+    let page_id = page_of(&state, id).await?;
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    require_page(&state, &p, page_id, Need::Edit).await?;
+    let mut tx = state.db.begin().await?;
+    let current: i32 = sqlx::query_scalar("SELECT version FROM attachments WHERE id = $1 FOR UPDATE").bind(id).fetch_one(&mut *tx).await?;
+    let old: Option<(Option<String>, i64, String)> =
+        sqlx::query_as("SELECT blob_key, size, media_type FROM attachment_versions WHERE attachment_id = $1 AND version = $2")
+            .bind(id)
+            .bind(version)
+            .fetch_optional(&mut *tx)
+            .await?;
+    let (key, size, media_type) = old.ok_or(ApiError::NotFound("attachment version"))?;
+    if version == current {
+        return Err(ApiError::bad("that is the current version"));
+    }
+    let next = current + 1;
+    sqlx::query("UPDATE attachments SET blob_key = $2, size = $3, media_type = $4, version = $5, text_content = NULL, updated_at = now() WHERE id = $1")
+        .bind(id)
+        .bind(&key)
+        .bind(size)
+        .bind(&media_type)
+        .bind(next)
+        .execute(&mut *tx)
+        .await?;
+    sqlx::query("INSERT INTO attachment_versions (id, attachment_id, version, blob_key, size, media_type, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7)")
+        .bind(new_id())
+        .bind(id)
+        .bind(next)
+        .bind(&key)
+        .bind(size)
+        .bind(&media_type)
+        .bind(user.id)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    state.search.enqueue(page_id);
+    crate::extract::spawn(&state, id);
+    crate::audit::log(
+        &state,
+        user.workspace_id,
+        Some(user.id),
+        "attachment.restore_version",
+        Some("page"),
+        Some(page_id),
+        serde_json::json!({"attachment": id, "from": version, "version": next}),
+    )
+    .await;
+    Ok(Json(serde_json::json!({ "version": next })))
+}

@@ -177,13 +177,18 @@ struct PendingNotification {
 }
 
 /// Claims notifications older than the digest delay and mails each user a summary of the
-/// unread ones they want by e-mail and can still see.
+/// unread ones they want by e-mail and can still see. People who chose an hourly or daily
+/// summary are only included once that much time has passed since their last one.
 pub async fn digests(state: &AppState) -> anyhow::Result<usize> {
     let rows = sqlx::query_as::<_, PendingNotification>(
         "WITH claimed AS (
             UPDATE notifications SET emailed_at = now() WHERE id IN (
-                SELECT id FROM notifications WHERE emailed_at IS NULL AND created_at < now() - make_interval(secs => $1)
-                ORDER BY created_at LIMIT 500 FOR UPDATE SKIP LOCKED)
+                SELECT n.id FROM notifications n JOIN users du ON du.id = n.user_id
+                 WHERE n.emailed_at IS NULL AND n.created_at < now() - make_interval(secs => $1)
+                   AND (du.email_digest = 'soon'
+                        OR (du.email_digest = 'hourly' AND (du.last_digest_at IS NULL OR du.last_digest_at < now() - interval '1 hour'))
+                        OR (du.email_digest = 'daily' AND (du.last_digest_at IS NULL OR du.last_digest_at < now() - interval '1 day')))
+                 ORDER BY n.created_at LIMIT 500 FOR UPDATE OF n SKIP LOCKED)
             RETURNING id, user_id, kind, page_id, actor_id, data, created_at, read_at)
          SELECT c.user_id, c.kind, c.page_id, c.data, c.read_at, a.name AS actor_name, p.title AS page_title,
                 u.email, u.name AS user_name, u.status, u.email_notifications AS preference
@@ -194,6 +199,15 @@ pub async fn digests(state: &AppState) -> anyhow::Result<usize> {
     .bind(DIGEST_DELAY_SECS as f64)
     .fetch_all(&state.db)
     .await?;
+    // the clock for hourly / daily summaries starts now for everyone whose notifications were claimed
+    let claimed_users: Vec<Uuid> = {
+        let mut ids: Vec<Uuid> = rows.iter().map(|r| r.user_id).collect();
+        ids.dedup();
+        ids
+    };
+    if !claimed_users.is_empty() {
+        sqlx::query("UPDATE users SET last_digest_at = now() WHERE id = ANY($1)").bind(&claimed_users).execute(&state.db).await?;
+    }
     let mut per_user: BTreeMap<Uuid, Vec<PendingNotification>> = BTreeMap::new();
     for r in rows {
         let wanted = match r.preference.as_str() {

@@ -1039,7 +1039,7 @@ paths:
     put:
       tags:
       - Account
-      summary: Set the notification e-mail preference
+      summary: Set notification preferences (only the fields sent change)
       operationId: put_me_preferences
       requestBody:
         required: true
@@ -1053,6 +1053,15 @@ paths:
                   - all
                   - important
                   - none
+                emailDigest:
+                  enum:
+                  - soon
+                  - hourly
+                  - daily
+                  description: how often notification e-mails go out
+                muted:
+                  type: array
+                  items: *id001
       responses:
         '200':
           description: OK
@@ -3316,6 +3325,97 @@ paths:
       - {}
       - session: []
       - token: []
+  /attachments/{id}/versions:
+    get:
+      tags:
+      - Attachments
+      summary: Every uploaded version of a file, newest first
+      operationId: get_attachments_id_versions
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    version: *id005
+                    size: *id005
+                    mediaType: *id001
+                    createdByName:
+                      type:
+                      - string
+                      - 'null'
+                    createdAt: *id004
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /attachments/{id}/versions/{version}/content:
+    get:
+      tags:
+      - Attachments
+      summary: Download an earlier version
+      operationId: get_attachments_id_versions_version_content
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      - name: version
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: file
+          content:
+            application/octet-stream: {}
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /attachments/{id}/versions/{version}/restore:
+    post:
+      tags:
+      - Attachments
+      summary: Make an earlier version current again (as a new version)
+      operationId: post_attachments_id_versions_version_restore
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      - name: version
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  version: *id005
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /search:
     get:
       tags:

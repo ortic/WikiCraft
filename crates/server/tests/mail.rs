@@ -137,6 +137,23 @@ async fn invitations_password_reset_and_notification_mails() {
         .await
         .unwrap();
     assert_eq!(wikicraft::mail::digests(&app.state).await.unwrap(), 0);
+
+    // a daily summary: at most one per day, with everything still unread then
+    let (st, prefs) = app.put(&fresh, "/me/preferences", json!({"emailDigest": "daily"})).await;
+    assert_eq!((st, &prefs["emailDigest"]), (200, &json!("daily")), "{prefs}");
+    assert_eq!(app.put(&fresh, "/me/preferences", json!({"emailDigest": "weekly"})).await.0, 400);
+    sqlx::query("UPDATE users SET last_digest_at = now() - interval '2 hours' WHERE email = $1").bind(&invitee).execute(&app.state.db).await.unwrap();
+    app.post(&owner, "/pages", mention("Daily one")).await;
+    app.post(&owner, "/pages", mention("Daily two")).await;
+    sqlx::query("UPDATE notifications SET created_at = now() - interval '5 minutes' WHERE emailed_at IS NULL").execute(&app.state.db).await.unwrap();
+    assert_eq!(wikicraft::mail::digests(&app.state).await.unwrap(), 0, "the last summary was only two hours ago");
+    let waiting: i64 = sqlx::query_scalar("SELECT count(*) FROM notifications WHERE emailed_at IS NULL").fetch_one(&app.state.db).await.unwrap();
+    assert_eq!(waiting, 2, "kept for the next summary");
+    sqlx::query("UPDATE users SET last_digest_at = now() - interval '25 hours' WHERE email = $1").bind(&invitee).execute(&app.state.db).await.unwrap();
+    assert_eq!(wikicraft::mail::digests(&app.state).await.unwrap(), 1, "both in one e-mail");
+    let text = mail_to(&invitee, "2 updates in WikiCraft").await;
+    assert!(text.contains("Daily one") && text.contains("Daily two"), "{text}");
+
     let (st, _) = app.put(&fresh, "/me/preferences", json!({"emailNotifications": "none"})).await;
     assert_eq!(st, 200);
     app.post(&owner, "/pages", mention("Muted")).await;

@@ -235,6 +235,18 @@ async fn comments_and_attachments() {
     let r = c.get(app.url(&format!("/attachments/{att}/content"))).send().await.unwrap();
     assert_eq!(r.headers()["content-type"], "image/png");
     assert_eq!(r.bytes().await.unwrap().as_ref(), b"\x89PNG v2");
+    // version history: list, download an old one, make it current again (as v3)
+    let (_, versions) = app.get(&c, &format!("/attachments/{att}/versions")).await;
+    let nums: Vec<i64> = versions.as_array().unwrap().iter().map(|v| v["version"].as_i64().unwrap()).collect();
+    assert_eq!(nums, [2, 1]);
+    let r = c.get(app.url(&format!("/attachments/{att}/versions/1/content"))).send().await.unwrap();
+    assert_eq!(r.bytes().await.unwrap().as_ref(), png.as_slice());
+    assert_eq!(app.post(&c, &format!("/attachments/{att}/versions/2/restore"), json!({})).await.0, 400, "already current");
+    let (st, r) = app.post(&c, &format!("/attachments/{att}/versions/1/restore"), json!({})).await;
+    assert_eq!((st, &r["version"]), (200, &json!(3)), "{r}");
+    let r = c.get(app.url(&format!("/attachments/{att}/content"))).send().await.unwrap();
+    assert_eq!(r.bytes().await.unwrap().as_ref(), png.as_slice());
+    assert_eq!(app.get(&c, &format!("/attachments/{att}/versions/9/content")).await.0, 404);
     // html is never served inline
     let form = reqwest::multipart::Form::new().part("file", reqwest::multipart::Part::bytes(b"<script>alert(1)</script>".to_vec()).file_name("x.html"));
     let r = c.post(app.url(&format!("/pages/{home}/attachments"))).multipart(form).send().await.unwrap();

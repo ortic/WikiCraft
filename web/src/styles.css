@@ -726,3 +726,9 @@ tr:hover .star-toggle, .star-toggle:focus-visible, .star-toggle.on { opacity: 1;
 .nav-item .nav-item-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .nav-star { color: #d97706; flex: none; }
 @media (hover: none) { .star-toggle { opacity: 1; } }
+/* attachment versions */
+.link-btn { display: inline-flex; align-items: center; gap: 3px; padding: 0; border: 0; background: none; color: var(--accent-text, var(--accent)); font: inherit; cursor: pointer; }
+.link-btn:hover { text-decoration: underline; }
+.attachment-versions { list-style: none; margin: 8px 0 0; padding: 6px 0 0; border-top: 1px dashed var(--border); display: flex; flex-direction: column; gap: 4px; }
+.attachment-versions li { gap: 8px; align-items: flex-start; }
+.attachment-versions .link-btn, .attachment-versions .badge { white-space: nowrap; flex: none; }

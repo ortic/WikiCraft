@@ -146,7 +146,7 @@ function EmailPreferences() {
     verification_request: 'Requests to review a page',
     access_request: 'Requests for access to my pages',
   }
-  const prefs = useQuery({ queryKey: ['preferences'], queryFn: () => api.get<{ emailNotifications: 'all' | 'important' | 'none'; mailEnabled: boolean; muted: string[]; kinds: string[] }>('/me/preferences') })
+  const prefs = useQuery({ queryKey: ['preferences'], queryFn: () => api.get<{ emailNotifications: 'all' | 'important' | 'none'; emailDigest: 'soon' | 'hourly' | 'daily'; mailEnabled: boolean; muted: string[]; kinds: string[] }>('/me/preferences') })
   const p = prefs.data
   if (!p) return null
   const set = async (v: string) => {
@@ -162,14 +162,32 @@ function EmailPreferences() {
     <div className="card" style={{ marginBottom: 16 }}>
       <h3 style={{ marginTop: 0 }} className="row"><Mail size={17} /> E-mail notifications</h3>
       <p className="muted small" style={{ marginTop: 0 }}>
-        Notifications you haven't seen in WikiCraft after a couple of minutes are e-mailed to you as one summary.
+        Notifications you haven't seen in WikiCraft are e-mailed to you as one summary: a few minutes after, at most once an hour, or once a day.
         {!p.mailEnabled && ' (E-mail is not configured on this server yet.)'}
       </p>
-      <select className="select" style={{ maxWidth: 420 }} value={p.emailNotifications} onChange={(e) => set(e.target.value)} aria-label="E-mail notifications">
-        <option value="important">Mentions, comments and replies (recommended)</option>
-        <option value="all">Everything, including updates to pages I watch</option>
-        <option value="none">Don't e-mail me</option>
-      </select>
+      <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
+        <select className="select" style={{ maxWidth: 420 }} value={p.emailNotifications} onChange={(e) => set(e.target.value)} aria-label="E-mail notifications">
+          <option value="important">Mentions, comments and replies (recommended)</option>
+          <option value="all">Everything, including updates to pages I watch</option>
+          <option value="none">Don't e-mail me</option>
+        </select>
+        {p.emailNotifications !== 'none' && (
+          <select
+            className="select"
+            style={{ maxWidth: 260 }}
+            value={p.emailDigest ?? 'soon'}
+            aria-label="How often"
+            onChange={async (e) => {
+              await api.put('/me/preferences', { emailDigest: e.target.value })
+              qc.invalidateQueries({ queryKey: ['preferences'] })
+            }}
+          >
+            <option value="soon">A few minutes after</option>
+            <option value="hourly">At most once an hour</option>
+            <option value="daily">Once a day</option>
+          </select>
+        )}
+      </div>
       <h4 style={{ margin: '18px 0 6px' }}>Notify me about</h4>
       <p className="muted small" style={{ marginTop: 0 }}>Turned-off events don't appear in WikiCraft and aren't e-mailed.</p>
       <div className="notify-kinds">

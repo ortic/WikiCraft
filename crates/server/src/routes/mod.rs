@@ -131,6 +131,9 @@ pub fn router(state: AppState) -> Router {
         .route("/pages/{id}/attachments", get(attachments::list).post(attachments::upload).layer(DefaultBodyLimit::max(max_upload)))
         .route("/attachments/{id}", delete(attachments::delete))
         .route("/attachments/{id}/content", get(attachments::download))
+        .route("/attachments/{id}/versions", get(attachments::versions))
+        .route("/attachments/{id}/versions/{version}/content", get(attachments::download_version))
+        .route("/attachments/{id}/versions/{version}/restore", post(attachments::restore_version))
         // discovery
         .route("/search", get(search::search))
         .route("/recent", get(search::recent))

@@ -447,6 +447,8 @@ async fn accept_signup(state: &AppState, headers: &HeaderMap, token: &str, ws: U
 #[serde(rename_all = "camelCase")]
 pub struct Preferences {
     email_notifications: Option<String>,
+    /// how often: `soon` (a few minutes after), `hourly` or `daily`
+    email_digest: Option<String>,
     /// notification kinds to drop entirely
     muted: Option<Vec<String>>,
 }
@@ -457,9 +459,9 @@ pub const NOTIFICATION_KINDS: &[&str] =
 
 /// `GET /api/me/preferences`
 pub async fn get_preferences(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Value>> {
-    let (pref, muted): (String, Vec<String>) =
-        sqlx::query_as("SELECT email_notifications, muted_notifications FROM users WHERE id = $1").bind(user.id).fetch_one(&state.db).await?;
-    Ok(Json(json!({ "emailNotifications": pref, "muted": muted, "kinds": NOTIFICATION_KINDS, "mailEnabled": state.mailer.enabled() })))
+    let (pref, digest, muted): (String, String, Vec<String>) =
+        sqlx::query_as("SELECT email_notifications, email_digest, muted_notifications FROM users WHERE id = $1").bind(user.id).fetch_one(&state.db).await?;
+    Ok(Json(json!({ "emailNotifications": pref, "emailDigest": digest, "muted": muted, "kinds": NOTIFICATION_KINDS, "mailEnabled": state.mailer.enabled() })))
 }
 
 /// `PUT /api/me/preferences`
@@ -469,6 +471,12 @@ pub async fn put_preferences(State(state): State<AppState>, CurrentUser(user): C
             return Err(ApiError::bad("emailNotifications must be all, important or none"));
         }
         sqlx::query("UPDATE users SET email_notifications = $2 WHERE id = $1").bind(user.id).bind(p).execute(&state.db).await?;
+    }
+    if let Some(d) = &req.email_digest {
+        if !matches!(d.as_str(), "soon" | "hourly" | "daily") {
+            return Err(ApiError::bad("emailDigest must be soon, hourly or daily"));
+        }
+        sqlx::query("UPDATE users SET email_digest = $2 WHERE id = $1").bind(user.id).bind(d).execute(&state.db).await?;
     }
     if let Some(m) = &req.muted {
         if let Some(bad) = m.iter().find(|k| !NOTIFICATION_KINDS.contains(&k.as_str())) {
