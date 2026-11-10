@@ -7,7 +7,12 @@ import { Decoration, DecorationSet } from '@tiptap/pm/view'
 import type { Node as PMNode } from '@tiptap/pm/model'
 import { BLOCK_ID_ATTR } from './BlockIds'
 
-const key = new PluginKey<DecorationSet>('changeHighlights')
+interface HighlightState {
+  ids: Set<string>
+  set: DecorationSet
+}
+
+const key = new PluginKey<HighlightState>('changeHighlights')
 
 function decorate(doc: PMNode, ids: Set<string>): DecorationSet {
   if (!ids.size) return DecorationSet.empty
@@ -27,18 +32,20 @@ export const ChangeHighlights = Extension.create({
   name: 'changeHighlights',
   addProseMirrorPlugins() {
     return [
-      new Plugin<DecorationSet>({
+      new Plugin<HighlightState>({
         key,
         state: {
-          init: () => DecorationSet.empty,
-          apply(tr, set) {
+          init: () => ({ ids: new Set(), set: DecorationSet.empty }),
+          apply(tr, prev) {
             const ids = tr.getMeta(key) as Set<string> | undefined
-            if (ids) return decorate(tr.doc, ids)
-            return tr.docChanged ? set.map(tr.mapping, tr.doc) : set
+            if (ids) return { ids, set: decorate(tr.doc, ids) }
+            // recomputed, not mapped: the collaboration sync may replace the whole document
+            if (tr.docChanged && prev.ids.size) return { ids: prev.ids, set: decorate(tr.doc, prev.ids) }
+            return prev
           },
         },
         props: {
-          decorations: (state) => key.getState(state),
+          decorations: (state) => key.getState(state)?.set,
         },
       }),
     ]
