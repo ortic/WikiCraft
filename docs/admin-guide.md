@@ -135,6 +135,16 @@ sign-up confirmations and notification digests (mentions, comments, watched page
 Mail goes through an outbox with retries; *Administration → Overview → E-mail* shows failures and
 sends a test message.
 
+## Virus scanning
+
+Set `WIKICRAFT_CLAMAV` to a ClamAV daemon (`tcp://clamd:3310`, or `unix:///run/clamav/clamd.ctl`
+on the same host) and every uploaded file is checked before it is stored, as are the files in
+Markdown, HTML, Notion and Confluence imports and backup restores. Infected uploads are refused;
+imports leave infected files out and report them. Each find is in the audit log
+(`upload.infected`). If clamd can't be reached or a file is larger than its `StreamMaxLength`,
+uploads are refused too; set `WIKICRAFT_CLAMAV_FAIL_OPEN=true` to let files through instead.
+Raise `StreamMaxLength` in `clamd.conf` to match `WIKICRAFT_MAX_UPLOAD_MB`.
+
 ## Backups
 
 Back up two things, at the same point in time if you can:

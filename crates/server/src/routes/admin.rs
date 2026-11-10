@@ -93,6 +93,7 @@ pub async fn system(State(state): State<AppState>, CurrentUser(user): CurrentUse
         "jobs": { "queued": queued, "running": running, "failedLastDay": failed_day },
         "search": { "backend": state.search.backend_name(), "indexed": indexed, "pages": pages },
         "mail": { "enabled": state.mailer.enabled() },
+        "virusScan": { "enabled": state.config.clamav.as_deref().is_some_and(|c| !c.trim().is_empty()), "failOpen": state.config.clamav_fail_open },
         "storage": { "backend": state.blobs.backend_name() },
         "liveRooms": state.rooms.all().len(),
         "signIn": state.providers.iter().map(|p| json!({"id": p.id(), "kind": p.kind(), "name": p.display_name()})).collect::<Vec<_>>(),

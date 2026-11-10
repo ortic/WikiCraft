@@ -1236,6 +1236,18 @@ async fn import_attachments(
                 Some(p) => tokio::task::block_in_place(|| source.read_bytes(p)).ok(),
                 None => None,
             };
+            // infected files are left out like missing ones (and counted)
+            let data = match data {
+                Some(bytes) => match crate::antivirus::screen(state, &bytes).await.map_err(|e| anyhow::anyhow!("{e}"))? {
+                    Some(sig) => {
+                        tracing::warn!(file = %filename, "virus found in an imported attachment: {sig}");
+                        count("attachmentsInfected", 1);
+                        None
+                    }
+                    None => Some(bytes),
+                },
+                None => None,
+            };
             let (key, size, media) = match data {
                 Some(bytes) => {
                     let media = a.media_type.clone().unwrap_or_else(|| crate::routes::attachments::guess_media_type(&filename, &bytes));

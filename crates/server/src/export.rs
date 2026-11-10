@@ -940,12 +940,18 @@ pub async fn run_restore(state: &AppState, job_id: Uuid, actor: Uuid, archive: &
 
     // attachments get new ids; content references are rewritten below
     let mut att_ids: HashMap<Uuid, Uuid> = HashMap::new();
+    let mut infected = 0;
     for (i, a) in m.attachments.iter().enumerate() {
         let Some(&page) = page_ids.get(&a.page_id) else { continue };
         let p = archive.to_path_buf();
         let file = a.file.clone();
         let max = state.config.max_upload_mb.saturating_mul(1024 * 1024);
         let data = tokio::task::spawn_blocking(move || read_entry(&p, &file, max)).await??;
+        if let Some(sig) = crate::antivirus::screen(state, &data).await.map_err(|e| anyhow::anyhow!("{e}"))? {
+            crate::audit::log(state, user.workspace_id, Some(user.id), "upload.infected", Some("page"), Some(page), json!({"file": a.filename, "signature": sig})).await;
+            infected += 1;
+            continue;
+        }
         let new =
             crate::routes::attachments::store_attachment(state, user.workspace_id, page, person(&a.created_by), &a.filename, data, Some(a.created_at), None)
                 .await
@@ -1050,6 +1056,7 @@ pub async fn run_restore(state: &AppState, job_id: Uuid, actor: Uuid, archive: &
         "spaceKey": key,
         "pages": m.pages.len(),
         "attachments": att_ids.len(),
+        "infectedAttachments": infected,
         "comments": restored_comments,
         "unmappedRestrictions": unmapped,
     }))

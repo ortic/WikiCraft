@@ -71,6 +71,15 @@ pub struct Config {
     #[arg(long, env = "WIKICRAFT_SMTP_URL", hide_env_values = true)]
     pub smtp_url: Option<String>,
 
+    /// Virus scanning of uploads and imported files with ClamAV: `tcp://clamd:3310` or
+    /// `unix:///run/clamav/clamd.ctl`. Infected files are refused.
+    #[arg(long, env = "WIKICRAFT_CLAMAV")]
+    pub clamav: Option<String>,
+
+    /// Accept files when the virus scanner can't be reached (default: refuse them).
+    #[arg(long, env = "WIKICRAFT_CLAMAV_FAIL_OPEN", default_value_t = false)]
+    pub clamav_fail_open: bool,
+
     /// Allow webhooks to private / loopback addresses (off by default: SSRF protection).
     #[arg(long, env = "WIKICRAFT_WEBHOOK_ALLOW_PRIVATE", default_value_t = false)]
     pub webhook_allow_private: bool,

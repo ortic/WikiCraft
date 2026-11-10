@@ -1,5 +1,6 @@
 //! WikiCraft server: HTTP API, real-time collaboration, search and importers.
 
+pub mod antivirus;
 pub mod app;
 pub mod audit;
 pub mod auth;

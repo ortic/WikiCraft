@@ -143,6 +143,8 @@ All settings are flags or environment variables:
 | `WIKICRAFT_LOG_FORMAT` | `text` | `json` for structured logs |
 | `WIKICRAFT_METRICS_TOKEN` | — | bearer token for `/api/metrics` |
 | `WIKICRAFT_MAX_UPLOAD_MB` | `2048` | max upload (attachments, imports) |
+| `WIKICRAFT_CLAMAV` | — | virus scanning with ClamAV: `tcp://clamd:3310` or `unix:///run/clamav/clamd.ctl`; infected uploads are refused, imports leave infected files out |
+| `WIKICRAFT_CLAMAV_FAIL_OPEN` | `false` | accept files when clamd can't be reached (default: refuse them) |
 | `WIKICRAFT_SECURE_COOKIES` | `false` | set `true` behind HTTPS (an `https://` base URL also turns on HSTS) |
 | `WIKICRAFT_SESSION_DAYS` | `30` | session lifetime |
 | `WIKICRAFT_SESSION_IDLE_MINUTES` | `0` (off) | sign out sessions inactive this long |

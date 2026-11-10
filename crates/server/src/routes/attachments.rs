@@ -264,6 +264,19 @@ pub async fn upload(
         let Some(name) = field.file_name().map(String::from) else { continue };
         let data = field.bytes().await.map_err(|e| ApiError::bad(format!("upload failed: {e}")))?;
         check_upload(&state, user.workspace_id, space, &clean_filename(&name), data.len() as u64).await?;
+        if let Some(sig) = crate::antivirus::screen(&state, &data).await? {
+            crate::audit::log(
+                &state,
+                user.workspace_id,
+                Some(user.id),
+                "upload.infected",
+                Some("page"),
+                Some(page_id),
+                serde_json::json!({"file": clean_filename(&name), "signature": sig}),
+            )
+            .await;
+            return Err(ApiError::bad(format!("{}: the virus scanner found {sig}; the file was refused", clean_filename(&name))));
+        }
         ids.push(store_attachment(&state, user.workspace_id, page_id, Some(user.id), &name, data, None, None).await?);
     }
     if ids.is_empty() {

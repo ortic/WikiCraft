@@ -633,7 +633,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P0** Upload safety: content sniffing, `Content-Disposition: attachment` for risky types, serve user files from a separate origin/subdomain, SVG sanitization (no separate user-content origin)
 - [x] **P0** Rate limiting and brute-force protection on auth; account lockout policies
 - [~] **P0** Secure secrets handling (env/files, never in DB in plaintext); TLS everywhere; HSTS (HSTS sent when the base URL is https; TLS at the proxy; secrets via env or `_FILE`)
-- [ ] **P1** Antivirus scanning hook (ClamAV) for uploads `X`
+- [x] **P1** Antivirus scanning hook (ClamAV) for uploads `X` — `WIKICRAFT_CLAMAV` (clamd INSTREAM over TCP or a Unix socket): uploads, Markdown/HTML/Notion/Confluence imports and backup restores; infected uploads refused, imports skip and report them, audited (`upload.infected`); fails closed unless `WIKICRAFT_CLAMAV_FAIL_OPEN`
 - [~] **P1** Iframe/embed allowlist; SSRF protection for link unfurling (block private IP ranges, DNS rebinding) (embed allowlist; unfurling not built)
 - [~] **P1** Import hardening: zip-slip, zip bombs, XML entity expansion disabled, per-file and total size limits, timeouts (Confluence zip entry caps incomplete)
 - [x] **P1** Audit log of security-relevant events (logins, permission changes, exports, admin actions) `C D(EE) X B` — logins, permission and restriction changes, shares, admin actions and settings, space/page exports (`space.exported`, `page.exported` with format), restores, job cancel/retry; Admin → Audit

@@ -1228,3 +1228,103 @@ async fn system_information_for_admins() {
     assert_eq!(s["mail"]["enabled"], false);
     assert!(s["storage"]["backend"].is_string());
 }
+
+/// A stand-in for clamd: answers INSTREAM, finding anything containing "EICAR".
+async fn fake_clamd() -> std::net::SocketAddr {
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    let l = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let addr = l.local_addr().unwrap();
+    tokio::spawn(async move {
+        while let Ok((mut s, _)) = l.accept().await {
+            tokio::spawn(async move {
+                let mut cmd = [0u8; 10];
+                if s.read_exact(&mut cmd).await.is_err() || &cmd != b"zINSTREAM\0" {
+                    return;
+                }
+                let mut data = Vec::new();
+                loop {
+                    let mut len = [0u8; 4];
+                    if s.read_exact(&mut len).await.is_err() {
+                        return;
+                    }
+                    let n = u32::from_be_bytes(len) as usize;
+                    if n == 0 {
+                        break;
+                    }
+                    let mut chunk = vec![0u8; n];
+                    if s.read_exact(&mut chunk).await.is_err() {
+                        return;
+                    }
+                    data.extend(chunk);
+                }
+                let reply: &[u8] = if data.windows(5).any(|w| w == b"EICAR") { b"stream: Eicar-Test-Signature FOUND\0" } else { b"stream: OK\0" };
+                let _ = s.write_all(reply).await;
+            });
+        }
+    });
+    addr
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn uploads_are_scanned_for_viruses() {
+    let clamd = fake_clamd().await;
+    let app = common::spawn_with(|c| c.clamav = Some(format!("tcp://{clamd}"))).await;
+    let owner = app.setup().await;
+    app.post(&owner, "/spaces", json!({"key": "AV", "name": "Scanned"})).await;
+    let (_, page) = app.post(&owner, "/pages", json!({"spaceKey": "AV", "title": "Files"})).await;
+    let page = page["id"].as_str().unwrap().to_string();
+    let upload = |app: &common::TestApp, c: &reqwest::Client, page: &str, name: &str, data: &[u8]| {
+        let form = reqwest::multipart::Form::new().part("file", reqwest::multipart::Part::bytes(data.to_vec()).file_name(name.to_string()));
+        c.post(app.url(&format!("/pages/{page}/attachments"))).multipart(form).send()
+    };
+    // a large clean file goes through in chunks
+    let big = vec![b'a'; 300 * 1024];
+    assert_eq!(upload(&app, &owner, &page, "clean.bin", &big).await.unwrap().status(), 201);
+    let eicar = b"X5O!P%@AP[4\\PZX54(P^)7CC)7}$EICAR-STANDARD-ANTIVIRUS-TEST-FILE!$H+H*";
+    let r = upload(&app, &owner, &page, "invoice.pdf", eicar).await.unwrap();
+    assert_eq!(r.status(), 400);
+    assert!(r.text().await.unwrap().contains("found Eicar-Test-Signature"));
+    let (_, atts) = app.get(&owner, &format!("/pages/{page}/attachments")).await;
+    assert_eq!(atts.as_array().unwrap().len(), 1, "the infected file isn't stored");
+    let (_, audit) = app.get(&owner, "/admin/audit").await;
+    let ev = audit.as_array().unwrap().iter().find(|e| e["action"] == "upload.infected").cloned().unwrap();
+    assert_eq!(ev["data"]["file"], "invoice.pdf");
+
+    // imports leave infected files out and say so
+    let mut w = zip::ZipWriter::new(std::io::Cursor::new(Vec::new()));
+    let o = zip::write::SimpleFileOptions::default();
+    use std::io::Write;
+    w.start_file("Guide.md", o).unwrap();
+    w.write_all(b"# Guide\n\n![a](a.png) ![b](b.png)\n").unwrap();
+    w.start_file("a.png", o).unwrap();
+    w.write_all(b"\x89PNG\r\n\x1a\nfine").unwrap();
+    w.start_file("b.png", o).unwrap();
+    w.write_all(eicar).unwrap();
+    let zip = w.finish().unwrap().into_inner();
+    let form = reqwest::multipart::Form::new().text("spaceKey", "AV").part("file", reqwest::multipart::Part::bytes(zip).file_name("guide.zip"));
+    let res: Value = owner.post(app.url("/imports/markdown")).multipart(form).send().await.unwrap().json().await.unwrap();
+    assert_eq!(res["attachments"], 1, "{res}");
+    assert!(res["skippedFiles"][0].as_str().unwrap().contains("b.png: the virus scanner found"), "{res}");
+
+    // no scanner reachable: refused, unless the wiki fails open
+    let gone = {
+        let l = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        l.local_addr().unwrap()
+    };
+    let closed = common::spawn_with(|c| c.clamav = Some(format!("tcp://{gone}"))).await;
+    let o2 = closed.setup().await;
+    closed.post(&o2, "/spaces", json!({"key": "AV", "name": "Scanned"})).await;
+    let (_, p2) = closed.post(&o2, "/pages", json!({"spaceKey": "AV", "title": "Files"})).await;
+    let r = upload(&closed, &o2, p2["id"].as_str().unwrap(), "notes.txt", b"hello").await.unwrap();
+    assert_eq!(r.status(), 400);
+    assert!(r.text().await.unwrap().contains("virus scanner couldn't check"));
+    let open = common::spawn_with(|c| {
+        c.clamav = Some(format!("tcp://{gone}"));
+        c.clamav_fail_open = true;
+    })
+    .await;
+    let o3 = open.setup().await;
+    open.post(&o3, "/spaces", json!({"key": "AV", "name": "Scanned"})).await;
+    let (_, p3) = open.post(&o3, "/pages", json!({"spaceKey": "AV", "title": "Files"})).await;
+    assert_eq!(upload(&open, &o3, p3["id"].as_str().unwrap(), "notes.txt", b"hello").await.unwrap().status(), 201);
+}

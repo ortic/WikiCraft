@@ -734,6 +734,22 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
                         }
                         continue;
                     }
+                    if let Some(sig) = crate::antivirus::screen(state, &data).await? {
+                        crate::audit::log(
+                            state,
+                            user.workspace_id,
+                            Some(user.id),
+                            "upload.infected",
+                            Some("page"),
+                            Some(id),
+                            json!({"file": clean, "signature": sig}),
+                        )
+                        .await;
+                        if skipped_files.len() < 50 {
+                            skipped_files.push(format!("{clean}: the virus scanner found {sig}"));
+                        }
+                        continue;
+                    }
                     let a = crate::routes::attachments::store_attachment(state, user.workspace_id, id, Some(user.id), &fname, data, None, None).await?;
                     attachments += 1;
                     stored.insert(key, a);

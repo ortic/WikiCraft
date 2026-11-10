@@ -184,6 +184,7 @@ interface SystemState {
   jobs: { queued: number; running: number; failedLastDay: number }
   search: { backend: string; indexed: number | null; pages: number }
   mail: { enabled: boolean }
+  virusScan?: { enabled: boolean; failOpen: boolean }
   storage: { backend: string }
   liveRooms: number
   signIn: { id: string; kind: string; name: string }[]
@@ -202,6 +203,7 @@ function SystemInfo() {
     ['Search', `${s.search.backend} · ${s.search.indexed ?? '?'} of ${s.search.pages} pages indexed${behind ? ' (catching up, or rebuild the index)' : ''}`],
     ['E-mail', s.mail.enabled ? 'configured' : 'off (WIKICRAFT_SMTP_URL not set)'],
     ['File storage', s.storage.backend],
+    ['Virus scanning', s.virusScan?.enabled ? `ClamAV${s.virusScan.failOpen ? ' (files pass when it is down)' : ''}` : 'off (WIKICRAFT_CLAMAV not set)'],
     ['Sign-in', s.signIn.length ? `passwords and ${s.signIn.map((p) => `${p.name} (${p.kind})`).join(', ')}` : 'passwords'],
     ['Replicas', s.cluster ? `clustered (this node ${s.node.slice(0, 8)})` : 'single server'],
     ['Live editing', `${s.liveRooms} ${s.liveRooms === 1 ? 'page' : 'pages'} open`],
