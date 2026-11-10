@@ -300,7 +300,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Insert / delete rows & columns, header row / column, resize columns `C D X O`
 - [~] **P1** Merge / split cells, cell background color, cell alignment `C D` (no cell alignment)
 - [ ] **P1** Numbered rows, sort by column (view-time), sticky header `C` — partial: the table toolbar sorts rows by the current column (A–Z / Z–A, numbers and percentages numerically, header rows stay)
-- [ ] **P1** Table width modes (fixed / wide / full) `C`
+- [x] **P1** Table width modes (fixed / wide / full) `C` — toolbar toggle Normal / Wide / Full width; Confluence `data-layout` imports keep it
 - [x] **P1** Paste from spreadsheets preserving cells `C D` — HTML tables from Excel / Google Sheets / LibreOffice, and plain tab-separated rows (first row becomes the header)
 - [ ] **P2** Table → chart conversion `C`
 - [ ] **P2** Large table performance (1,000+ rows) `C`

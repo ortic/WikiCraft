@@ -671,3 +671,10 @@ table.list tr.list-group td { padding: 18px 8px 6px; font-size: 12px; font-weigh
 .activity-body { flex: 1; min-width: 0; display: grid; gap: 2px; overflow-wrap: anywhere; }
 .activity-verb { color: var(--text-soft); display: inline-flex; align-items: center; gap: 4px; }
 .activity-detail { color: var(--text-soft); font-size: 13px; border-left: 2px solid var(--border-strong); padding-left: 8px; margin: 2px 0; }
+
+/* table width modes (Confluence data-layout): break out of the text column on wide screens */
+@media (min-width: 861px) {
+  .ProseMirror .tableWrapper[data-layout="wide"] { --tw: max(100%, min(1180px, calc(100vw - 280px - 96px))); }
+  .ProseMirror .tableWrapper[data-layout="full-width"] { --tw: max(100%, calc(100vw - 280px - 96px)); }
+  .ProseMirror .tableWrapper[data-layout] { width: var(--tw); margin-left: calc((100% - var(--tw)) / 2); position: relative; }
+}

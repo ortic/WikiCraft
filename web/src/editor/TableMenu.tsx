@@ -1,5 +1,5 @@
 import { BubbleMenu } from '@tiptap/react/menus'
-import type { Editor } from '@tiptap/react'
+import { useEditorState, type Editor } from '@tiptap/react'
 import { ArrowDownAZ, ArrowDownToLine, ArrowDownZA, ArrowLeftToLine, ArrowRightToLine, ArrowUpToLine, Columns3, Combine, PaintBucket, Rows3, Split, Trash2 } from 'lucide-react'
 import { useState } from 'react'
 import { Fragment, type Node as PMNode } from '@tiptap/pm/model'
@@ -65,6 +65,8 @@ const CELL_COLORS = [
 /** Floating toolbar above the table the cursor is in: rows, columns, headers, merge, colour. */
 export function TableMenu({ editor }: { editor: Editor }) {
   const [colors, setColors] = useState(false)
+  // re-render when the table's width mode changes (the menu doesn't otherwise follow attribute updates)
+  const layout = useEditorState({ editor, selector: (ctx) => (ctx.editor.getAttributes('table').layout as string | null) ?? 'default' })
   const tableRect = () => {
     const { from } = editor.state.selection
     const dom = editor.view.domAtPos(from).node as HTMLElement | null
@@ -127,6 +129,16 @@ export function TableMenu({ editor }: { editor: Editor }) {
             </span>
           )}
         </span>
+        <span className="sep" />
+        {(() => {
+          const next = layout === 'default' ? 'wide' : layout === 'wide' ? 'full-width' : 'default'
+          const label = layout === 'wide' ? 'Wide' : layout === 'full-width' ? 'Full width' : 'Normal'
+          return (
+            <button type="button" className="icon-btn text-btn" title={`Table width: ${label} (click for ${next === 'default' ? 'normal' : next.replace('-', ' ')})`} onMouseDown={(e) => e.preventDefault()} onClick={run((c) => c.updateAttributes('table', { layout: next === 'default' ? null : next }))}>
+              {label}
+            </button>
+          )
+        })()}
         <span className="sep" />
         {b('Delete table', run((c) => c.deleteTable()), <Trash2 size={15} />, true)}
       </div>

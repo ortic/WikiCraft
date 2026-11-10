@@ -6,7 +6,7 @@ import DragHandle from '@tiptap/extension-drag-handle-react'
 import StarterKit from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCaret from '@tiptap/extension-collaboration-caret'
-import { TableKit, TableCell, TableHeader } from '@tiptap/extension-table'
+import { TableKit, TableCell, TableHeader, Table, TableView } from '@tiptap/extension-table'
 import { CellSelection } from '@tiptap/pm/tables'
 import { TaskList, TaskItem } from '@tiptap/extension-list'
 import Image from '@tiptap/extension-image'
@@ -69,6 +69,28 @@ function tsvTable(rows: string[][]) {
 function hasRichHtml(html: string): boolean {
   return /<(h[1-6]|ul|ol|li|table|p|strong|b|em|i|a|pre|blockquote|img)\b/i.test(html)
 }
+
+/** Table width (Confluence's `data-layout`): normal, `wide` or `full-width`, shown on the wrapper. */
+class LayoutTableView extends TableView {
+  constructor(...args: ConstructorParameters<typeof TableView>) {
+    super(...args)
+    const layout = args[0].attrs.layout as string | null
+    if (layout && layout !== 'default') this.dom.dataset.layout = layout
+  }
+}
+
+const LayoutTable = Table.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      layout: {
+        default: null,
+        parseHTML: (el: HTMLElement) => el.getAttribute('data-layout'),
+        renderHTML: (attrs: Record<string, unknown>) => (attrs.layout ? { 'data-layout': attrs.layout } : {}),
+      },
+    }
+  },
+}).configure({ resizable: true, View: LayoutTableView })
 
 const withBackground = <T extends typeof TableCell>(ext: T) =>
   ext.extend({
@@ -163,7 +185,8 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
         Collaboration.configure({ document: ydoc, field: 'default' }),
         CollaborationCaret.configure({ provider, user: me }),
         CodeBlock.configure({ lowlight }),
-        TableKit.configure({ table: { resizable: true }, tableCell: false, tableHeader: false }),
+        TableKit.configure({ table: false, tableCell: false, tableHeader: false }),
+        LayoutTable,
         withBackground(TableCell),
         withBackground(TableHeader as unknown as typeof TableCell),
         TaskList,
