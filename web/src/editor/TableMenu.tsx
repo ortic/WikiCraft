@@ -1,6 +1,6 @@
 import { BubbleMenu } from '@tiptap/react/menus'
 import { useEditorState, type Editor } from '@tiptap/react'
-import { ArrowDownAZ, ArrowDownToLine, ArrowDownZA, ArrowLeftToLine, ArrowRightToLine, ArrowUpToLine, Columns3, Combine, PaintBucket, Rows3, Split, Trash2 } from 'lucide-react'
+import { ArrowDownAZ, ArrowDownToLine, ArrowDownZA, ArrowLeftToLine, ArrowRightToLine, ArrowUpToLine, Columns3, Combine, PaintBucket, Rows3, Split, Trash2, ListOrdered } from 'lucide-react'
 import { useState } from 'react'
 import { Fragment, type Node as PMNode } from '@tiptap/pm/model'
 
@@ -67,6 +67,7 @@ export function TableMenu({ editor }: { editor: Editor }) {
   const [colors, setColors] = useState(false)
   // re-render when the table's width mode changes (the menu doesn't otherwise follow attribute updates)
   const layout = useEditorState({ editor, selector: (ctx) => (ctx.editor.getAttributes('table').layout as string | null) ?? 'default' })
+  const numbered = useEditorState({ editor, selector: (ctx) => !!ctx.editor.getAttributes('table').numbered })
   const tableRect = () => {
     const { from } = editor.state.selection
     const dom = editor.view.domAtPos(from).node as HTMLElement | null
@@ -139,6 +140,17 @@ export function TableMenu({ editor }: { editor: Editor }) {
             </button>
           )
         })()}
+        <button
+          type="button"
+          className={`icon-btn${numbered ? ' active' : ''}`}
+          title="Numbered rows"
+          aria-label="Numbered rows"
+          aria-pressed={numbered}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={run((c) => c.updateAttributes('table', { numbered: numbered ? null : true }))}
+        >
+          <ListOrdered size={15} />
+        </button>
         <span className="sep" />
         {b('Delete table', run((c) => c.deleteTable()), <Trash2 size={15} />, true)}
       </div>

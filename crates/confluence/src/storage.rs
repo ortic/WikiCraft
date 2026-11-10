@@ -680,6 +680,10 @@ impl Conv<'_> {
         if let Some(l) = el.attr("data-layout") {
             t = t.attr("layout", l);
         }
+        // the editor's "numbered rows" option
+        if el.attr("data-number-column").is_some_and(|v| v.eq_ignore_ascii_case("true")) {
+            t = t.attr("numbered", true);
+        }
         t
     }
 
@@ -1284,6 +1288,16 @@ mod tests {
         // an emoji a Cloud user typed is their content and stays text; unknown names are dropped
         let text: String = p.content.iter().filter_map(|n| n.text.clone()).collect();
         assert!(text.contains('\u{1F680}') && !text.contains("unknown"), "{text}");
+    }
+
+    #[test]
+    fn numbered_tables() {
+        let (doc, _) = conv(
+            r#"<table data-number-column="true" data-layout="wide"><tbody><tr><th><p>Step</p></th></tr><tr><td><p>One</p></td></tr></tbody></table><table><tbody><tr><td><p>x</p></td></tr></tbody></table>"#,
+        );
+        assert_eq!(doc.content[0].attr_bool("numbered"), Some(true));
+        assert_eq!(doc.content[0].attr_str("layout"), Some("wide"));
+        assert_eq!(doc.content[1].attr_bool("numbered"), None);
     }
 
     #[test]

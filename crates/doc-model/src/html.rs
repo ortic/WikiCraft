@@ -177,7 +177,10 @@ impl Renderer<'_> {
             nodes::HORIZONTAL_RULE => self.out.push_str("<hr>"),
             nodes::HARD_BREAK => self.out.push_str("<br>"),
             nodes::IMAGE => self.image(n),
-            nodes::TABLE => self.wrap("<table><tbody>", n, "</tbody></table>"),
+            nodes::TABLE => {
+                let open = if n.attr_bool("numbered") == Some(true) { "<table data-numbered=\"true\"><tbody>" } else { "<table><tbody>" };
+                self.wrap(open, n, "</tbody></table>")
+            }
             nodes::TABLE_ROW => self.wrap("<tr>", n, "</tr>"),
             nodes::TABLE_HEADER | nodes::TABLE_CELL => {
                 let tag = if n.kind == nodes::TABLE_HEADER { "th" } else { "td" };
@@ -403,6 +406,10 @@ mod tests {
             Node::heading(3, vec![Node::text("b")]).attr("indent", 99),
             Node::paragraph(vec![Node::text("c")]).attr("indent", -1),
         ]);
+        let table = Node::doc(vec![Node::new(nodes::TABLE).attr("numbered", true).with_content(vec![
+            Node::new(nodes::TABLE_ROW).with_content(vec![Node::new(nodes::TABLE_CELL).with_content(vec![Node::paragraph(vec![Node::text("a")])])]),
+        ])]);
+        assert!(render(&table, &HtmlOptions::default()).starts_with("<table data-numbered=\"true\"><tbody>"));
         let out = render(&indented, &HtmlOptions::default());
         assert!(out.contains("<p style=\"text-align:center;margin-left:60px\">a</p>"), "{out}");
         assert!(out.contains("<h3 style=\"margin-left:240px\">b</h3>"), "capped at 8 levels: {out}");

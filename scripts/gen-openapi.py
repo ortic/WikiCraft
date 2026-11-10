@@ -241,7 +241,7 @@ op("/templates/{id}/preview", "get", "Templates", "What a page from the template
 # import / export / jobs
 op("/imports/confluence", "post", "Import & export", "Import a Confluence space export (XML or Cloud CSV zip) as a job", req=multipart({"options": {"type": "string", "description": "JSON ImportOptions"}}), res=resp(obj({"jobId": uuid}), "202", "Queued"))
 op("/imports/confluence/analyze", "post", "Import & export", "Dry run: what an import would create", req=multipart({}))
-op("/imports/markdown", "post", "Import & export", "Import Word, Markdown, HTML, Notion or Obsidian (.docx, .md, .html or a .zip of them, incl. Confluence HTML exports)", req=multipart({"spaceKey": txt, "parentId": uuid}), res=resp(obj({"pages": num, "attachments": num, "skippedFiles": arr(txt)}), "201", "Created"))
+op("/imports/markdown", "post", "Import & export", "Import Word, Markdown, HTML, Notion or Obsidian (.docx, .md, .html or a .zip of them, incl. Confluence HTML exports)", req=multipart({"spaceKey": txt, "parentId": uuid, "splitHeadings": {"type": "string", "description": "Word: 1-3 = a page per heading of that level or above"}}), res=resp(obj({"pages": num, "attachments": num, "skippedFiles": arr(txt)}), "201", "Created"))
 op("/imports/backup", "post", "Import & export", "Restore a space backup as a new space (job)", req=multipart({"spaceKey": txt, "spaceName": txt}), res=resp(obj({"jobId": uuid, "spaceKey": txt}), "202", "Queued"))
 op("/jobs", "get", "Import & export", "Recent jobs (admins)", res=resp(arr(S("Job"))))
 op("/jobs/{id}", "get", "Import & export", "A job", res=resp(S("Job")))

@@ -81,8 +81,20 @@ function hasRichHtml(html: string): boolean {
 class LayoutTableView extends TableView {
   constructor(...args: ConstructorParameters<typeof TableView>) {
     super(...args)
-    const layout = args[0].attrs.layout as string | null
+    this.sync(args[0])
+  }
+  /** width and row numbers live on the wrapper (the table element is the view's own) */
+  private sync(node: PMNode) {
+    const layout = node.attrs.layout as string | null
     if (layout && layout !== 'default') this.dom.dataset.layout = layout
+    else delete this.dom.dataset.layout
+    if (node.attrs.numbered) this.dom.dataset.numbered = 'true'
+    else delete this.dom.dataset.numbered
+  }
+  update(node: PMNode) {
+    if (!super.update(node)) return false
+    this.sync(node)
+    return true
   }
 }
 
@@ -94,6 +106,12 @@ const LayoutTable = Table.extend({
         default: null,
         parseHTML: (el: HTMLElement) => el.getAttribute('data-layout'),
         renderHTML: (attrs: Record<string, unknown>) => (attrs.layout ? { 'data-layout': attrs.layout } : {}),
+      },
+      /** a number in front of every row with data cells */
+      numbered: {
+        default: null,
+        parseHTML: (el: HTMLElement) => (el.getAttribute('data-numbered') === 'true' || el.getAttribute('data-number-column') === 'true' ? true : null),
+        renderHTML: (attrs: Record<string, unknown>) => (attrs.numbered ? { 'data-numbered': 'true' } : {}),
       },
     }
   },

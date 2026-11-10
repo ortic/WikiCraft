@@ -466,6 +466,36 @@ test('a page moves to another space from the page menu', async ({ browser }) => 
   await ctx.close()
 })
 
+test('a table gets numbered rows from its toolbar', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState })
+  const page = await ctx.newPage()
+  await page.goto('/')
+  const id = await page.evaluate(async () => {
+    const cell = (t: string, kind = 'tableCell') => ({ type: kind, content: [{ type: 'paragraph', content: [{ type: 'text', text: t }] }] })
+    const content = { type: 'doc', content: [{ type: 'table', content: [
+      { type: 'tableRow', content: [cell('Step', 'tableHeader')] },
+      { type: 'tableRow', content: [cell('Unpack')] },
+      { type: 'tableRow', content: [cell('Plug in')] },
+    ] }] }
+    const r = await fetch('/api/pages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-wikicraft': '1' }, body: JSON.stringify({ spaceKey: 'PRODUCT', title: 'Setup steps', content }) })
+    return (await r.json()).id as string
+  })
+  await page.goto(`/pages/${id}`)
+  const editor = page.locator('.ProseMirror[contenteditable="true"]')
+  await editor.getByText('Unpack').click()
+  await page.getByRole('button', { name: 'Numbered rows' }).click()
+  const wrapper = page.locator('.tableWrapper')
+  await expect(wrapper).toHaveAttribute('data-numbered', 'true')
+  const label = await page.evaluate(() => getComputedStyle(document.querySelectorAll('.tableWrapper td')[1], '::before').content)
+  expect(label).toContain('counter')
+  await expect
+    .poll(async () => page.evaluate(async (pid) => JSON.stringify((await (await fetch(`/api/pages/${pid}`)).json()).content), id), { timeout: 15_000 })
+    .toContain('"numbered":true')
+  await page.getByRole('button', { name: 'Numbered rows' }).click()
+  await expect(wrapper).not.toHaveAttribute('data-numbered', 'true')
+  await ctx.close()
+})
+
 test('blocks changed since your last visit are highlighted', async ({ browser }) => {
   const ctx = await browser.newContext({ storageState: ownerState })
   const page = await ctx.newPage()

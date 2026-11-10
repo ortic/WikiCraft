@@ -905,3 +905,10 @@ button.page-prop-key-btn:hover, button.page-prop-key-btn:focus-visible { backgro
 .kv-table { border-collapse: collapse; width: 100%; font-size: 13.5px; }
 .kv-table th { text-align: left; font-weight: 500; color: var(--text-soft); padding: 5px 16px 5px 0; vertical-align: top; white-space: nowrap; width: 1%; }
 .kv-table td { padding: 5px 0; overflow-wrap: anywhere; }
+/* tables with numbered rows (every row with data cells) */
+.tableWrapper[data-numbered] table, table[data-numbered] { counter-reset: wc-row; }
+.tableWrapper[data-numbered] tr:has(> td), table[data-numbered] tr:has(> td) { counter-increment: wc-row; }
+.tableWrapper[data-numbered] tr:has(> td) > :first-child, table[data-numbered] tr:has(> td) > :first-child { position: relative; padding-left: 2.6em; }
+.tableWrapper[data-numbered] tr:has(> td) > :first-child::before, table[data-numbered] tr:has(> td) > :first-child::before {
+  content: counter(wc-row); position: absolute; left: 0.6em; top: 0.55em; font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; user-select: none;
+}
