@@ -145,6 +145,7 @@ All settings are flags or environment variables:
 | `WIKICRAFT_DISABLE_PASSWORD_LOGIN` | `false` | turn off local passwords (SSO / LDAP only) |
 | `WIKICRAFT_SMTP_URL` | — | outgoing mail: `smtps://user:pass@host` (TLS), `smtp://user:pass@host:587?tls=required` (STARTTLS) or `smtp://host:25` (plain, local relays) |
 | `WIKICRAFT_MAIL_FROM` | `WikiCraft <wikicraft@localhost>` | sender address |
+| `WIKICRAFT_UNFURL_ALLOW_PRIVATE` | `false` | let link previews fetch private / loopback addresses (closed intranets only) |
 | `WIKICRAFT_AI_API_KEY` | — | Anthropic API key: turns on *Ask the wiki* (off when unset; nothing leaves the server) |
 | `WIKICRAFT_AI_MODEL` / `WIKICRAFT_AI_BASE_URL` | `claude-opus-5-5` / `https://api.anthropic.com` | model and API endpoint (e.g. a gateway) for *Ask the wiki* |
 

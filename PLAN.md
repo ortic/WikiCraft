@@ -489,7 +489,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P0** Home dashboard: recent pages, starred, drafts, tasks assigned to me `C D O` (no drafts; personal space for unpublished work)
 - [x] **P0** Recently viewed / recently edited `C D O`
 - [~] **P1** Starred/favorite pages and spaces `C D O` (pages only)
-- [ ] **P1** Activity feed (following people/spaces; popular in my org) `C X`
+- [ ] **P1** Activity feed (following people/spaces; popular in my org) `C X` — partial: Home → Activity (everything visible, or watched pages and spaces) and Popular; following people not yet
 - [~] **P1** "For you" / popular pages `C` (popular pages; no personalisation)
 - [~] **P1** Command palette (Ctrl/Cmd+K): jump to page/space/action `C O` (page search only; no actions)
 - [~] **P1** Dark mode, theme switching, high-contrast `C D O` (no high-contrast theme)
@@ -558,7 +558,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P3** Git sync (two-way Markdown sync with a repository) `Wiki.js`
 
 ### 4.20 Integrations
-- [ ] **P1** Smart links / unfurling via oEmbed + OpenGraph, with provider plugins `C D O`
+- [ ] **P1** Smart links / unfurling via oEmbed + OpenGraph, with provider plugins `C D O` — partial: OpenGraph / `<title>` link cards (no oEmbed providers yet)
 - [ ] **P1** Issue trackers: Jira (issue macro, create issue from selection, issue status lozenge), GitHub, GitLab, Linear `C`
 - [ ] **P1** Slack / Microsoft Teams / Mattermost: link unfurl, notifications, search from chat `C O`
 - [~] **P1** Diagrams: draw.io, Excalidraw, Mermaid, PlantUML (server-side, sandboxed) `D X` (Mermaid client-side only)

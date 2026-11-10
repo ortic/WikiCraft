@@ -64,9 +64,21 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   link previews (server-side OpenGraph fetch with the webhook SSRF guards, cached); announcement banner;
   feature switches (public links, exports, Ask the wiki, personal spaces); space categories; spreadsheet
   (tab-separated) paste; table sort by column; instructional text (template hints, Confluence `ac:placeholder`);
-  decision log (`decisionreport`) + `/decision`, `/decision log`, `/task report`; workspace name and logo.
+  decision log (`decisionreport`) + `/decision`, `/decision log`, `/task report`; workspace name and logo; activity feed;
+  security review 4 (5 findings, all fixed).
 - Note: running the whole test suite saturates this WSL machine (load ~100); a parallel demo server then hits DB
   pool timeouts, and the mail test's 4-second wait can flake. Both pass when the machine is idle.
+
+## Security review 4 (independent review agent, 2026-11-10 ~03:40 UTC: link previews, banner, switches, decision log, branding) — status
+No critical or high findings. All five fixed in `9f0b9a9`:
+1. Medium (only with `WIKICRAFT_WEBHOOK_ALLOW_PRIVATE=true`): link previews shared the webhook private-network flag → own
+   `WIKICRAFT_UNFURL_ALLOW_PRIVATE` (default off).
+2. Low: preview errors disclosed resolved internal addresses / acted as a port oracle → generic "preview unavailable".
+3. Low–Medium (DoS): decision log scanned and loaded up to 2000 full documents → space required, 300 pages max,
+   only decision items selected in SQL.
+4. Low: export downloads didn't re-check the exports switch → checked; admin hint says the switch doesn't stop reading.
+5. Low: link preview cache never pruned → batch prune of expired rows (index on `fetched_at`).
+Note (not a vulnerability): instructional text is hidden from readers by the UI and exports, but is part of the page JSON.
 
 ## Security review 3 (independent review agent, 2026-11-10 night: Word import/export, AI, sign-up, archive, …) — status
 No authorization bypass found; all new read paths check visibility. Fixed:
