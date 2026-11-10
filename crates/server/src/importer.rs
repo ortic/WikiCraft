@@ -232,6 +232,15 @@ fn rewrite(doc: &mut Node, l: &Links, st: &mut RewriteStats) {
                     n.attrs.insert("missing".into(), Value::Bool(true));
                 }
             }
+            nodes::DRAWING => {
+                // an imported draw.io diagram: its preview image and the diagram file
+                for attr in ["preview", "source"] {
+                    if let Some(v) = n.attr_str(attr).filter(|v| v.starts_with("wcimport:")).map(String::from) {
+                        let new = rewrite_href(&v, l, st);
+                        n.attrs.insert(attr.into(), new.map(Value::String).unwrap_or(Value::Null));
+                    }
+                }
+            }
             nodes::INCLUDE => {
                 if let Some(r) = n.attr_str("pageRef").map(String::from) {
                     if let Some(h) = rewrite_href(&r, l, st) {

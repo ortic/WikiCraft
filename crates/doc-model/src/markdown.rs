@@ -522,7 +522,8 @@ impl MdWriter {
             nodes::IMAGE => self.line(prefix, &inline_md(std::slice::from_ref(n))),
             nodes::DRAWING => {
                 if let Some(src) = n.attr_str("preview") {
-                    self.line(prefix, &format!("![Drawing]({src})"));
+                    let alt = n.attr_str("title").unwrap_or("Drawing").replace(['[', ']'], "");
+                    self.line(prefix, &format!("![{alt}]({src})"));
                 }
             }
             nodes::TOC => self.line(prefix, "<!-- table of contents -->"),

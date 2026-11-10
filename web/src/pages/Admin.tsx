@@ -216,7 +216,8 @@ function AnnouncementSettings() {
 function WorkspaceSettings() {
   const qc = useQueryClient()
   const toast = useToast()
-  const settings = useQuery({ queryKey: ['admin-settings'], queryFn: () => api.get<Features & { trashRetentionDays: number; viewerList: boolean; requireTwoFactor: 'off' | 'admins' | 'everyone' }>('/admin/settings') })
+  const settings = useQuery({ queryKey: ['admin-settings'], queryFn: () => api.get<Features & { trashRetentionDays: number; viewerList: boolean; requireTwoFactor: 'off' | 'admins' | 'everyone'; drawioUrl: string | null }>('/admin/settings') })
+  const [drawio, setDrawio] = useState<string | null>(null)
   const [retention, setRetention] = useState<string | null>(null)
   if (!settings.data) return null
   const set = async (key: keyof Features | 'viewerList', on: boolean, message: string) => {
@@ -259,6 +260,39 @@ function WorkspaceSettings() {
         Show who viewed a page (to the people who can edit it)
       </label>
       <p className="faint small" style={{ margin: '2px 0 12px 24px' }}>Off by default: it shows people's reading habits. View counts are always shown.</p>
+      <div className="field">
+        <label htmlFor="drawio-url">draw.io diagrams</label>
+        <div className="row" style={{ flexWrap: 'wrap', gap: 8 }}>
+          <input
+            id="drawio-url"
+            className="input"
+            style={{ maxWidth: 360 }}
+            placeholder="empty: diagrams off"
+            value={drawio ?? s.drawioUrl ?? ''}
+            onChange={(e) => setDrawio(e.target.value)}
+          />
+          <button
+            className="btn btn-sm"
+            disabled={drawio === null}
+            onClick={async () => {
+              try {
+                await api.put('/admin/settings', { drawioUrl: drawio ?? '' })
+                setDrawio(null)
+                qc.invalidateQueries({ queryKey: ['admin-settings'] })
+                qc.invalidateQueries({ queryKey: ['features'] })
+                toast(drawio ? 'Diagrams open in this draw.io' : 'draw.io diagrams are off')
+              } catch (err) {
+                toast(err instanceof Error ? err.message : 'Could not save')
+              }
+            }}
+          >
+            Save
+          </button>
+        </div>
+        <p className="faint small" style={{ margin: '4px 0 0' }}>
+          The draw.io editor in embed mode: <code>https://embed.diagrams.net</code> (the default) runs in the browser and doesn't store diagrams; a self-hosted draw.io keeps even the editor on your servers. Empty turns diagram editing off (existing diagrams stay visible).
+        </p>
+      </div>
       <div className="field">
         <label htmlFor="require-2fa">Two-factor authentication</label>
         <select

@@ -1,0 +1,4 @@
+<ac:structured-macro ac:name="drawio" ac:schema-version="1"><ac:parameter ac:name="diagramName">architecture</ac:parameter><ac:parameter ac:name="width">800</ac:parameter></ac:structured-macro>
+<p>Without its diagram file, a draw.io macro shows its preview:</p>
+<ac:structured-macro ac:name="drawio"><ac:parameter ac:name="diagramName">diagram</ac:parameter></ac:structured-macro>
+<ac:structured-macro ac:name="gliffy"><ac:parameter ac:name="name">diagram</ac:parameter></ac:structured-macro>

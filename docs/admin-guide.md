@@ -166,6 +166,15 @@ take a database backup first. Live editors reconnect on their own.
   space and page permissions, trash / restore / archive, imports, space exports, API tokens,
   webhooks and workspace settings.
 
+## Diagrams (draw.io)
+
+`/draw.io diagram` opens draw.io's editor in embed mode. By default that is
+`https://embed.diagrams.net`: the editor runs in the person's browser and gets the diagram from
+the page; diagrams are stored in WikiCraft, not by diagrams.net. To keep even the editor on your
+servers, run draw.io yourself (for example the `jgraph/drawio` container behind your proxy) and
+set its https address under *Admin → Overview → draw.io diagrams*. An empty address turns
+diagram editing off; existing diagrams stay visible as pictures.
+
 ## AI features (optional)
 
 - **MCP server** at `/api/mcp`: AI assistants (Claude and others) search, read and write pages

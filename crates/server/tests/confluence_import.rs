@@ -540,3 +540,48 @@ async fn update_import_brings_changes_across() {
     assert!(messages.contains(&"Updated from Confluence"), "{versions}");
     assert!(versions.as_array().unwrap().len() >= 3, "imported, local edit, from Confluence: {versions}");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn drawio_diagrams_stay_editable() {
+    let app = common::spawn().await;
+    let c = app.setup().await;
+    let xml = r#"<mxfile><diagram name="Page-1"><mxGraphModel><root><mxCell id="0"/><mxCell id="2" value="Load balancer" vertex="1"/></root></mxGraphModel></diagram></mxfile>"#;
+    let attachment = |title: &'static str| -> Vec<(&'static str, &'static str)> {
+        vec![("title", title), ("containerContent", "@Page:10"), ("contentStatus", "current"), ("version", "1"), ("space", "@Space:1")]
+    };
+    let zip = entities_zip_with(
+        &[
+            ("Space", "1", &[("key", "DIA"), ("name", "Diagrams")]),
+            ("Page", "10", &[("title", "Architecture"), ("contentStatus", "current"), ("space", "@Space:1"), ("version", "1")]),
+            ("Attachment", "40", &attachment("architecture")),
+            ("Attachment", "41", &attachment("architecture.png")),
+            (
+                "BodyContent",
+                "100",
+                &[
+                    ("content", "@Page:10"),
+                    ("body", "<ac:structured-macro ac:name=\"drawio\"><ac:parameter ac:name=\"diagramName\">architecture</ac:parameter></ac:structured-macro>"),
+                    ("bodyType", "2"),
+                ],
+            ),
+        ],
+        &[("attachments/10/40/1", xml.as_bytes()), ("attachments/10/41/1", b"\x89PNG\r\n\x1a\n preview")],
+    );
+    import(&app, &c, zip, json!({})).await;
+    let content: serde_json::Value = sqlx::query_scalar("SELECT content FROM pages WHERE title = 'Architecture'").fetch_one(&app.state.db).await.unwrap();
+    let node = &content["content"][0];
+    assert_eq!(node["type"], "drawing", "{content}");
+    assert_eq!(node["attrs"]["kind"], "drawio");
+    assert_eq!(node["attrs"]["title"], "architecture");
+    // the diagram file can be opened in draw.io; readers see the preview
+    for attr in ["source", "preview"] {
+        let url = node["attrs"][attr].as_str().unwrap();
+        assert!(url.starts_with("/api/attachments/"), "{attr}: {url}");
+        let r = c.get(format!("{}{url}", app.base)).send().await.unwrap();
+        assert_eq!(r.status(), 200, "{attr}");
+        let body = r.bytes().await.unwrap();
+        if attr == "source" {
+            assert_eq!(&body[..], xml.as_bytes());
+        }
+    }
+}

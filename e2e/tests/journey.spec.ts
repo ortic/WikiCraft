@@ -313,6 +313,48 @@ test('a template asks for its variables before creating the page', async ({ brow
   await ctx.close()
 })
 
+test('a draw.io diagram is edited in the draw.io frame and saved with a preview', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState })
+  // a stand-in for diagrams.net that speaks its embed protocol: it asks for the diagram, then
+  // "saves" an edited one and returns a PNG for the export
+  const png = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFBQIAX8jx0gAAAABJRU5ErkJggg=='
+  await ctx.route('https://embed.diagrams.net/**', (route) =>
+    route.fulfill({
+      contentType: 'text/html',
+      body: `<!doctype html><script>
+        const send = (m) => parent.postMessage(JSON.stringify(m), '*')
+        const edited = '<mxfile><diagram><mxGraphModel><root><mxCell id="2" value="Checkout service" vertex="1"/></root></mxGraphModel></diagram></mxfile>'
+        addEventListener('message', (e) => {
+          const m = JSON.parse(e.data)
+          if (m.action === 'load') send({ event: 'save', xml: edited, exit: true })
+          if (m.action === 'export') send({ event: 'export', format: 'png', xml: m.xml, data: 'data:image/png;base64,${png}' })
+        })
+        send({ event: 'init' })
+      </script>`,
+    }),
+  )
+  const page = await ctx.newPage()
+  await page.goto('/')
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/api/pages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-wikicraft': '1' }, body: JSON.stringify({ spaceKey: 'PRODUCT', title: 'Architecture diagram', blank: true }) })
+    return (await r.json()).id as string
+  })
+  await page.goto(`/pages/${id}`)
+  const editor = page.locator('.ProseMirror[contenteditable="true"]')
+  await expect(editor).toBeVisible({ timeout: 20_000 })
+  await editor.click()
+  await page.keyboard.type('/draw.io')
+  await page.keyboard.press('Enter')
+  await page.getByRole('button', { name: /click to edit in draw.io/ }).click()
+  // saved and closed: the preview shows, the diagram is in the page (and searchable)
+  await expect(page.locator('.drawing-block img.drawing-preview')).toBeVisible({ timeout: 15_000 })
+  await expect(page.locator('.drawio-modal')).toHaveCount(0)
+  await expect
+    .poll(async () => page.evaluate(async (pid) => JSON.stringify((await (await fetch(`/api/pages/${pid}`)).json()).content), id), { timeout: 15_000 })
+    .toContain('Checkout service')
+  await ctx.close()
+})
+
 test('main screens have no serious accessibility violations (axe, WCAG 2.2 AA)', async ({ browser }) => {
   const problems: string[] = []
   const audit = async (p: Page, name: string) => {

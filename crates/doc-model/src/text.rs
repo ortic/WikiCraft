@@ -141,6 +141,9 @@ pub fn word_count(doc: &Node) -> usize {
 
 /// The text written in a drawing (its text elements), for search.
 pub fn drawing_text(n: &Node) -> String {
+    if let Some(xml) = n.attr_str("scene").filter(|s| s.trim_start().starts_with('<')) {
+        return drawio_text(xml);
+    }
     let Some(scene) = n.attr_str("scene").and_then(|s| serde_json::from_str::<serde_json::Value>(s).ok()) else { return String::new() };
     scene["elements"]
         .as_array()
@@ -150,8 +153,57 @@ pub fn drawing_text(n: &Node) -> String {
         .unwrap_or_default()
 }
 
+/// The labels of a draw.io diagram (`value` attributes of its cells, which may hold HTML).
+/// Compressed diagrams have none to read.
+fn drawio_text(xml: &str) -> String {
+    let mut out: Vec<String> = Vec::new();
+    let mut rest = xml;
+    while let Some(i) = rest.find(" value=\"") {
+        rest = &rest[i + 8..];
+        let Some(end) = rest.find('"') else { break };
+        let raw = &rest[..end];
+        rest = &rest[end..];
+        // the attribute is XML-escaped; HTML labels are HTML inside it (escaped once more)
+        let unescape = |s: &str| {
+            s.replace("&lt;", "<")
+                .replace("&gt;", ">")
+                .replace("&quot;", "\"")
+                .replace("&#xa;", " ")
+                .replace("&#10;", " ")
+                .replace("&nbsp;", " ")
+                .replace("&amp;", "&")
+        };
+        let unescaped = unescape(raw);
+        let mut text = String::with_capacity(unescaped.len());
+        let mut in_tag = false;
+        for c in unescaped.chars() {
+            match c {
+                '<' => {
+                    in_tag = true;
+                    text.push(' ');
+                }
+                '>' => in_tag = false,
+                c if !in_tag => text.push(c),
+                _ => {}
+            }
+        }
+        let text = unescape(&text).split_whitespace().collect::<Vec<_>>().join(" ");
+        if !text.is_empty() && out.len() < 2_000 {
+            out.push(text);
+        }
+    }
+    out.join(" ")
+}
+
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn drawio_labels_are_searchable() {
+        let xml = r#"<mxfile><diagram><mxGraphModel><root><mxCell id="0"/><mxCell id="2" value="Load &lt;b&gt;balancer&lt;/b&gt;" vertex="1"/><mxCell id="3" value="" edge="1"/><mxCell id="4" value="DB &amp;amp; cache"/></root></mxGraphModel></diagram></mxfile>"#;
+        let n = crate::node::Node::new(crate::node::nodes::DRAWING).attr("kind", "drawio").attr("scene", xml);
+        assert_eq!(super::drawing_text(&n), "Load balancer DB & cache");
+    }
+
     #[test]
     fn placeholders_are_for_authors_only() {
         use crate::node::{Node, expand_placeholders, nodes};

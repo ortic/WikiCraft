@@ -1,0 +1,122 @@
+---
+source: crates/confluence/tests/golden.rs
+expression: "report(&doc, &stats)"
+input_file: crates/confluence/tests/golden/diagrams.xml
+---
+## stats
+{
+  "attachment_refs": 6,
+  "attachment_refs_resolved": 4,
+  "bodies": 1,
+  "macros": {
+    "drawio": [
+      2,
+      "partial"
+    ],
+    "gliffy": [
+      1,
+      "partial"
+    ]
+  },
+  "missing_attachment_samples": [
+    "diagram",
+    "diagram.drawio"
+  ]
+}
+
+## prosemirror
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "drawing",
+      "attrs": {
+        "kind": "drawio",
+        "preview": "wcimport:attachment/302",
+        "source": "wcimport:attachment/301",
+        "title": "architecture"
+      }
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Without its diagram file, a draw.io macro shows its preview:"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "image",
+          "attrs": {
+            "alt": "diagram",
+            "src": "wcimport:attachment/300",
+            "title": "drawio: diagram"
+          }
+        }
+      ]
+    },
+    {
+      "type": "macro",
+      "attrs": {
+        "name": "drawio",
+        "params": {
+          "diagramName": "diagram"
+        }
+      }
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "image",
+          "attrs": {
+            "alt": "diagram",
+            "src": "wcimport:attachment/300",
+            "title": "gliffy: diagram"
+          }
+        }
+      ]
+    },
+    {
+      "type": "macro",
+      "attrs": {
+        "name": "gliffy",
+        "params": {
+          "name": "diagram"
+        }
+      }
+    }
+  ]
+}
+
+## markdown
+![architecture](wcimport:attachment/302)
+
+Without its diagram file, a draw.io macro shows its preview:
+
+![diagram](wcimport:attachment/300 "drawio: diagram")
+
+<!-- macro: drawio -->
+
+![diagram](wcimport:attachment/300 "gliffy: diagram")
+
+<!-- macro: gliffy -->
+
+## html
+<p>Without its diagram file, a draw.io macro shows its preview:</p>
+<p>
+<img src="" alt="diagram" title="drawio: diagram" loading="lazy">
+</p>
+<div class="macro" data-macro="drawio">
+<div class="macro-label">Macro: drawio</div>
+</div>
+<p>
+<img src="" alt="diagram" title="gliffy: diagram" loading="lazy">
+</p>
+<div class="macro" data-macro="gliffy">
+<div class="macro-label">Macro: gliffy</div>
+</div>

@@ -44,6 +44,10 @@ jump to where they are.
   block**. Opening such a link scrolls to the block and highlights it.
 - `Ctrl F` / `Ctrl H` find and replace within the page.
 
+**Diagrams:** `/drawing` opens a sketchpad (Excalidraw); `/draw.io diagram` opens draw.io for
+flowcharts, architecture and network diagrams. Readers see a picture of it; editors click it to
+change it. Diagrams imported from Confluence's draw.io app stay editable.
+
 Tables have a toolbar for rows, columns, header rows, merged cells, cell colours, sorting and the
 width (normal, wide, full). Images can be resized, aligned, captioned, annotated and opened full
 size.

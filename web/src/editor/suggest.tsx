@@ -8,7 +8,7 @@ import { EMOTICONS, Emoticon } from '../icons'
 import { forwardRef, useEffect, useImperativeHandle, useState, type ReactNode } from 'react'
 import {
   Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Quote, Code2, Minus, Table, Info, AlertTriangle, CheckCircle2, XCircle, ChevronRight,
-  UserRound, Hash, ListTree, CalendarDays, Tag, Sigma, Image as ImageIcon, Link2, Columns2, Paperclip, StickyNote, FileText, FilePlus2, PenTool,
+  UserRound, Hash, ListTree, CalendarDays, Tag, Sigma, Image as ImageIcon, Link2, Columns2, Paperclip, StickyNote, FileText, FilePlus2, PenTool, Workflow,
   MessageSquareDashed, Milestone,
 } from 'lucide-react'
 import { api } from '../api'
@@ -134,6 +134,7 @@ export function slashItems(onImage: (editor: Editor) => void, onAttachment: (edi
     { group: 'Basic', title: 'Quote', icon: ic(Quote), keywords: 'blockquote', command: (e, r) => e.chain().focus().deleteRange(r).toggleBlockquote().run() },
     { group: 'Basic', title: 'Code block', icon: ic(Code2), keywords: 'snippet pre', command: (e, r) => e.chain().focus().deleteRange(r).toggleCodeBlock().run() },
     { group: 'Media', title: 'Drawing', description: 'Sketch a diagram or whiteboard (Excalidraw)', icon: ic(PenTool), keywords: 'excalidraw whiteboard sketch draw diagram', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'drawing' }).run() },
+    { group: 'Media', title: 'Draw.io diagram', description: 'Flowcharts, architecture and network diagrams (draw.io)', icon: ic(Workflow), keywords: 'drawio diagrams.net flowchart uml architecture network', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'drawing', attrs: { kind: 'drawio' } }).run() },
     { group: 'Media', title: 'Diagram (Mermaid)', description: 'Flowcharts, sequence diagrams, Gantt…', icon: ic(Columns2), keywords: 'mermaid flowchart sequence chart', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'codeBlock', attrs: { language: 'mermaid' }, content: [{ type: 'text', text: 'flowchart LR\n  A[Idea] --> B{Review}\n  B -->|approved| C[Ship it]\n  B -->|changes| A' }] }).run() },
     { group: 'Basic', title: 'Divider', icon: ic(Minus), keywords: 'hr rule', command: (e, r) => e.chain().focus().deleteRange(r).setHorizontalRule().run() },
     { group: 'Basic', title: 'Table', icon: ic(Table), keywords: 'grid', command: (e, r) => e.chain().focus().deleteRange(r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },

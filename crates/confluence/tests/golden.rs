@@ -12,7 +12,8 @@ use wikicraft_confluence::storage::{Resolver, convert, convert_wiki};
 use wikicraft_doc_model::{Node, html, markdown, ydoc};
 
 /// The export around the fixtures: space DOC, the page being converted is 100, "Other Page" is
-/// 200, diagram.png is attachment 300 on it, user key `abc` is Ada Lovelace.
+/// 200, diagram.png is attachment 300 on it (the draw.io diagram "architecture" 301 with its
+/// preview 302), user key `abc` is Ada Lovelace.
 struct Export;
 
 impl Resolver for Export {
@@ -29,7 +30,16 @@ impl Resolver for Export {
         id == "200"
     }
     fn attachment(&self, container: &str, filename: &str) -> Option<String> {
-        (container == "100" && filename == "diagram.png").then(|| "300".into())
+        if container != "100" {
+            return None;
+        }
+        match filename {
+            "diagram.png" => Some("300".into()),
+            // a draw.io diagram: the file (no extension) and its preview
+            "architecture" => Some("301".into()),
+            "architecture.png" => Some("302".into()),
+            _ => None,
+        }
     }
     fn user_name(&self, key: &str) -> Option<String> {
         (key == "abc").then(|| "Ada Lovelace".into())

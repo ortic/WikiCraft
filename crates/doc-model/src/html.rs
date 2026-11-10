@@ -276,7 +276,8 @@ impl Renderer<'_> {
             }
             nodes::DRAWING => {
                 if let Some(src) = n.attr_str("preview").and_then(safe_url) {
-                    let _ = write!(self.out, "<p class=\"drawing\"><img src=\"{}\" alt=\"Drawing\" loading=\"lazy\"></p>", escape(src));
+                    let alt = n.attr_str("title").unwrap_or("Drawing");
+                    let _ = write!(self.out, "<p class=\"drawing\"><img src=\"{}\" alt=\"{}\" loading=\"lazy\"></p>", escape(src), escape(alt));
                 }
             }
             nodes::MACRO => {

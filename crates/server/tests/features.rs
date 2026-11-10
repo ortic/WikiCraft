@@ -943,3 +943,23 @@ async fn profile_pictures() {
     let res = bob.get(format!("{}/api/users/{owner_id}/avatar", app.base)).send().await.unwrap();
     assert_eq!(res.status(), 404);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn drawio_setting() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (_, f) = app.get(&owner, "/features").await;
+    assert_eq!(f["drawioUrl"], "https://embed.diagrams.net", "diagrams.net by default");
+    for bad in ["http://draw.example", "https://draw.example/?x=1", "javascript:alert(1)"] {
+        let (st, _) = app.put(&owner, "/admin/settings", json!({"drawioUrl": bad})).await;
+        assert_eq!(st, 400, "{bad}");
+    }
+    let (st, s) = app.put(&owner, "/admin/settings", json!({"drawioUrl": "https://draw.acme.test/"})).await;
+    assert_eq!(st, 200);
+    assert_eq!(s["drawioUrl"], "https://draw.acme.test");
+    let (_, f) = app.get(&owner, "/features").await;
+    assert_eq!(f["drawioUrl"], "https://draw.acme.test");
+    app.put(&owner, "/admin/settings", json!({"drawioUrl": ""})).await;
+    let (_, f) = app.get(&owner, "/features").await;
+    assert!(f["drawioUrl"].is_null(), "off");
+}

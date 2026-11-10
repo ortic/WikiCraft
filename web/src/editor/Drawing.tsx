@@ -1,12 +1,15 @@
-// Drawing block: an Excalidraw sketch stored in the page (its scene as JSON) with a PNG preview
-// attachment that readers, shared pages and exports show.
+// Drawing block: an Excalidraw sketch (its scene as JSON) or a draw.io diagram (kind "drawio",
+// its XML) stored in the page, with a PNG preview attachment that readers, shared pages and
+// exports show. Diagrams imported from Confluence point at their diagram file (`source`) until
+// first saved here.
 
 import { Suspense, lazy, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Node, mergeAttributes } from '@tiptap/core'
 import { NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react'
-import { PenTool } from 'lucide-react'
+import { PenTool, Workflow } from 'lucide-react'
 import { api, type Attachment } from '../api'
+import { useFeatures } from '../ui'
 import { Lightbox } from './ImageView'
 import { useEditable } from './useEditable'
 
@@ -14,6 +17,7 @@ import { useEditable } from './useEditable'
 // (they're self-hosted, see scripts/copy-excalidraw-assets.mjs; a CDN would be blocked anyway)
 ;(window as unknown as { EXCALIDRAW_ASSET_PATH: string }).EXCALIDRAW_ASSET_PATH = '/excalidraw-assets/'
 const DrawingEditor = lazy(() => import('./DrawingEditor'))
+const DrawioEditor = lazy(() => import('./DrawioEditor'))
 
 /** Scenes larger than this are refused (usually big pasted images). */
 const MAX_SCENE = 3_000_000
@@ -30,6 +34,11 @@ function DrawingView({ node, updateAttributes, editor, extension, selected }: Re
   const [error, setError] = useState<string | null>(null)
   const preview = node.attrs.preview as string | null
   const pageId = (extension.options as { pageId: string }).pageId
+  const drawio = node.attrs.kind === 'drawio'
+  const drawioUrl = useFeatures().drawioUrl ?? null
+  // draw.io turned off by an admin: diagrams stay readable, not editable
+  const canEdit = editable && (!drawio || !!drawioUrl)
+  const title = (node.attrs.title as string | null) ?? null
   const save = async (scene: string, png: Blob | null) => {
     if (scene.length > MAX_SCENE) throw new Error('This drawing is too large to save (pasted images take a lot of space).')
     let src: string | null = null
@@ -37,34 +46,49 @@ function DrawingView({ node, updateAttributes, editor, extension, selected }: Re
       // one attachment per drawing; saving again adds a version of it
       const key = (node.attrs.key as string | null) ?? crypto.randomUUID().slice(0, 8)
       const form = new FormData()
-      form.append('file', new File([png], `drawing-${key}.png`, { type: 'image/png' }))
+      form.append('file', new File([png], `${drawio ? 'diagram' : 'drawing'}-${key}.png`, { type: 'image/png' }))
       const rows = await api.upload<Attachment[]>(`/pages/${pageId}/attachments`, form)
       src = `/api/attachments/${rows[0].id}/content?v=${Date.now()}`
       updateAttributes({ key })
     }
-    updateAttributes({ scene, preview: src })
-    setOpen(false)
+    // saved here: the diagram lives in the page from now on
+    updateAttributes({ scene, preview: src, source: null })
+    if (!drawio) setOpen(false)
     setError(null)
   }
+  const label = drawio ? 'diagram' : 'drawing'
+  const Icon = drawio ? Workflow : PenTool
   return (
     <NodeViewWrapper className={`drawing-block${selected ? ' is-selected' : ''}`} contentEditable={false}>
       {preview ? (
-        <img src={preview} alt="Drawing" className="drawing-preview" draggable={false} onClick={() => (editable ? setOpen(true) : setZoom(true))} />
+        <img src={preview} alt={title ?? (drawio ? 'Diagram' : 'Drawing')} className="drawing-preview" draggable={false} onClick={() => (canEdit ? setOpen(true) : setZoom(true))} />
       ) : (
-        <button type="button" className="drawing-empty" onClick={() => editable && setOpen(true)} disabled={!editable}>
-          <PenTool size={20} /> {editable ? 'Empty drawing: click to draw' : 'Empty drawing'}
+        <button type="button" className="drawing-empty" onClick={() => canEdit && setOpen(true)} disabled={!canEdit}>
+          <Icon size={20} /> {canEdit ? `Empty ${label}: click to ${drawio ? 'edit in draw.io' : 'draw'}` : drawio && editable ? 'draw.io diagrams are turned off on this wiki' : `Empty ${label}`}
         </button>
       )}
-      {editable && preview && (
+      {canEdit && preview && (
         <button type="button" className="btn btn-sm drawing-edit" onClick={() => setOpen(true)}>
-          <PenTool size={13} /> Edit drawing
+          <Icon size={13} /> Edit {label}
         </button>
       )}
       {error && <div className="error-text small">{error}</div>}
-      {zoom && preview && <Lightbox src={preview} alt="Drawing" caption={null} onClose={() => setZoom(false)} />}
+      {zoom && preview && <Lightbox src={preview} alt={title ?? 'Drawing'} caption={null} onClose={() => setZoom(false)} />}
       {open && (
         <Suspense fallback={createPortal(<div className="drawing-modal drawing-loading"><div className="spinner" /></div>, document.body)}>
-          <DrawingEditor initial={(node.attrs.scene as string | null) ?? null} dark={isDark()} onSave={save} onClose={() => setOpen(false)} />
+          {drawio && drawioUrl ? (
+            <DrawioEditor
+              url={drawioUrl}
+              initial={(node.attrs.scene as string | null) ?? null}
+              source={(node.attrs.source as string | null) ?? null}
+              title={title}
+              dark={isDark()}
+              onSave={save}
+              onClose={() => setOpen(false)}
+            />
+          ) : (
+            <DrawingEditor initial={(node.attrs.scene as string | null) ?? null} dark={isDark()} onSave={save} onClose={() => setOpen(false)} />
+          )}
         </Suspense>
       )}
     </NodeViewWrapper>
@@ -84,6 +108,11 @@ export const Drawing = Node.create<{ pageId: string }>({
       scene: { default: null, rendered: false },
       preview: { default: null },
       key: { default: null, rendered: false },
+      // "drawio" for draw.io diagrams (default: Excalidraw)
+      kind: { default: null, rendered: false },
+      // an imported diagram's file, until it's first saved here
+      source: { default: null, rendered: false },
+      title: { default: null, rendered: false },
     }
   },
   parseHTML() {

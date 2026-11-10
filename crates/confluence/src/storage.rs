@@ -707,6 +707,23 @@ impl Conv<'_> {
         Some(placeholder)
     }
 
+    /// A diagram app's PNG preview (`<diagramName>.png`) as an image, with the macro kept.
+    fn diagram_preview(&mut self, name: &str, el: &Element, diagram: &str) -> Vec<Node> {
+        self.stats.macro_seen(name, Support::Partial);
+        let mut v = Vec::new();
+        if !diagram.is_empty() {
+            let png = Element { name: "ri:attachment".into(), attrs: vec![("ri:filename".into(), format!("{diagram}.png"))], children: vec![] };
+            let (href, _) = self.resolve_attachment_ref(&png);
+            if !href.starts_with("wcimport:missing") {
+                v.push(Node::paragraph(vec![
+                    Node::new(nodes::IMAGE).attr("src", href).attr("alt", diagram.to_string()).attr("title", format!("{name}: {diagram}")),
+                ]));
+            }
+        }
+        v.push(placeholder_macro(name, el, vec![]));
+        v
+    }
+
     fn resolve_page_ref(&mut self, page: &Element) -> String {
         self.stats.page_links += 1;
         if let Some(id) = page.attr("ri:content-id").filter(|id| self.r.content_exists(id)) {
@@ -1102,22 +1119,29 @@ impl Conv<'_> {
                 let latex = param("body").or(plain).or_else(|| rich.map(Element::text)).unwrap_or_default();
                 vec![Node::new(nodes::MATH_INLINE).attr("latex", latex.trim().to_string())]
             }
-            "drawio" | "inc-drawio" | "drawio-sketch" | "gliffy" => {
-                // show the PNG preview the apps store as `<diagramName>.png` and keep the macro info
-                self.stats.macro_seen(&name, Support::Partial);
+            "drawio" | "drawio-sketch" => {
+                // an editable draw.io diagram: the app stores it as an attachment named after the
+                // diagram (no extension, or `.drawio`) and its preview as `<diagramName>.png`
                 let diagram = param("diagramName").or_else(|| param("name")).unwrap_or_default();
-                let mut v = Vec::new();
-                if !diagram.is_empty() {
-                    let png = Element { name: "ri:attachment".into(), attrs: vec![("ri:filename".into(), format!("{diagram}.png"))], children: vec![] };
-                    let (href, _) = self.resolve_attachment_ref(&png);
-                    if !href.starts_with("wcimport:missing") {
-                        v.push(Node::paragraph(vec![
-                            Node::new(nodes::IMAGE).attr("src", href).attr("alt", diagram.clone()).attr("title", format!("{name}: {diagram}")),
-                        ]));
+                let attachment = |me: &mut Self, filename: String| {
+                    let el = Element { name: "ri:attachment".into(), attrs: vec![("ri:filename".into(), filename)], children: vec![] };
+                    let (href, _) = me.resolve_attachment_ref(&el);
+                    (!href.starts_with("wcimport:missing")).then_some(href)
+                };
+                let source =
+                    if diagram.is_empty() { None } else { attachment(self, diagram.clone()).or_else(|| attachment(self, format!("{diagram}.drawio"))) };
+                match source {
+                    Some(source) => {
+                        self.stats.macro_seen(&name, Support::Native);
+                        let preview = attachment(self, format!("{diagram}.png"));
+                        vec![Node::new(nodes::DRAWING).attr("kind", "drawio").attr("source", source).attr("preview", preview).attr("title", diagram)]
                     }
+                    None => self.diagram_preview(&name, el, &diagram),
                 }
-                v.push(placeholder_macro(&name, el, vec![]));
-                v
+            }
+            "inc-drawio" | "gliffy" => {
+                let diagram = param("diagramName").or_else(|| param("name")).unwrap_or_default();
+                self.diagram_preview(&name, el, &diagram)
             }
             // queries rendered live by the editor from the preserved parameters
             "contentbylabel" | "recently-updated" | "detailssummary" | "content-report-table" | "tasks-report-macro" | "attachments" => {

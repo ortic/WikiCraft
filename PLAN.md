@@ -283,7 +283,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P1** Decisions block (decision list) `C` (imported only; no insert UI)
 - [x] **P1** Block math (KaTeX / LaTeX) `D O X`
 - [~] **P1** Mermaid, PlantUML (server-side render, sandboxed) `D X` (Mermaid client-side only; no PlantUML render)
-- [ ] **P1** Draw.io diagrams (embedded editor, stored as attachment + SVG preview) `D X C(app)`
+- [x] **P1** Draw.io diagrams (embedded editor, stored as attachment + SVG preview) `D X C(app)` — `/draw.io diagram`: draw.io in embed mode in a full-screen frame (diagrams.net by default, or a self-hosted draw.io set in Admin; empty turns editing off), JSON postMessage protocol with origin checks, sandboxed frame; XML kept in the page, PNG preview attachment for readers / shared pages / exports; cell labels searchable; Confluence draw.io macros import as editable diagrams (their diagram file + preview)
 - [x] **P1** Excalidraw sketches `D`
 - [~] **P1** File / attachment block with inline preview (PDF, Office, video, audio) `C D` (PDF/image preview only)
 - [~] **P1** Embeds: YouTube, Vimeo, Loom, Figma, Miro, Google Docs/Sheets/Slides, Airtable, Typeform, GitHub gist, iframe allowlist `C D O` (no Airtable/Typeform/gist)
@@ -419,7 +419,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P3** Calculated content via a safe query language (CQL-like) in blocks
 
 ### 4.10 Whiteboards & diagrams
-- [ ] **P1** Draw.io integration (self-hosted draw.io editor in an iframe; store `.drawio` + SVG) `D X C(app)`
+- [x] **P1** Draw.io integration (self-hosted draw.io editor in an iframe; store `.drawio` + SVG) `D X C(app)` — `/draw.io diagram`: draw.io in embed mode in a full-screen frame (diagrams.net by default, or a self-hosted draw.io set in Admin; empty turns editing off), JSON postMessage protocol with origin checks, sandboxed frame; XML kept in the page, PNG preview attachment for readers / shared pages / exports; cell labels searchable; Confluence draw.io macros import as editable diagrams (their diagram file + preview)
 - [x] **P1** Excalidraw block `D`
 - [~] **P1** Mermaid / PlantUML text diagrams `D X` (Mermaid client-side only)
 - [ ] **P2** Native infinite-canvas whiteboards: sticky notes, shapes, connectors, text, frames, images, pen `C`

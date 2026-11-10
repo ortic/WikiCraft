@@ -179,7 +179,22 @@ pub async fn get_settings(State(state): State<AppState>, CurrentUser(user): Curr
     let mfa: Option<String> =
         sqlx::query_scalar("SELECT settings->>'requireTwoFactor' FROM workspaces WHERE id = $1").bind(user.workspace_id).fetch_one(&state.db).await?;
     out.insert("requireTwoFactor".into(), json!(mfa.unwrap_or_else(|| "off".into())));
+    out.insert("drawioUrl".into(), json!(drawio_url(&state, user.workspace_id).await?));
     Ok(Json(Value::Object(out)))
+}
+
+/// The draw.io editor this wiki uses for diagrams (embed mode): diagrams.net's unless an admin
+/// set a self-hosted one; None when they turned diagrams off (empty setting).
+pub const DEFAULT_DRAWIO_URL: &str = "https://embed.diagrams.net";
+
+pub async fn drawio_url(state: &AppState, ws: Uuid) -> ApiResult<Option<String>> {
+    let set: Option<String> =
+        sqlx::query_scalar("SELECT settings->>'drawioUrl' FROM workspaces WHERE id = $1").bind(ws).fetch_optional(&state.db).await?.flatten();
+    Ok(match set {
+        None => Some(DEFAULT_DRAWIO_URL.into()),
+        Some(s) if s.is_empty() => None,
+        Some(s) => Some(s),
+    })
 }
 
 pub async fn put_settings(
@@ -201,6 +216,24 @@ pub async fn put_settings(
                 .execute(&state.db)
                 .await?;
             audit::log(&state, user.workspace_id, Some(user.id), "workspace.settings", None, None, json!({ "requireTwoFactor": v })).await;
+            continue;
+        }
+        if key == "drawioUrl" {
+            // "" turns draw.io diagrams off; otherwise an https address of a draw.io (embed mode)
+            let url = v.as_str().map(|s| s.trim().trim_end_matches('/').to_string()).ok_or_else(|| ApiError::bad("drawioUrl must be a string"))?;
+            let ok = url.is_empty()
+                || (url.starts_with("https://")
+                    && url.len() <= 300
+                    && !url.chars().any(|c| c.is_whitespace() || matches!(c, '"' | '\'' | '<' | '>' | '\\' | '?' | '#')));
+            if !ok {
+                return Err(ApiError::bad("drawioUrl must be an https address without query (or empty to turn diagrams off)"));
+            }
+            sqlx::query("UPDATE workspaces SET settings = settings || jsonb_build_object('drawioUrl', $2::text) WHERE id = $1")
+                .bind(user.workspace_id)
+                .bind(&url)
+                .execute(&state.db)
+                .await?;
+            audit::log(&state, user.workspace_id, Some(user.id), "workspace.settings", None, None, json!({ "drawioUrl": url })).await;
             continue;
         }
         if key == "viewerList" {
@@ -252,6 +285,7 @@ pub async fn features(State(state): State<AppState>, CurrentUser(user): CurrentU
         f.insert("personalSpaces".into(), Value::Bool(false));
     }
     f.insert("viewerList".into(), Value::Bool(viewer_list_on(&state, user.workspace_id).await?));
+    f.insert("drawioUrl".into(), json!(drawio_url(&state, user.workspace_id).await?));
     Ok(Json(Value::Object(f)))
 }
 

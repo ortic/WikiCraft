@@ -737,7 +737,7 @@ impl Renderer<'_> {
             nodes::DRAWING => {
                 // drawn as its preview image, centred
                 if let Some(src) = n.attr_str("preview") {
-                    let img = Node::new(nodes::IMAGE).attr("src", src).attr("alt", "Drawing").attr("align", "center");
+                    let img = Node::new(nodes::IMAGE).attr("src", src).attr("alt", n.attr_str("title").unwrap_or("Drawing")).attr("align", "center");
                     let wrapper = Node::paragraph(vec![img]);
                     let p = Self::indented(Paragraph::new(), ctx);
                     self.paragraph(&wrapper, p, ctx, out);
