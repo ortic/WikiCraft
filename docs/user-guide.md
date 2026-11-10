@@ -73,8 +73,13 @@ database (from its columns).
 ## Templates
 
 *Create* offers blank pages and templates (meeting notes, decision record, how-to,
-retrospective, runbook, product requirements …), plus your space's own templates. Grey
-instructional text in a template disappears when you start typing there.
+retrospective, runbook, product requirements …), plus your space's own templates and those for
+every space. Grey instructional text in a template disappears when you start typing there.
+
+Page menu → *Save as template* turns what a page holds now into a template for its space, with a
+name and a description; workspace admins can offer it to every space instead. Templates are
+renamed, described or deleted in *Space settings → Details → Templates* (their creator and space
+admins) and *Administration → Templates* (the ones for every space).
 
 Meeting notes, decisions, retrospectives, postmortems, status reports, how-tos, runbooks and
 requirements made from *Create* go under an index page of their kind (for example *Meeting notes*,

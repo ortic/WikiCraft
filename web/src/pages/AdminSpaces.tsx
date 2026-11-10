@@ -1,6 +1,7 @@
+import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, ArchiveRestore, Trash2 } from 'lucide-react'
+import { Archive, ArchiveRestore, Trash2, Users, X } from 'lucide-react'
 import { api, formatBytes, formatDate } from '../api'
 import { SpaceIcon, Spinner, useToast } from '../ui'
 
@@ -44,6 +45,7 @@ export default function AdminSpaces() {
   if (spaces.isLoading) return <Spinner />
   return (
     <div>
+      <NewSpaceDefaults />
       <p className="muted" style={{ marginTop: 0 }}>Archived spaces are read-only and hidden from search and the space list. Only archived spaces can be deleted, and deleting is permanent.</p>
       <table className="list">
         <thead>
@@ -96,6 +98,99 @@ export default function AdminSpaces() {
           ))}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+interface DefaultGrant {
+  subjectType: 'user' | 'group'
+  subjectId: string
+  role: string
+}
+
+const ROLES = ['viewer', 'commenter', 'editor', 'admin']
+
+/** Admin → Spaces → New spaces: the role everyone gets in a new space (unless its creator picks
+ *  another) and the people and groups added to every new space. */
+function NewSpaceDefaults() {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const settings = useQuery({ queryKey: ['admin-settings'], queryFn: () => api.get<{ newSpaces: { defaultRole: string; grants: DefaultGrant[] } }>('/admin/settings') })
+  const users = useQuery({ queryKey: ['users-all'], queryFn: () => api.get<{ id: string; name: string; status?: string }[]>('/users') })
+  const groups = useQuery({ queryKey: ['groups'], queryFn: () => api.get<{ id: string; name: string }[]>('/groups') })
+  const [role, setRole] = useState('editor')
+  const [grants, setGrants] = useState<DefaultGrant[]>([])
+  const [pick, setPick] = useState('')
+  const [dirty, setDirty] = useState(false)
+  useEffect(() => {
+    if (settings.data?.newSpaces && !dirty) {
+      setRole(settings.data.newSpaces.defaultRole)
+      setGrants(settings.data.newSpaces.grants)
+    }
+  }, [settings.data, dirty])
+  const nameOf = (g: DefaultGrant) => (g.subjectType === 'group' ? groups.data?.find((x) => x.id === g.subjectId)?.name : users.data?.find((x) => x.id === g.subjectId)?.name) ?? 'Unknown'
+  const save = async () => {
+    try {
+      await api.put('/admin/settings', { newSpaces: { defaultRole: role, grants } })
+      setDirty(false)
+      qc.invalidateQueries({ queryKey: ['admin-settings'] })
+      qc.invalidateQueries({ queryKey: ['features'] })
+      toast('Saved: new spaces start like this')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not save')
+    }
+  }
+  const add = () => {
+    const [type, id] = pick.split(':')
+    if (!id || grants.some((g) => g.subjectId === id)) return
+    setGrants([...grants, { subjectType: type as 'user' | 'group', subjectId: id, role: 'admin' }])
+    setPick('')
+    setDirty(true)
+  }
+  if (!settings.data) return null
+  return (
+    <div className="card" style={{ maxWidth: 720, marginBottom: 20 }}>
+      <h3 style={{ marginTop: 0 }}>New spaces</h3>
+      <p className="muted small" style={{ marginTop: 0 }}>How spaces start out. Whoever creates a space becomes its admin and can change all of this afterwards.</p>
+      <div className="field">
+        <label htmlFor="ns-role">Everyone signed in (except guests)</label>
+        <select id="ns-role" className="select" style={{ maxWidth: 260 }} value={role} onChange={(e) => { setRole(e.target.value); setDirty(true) }}>
+          <option value="none">No access</option>
+          {ROLES.filter((r) => r !== 'admin').map((r) => <option key={r} value={r}>{r}</option>)}
+        </select>
+        <p className="faint small" style={{ margin: '4px 0 0' }}>Preselected when someone creates a space; they can still pick another.</p>
+      </div>
+      <div className="field" style={{ marginBottom: 8 }}>
+        <label htmlFor="ns-pick">Added to every new space</label>
+        <div className="row" style={{ gap: 6 }}>
+          <select id="ns-pick" className="select" style={{ maxWidth: 320 }} value={pick} onChange={(e) => setPick(e.target.value)}>
+            <option value="">Add a person or group…</option>
+            {groups.data?.map((g) => <option key={g.id} value={`group:${g.id}`}>{g.name} (group)</option>)}
+            {users.data?.filter((u) => !u.status || u.status === 'active').map((u) => <option key={u.id} value={`user:${u.id}`}>{u.name}</option>)}
+          </select>
+          <button className="btn" disabled={!pick} onClick={add}>Add</button>
+        </div>
+      </div>
+      {grants.length > 0 && (
+        <table className="list">
+          <tbody>
+            {grants.map((g, i) => (
+              <tr key={g.subjectType + g.subjectId}>
+                <td className="row">{g.subjectType === 'group' && <Users size={15} />} {nameOf(g)}</td>
+                <td style={{ width: 170 }}>
+                  <select className="select" aria-label={`Role of ${nameOf(g)}`} value={g.role} onChange={(e) => { setGrants(grants.map((x, j) => (j === i ? { ...x, role: e.target.value } : x))); setDirty(true) }}>
+                    {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                  </select>
+                </td>
+                <td style={{ width: 40 }}>
+                  <button className="icon-btn" aria-label={`Remove ${nameOf(g)}`} onClick={() => { setGrants(grants.filter((_, j) => j !== i)); setDirty(true) }}><X size={14} /></button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <button className="btn btn-primary btn-sm" style={{ marginTop: 10 }} disabled={!dirty} onClick={save}>Save</button>
     </div>
   )
 }

@@ -139,7 +139,7 @@ pub fn router(state: AppState) -> Router {
         .route("/pages/{id}/tasks/{idx}/toggle", post(tasks::toggle))
         .route("/notifications/read", post(notifications::mark_read))
         .route("/templates", get(templates::list).post(templates::create))
-        .route("/templates/{id}", delete(templates::delete))
+        .route("/templates/{id}", delete(templates::delete).patch(templates::update))
         .route("/templates/{id}/preview", get(templates::preview))
         .route("/pages/{id}/export", get(pages::export))
         .route("/pages/{id}/collab", get(crate::collab::ws_handler))

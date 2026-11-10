@@ -485,7 +485,7 @@ async fn feature_switches() {
     let (_, f) = app.get(&member, "/features").await;
     assert_eq!(
         f,
-        json!({"publicLinks": true, "exports": true, "ai": false, "personalSpaces": true, "viewerList": false, "drawioUrl": "https://embed.diagrams.net", "maxFileMb": 512}),
+        json!({"publicLinks": true, "exports": true, "ai": false, "personalSpaces": true, "viewerList": false, "drawioUrl": "https://embed.diagrams.net", "maxFileMb": 512, "newSpaceRole": "editor"}),
         "on by default (the viewer list off); ai needs a key"
     );
     assert_eq!(app.get(&member, &export).await.0, 200);
@@ -508,7 +508,7 @@ async fn feature_switches() {
         s,
         json!({"publicLinks": true, "exports": false, "ai": true, "personalSpaces": false, "trashRetentionDays": 0, "viewerList": false, "requireTwoFactor": "off", "drawioUrl": "https://embed.diagrams.net",
             "attachments": {"maxFileMb": 512, "blockedTypes": [], "allowedTypes": [], "spaceQuotaMb": 0, "workspaceQuotaMb": 0},
-            "serverMaxUploadMb": 512, "attachmentStorageBytes": 0})
+            "serverMaxUploadMb": 512, "attachmentStorageBytes": 0, "newSpaces": {"defaultRole": "editor", "grants": []}})
     );
 
     // ... can't be downloaded after it; members can't export any more, admins still can

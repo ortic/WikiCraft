@@ -6,6 +6,7 @@ import { api, formatBytes, formatDate, formatDay, type Job } from '../api'
 import { Avatar, Modal, Spinner, useMe, useToast, type Features } from '../ui'
 import AdminWebhooks from './AdminWebhooks'
 import AdminSpaces from './AdminSpaces'
+import { TemplateList } from '../components/TemplateManager'
 
 export default function Admin() {
   const me = useMe()
@@ -18,6 +19,7 @@ export default function Admin() {
         <NavLink to="/admin/spaces" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>Spaces</NavLink>
         <NavLink to="/admin/users" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>Users</NavLink>
         <NavLink to="/admin/groups" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>Groups</NavLink>
+        <NavLink to="/admin/templates" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>Templates</NavLink>
         <NavLink to="/admin/import" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>Import</NavLink>
         <NavLink to="/admin/webhooks" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>Webhooks</NavLink>
         <NavLink to="/admin/audit" className={({ isActive }) => `tab ${isActive ? 'active' : ''}`}>Audit log</NavLink>
@@ -27,6 +29,16 @@ export default function Admin() {
         <Route path="spaces" element={<AdminSpaces />} />
         <Route path="users" element={<UsersAdmin />} />
         <Route path="groups" element={<GroupsAdmin />} />
+        <Route
+          path="templates"
+          element={
+            <div className="card" style={{ maxWidth: 720 }}>
+              <h3 style={{ marginTop: 0 }}>Templates for every space</h3>
+              <p className="muted small" style={{ marginTop: 0 }}>Offered in every space next to the built-in templates and the space’s own.</p>
+              <TemplateList />
+            </div>
+          }
+        />
         <Route path="import" element={<ImportAdmin />} />
         <Route path="webhooks" element={<AdminWebhooks />} />
         <Route path="audit" element={<Audit />} />

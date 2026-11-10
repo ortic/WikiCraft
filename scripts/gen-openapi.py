@@ -239,7 +239,8 @@ op("/reports/tasks", "get", "Reports", "Task report (tasks-report-macro)", query
 op("/reports/decisions", "get", "Reports", "Decision log (decisionreport): decision items of the matching pages", query=[q("spaces", "keys"), q("labels", "labels"), q("status", "decided = only decided items"), q("max", "rows")], public=True)
 op("/templates", "get", "Templates", "Built-in and custom templates, each with the {{variables}} it asks for", query=[q("space", "space key")], res=resp(arr(obj({"id": txt, "name": txt, "description": {"type": ["string", "null"]}, "icon": {"type": ["string", "null"]}, "builtin": boolean, "spaceKey": {"type": ["string", "null"]}, "variables": arr(txt)}))))
 op("/templates", "post", "Templates", "Save a template", req=body(obj({"name": txt, "description": txt, "spaceKey": txt, "content": S("PmNode"), "pageId": uuid})))
-op("/templates/{id}", "delete", "Templates", "Delete a template", res=NO)
+op("/templates/{id}", "delete", "Templates", "Delete a template (its creator, workspace admins, or the space's admins for a space template); spaces and pages that started new pages from it fall back to a blank page", res=NO)
+op("/templates/{id}", "patch", "Templates", "Rename or describe a template, or take a page's current content again (same people as delete)", req=body(obj({"name": txt, "description": txt, "pageId": uuid})), res=NO)
 op("/templates/{id}/preview", "get", "Templates", "What a page from the template looks like (title and rendered HTML) and the {{variables}} it asks for", res=resp(obj({"title": {"type": ["string", "null"]}, "html": txt, "variables": arr(txt)})))
 # import / export / jobs
 op("/imports/confluence", "post", "Import & export", "Import a Confluence space export (XML or Cloud CSV zip) as a job", req=multipart({"options": {"type": "string", "description": "JSON ImportOptions"}}), res=resp(obj({"jobId": uuid}), "202", "Queued"))

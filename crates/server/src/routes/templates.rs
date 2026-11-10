@@ -169,6 +169,9 @@ pub struct TemplateItem {
     variables: Vec<String>,
     /// blueprints: the index page new pages are filed under
     filed_under: Option<&'static str>,
+    /// the caller may rename or delete it (its creator, workspace admins, and space admins for
+    /// a space's templates)
+    can_manage: bool,
 }
 
 #[derive(Deserialize)]
@@ -180,9 +183,12 @@ pub struct ListQuery {
 pub async fn list(State(state): State<AppState>, CurrentUser(user): CurrentUser, Query(q): Query<ListQuery>) -> ApiResult<Json<Vec<TemplateItem>>> {
     // a space's own templates only for people who can see the space
     let p = Principal::load(&state, Some(user.clone())).await?;
-    let space_key = match &q.space_key {
-        Some(k) if load_space(&state, &p, k).await.is_ok() => k.clone(),
-        _ => String::new(),
+    let (space_key, space_role) = match &q.space_key {
+        Some(k) => match load_space(&state, &p, k).await {
+            Ok((_, role)) => (k.clone(), role),
+            Err(_) => (String::new(), Role::None),
+        },
+        _ => (String::new(), Role::None),
     };
     let mut out: Vec<TemplateItem> = BUILTINS
         .iter()
@@ -195,23 +201,25 @@ pub async fn list(State(state): State<AppState>, CurrentUser(user): CurrentUser,
             space_key: None,
             variables: template::variables(Some(b.title), &builtin_doc(b)),
             filed_under: blueprint(b.id).map(|bp| bp.index_title),
+            can_manage: false,
         })
         .collect();
-    type Row = (Uuid, String, Option<String>, Option<String>, Option<String>, Option<String>, Value);
+    type Row = (Uuid, String, Option<String>, Option<String>, Option<String>, Option<String>, Value, Option<Uuid>);
     let rows: Vec<Row> = sqlx::query_as(
-        "SELECT t.id, t.name, t.description, t.icon, s.key, t.title, t.content FROM templates t LEFT JOIN spaces s ON s.id = t.space_id
+        "SELECT t.id, t.name, t.description, t.icon, s.key, t.title, t.content, t.created_by FROM templates t LEFT JOIN spaces s ON s.id = t.space_id
          WHERE t.workspace_id = $1 AND (t.space_id IS NULL OR lower(s.key) = lower($2)) ORDER BY lower(t.name)",
     )
     .bind(user.workspace_id)
     .bind(space_key)
     .fetch_all(&state.db)
     .await?;
-    out.extend(rows.into_iter().map(|(id, name, description, icon, space_key, title, content)| TemplateItem {
+    out.extend(rows.into_iter().map(|(id, name, description, icon, space_key, title, content, creator)| TemplateItem {
         id: id.to_string(),
         name,
         description,
         icon,
         builtin: false,
+        can_manage: user.is_admin() || creator == Some(user.id) || (space_key.is_some() && space_role >= Role::Admin),
         space_key,
         variables: Node::from_json(&content).map(|doc| template::variables(title.as_deref(), &doc)).unwrap_or_default(),
         filed_under: None,
@@ -313,16 +321,78 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
     Ok((StatusCode::CREATED, Json(json!({ "id": id }))))
 }
 
-pub async fn delete(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+/// Who may rename or delete a template: its creator, workspace admins, and the admins of the
+/// space it belongs to.
+async fn require_manage(state: &AppState, user: &crate::auth::User, id: Uuid) -> ApiResult<()> {
     let row: Option<(Option<Uuid>, Option<Uuid>)> = sqlx::query_as("SELECT created_by, space_id FROM templates WHERE id = $1 AND workspace_id = $2")
         .bind(id)
         .bind(user.workspace_id)
         .fetch_optional(&state.db)
         .await?;
-    let (creator, _) = row.ok_or(ApiError::NotFound("template"))?;
-    if creator != Some(user.id) && !user.is_admin() {
-        return Err(ApiError::Forbidden);
+    let (creator, space) = row.ok_or(ApiError::NotFound("template"))?;
+    if creator == Some(user.id) || user.is_admin() {
+        return Ok(());
     }
+    if let Some(space_id) = space {
+        let p = Principal::load(state, Some(user.clone())).await?;
+        let sa = crate::authz::load_space_access(state, space_id).await?;
+        if crate::authz::space_role(state, &p, &sa).await? >= Role::Admin {
+            return Ok(());
+        }
+    }
+    Err(ApiError::Forbidden)
+}
+
+pub async fn delete(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+    require_manage(&state, &user, id).await?;
     sqlx::query("DELETE FROM templates WHERE id = $1").bind(id).execute(&state.db).await?;
+    // spaces and pages that started new pages from it fall back to a blank page
+    sqlx::query("UPDATE spaces SET default_template = NULL WHERE default_template = $1").bind(id.to_string()).execute(&state.db).await?;
+    sqlx::query("UPDATE pages SET child_template = NULL WHERE child_template = $1").bind(id.to_string()).execute(&state.db).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct UpdateTemplate {
+    name: Option<String>,
+    /// "" removes it
+    description: Option<String>,
+    /// replaces the content with the page's current content
+    page_id: Option<Uuid>,
+}
+
+/// `PATCH /templates/{id}` `{name?, description?, pageId?}` — rename, describe, or take the
+/// content of a page again (same people as delete).
+pub async fn update(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(req): Json<UpdateTemplate>,
+) -> ApiResult<StatusCode> {
+    require_manage(&state, &user, id).await?;
+    if let Some(name) = &req.name {
+        let name = name.split_whitespace().collect::<Vec<_>>().join(" ");
+        if name.is_empty() || name.chars().count() > 120 {
+            return Err(ApiError::bad("a template needs a name of up to 120 characters"));
+        }
+        sqlx::query("UPDATE templates SET name = $2 WHERE id = $1").bind(id).bind(name).execute(&state.db).await?;
+    }
+    if let Some(d) = &req.description {
+        let d = d.trim();
+        if d.chars().count() > 500 {
+            return Err(ApiError::bad("descriptions are limited to 500 characters"));
+        }
+        sqlx::query("UPDATE templates SET description = $2 WHERE id = $1").bind(id).bind(Some(d).filter(|d| !d.is_empty())).execute(&state.db).await?;
+    }
+    if let Some(page) = req.page_id {
+        let p = Principal::load(&state, Some(user.clone())).await?;
+        require_page(&state, &p, page, Need::View).await?;
+        let content: Value = match state.rooms.get(page) {
+            Some(room) => room.snapshot().to_json(),
+            None => sqlx::query_scalar("SELECT content FROM pages WHERE id = $1").bind(page).fetch_one(&state.db).await?,
+        };
+        sqlx::query("UPDATE templates SET content = $2 WHERE id = $1").bind(id).bind(content).execute(&state.db).await?;
+    }
     Ok(StatusCode::NO_CONTENT)
 }

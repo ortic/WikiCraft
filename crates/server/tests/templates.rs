@@ -128,3 +128,62 @@ async fn blueprints_file_pages_under_an_index_page() {
     let okrs = create(json!({"spaceKey": "BP", "templateId": "builtin:okrs"})).await;
     assert!(okrs["parentId"].is_null());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn managing_templates() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (lead, lead_id) = app.user(&owner, "lead@acme.test", "member").await;
+    let (ed, ed_id) = app.user(&owner, "ed@acme.test", "member").await;
+    app.post(&owner, "/spaces", json!({"key": "MT", "name": "Managed"})).await;
+    let grants = |extra: Option<&str>| {
+        let mut g =
+            vec![json!({"subjectType": "user", "subjectId": lead_id, "role": "admin"}), json!({"subjectType": "user", "subjectId": ed_id, "role": "editor"})];
+        if let Some(o) = extra {
+            g.push(json!({"subjectType": "user", "subjectId": o, "role": "editor"}));
+        }
+        json!({"defaultRole": "viewer", "grants": g})
+    };
+    let (st, b) = app.put(&owner, "/spaces/MT/permissions", grants(None)).await;
+    assert!(st < 300, "{st} {b}");
+    let (_, src) = app.post(&ed, "/pages", json!({"spaceKey": "MT", "title": "Runbook", "markdown": "Step one"})).await;
+    let page = src["id"].as_str().unwrap().to_string();
+    // workspace-wide templates are for workspace admins
+    assert_eq!(app.post(&ed, "/templates", json!({"name": "Everyone's", "pageId": page})).await.0, 400);
+    let (st, wt) = app.post(&owner, "/templates", json!({"name": "Company runbook", "pageId": page})).await;
+    assert_eq!(st, 201);
+    let wt = wt["id"].as_str().unwrap().to_string();
+    let (_, st_) = app.post(&ed, "/templates", json!({"name": "Team runbook", "pageId": page, "spaceKey": "MT"})).await;
+    let tt = st_["id"].as_str().unwrap().to_string();
+    app.patch(&lead, "/spaces/MT", json!({"defaultTemplate": tt})).await;
+
+    let can = |list: &serde_json::Value, id: &str| list.as_array().unwrap().iter().find(|t| t["id"] == id).map(|t| t["canManage"].as_bool().unwrap());
+    let (_, l) = app.get(&ed, "/templates?spaceKey=MT").await;
+    assert_eq!((can(&l, &wt), can(&l, &tt), can(&l, "builtin:how-to")), (Some(false), Some(true), Some(false)), "creators manage their own");
+    let (_, l) = app.get(&lead, "/templates?spaceKey=MT").await;
+    assert_eq!((can(&l, &wt), can(&l, &tt)), (Some(false), Some(true)), "space admins manage the space's templates");
+    let (_, l) = app.get(&owner, "/templates?spaceKey=MT").await;
+    assert_eq!((can(&l, &wt), can(&l, &tt)), (Some(true), Some(true)));
+
+    // rename, describe, new content
+    assert_eq!(app.patch(&ed, &format!("/templates/{wt}"), json!({"name": "Mine now"})).await.0, 403);
+    assert_eq!(app.patch(&lead, &format!("/templates/{tt}"), json!({"name": "  "})).await.0, 400);
+    assert_eq!(app.patch(&lead, &format!("/templates/{tt}"), json!({"name": " Team  runbook v2 ", "description": "For on-call"})).await.0, 204);
+    app.put(&ed, &format!("/pages/{page}/content"), json!({"markdown": "Step one\n\nStep two"})).await;
+    assert_eq!(app.patch(&ed, &format!("/templates/{tt}"), json!({"pageId": page})).await.0, 204);
+    let (_, l) = app.get(&ed, "/templates?spaceKey=MT").await;
+    let t = l.as_array().unwrap().iter().find(|t| t["id"] == tt.as_str()).unwrap().clone();
+    assert_eq!((t["name"].as_str(), t["description"].as_str()), (Some("Team runbook v2"), Some("For on-call")));
+    let (_, pv) = app.get(&ed, &format!("/templates/{tt}/preview")).await;
+    assert!(pv["html"].as_str().unwrap().contains("Step two"), "{pv}");
+
+    // deleting: not by other editors; the space stops starting pages from it
+    let (other, other_id) = app.user(&owner, "other@acme.test", "member").await;
+    app.put(&owner, "/spaces/MT/permissions", grants(Some(&other_id))).await;
+    assert_eq!(app.delete(&other, &format!("/templates/{tt}")).await, 403);
+    assert_eq!(app.delete(&lead, &format!("/templates/{tt}")).await, 204);
+    let (_, s) = app.get(&ed, "/spaces/MT").await;
+    assert!(s["defaultTemplate"].is_null(), "{s}");
+    assert_eq!(app.delete(&lead, &format!("/templates/{wt}")).await, 403, "workspace templates: workspace admins");
+    assert_eq!(app.delete(&owner, &format!("/templates/{wt}")).await, 204);
+}

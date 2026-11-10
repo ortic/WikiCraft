@@ -446,3 +446,50 @@ async fn copying_a_whole_space() {
     );
     assert_eq!(d["look"], json!({"accentColor": "#0e7c66"}));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn defaults_for_new_spaces() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, member_id) = app.user(&owner, "ns@acme.test", "member").await;
+    let (_, g) = app.post(&owner, "/groups", json!({"name": "Wiki gardeners"})).await;
+    let gid = g["id"].as_str().unwrap().to_string();
+    assert_eq!(app.get(&member, "/features").await.1["newSpaceRole"], "editor");
+    for bad in [
+        json!({"defaultRole": "admin", "grants": []}),
+        json!({"defaultRole": "owner", "grants": []}),
+        json!({"defaultRole": "viewer", "grants": [{"subjectType": "group", "subjectId": uuid::Uuid::new_v4(), "role": "admin"}]}),
+        json!({"defaultRole": "viewer", "grants": [{"subjectType": "group", "subjectId": gid, "role": "admin"}, {"subjectType": "group", "subjectId": gid, "role": "editor"}]}),
+        json!({"defaultRole": "viewer", "grants": [{"subjectType": "team", "subjectId": gid, "role": "admin"}]}),
+    ] {
+        assert_eq!(app.put(&owner, "/admin/settings", json!({ "newSpaces": bad })).await.0, 400, "{bad}");
+    }
+    assert_eq!(app.put(&member, "/admin/settings", json!({"newSpaces": {"defaultRole": "none"}})).await.0, 403);
+    let (st, s) = app
+        .put(
+            &owner,
+            "/admin/settings",
+            json!({"newSpaces": {"defaultRole": "viewer", "grants": [{"subjectType": "group", "subjectId": gid, "role": "admin"}]}}),
+        )
+        .await;
+    assert_eq!(st, 200, "{s}");
+    assert_eq!(s["newSpaces"]["grants"][0]["role"], "admin");
+    assert_eq!(app.get(&member, "/features").await.1["newSpaceRole"], "viewer");
+
+    // a space created without a role choice gets the defaults, plus the creator as admin
+    let (st, sp) = app.post(&member, "/spaces", json!({"key": "NS1", "name": "Defaults"})).await;
+    assert_eq!(st, 201, "{sp}");
+    assert_eq!(sp["defaultRole"], "viewer");
+    let (_, perms) = app.get(&member, "/spaces/NS1/permissions").await;
+    let grants = perms["grants"].as_array().cloned().unwrap_or_else(|| perms.as_array().cloned().unwrap_or_default());
+    let role_of = |id: &str| grants.iter().find(|g| g["subjectId"] == id).map(|g| g["role"].as_str().unwrap().to_string());
+    assert_eq!(role_of(&gid).as_deref(), Some("admin"), "{perms}");
+    assert_eq!(role_of(&member_id).as_deref(), Some("admin"));
+    // an explicit choice wins for the role; the grants still come along
+    let (_, sp) = app.post(&member, "/spaces", json!({"key": "NS2", "name": "Open", "defaultRole": "editor"})).await;
+    assert_eq!(sp["defaultRole"], "editor");
+    // a deleted group is skipped
+    assert!(app.delete(&owner, &format!("/groups/{gid}")).await < 300);
+    let (st, _) = app.post(&member, "/spaces", json!({"key": "NS3", "name": "Later"})).await;
+    assert_eq!(st, 201);
+}

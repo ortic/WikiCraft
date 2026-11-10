@@ -5119,13 +5119,42 @@ paths:
     delete:
       tags:
       - Templates
-      summary: Delete a template
+      summary: Delete a template (its creator, workspace admins, or the space's admins for a space template); spaces and pages
+        that started new pages from it fall back to a blank page
       operationId: delete_templates_id
       parameters:
       - name: id
         in: path
         required: true
         schema: *id001
+      responses:
+        '204': *id007
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    patch:
+      tags:
+      - Templates
+      summary: Rename or describe a template, or take a page's current content again (same people as delete)
+      operationId: patch_templates_id
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: *id001
+                description: *id001
+                pageId: *id002
       responses:
         '204': *id007
         4XX:

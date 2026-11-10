@@ -8,7 +8,7 @@ export function useMe() {
   return useQuery({ queryKey: ['me'], queryFn: () => api.get<Me>('/me'), staleTime: 60_000 })
 }
 
-export type Features = { publicLinks: boolean; exports: boolean; ai: boolean; personalSpaces: boolean; viewerList?: boolean; drawioUrl?: string | null; maxFileMb?: number }
+export type Features = { publicLinks: boolean; exports: boolean; ai: boolean; personalSpaces: boolean; viewerList?: boolean; drawioUrl?: string | null; maxFileMb?: number; newSpaceRole?: string }
 
 /** Workspace switches as they apply to the signed-in person (Admin → Overview). Undefined while
  *  loading or when signed out: callers treat that as "on" (the server enforces them anyway). */

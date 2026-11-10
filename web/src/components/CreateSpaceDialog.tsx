@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { FilePlus2 } from 'lucide-react'
 import { api, type Space } from '../api'
-import { Modal } from '../ui'
+import { Modal, useFeatures } from '../ui'
 import { LineIcon } from '../icons'
 
 interface SpaceTemplate {
@@ -19,7 +19,8 @@ export default function CreateSpaceDialog({ onClose }: { onClose: () => void }) 
   const [key, setKey] = useState('')
   const [keyTouched, setKeyTouched] = useState(false)
   const [description, setDescription] = useState('')
-  const [access, setAccess] = useState('editor')
+  const features = useFeatures()
+  const [access, setAccess] = useState(features.newSpaceRole ?? 'editor')
   const [template, setTemplate] = useState('')
   const templates = useQuery({ queryKey: ['space-templates'], queryFn: () => api.get<SpaceTemplate[]>('/space-templates'), staleTime: Infinity })
   const [error, setError] = useState<string | null>(null)

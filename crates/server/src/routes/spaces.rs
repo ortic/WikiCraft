@@ -162,6 +162,68 @@ fn validate_role(r: &str) -> ApiResult<()> {
     if matches!(r, "none" | "viewer" | "commenter" | "editor" | "admin") { Ok(()) } else { Err(ApiError::bad("invalid role")) }
 }
 
+/// What new spaces start with (Admin → Spaces → New spaces): the role everyone signed in gets
+/// unless the creator picks another, and people or groups added to every new space.
+#[derive(Serialize, Deserialize, Clone, Default)]
+#[serde(rename_all = "camelCase")]
+pub struct NewSpaceDefaults {
+    #[serde(default = "editor_role")]
+    pub default_role: String,
+    #[serde(default)]
+    pub grants: Vec<DefaultGrant>,
+}
+
+#[derive(Serialize, Deserialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub struct DefaultGrant {
+    pub subject_type: String,
+    pub subject_id: Uuid,
+    pub role: String,
+}
+
+fn editor_role() -> String {
+    "editor".into()
+}
+
+/// The workspace's [`NewSpaceDefaults`] (unset: everyone edits, nobody added).
+pub async fn new_space_defaults(state: &AppState, ws: Uuid) -> ApiResult<NewSpaceDefaults> {
+    let v: Option<Value> = sqlx::query_scalar("SELECT settings->'newSpaces' FROM workspaces WHERE id = $1").bind(ws).fetch_optional(&state.db).await?.flatten();
+    Ok(v.and_then(|v| serde_json::from_value(v).ok()).unwrap_or(NewSpaceDefaults { default_role: editor_role(), grants: Vec::new() }))
+}
+
+/// Checks [`NewSpaceDefaults`] from an admin: known roles, and people and groups of this
+/// workspace (at most 20 grants, one per subject).
+pub async fn clean_new_space_defaults(state: &AppState, ws: Uuid, v: &Value) -> ApiResult<NewSpaceDefaults> {
+    let d: NewSpaceDefaults = serde_json::from_value(v.clone()).map_err(|e| ApiError::bad(format!("newSpaces: {e}")))?;
+    validate_role(&d.default_role)?;
+    if d.default_role == "admin" {
+        return Err(ApiError::bad("everyone can't be admin of every new space; pick editor at most"));
+    }
+    if d.grants.len() > 20 {
+        return Err(ApiError::bad("at most 20 people or groups"));
+    }
+    let mut seen = std::collections::HashSet::new();
+    for g in &d.grants {
+        validate_role(&g.role)?;
+        if g.role == "none" || !seen.insert((g.subject_type.clone(), g.subject_id)) {
+            return Err(ApiError::bad("each person or group once, with a role"));
+        }
+        let known: bool = match g.subject_type.as_str() {
+            "user" => sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM users WHERE id = $1 AND workspace_id = $2 AND status = 'active')"),
+            "group" => sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM groups WHERE id = $1 AND workspace_id = $2)"),
+            _ => return Err(ApiError::bad("subjectType must be user or group")),
+        }
+        .bind(g.subject_id)
+        .bind(ws)
+        .fetch_one(&state.db)
+        .await?;
+        if !known {
+            return Err(ApiError::bad("unknown person or group"));
+        }
+    }
+    Ok(d)
+}
+
 /// Creates a space with an empty home page.
 pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUser, Json(req): Json<CreateSpace>) -> ApiResult<(StatusCode, Json<SpaceRow>)> {
     if user.is_guest() {
@@ -187,7 +249,8 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
     {
         return Err(ApiError::bad(format!("unknown space template {t}")));
     }
-    let default_role = req.default_role.unwrap_or_else(|| "editor".into());
+    let defaults = new_space_defaults(&state, user.workspace_id).await?;
+    let default_role = req.default_role.clone().unwrap_or_else(|| defaults.default_role.clone());
     validate_role(&default_role)?;
     let icon = req.icon.clone().or_else(|| req.template.as_deref().and_then(crate::routes::space_templates::icon));
     let space = create_space(&state, user.workspace_id, Some(user.id), &key, name, req.description.as_deref(), icon.as_deref(), &default_role, None).await?;
@@ -197,6 +260,22 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
         .bind(user.id)
         .execute(&state.db)
         .await?;
+    // people and groups every new space gets (still existing ones)
+    for g in &defaults.grants {
+        sqlx::query(
+            "INSERT INTO space_permissions (space_id, subject_type, subject_id, role)
+             SELECT $1, $2::text, $3, $4
+              WHERE ($2::text = 'user' AND EXISTS (SELECT 1 FROM users WHERE id = $3 AND status = 'active'))
+                 OR ($2::text = 'group' AND EXISTS (SELECT 1 FROM groups WHERE id = $3))
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(space.id)
+        .bind(&g.subject_type)
+        .bind(g.subject_id)
+        .bind(&g.role)
+        .execute(&state.db)
+        .await?;
+    }
     // home page
     let home = crate::routes::pages::insert_page(
         &state.db,

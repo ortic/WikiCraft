@@ -7,6 +7,7 @@ import { api, formatDate, type Shortcut, type Space, type SpaceLook } from '../a
 import { SymbolPicker } from '../icons'
 import ExportPanel from '../components/ExportPanel'
 import { ErrorBox, SpaceIcon, Spinner, useFeatures, useToast } from '../ui'
+import { TemplateList } from '../components/TemplateManager'
 
 interface Grant {
   subjectType: 'user' | 'group'
@@ -112,6 +113,11 @@ function Details({ space }: { space: Space }) {
       <button className="btn btn-primary" onClick={save}>Save</button>
       <Shortcuts space={space} />
       <SpaceLookCard space={space} />
+      <div className="card" style={{ marginTop: 28 }}>
+        <b>Templates</b>
+        <p className="muted small" style={{ margin: '4px 0 10px' }}>This space’s own templates, offered next to the built-in ones and those for every space.</p>
+        <TemplateList spaceKey={space.key} />
+      </div>
       {!space.personalOwnerId && <SpaceOwner space={space} />}
       {!space.personalOwnerId && <CopySpace space={space} />}
       <div className="card danger-zone" style={{ marginTop: 28 }}>

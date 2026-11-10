@@ -90,7 +90,9 @@ default role for all members (or *none* for a private space) and optional anonym
 Each space also has an **owner**, the person responsible for it: its creator at first. Space
 admins hand it over in *Space settings → Details*; the new owner becomes a space admin and gets a
 notification. *Administration → Spaces* lists the owners and marks spaces whose owner's account
-was deactivated.
+was deactivated. Its **New spaces** card sets how spaces start out: the role everyone signed in
+gets (preselected when someone creates a space; they can pick another) and people or groups
+added to every new space with a role, e.g. a *Wiki gardeners* group as admins.
 
 **Drafts** are the exception to all of this: an unpublished draft (and what's below it) is only
 visible to the person who created it, space and workspace admins included, until they publish it.

@@ -6,6 +6,7 @@ import { NoAccess, OwnerDialog, RequestReviewDialog, VerificationBadge, VerifyDi
 import { ApiError, api, formatDate, type Page, type Space } from '../api'
 import { PageDecor } from '../components/PageDecor'
 import { ErrorBox, Modal, Spinner, useFeatures, useMe, useToast } from '../ui'
+import { SaveTemplateDialog } from '../components/TemplateManager'
 import { PageStatus } from '../components/PageStatus'
 import { FolderView } from '../components/FolderView'
 import { PageViews } from '../components/Viewers'
@@ -38,6 +39,7 @@ export default function PageView() {
   const [statusOpen, setStatusOpen] = useState(false)
   const [addingProp, setAddingProp] = useState(false)
   const [childTplOpen, setChildTplOpen] = useState(false)
+  const [saveTplOpen, setSaveTplOpen] = useState(false)
   const [copyOpen, setCopyOpen] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
   const [restrictions, setRestrictions] = useState(false)
@@ -175,13 +177,9 @@ export default function PageView() {
     qc.invalidateQueries({ queryKey: ['page', p.id] })
     toast('You will be notified about this page and the pages below it, including new ones')
   }
-  const saveAsTemplate = async () => {
+  const saveAsTemplate = () => {
     setMenu(false)
-    const name = window.prompt('Template name', p.title)
-    if (!name) return
-    await api.post('/templates', { name, pageId: p.id, spaceKey: p.spaceKey })
-    qc.invalidateQueries({ queryKey: ['templates'] })
-    toast(`Template “${name}” saved for this space`)
+    setSaveTplOpen(true)
   }
   const saveLabels = async (labels: string[]) => {
     await api.put(`/pages/${p.id}/labels`, { labels })
@@ -567,6 +565,7 @@ export default function PageView() {
       {ownerOpen && <OwnerDialog pageId={p.id} current={(p as Page & { ownerName?: string }).ownerName ?? null} onClose={() => setOwnerOpen(false)} />}
       {copyOpen && <CopyPageDialog page={p} onClose={() => setCopyOpen(false)} />}
       {childTplOpen && <ChildTemplateDialog page={p} onClose={() => setChildTplOpen(false)} />}
+      {saveTplOpen && <SaveTemplateDialog page={p} onClose={() => setSaveTplOpen(false)} />}
       {moveOpen && <MovePageDialog page={p} onClose={() => setMoveOpen(false)} />}
       {share && <ShareDialog pageId={p.id} title={p.title} restricted={!!p.restricted} onClose={() => setShare(false)} />}
     </div>

@@ -194,6 +194,7 @@ pub async fn get_settings(State(state): State<AppState>, CurrentUser(user): Curr
     out.insert("attachments".into(), json!(crate::routes::attachments::upload_policy(&state, user.workspace_id).await?));
     out.insert("serverMaxUploadMb".into(), json!(state.config.max_upload_mb));
     out.insert("attachmentStorageBytes".into(), json!(crate::routes::attachments::storage_used(&state, user.workspace_id, None).await?));
+    out.insert("newSpaces".into(), json!(crate::routes::spaces::new_space_defaults(&state, user.workspace_id).await?));
     Ok(Json(Value::Object(out)))
 }
 
@@ -284,6 +285,17 @@ pub async fn put_settings(
             audit::log(&state, user.workspace_id, Some(user.id), "workspace.settings", None, None, json!({ "attachments": set })).await;
             continue;
         }
+        if key == "newSpaces" {
+            // what new spaces start with: {defaultRole, grants: [{subjectType, subjectId, role}]}
+            let d = crate::routes::spaces::clean_new_space_defaults(&state, user.workspace_id, v).await?;
+            sqlx::query("UPDATE workspaces SET settings = jsonb_set(settings, '{newSpaces}', $2) WHERE id = $1")
+                .bind(user.workspace_id)
+                .bind(json!(d))
+                .execute(&state.db)
+                .await?;
+            audit::log(&state, user.workspace_id, Some(user.id), "workspace.settings", None, None, json!({ "newSpaces": d })).await;
+            continue;
+        }
         if key == "viewerList" {
             let on = v.as_bool().ok_or_else(|| ApiError::bad("viewerList must be true or false"))?;
             sqlx::query("UPDATE workspaces SET settings = settings || jsonb_build_object('viewerList', $2::boolean) WHERE id = $1")
@@ -336,6 +348,7 @@ pub async fn features(State(state): State<AppState>, CurrentUser(user): CurrentU
     f.insert("drawioUrl".into(), json!(drawio_url(&state, user.workspace_id).await?));
     let policy = crate::routes::attachments::upload_policy(&state, user.workspace_id).await?;
     f.insert("maxFileMb".into(), json!(policy.max_file_mb));
+    f.insert("newSpaceRole".into(), json!(crate::routes::spaces::new_space_defaults(&state, user.workspace_id).await?.default_role));
     Ok(Json(Value::Object(f)))
 }
 
