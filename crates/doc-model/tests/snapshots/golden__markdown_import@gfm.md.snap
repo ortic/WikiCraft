@@ -1,0 +1,732 @@
+---
+source: crates/doc-model/tests/golden.rs
+expression: "format!(\"## prosemirror\\n{}\\n\\n## markdown\\n{}\\n\\n## html\\n{}\\n\",\nserde_json::to_string_pretty(&doc).unwrap(), exported.trim_end(),\nhtml::render(&doc, &html::HtmlOptions\n{ heading_ids: true }).replace(\"><\", \">\\n<\"),)"
+input_file: crates/doc-model/tests/golden/gfm.md
+---
+## prosemirror
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 1
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Onboarding"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Welcome! This page uses "
+        },
+        {
+          "type": "text",
+          "text": "bold",
+          "marks": [
+            {
+              "type": "bold"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", "
+        },
+        {
+          "type": "text",
+          "text": "italic",
+          "marks": [
+            {
+              "type": "italic"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", "
+        },
+        {
+          "type": "text",
+          "text": "strike",
+          "marks": [
+            {
+              "type": "strike"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", "
+        },
+        {
+          "type": "text",
+          "text": "code",
+          "marks": [
+            {
+              "type": "code"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", "
+        },
+        {
+          "type": "text",
+          "text": "highlight",
+          "marks": [
+            {
+              "type": "highlight"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": " and a "
+        },
+        {
+          "type": "text",
+          "text": "link",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "https://example.com",
+                "title": "Example"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": "."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Checklist"
+        }
+      ]
+    },
+    {
+      "type": "taskList",
+      "content": [
+        {
+          "type": "taskItem",
+          "attrs": {
+            "checked": true
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Laptop"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "taskItem",
+          "attrs": {
+            "checked": false
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Accounts"
+                }
+              ]
+            },
+            {
+              "type": "taskList",
+              "content": [
+                {
+                  "type": "taskItem",
+                  "attrs": {
+                    "checked": false
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "VPN"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "taskItem",
+                  "attrs": {
+                    "checked": false
+                  },
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Wiki"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "orderedList",
+      "attrs": {
+        "start": 1
+      },
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Read the handbook"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Meet the team"
+                }
+              ]
+            },
+            {
+              "type": "bulletList",
+              "content": [
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Engineering"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Product"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "content": [
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Tool"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "textAlign": "center"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Purpose"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "textAlign": "right"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Owner"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Wiki"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "textAlign": "center"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "docs"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "textAlign": "right"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Ops"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Chat"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "textAlign": "center"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "talk | ask"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "attrs": {
+                    "textAlign": "right"
+                  },
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "IT"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "callout",
+      "attrs": {
+        "type": "warning"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Never share your password."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "blockquote",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "A plain quote over two lines."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "language": "rust"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "fn main() {\n    println!(\"hi\");\n}"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Inline math "
+        },
+        {
+          "type": "inlineMath",
+          "attrs": {
+            "latex": "e = mc^2"
+          }
+        },
+        {
+          "type": "text",
+          "text": " and a block:"
+        }
+      ]
+    },
+    {
+      "type": "blockMath",
+      "attrs": {
+        "latex": "\\int_0^1 x\\,dx"
+      }
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "image",
+          "attrs": {
+            "alt": "Team photo",
+            "src": "https://example.com/team.png",
+            "title": "The whole team"
+          }
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Line with a hard break"
+        },
+        {
+          "type": "hardBreak"
+        },
+        {
+          "type": "text",
+          "text": "and the next line."
+        }
+      ]
+    },
+    {
+      "type": "horizontalRule"
+    },
+    {
+      "type": "details",
+      "content": [
+        {
+          "type": "detailsSummary",
+          "content": [
+            {
+              "type": "text",
+              "text": "More"
+            }
+          ]
+        },
+        {
+          "type": "detailsContent",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hidden text."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+## markdown
+# Onboarding
+
+Welcome! This page uses **bold**, _italic_, ~~strike~~, `code`, ==highlight== and a [link](https://example.com).
+
+## Checklist
+
+- [x] Laptop
+- [ ] Accounts
+
+  - [ ] VPN
+  - [ ] Wiki
+
+1. Read the handbook
+2. Meet the team
+
+   - Engineering
+   - Product
+
+| Tool | Purpose | Owner |
+| --- | --- | --- |
+| Wiki | docs | Ops |
+| Chat | talk \| ask | IT |
+
+> [!WARNING]
+> Never share your password.
+
+> A plain quote over two lines.
+
+```rust
+fn main() {
+    println!("hi");
+}
+```
+
+Inline math $e = mc^2$ and a block:
+
+$$
+\int_0^1 x\,dx
+$$
+
+![Team photo](https://example.com/team.png "The whole team")
+
+Line with a hard break\
+and the next line.
+
+---
+
+<details><summary>More</summary>
+
+Hidden text.
+
+</details>
+
+## html
+<h1 id="onboarding">Onboarding</h1>
+<p>Welcome! This page uses <strong>bold</strong>, <em>italic</em>, <s>strike</s>, <code>code</code>, <mark>highlight</mark> and a <a href="https://example.com" rel="noopener noreferrer">link</a>.</p>
+<h2 id="checklist">Checklist</h2>
+<ul class="task-list" data-type="taskList">
+<li class="task-item" data-checked="true">
+<input type="checkbox" disabled checked> <div>
+<p>Laptop</p>
+</div>
+</li>
+<li class="task-item" data-checked="false">
+<input type="checkbox" disabled> <div>
+<p>Accounts</p>
+<ul class="task-list" data-type="taskList">
+<li class="task-item" data-checked="false">
+<input type="checkbox" disabled> <div>
+<p>VPN</p>
+</div>
+</li>
+<li class="task-item" data-checked="false">
+<input type="checkbox" disabled> <div>
+<p>Wiki</p>
+</div>
+</li>
+</ul>
+</div>
+</li>
+</ul>
+<ol>
+<li>
+<p>Read the handbook</p>
+</li>
+<li>
+<p>Meet the team</p>
+<ul>
+<li>
+<p>Engineering</p>
+</li>
+<li>
+<p>Product</p>
+</li>
+</ul>
+</li>
+</ol>
+<table>
+<tbody>
+<tr>
+<th>
+<p>Tool</p>
+</th>
+<th>
+<p style="text-align:center">Purpose</p>
+</th>
+<th>
+<p style="text-align:right">Owner</p>
+</th>
+</tr>
+<tr>
+<td>
+<p>Wiki</p>
+</td>
+<td>
+<p style="text-align:center">docs</p>
+</td>
+<td>
+<p style="text-align:right">Ops</p>
+</td>
+</tr>
+<tr>
+<td>
+<p>Chat</p>
+</td>
+<td>
+<p style="text-align:center">talk | ask</p>
+</td>
+<td>
+<p style="text-align:right">IT</p>
+</td>
+</tr>
+</tbody>
+</table>
+<div class="callout callout-warning" data-type="callout">
+<svg class="callout-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+<path d="M10.4 4.3 3 17.4A1.8 1.8 0 0 0 4.6 20h14.8a1.8 1.8 0 0 0 1.6-2.6L13.6 4.3a1.8 1.8 0 0 0-3.2 0z"/>
+<path d="M12 9.5v4.2"/>
+<path d="M12 16.9h.01"/>
+</svg>
+<div class="callout-body">
+<p>Never share your password.</p>
+</div>
+</div>
+<blockquote>
+<p>A plain quote over two lines.</p>
+</blockquote>
+<pre>
+<code class="language-rust">fn main() {
+    println!(&quot;hi&quot;);
+}</code>
+</pre>
+<p>Inline math <span class="math" data-latex="e = mc^2">e = mc^2</span> and a block:</p>
+<div class="math" data-latex="\int_0^1 x\,dx">\int_0^1 x\,dx</div>
+<p>
+<img src="https://example.com/team.png" alt="Team photo" title="The whole team" loading="lazy">
+</p>
+<p>Line with a hard break<br>and the next line.</p>
+<hr>
+<details>
+<summary>More</summary>
+<div class="details-content">
+<p>Hidden text.</p>
+</div>
+</details>

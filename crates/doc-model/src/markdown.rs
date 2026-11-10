@@ -45,15 +45,13 @@ pub fn markdown_to_pm(md: &str) -> MarkdownImport {
     let opts = options();
     let root = parse_document(&arena, md, &opts);
     let mut front_matter = None;
-    let mut content = Vec::new();
     for child in root.children() {
         if let NodeValue::FrontMatter(fm) = &child.data.borrow().value {
             let fm = fm.trim().trim_start_matches("---").trim_end_matches("---").trim().to_string();
             front_matter = Some(fm);
-            continue;
         }
-        content.extend(block(child, 0));
     }
+    let content = child_blocks(root, 0);
     let mut doc = Node::doc(wrap_inline_runs(content, true));
     sanitize_tree(&mut doc);
     let title = doc.content.iter().find(|n| n.kind == nodes::HEADING && n.attr_i64("level") == Some(1)).map(crate::text::inline_text);
@@ -84,7 +82,17 @@ fn block<'a>(n: Ast<'a>, depth: usize) -> Vec<Node> {
     }
     let value = n.data.borrow().value.clone();
     match value {
-        NodeValue::Paragraph => vec![Node::paragraph(inlines(n, &[], 0))],
+        NodeValue::Paragraph => {
+            let inl = inlines(n, &[], 0);
+            // `$$ … $$` on lines of their own: a math block, not display math inside a paragraph
+            if let [m] = inl.as_slice()
+                && m.kind == nodes::MATH_INLINE
+                && m.attr_bool("display") == Some(true)
+            {
+                return vec![Node::new(nodes::MATH_BLOCK).attr("latex", m.attr_str("latex").unwrap_or("").trim())];
+            }
+            vec![Node::paragraph(inl)]
+        }
         NodeValue::Heading(h) => vec![Node::heading(h.level.clamp(1, 6), inlines(n, &[], 0))],
         NodeValue::BlockQuote | NodeValue::MultilineBlockQuote(_) => {
             vec![Node::new(nodes::BLOCKQUOTE).with_content(blocks(n, depth))]
@@ -195,11 +203,94 @@ fn text_or_empty(s: String) -> Vec<Node> {
 }
 
 fn blocks<'a>(n: Ast<'a>, depth: usize) -> Vec<Node> {
+    wrap_inline_runs(child_blocks(n, depth + 1), true)
+}
+
+/// The blocks of `n`'s children; `<details><summary>…</summary>` … `</details>` HTML (what our
+/// export writes for expand blocks, and GitHub's way to fold content) becomes an expand block.
+fn child_blocks<'a>(n: Ast<'a>, depth: usize) -> Vec<Node> {
+    let children: Vec<Ast<'a>> = n.children().collect();
+    slice_blocks(&children, depth)
+}
+
+fn slice_blocks<'a>(children: &[Ast<'a>], depth: usize) -> Vec<Node> {
+    let html = |c: &Ast<'a>| match &c.data.borrow().value {
+        NodeValue::HtmlBlock(h) => Some(h.literal.trim().to_string()),
+        _ => None,
+    };
     let mut out = Vec::new();
-    for c in n.children() {
-        out.extend(block(c, depth + 1));
+    let mut i = 0;
+    while i < children.len() {
+        let c = children[i];
+        i += 1;
+        if matches!(c.data.borrow().value, NodeValue::FrontMatter(_)) {
+            continue;
+        }
+        let lit = html(&c);
+        let Some((summary, open, rest)) = lit.as_deref().and_then(details_open) else {
+            out.extend(block(c, depth));
+            continue;
+        };
+        if let Some(inner) = rest.strip_suffix("</details>") {
+            // all in one HTML block (no blank lines inside)
+            let body = if depth < MAX_DEPTH { markdown_to_pm(inner).doc.content } else { vec![] };
+            out.push(details_node(summary, open, body));
+            continue;
+        }
+        // the body is the following siblings, up to the matching `</details>`
+        let mut level = 1;
+        let end = children.iter().enumerate().skip(i).find_map(|(j, s)| {
+            let t = html(s)?;
+            if details_open(&t).is_some_and(|(_, _, r)| !r.ends_with("</details>")) {
+                level += 1;
+            } else if t == "</details>" {
+                level -= 1;
+            }
+            (level == 0).then_some(j)
+        });
+        match end {
+            Some(end) if depth < MAX_DEPTH => {
+                let body = wrap_inline_runs(slice_blocks(&children[i..end], depth + 1), true);
+                out.push(details_node(summary, open, body));
+                i = end + 1;
+            }
+            _ => out.extend(block(c, depth)),
+        }
     }
-    wrap_inline_runs(out, true)
+    out
+}
+
+/// `<details>` / `<details open>`, optionally followed by `<summary>…</summary>`: the summary
+/// text, whether it's open, and what follows.
+fn details_open(html: &str) -> Option<(String, bool, &str)> {
+    let rest = html.trim().strip_prefix("<details")?;
+    let (open, rest) = match rest.trim_start().strip_prefix("open") {
+        Some(r) => (true, r),
+        None => (false, rest),
+    };
+    let rest = rest.trim_start().strip_prefix('>')?.trim_start();
+    match rest.strip_prefix("<summary>") {
+        Some(r) => {
+            let close = r.find("</summary>")?;
+            Some((html_unescape(&r[..close]), open, r[close + "</summary>".len()..].trim()))
+        }
+        None => Some((String::new(), open, rest.trim())),
+    }
+}
+
+fn details_node(summary: String, open: bool, body: Vec<Node>) -> Node {
+    let summary = if summary.trim().is_empty() { "Details".to_string() } else { summary };
+    let body = if body.is_empty() { vec![Node::paragraph(vec![])] } else { body };
+    let mut d = Node::new(nodes::DETAILS)
+        .with_content(vec![Node::new(nodes::DETAILS_SUMMARY).with_content(vec![Node::text(summary)]), Node::new(nodes::DETAILS_CONTENT).with_content(body)]);
+    if open {
+        d = d.attr("open", true);
+    }
+    d
+}
+
+fn html_unescape(s: &str) -> String {
+    s.replace("&lt;", "<").replace("&gt;", ">").replace("&quot;", "\"").replace("&#39;", "'").replace("&amp;", "&")
 }
 
 fn inlines<'a>(n: Ast<'a>, active: &[Mark], depth: usize) -> Vec<Node> {
@@ -418,7 +509,8 @@ impl MdWriter {
             nodes::TABLE => self.table(n, prefix),
             nodes::DETAILS => {
                 let summary = n.content.first().map(|s| inline_md(&s.content)).unwrap_or_default();
-                self.line(prefix, &format!("<details><summary>{}</summary>", html_escape(&summary)));
+                let open = if n.attr_bool("open").unwrap_or(false) { " open" } else { "" };
+                self.line(prefix, &format!("<details{open}><summary>{}</summary>", html_escape(&summary)));
                 self.line(prefix, "");
                 if let Some(body) = n.content.get(1) {
                     self.blocks(&body.content, prefix);
@@ -435,6 +527,10 @@ impl MdWriter {
             }
             nodes::TOC => self.line(prefix, "<!-- table of contents -->"),
             nodes::CHILD_PAGES => self.line(prefix, "<!-- child pages -->"),
+            nodes::INCLUDE => {
+                let title = n.attr_str("title").unwrap_or("page").replace("--", "–");
+                self.line(prefix, &format!("<!-- included page: {title} -->"));
+            }
             nodes::ATTACHMENT => {
                 let name = n.attr_str("name").unwrap_or("attachment");
                 let href = n.attr_str("href").unwrap_or("");
@@ -469,7 +565,9 @@ impl MdWriter {
                 r.content
                     .iter()
                     .map(|c| {
-                        let parts: Vec<String> = c.content.iter().map(|b| inline_md(&b.content)).collect();
+                        // Markdown cells hold one line: blocks and list items become <br>-separated lines
+                        let mut parts = Vec::new();
+                        cell_lines(&c.content, "", &mut parts);
                         escape_pipes(&parts.join("<br>")).replace('\n', " ")
                     })
                     .collect()
@@ -488,6 +586,35 @@ impl MdWriter {
         self.line(prefix, &format!("|{}", " --- |".repeat(cols)));
         for r in body {
             self.line(prefix, &fmt(r));
+        }
+    }
+}
+
+/// The lines of a table cell's blocks; list items get a marker (`• `, `1. `, `[x] `).
+fn cell_lines(blocks: &[Node], marker: &str, out: &mut Vec<String>) {
+    for (i, b) in blocks.iter().enumerate() {
+        // only the item's first block carries its marker
+        let m = if i == 0 { marker } else { "" };
+        match b.kind.as_str() {
+            nodes::BULLET_LIST => b.content.iter().for_each(|item| cell_lines(&item.content, "• ", out)),
+            nodes::ORDERED_LIST => {
+                let start = b.attr_i64("start").unwrap_or(1);
+                for (n, item) in b.content.iter().enumerate() {
+                    cell_lines(&item.content, &format!("{}. ", start + n as i64), out);
+                }
+            }
+            nodes::TASK_LIST => {
+                for item in &b.content {
+                    cell_lines(&item.content, if item.attr_bool("checked").unwrap_or(false) { "[x] " } else { "[ ] " }, out);
+                }
+            }
+            nodes::PARAGRAPH | nodes::HEADING | nodes::CODE_BLOCK => {
+                let text = inline_md(&b.content);
+                if !text.trim().is_empty() || !m.is_empty() {
+                    out.push(format!("{m}{text}"));
+                }
+            }
+            _ => cell_lines(&b.content, m, out),
         }
     }
 }
@@ -603,11 +730,17 @@ fn inline_md(content: &[Node]) -> String {
             }
             nodes::HARD_BREAK if s.trim().is_empty() => {}
             nodes::HARD_BREAK => s.push_str("\\\n"),
-            nodes::IMAGE => s.push_str(&format!("![{}]({})", md_escape(n.attr_str("alt").unwrap_or("")), n.attr_str("src").unwrap_or(""))),
+            nodes::IMAGE => {
+                // the caption (else the title) as the Markdown image title
+                let title = n.attr_str("caption").or(n.attr_str("title")).filter(|t| !t.trim().is_empty());
+                let title = title.map(|t| format!(" \"{}\"", t.replace('\\', "\\\\").replace('"', "\\\"").replace('\n', " "))).unwrap_or_default();
+                s.push_str(&format!("![{}]({}{title})", md_escape(n.attr_str("alt").unwrap_or("")), n.attr_str("src").unwrap_or("")));
+            }
             nodes::MENTION => s.push_str(&format!("@{}", n.attr_str("label").or(n.attr_str("id")).unwrap_or("user"))),
             nodes::STATUS => s.push_str(&format!("`{}`", n.attr_str("text").unwrap_or("").to_uppercase())),
             nodes::DATE => s.push_str(n.attr_str("date").unwrap_or("")),
             nodes::EMOTICON => s.push_str(crate::icons::emoticon_shortcut(n.attr_str("name").unwrap_or(""))),
+            nodes::MATH_INLINE if n.attr_bool("display") == Some(true) => s.push_str(&format!("$${}$$", n.attr_str("latex").unwrap_or(""))),
             nodes::MATH_INLINE => s.push_str(&format!("${}$", n.attr_str("latex").unwrap_or(""))),
             nodes::ANCHOR => {}
             _ => s.push_str(&inline_md(&n.content)),

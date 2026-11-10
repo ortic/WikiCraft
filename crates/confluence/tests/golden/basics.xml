@@ -1,0 +1,20 @@
+<h1>Release process</h1>
+<p>This page describes <strong>how</strong> we ship. <em>Read it</em> before your first release &mdash; it&rsquo;s short.</p>
+<p>Formatting: <u>underline</u>, <s>strike</s>, <code>inline code</code>, H<sub>2</sub>O, x<sup>2</sup>, <span style="color: rgb(255,86,48);">red text</span> and <span data-highlight-colour="yellow">highlighted</span>.</p>
+<p>Line one<br />line two&nbsp;with a non-breaking space.</p>
+<h2>Links</h2>
+<p>External: <a href="https://example.com/docs?a=1&amp;b=2">example docs</a>. Page: <ac:link><ri:page ri:content-title="Other Page" /><ac:plain-text-link-body><![CDATA[the other page]]></ac:plain-text-link-body></ac:link>. Missing: <ac:link><ri:page ri:content-title="Not Exported" /></ac:link>. Anchor: <ac:link ac:anchor="Steps"><ac:plain-text-link-body><![CDATA[jump to steps]]></ac:plain-text-link-body></ac:link>. Attachment: <ac:link><ri:attachment ri:filename="diagram.png" /><ac:plain-text-link-body><![CDATA[the diagram]]></ac:plain-text-link-body></ac:link>. Mail: <a href="mailto:ops@example.com">ops</a>.</p>
+<h2>Steps</h2>
+<ol>
+  <li>Freeze the branch
+    <ul>
+      <li>tell the team</li>
+      <li>wait for <strong>green</strong> CI</li>
+    </ul>
+  </li>
+  <li>Tag the release</li>
+</ol>
+<blockquote><p>Never release on a Friday.</p></blockquote>
+<hr />
+<h3>Unsafe input</h3>
+<p><a href="javascript:alert(1)">bad link</a> stays text; <script>alert(2)</script> is dropped.</p>

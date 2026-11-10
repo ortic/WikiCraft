@@ -13,7 +13,7 @@ thiserror = "2.0.21"
 yrs = "0.28.1"
 
 [dev-dependencies]
-insta = "1.49.0"
+insta = { version = "1.49.0", features = ["glob"] }
 pretty_assertions = "1.4.1"
 proptest = "1.12.0"
 

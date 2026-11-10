@@ -742,7 +742,8 @@ impl Conv<'_> {
             "code" | "noformat" | "code-block" | "sourcecode" => {
                 self.stats.macro_seen(&name, Support::Native);
                 let lang = param("language").map(|l| l.to_ascii_lowercase());
-                let text = plain.unwrap_or_default();
+                // Confluence doesn't show the newline before `]]>`; the editor would (an empty last line)
+                let text = plain.map(|t| t.trim_end_matches(['\n', '\r']).to_string()).unwrap_or_default();
                 let mut v = Vec::new();
                 if let Some(t) = param("title") {
                     v.push(Node::paragraph(vec![Node::text_marked(t, vec![Mark::new(marks::BOLD)])]));

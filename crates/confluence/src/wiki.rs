@@ -10,12 +10,72 @@ use wikicraft_doc_model::node::{sanitize_tree, wrap_inline_runs};
 use wikicraft_doc_model::{Mark, Node, marks, nodes};
 
 pub fn wiki_to_pm(src: &str) -> Node {
-    let lines: Vec<&str> = src.lines().collect();
+    let split = split_block_macros(src);
+    let lines: Vec<&str> = split.iter().map(String::as_str).collect();
     let mut i = 0;
     let content = parse_blocks(&lines, &mut i, None);
     let mut doc = Node::doc(wrap_inline_runs(content, true));
     sanitize_tree(&mut doc);
     doc
+}
+
+const BLOCK_MACROS: &[&str] = &["code", "noformat", "quote", "info", "note", "tip", "warning", "panel", "expand"];
+
+/// The next block macro tag (`{info}`, `{code:java}`, …) in `s`: (start, end, name). Inside a
+/// `{code}` / `{noformat}` body only its closing tag counts; `{{mono}}` is never a tag.
+fn next_tag(s: &str, inside: Option<&str>) -> Option<(usize, usize, String)> {
+    if let Some(name) = inside {
+        let close = format!("{{{name}}}");
+        let start = s.to_ascii_lowercase().find(&close)?;
+        return Some((start, start + close.len(), name.to_string()));
+    }
+    let b = s.as_bytes();
+    let mut from = 0;
+    while let Some(off) = s[from..].find('{') {
+        let start = from + off;
+        from = start + 1;
+        if b.get(start + 1) == Some(&b'{') || (start > 0 && b[start - 1] == b'{') {
+            from = start + 2;
+            continue;
+        }
+        let Some(close) = s[start..].find('}') else { break };
+        let inner = &s[start + 1..start + close];
+        let name = inner.split(':').next().unwrap_or("").to_ascii_lowercase();
+        if BLOCK_MACROS.contains(&name.as_str()) {
+            return Some((start, start + close + 1, name));
+        }
+    }
+    None
+}
+
+/// Puts every block macro tag on a line of its own, so `{info}Short note.{info}` and
+/// `{code}x = 1{code}` parse like their multi-line forms. Blank lines (paragraph breaks) and
+/// code bodies are kept as they are.
+fn split_block_macros(src: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut inside: Option<String> = None;
+    for line in src.lines() {
+        let mut rest = line;
+        let mut split = false;
+        while let Some((start, end, name)) = next_tag(rest, inside.as_deref()) {
+            let before = &rest[..start];
+            if !before.trim().is_empty() {
+                out.push(before.to_string());
+            }
+            out.push(rest[start..end].to_string());
+            inside = match inside {
+                Some(_) => None,
+                None if name == "code" || name == "noformat" => Some(name),
+                None => None,
+            };
+            rest = &rest[end..];
+            split = true;
+        }
+        if !split || !rest.trim().is_empty() {
+            out.push(rest.to_string());
+        }
+    }
+    out
 }
 
 fn block_macro_start(line: &str) -> Option<(String, Option<String>)> {
@@ -28,7 +88,7 @@ fn block_macro_start(line: &str) -> Option<(String, Option<String>)> {
         None => (inner, None),
     };
     let name = name.to_ascii_lowercase();
-    matches!(name.as_str(), "code" | "noformat" | "quote" | "info" | "note" | "tip" | "warning" | "panel" | "expand").then_some((name, params))
+    BLOCK_MACROS.contains(&name.as_str()).then_some((name, params))
 }
 
 fn parse_blocks(lines: &[&str], i: &mut usize, until: Option<&str>) -> Vec<Node> {
@@ -125,10 +185,12 @@ fn parse_blocks(lines: &[&str], i: &mut usize, until: Option<&str>) -> Vec<Node>
         }
         if list_marker(t).is_some() {
             flush(&mut para, &mut out);
-            let mut items = Vec::new();
+            let mut items: Vec<(String, String)> = Vec::new();
             while *i < lines.len() {
                 let lt = lines[*i].trim();
                 match list_marker(lt) {
+                    // `*` and `#` items at the top level are separate lists
+                    Some((m, _)) if items.first().is_some_and(|(f, _)| f.as_bytes()[0] != m.as_bytes()[0]) => break,
                     Some((m, rest)) => items.push((m.to_string(), rest.to_string())),
                     None => break,
                 }
@@ -353,5 +415,33 @@ mod tests {
         assert_eq!(doc.content[4].attr_str("language"), Some("java"));
         let p = serde_json::to_string(&doc.content[1]).unwrap();
         assert!(p.contains("\"bold\"") && p.contains("https://google.com") && p.contains("\"code\""));
+    }
+
+    #[test]
+    fn one_line_block_macros_and_mixed_lists() {
+        let doc = wiki_to_pm(
+            "{info}Ask in #help.{info}
+
+after
+
+{code}x = {y}{code}
+* bullet
+# one
+# two
+
+See {{code}} here.
+
+{note}start
+more{note}",
+        );
+        let kinds: Vec<&str> = doc.content.iter().map(|n| n.kind.as_str()).collect();
+        assert_eq!(kinds, ["callout", "paragraph", "codeBlock", "bulletList", "orderedList", "paragraph", "callout"]);
+        let text = |n: &Node| wikicraft_doc_model::text::plain_text(n);
+        assert_eq!(text(&doc.content[0]), "Ask in #help.");
+        assert_eq!(text(&doc.content[1]), "after", "the callout ends where its closing tag is");
+        assert_eq!(text(&doc.content[2]), "x = {y}");
+        assert_eq!(doc.content[4].content.len(), 2);
+        assert!(serde_json::to_string(&doc.content[5]).unwrap().contains("\"code\""), "{{mono}} stays inline");
+        assert_eq!(text(&doc.content[6]), "start more");
     }
 }

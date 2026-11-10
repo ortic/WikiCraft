@@ -1,0 +1,759 @@
+---
+source: crates/confluence/tests/golden.rs
+expression: "report(&doc, &stats)"
+input_file: crates/confluence/tests/golden/macros.xml
+---
+## stats
+{
+  "attachment_refs": 1,
+  "attachment_refs_resolved": 1,
+  "bodies": 1,
+  "macros": {
+    "anchor": [
+      1,
+      "native"
+    ],
+    "children": [
+      1,
+      "native"
+    ],
+    "code": [
+      1,
+      "native"
+    ],
+    "contentbylabel": [
+      1,
+      "native"
+    ],
+    "details": [
+      1,
+      "partial"
+    ],
+    "excerpt": [
+      1,
+      "native"
+    ],
+    "expand": [
+      1,
+      "native"
+    ],
+    "html": [
+      1,
+      "partial"
+    ],
+    "include": [
+      1,
+      "native"
+    ],
+    "info": [
+      1,
+      "native"
+    ],
+    "jira": [
+      1,
+      "partial"
+    ],
+    "mathblock": [
+      1,
+      "native"
+    ],
+    "mermaid": [
+      1,
+      "native"
+    ],
+    "noformat": [
+      1,
+      "native"
+    ],
+    "note": [
+      1,
+      "native"
+    ],
+    "panel": [
+      1,
+      "native"
+    ],
+    "status": [
+      2,
+      "native"
+    ],
+    "tip": [
+      1,
+      "native"
+    ],
+    "toc": [
+      1,
+      "native"
+    ],
+    "vendor-app-calendar": [
+      1,
+      "placeholder"
+    ],
+    "view-file": [
+      1,
+      "native"
+    ],
+    "warning": [
+      1,
+      "native"
+    ],
+    "widget": [
+      1,
+      "native"
+    ]
+  },
+  "page_links": 1,
+  "page_links_resolved": 1
+}
+
+## prosemirror
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "toc",
+      "attrs": {
+        "maxLevel": 2,
+        "numbered": true
+      }
+    },
+    {
+      "type": "callout",
+      "attrs": {
+        "type": "info"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Heads up",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Maintenance on "
+            },
+            {
+              "type": "text",
+              "text": "Saturday",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            },
+            {
+              "type": "text",
+              "text": "."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "callout",
+      "attrs": {
+        "type": "success"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Use the CLI."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "callout",
+      "attrs": {
+        "type": "warning"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Read-only mode."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "callout",
+      "attrs": {
+        "type": "error"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Data loss possible."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "callout",
+      "attrs": {
+        "type": "note"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Panel",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Inside a panel."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "deploy.py",
+          "marks": [
+            {
+              "type": "bold"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "language": "python"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "def deploy(env):\n    print(f\"deploying to {env}\")  # <not a tag>"
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "content": [
+        {
+          "type": "text",
+          "text": "plain   preformatted"
+        }
+      ]
+    },
+    {
+      "type": "details",
+      "content": [
+        {
+          "type": "detailsSummary",
+          "content": [
+            {
+              "type": "text",
+              "text": "Details"
+            }
+          ]
+        },
+        {
+          "type": "detailsContent",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Hidden until opened."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Status: "
+        },
+        {
+          "type": "status",
+          "attrs": {
+            "color": "green",
+            "text": "On track"
+          }
+        },
+        {
+          "type": "text",
+          "text": " "
+        },
+        {
+          "type": "status",
+          "attrs": {
+            "color": "red",
+            "text": "Blocked"
+          }
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "anchor",
+          "attrs": {
+            "name": "intro"
+          }
+        },
+        {
+          "type": "text",
+          "text": "Anchored paragraph."
+        }
+      ]
+    },
+    {
+      "type": "childPages",
+      "attrs": {
+        "depth": 2,
+        "sort": "title"
+      }
+    },
+    {
+      "type": "include",
+      "attrs": {
+        "excerpt": false,
+        "pageRef": "wcimport:page/200",
+        "title": "Other Page"
+      }
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "The short version."
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "OPS-42",
+          "marks": [
+            {
+              "type": "code"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "language": "mermaid"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "graph TD; A-->B"
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "language": "html"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "<b>raw</b><script>x()</script>"
+        }
+      ]
+    },
+    {
+      "type": "attachment",
+      "attrs": {
+        "href": "wcimport:attachment/300",
+        "name": "diagram.png",
+        "view": "preview"
+      }
+    },
+    {
+      "type": "embed",
+      "attrs": {
+        "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+      }
+    },
+    {
+      "type": "blockMath",
+      "attrs": {
+        "latex": "e^{i\\pi} + 1 = 0"
+      }
+    },
+    {
+      "type": "table",
+      "content": [
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "attrs": {
+                "colspan": 1,
+                "rowspan": 1
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Owner"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "attrs": {
+                "colspan": 1,
+                "rowspan": 1
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Ops"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "attrs": {
+                "colspan": 1,
+                "rowspan": 1
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Status"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "attrs": {
+                "colspan": 1,
+                "rowspan": 1
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Live"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "macro",
+      "attrs": {
+        "name": "contentbylabel",
+        "params": {
+          "labels": "runbook",
+          "max": "5"
+        }
+      }
+    },
+    {
+      "type": "macro",
+      "attrs": {
+        "name": "vendor-app-calendar",
+        "params": {
+          "calendarId": "team"
+        }
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "kept body"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+## markdown
+<!-- table of contents -->
+
+> [!NOTE]
+> **Heads up**
+>
+> Maintenance on **Saturday**.
+
+> [!TIP]
+> Use the CLI.
+
+> [!WARNING]
+> Read-only mode.
+
+> [!CAUTION]
+> Data loss possible.
+
+> [!IMPORTANT]
+> **Panel**
+>
+> Inside a panel.
+
+**deploy.py**
+
+```python
+def deploy(env):
+    print(f"deploying to {env}")  # <not a tag>
+```
+
+```
+plain   preformatted
+```
+
+<details><summary>Details</summary>
+
+Hidden until opened.
+
+</details>
+
+Status: `ON TRACK` `BLOCKED`
+
+Anchored paragraph.
+
+<!-- child pages -->
+
+<!-- included page: Other Page -->
+
+The short version.
+
+`OPS-42`
+
+```mermaid
+graph TD; A-->B
+```
+
+```html
+<b>raw</b><script>x()</script>
+```
+
+[diagram.png](wcimport:attachment/300)
+
+<https://www.youtube.com/watch?v=dQw4w9WgXcQ>
+
+$$
+e^{i\pi} + 1 = 0
+$$
+
+|  |  |
+| --- | --- |
+| Owner | Ops |
+| Status | Live |
+
+<!-- macro: contentbylabel -->
+
+<!-- macro: vendor-app-calendar -->
+kept body
+
+## html
+<nav class="toc">
+<ul>
+</ul>
+</nav>
+<div class="callout callout-info" data-type="callout">
+<svg class="callout-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+<circle cx="12" cy="12" r="9"/>
+<path d="M12 11v5.5"/>
+<path d="M12 7.6h.01"/>
+</svg>
+<div class="callout-body">
+<p>
+<strong>Heads up</strong>
+</p>
+<p>Maintenance on <strong>Saturday</strong>.</p>
+</div>
+</div>
+<div class="callout callout-success" data-type="callout">
+<svg class="callout-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+<circle cx="12" cy="12" r="9"/>
+<path d="m8.2 12.4 2.6 2.6 5-5.4"/>
+</svg>
+<div class="callout-body">
+<p>Use the CLI.</p>
+</div>
+</div>
+<div class="callout callout-warning" data-type="callout">
+<svg class="callout-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+<path d="M10.4 4.3 3 17.4A1.8 1.8 0 0 0 4.6 20h14.8a1.8 1.8 0 0 0 1.6-2.6L13.6 4.3a1.8 1.8 0 0 0-3.2 0z"/>
+<path d="M12 9.5v4.2"/>
+<path d="M12 16.9h.01"/>
+</svg>
+<div class="callout-body">
+<p>Read-only mode.</p>
+</div>
+</div>
+<div class="callout callout-error" data-type="callout">
+<svg class="callout-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+<path d="M8.4 3h7.2L21 8.4v7.2L15.6 21H8.4L3 15.6V8.4z"/>
+<path d="m9.4 9.4 5.2 5.2M14.6 9.4l-5.2 5.2"/>
+</svg>
+<div class="callout-body">
+<p>Data loss possible.</p>
+</div>
+</div>
+<div class="callout callout-note" data-type="callout">
+<svg class="callout-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+<path d="M6 3.5h8.5l3.5 3.5v13.5H6z"/>
+<path d="M14.5 3.5V7H18"/>
+<path d="M9 11.5h6M9 15h6M9 18.5h3.5"/>
+</svg>
+<div class="callout-body">
+<p>
+<strong>Panel</strong>
+</p>
+<p>Inside a panel.</p>
+</div>
+</div>
+<p>
+<strong>deploy.py</strong>
+</p>
+<pre>
+<code class="language-python">def deploy(env):
+    print(f&quot;deploying to {env}&quot;)  # &lt;not a tag&gt;</code>
+</pre>
+<pre>
+<code>plain   preformatted</code>
+</pre>
+<details>
+<summary>Details</summary>
+<div class="details-content">
+<p>Hidden until opened.</p>
+</div>
+</details>
+<p>Status: <span class="status status-green">On track</span> <span class="status status-red">Blocked</span>
+</p>
+<p>
+<a id="intro">
+</a>Anchored paragraph.</p>
+<div class="child-pages" data-type="childPages">
+</div>
+<div class="include" data-page-id="">Included page: Other Page</div>
+<p>The short version.</p>
+<p>
+<code>OPS-42</code>
+</p>
+<pre>
+<code class="language-mermaid">graph TD; A--&gt;B</code>
+</pre>
+<pre>
+<code class="language-html">&lt;b&gt;raw&lt;/b&gt;&lt;script&gt;x()&lt;/script&gt;</code>
+</pre>
+<p class="attachment">
+<a href="#">
+<svg class="attachment-icon" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+<path d="m20 11.5-7.9 7.9a5 5 0 0 1-7.1-7.1l8.6-8.6a3.4 3.4 0 0 1 4.8 4.8l-8.6 8.6a1.7 1.7 0 0 1-2.4-2.4l7.9-7.9"/>
+</svg> diagram.png</a>
+</p>
+<p class="embed">
+<a href="https://www.youtube.com/watch?v=dQw4w9WgXcQ" rel="noopener noreferrer">https://www.youtube.com/watch?v=dQw4w9WgXcQ</a>
+</p>
+<div class="math" data-latex="e^{i\pi} + 1 = 0">e^{i\pi} + 1 = 0</div>
+<table>
+<tbody>
+<tr>
+<th>
+<p>Owner</p>
+</th>
+<td>
+<p>Ops</p>
+</td>
+</tr>
+<tr>
+<th>
+<p>Status</p>
+</th>
+<td>
+<p>Live</p>
+</td>
+</tr>
+</tbody>
+</table>
+<div class="macro" data-macro="contentbylabel">
+<div class="macro-label">Macro: contentbylabel</div>
+</div>
+<div class="macro" data-macro="vendor-app-calendar">
+<div class="macro-label">Macro: vendor-app-calendar</div>
+<p>kept body</p>
+</div>

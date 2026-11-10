@@ -1,0 +1,488 @@
+---
+source: crates/confluence/tests/golden.rs
+expression: "report(&doc, &stats)"
+input_file: crates/confluence/tests/golden/space_description.wiki
+---
+## stats
+{
+  "bodies": 1,
+  "wiki_markup_bodies": 1
+}
+
+## prosemirror
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 1
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Engineering space"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Welcome to "
+        },
+        {
+          "type": "text",
+          "text": "Engineering",
+          "marks": [
+            {
+              "type": "bold"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ". See "
+        },
+        {
+          "type": "text",
+          "text": "the handbook",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "https://example.com/handbook"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": " and "
+        },
+        {
+          "type": "text",
+          "text": "Other Page",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "wcimport:wikilink//Other Page"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": "."
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Runbooks"
+                }
+              ]
+            },
+            {
+              "type": "bulletList",
+              "content": [
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Database"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "Network"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "orderedList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "first"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "second"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "content": [
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Service"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Owner"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "API"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Team A"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Web"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Team B"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "language": "java"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "class A {}"
+        }
+      ]
+    },
+    {
+      "type": "callout",
+      "attrs": {
+        "type": "info"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Ask in #eng-help."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "blockquote",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "A quote."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "horizontalRule"
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "strike",
+          "marks": [
+            {
+              "type": "strike"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": " "
+        },
+        {
+          "type": "text",
+          "text": "under",
+          "marks": [
+            {
+              "type": "underline"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": " "
+        },
+        {
+          "type": "text",
+          "text": "sup",
+          "marks": [
+            {
+              "type": "superscript"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": " "
+        },
+        {
+          "type": "text",
+          "text": "sub",
+          "marks": [
+            {
+              "type": "subscript"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": " "
+        },
+        {
+          "type": "text",
+          "text": "mono",
+          "marks": [
+            {
+              "type": "code"
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+## markdown
+# Engineering space
+
+Welcome to **Engineering**. See [the handbook](https://example.com/handbook) and [Other Page](<wcimport:wikilink//Other Page>).
+
+- Runbooks
+
+  - Database
+  - Network
+
+1. first
+2. second
+
+| Service | Owner |
+| --- | --- |
+| API | Team A |
+| Web | Team B |
+
+```java
+class A {}
+```
+
+> [!NOTE]
+> Ask in \#eng-help.
+
+> A quote.
+
+---
+
+~~strike~~ under sup sub `mono`
+
+## html
+<h1 id="engineering-space">Engineering space</h1>
+<p>Welcome to <strong>Engineering</strong>. See <a href="https://example.com/handbook" rel="noopener noreferrer">the handbook</a> and Other Page.</p>
+<ul>
+<li>
+<p>Runbooks</p>
+<ul>
+<li>
+<p>Database</p>
+</li>
+<li>
+<p>Network</p>
+</li>
+</ul>
+</li>
+</ul>
+<ol>
+<li>
+<p>first</p>
+</li>
+<li>
+<p>second</p>
+</li>
+</ol>
+<table>
+<tbody>
+<tr>
+<th>
+<p>Service</p>
+</th>
+<th>
+<p>Owner</p>
+</th>
+</tr>
+<tr>
+<td>
+<p>API</p>
+</td>
+<td>
+<p>Team A</p>
+</td>
+</tr>
+<tr>
+<td>
+<p>Web</p>
+</td>
+<td>
+<p>Team B</p>
+</td>
+</tr>
+</tbody>
+</table>
+<pre>
+<code class="language-java">class A {}</code>
+</pre>
+<div class="callout callout-info" data-type="callout">
+<svg class="callout-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+<circle cx="12" cy="12" r="9"/>
+<path d="M12 11v5.5"/>
+<path d="M12 7.6h.01"/>
+</svg>
+<div class="callout-body">
+<p>Ask in #eng-help.</p>
+</div>
+</div>
+<blockquote>
+<p>A quote.</p>
+</blockquote>
+<hr>
+<p>
+<s>strike</s> <u>under</u> <sup>sup</sup> <sub>sub</sub> <code>mono</code>
+</p>

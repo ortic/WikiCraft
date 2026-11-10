@@ -1,0 +1,503 @@
+---
+source: crates/confluence/tests/golden.rs
+expression: "report(&doc, &stats)"
+input_file: crates/confluence/tests/golden/basics.xml
+---
+## stats
+{
+  "attachment_refs": 1,
+  "attachment_refs_resolved": 1,
+  "bodies": 1,
+  "missing_link_samples": [
+    "DOC/Not Exported"
+  ],
+  "page_links": 2,
+  "page_links_missing": 1,
+  "page_links_resolved": 1
+}
+
+## prosemirror
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 1
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Release process"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "This page describes "
+        },
+        {
+          "type": "text",
+          "text": "how",
+          "marks": [
+            {
+              "type": "bold"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": " we ship. "
+        },
+        {
+          "type": "text",
+          "text": "Read it",
+          "marks": [
+            {
+              "type": "italic"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": " before your first release — it’s short."
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Formatting: "
+        },
+        {
+          "type": "text",
+          "text": "underline",
+          "marks": [
+            {
+              "type": "underline"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", "
+        },
+        {
+          "type": "text",
+          "text": "strike",
+          "marks": [
+            {
+              "type": "strike"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", "
+        },
+        {
+          "type": "text",
+          "text": "inline code",
+          "marks": [
+            {
+              "type": "code"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", H"
+        },
+        {
+          "type": "text",
+          "text": "2",
+          "marks": [
+            {
+              "type": "subscript"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": "O, x"
+        },
+        {
+          "type": "text",
+          "text": "2",
+          "marks": [
+            {
+              "type": "superscript"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", "
+        },
+        {
+          "type": "text",
+          "text": "red text",
+          "marks": [
+            {
+              "type": "textStyle",
+              "attrs": {
+                "color": "rgb(255,86,48)"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": " and "
+        },
+        {
+          "type": "text",
+          "text": "highlighted",
+          "marks": [
+            {
+              "type": "highlight",
+              "attrs": {
+                "color": "yellow"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": "."
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Line one"
+        },
+        {
+          "type": "hardBreak"
+        },
+        {
+          "type": "text",
+          "text": "line two with a non-breaking space."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Links"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "External: "
+        },
+        {
+          "type": "text",
+          "text": "example docs",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "https://example.com/docs?a=1&b=2"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ". Page: "
+        },
+        {
+          "type": "text",
+          "text": "the other page",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "wcimport:page/200"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ". Missing: "
+        },
+        {
+          "type": "text",
+          "text": "Not Exported",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "wcimport:missing/DOC/Not+Exported"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ". Anchor: "
+        },
+        {
+          "type": "text",
+          "text": "jump to steps",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "#steps"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ". Attachment: "
+        },
+        {
+          "type": "text",
+          "text": "the diagram",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "wcimport:attachment/300"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ". Mail: "
+        },
+        {
+          "type": "text",
+          "text": "ops",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "mailto:ops@example.com"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": "."
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 2
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Steps"
+        }
+      ]
+    },
+    {
+      "type": "orderedList",
+      "attrs": {
+        "start": 1
+      },
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Freeze the branch"
+                }
+              ]
+            },
+            {
+              "type": "bulletList",
+              "content": [
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "tell the team"
+                        }
+                      ]
+                    }
+                  ]
+                },
+                {
+                  "type": "listItem",
+                  "content": [
+                    {
+                      "type": "paragraph",
+                      "content": [
+                        {
+                          "type": "text",
+                          "text": "wait for "
+                        },
+                        {
+                          "type": "text",
+                          "text": "green",
+                          "marks": [
+                            {
+                              "type": "bold"
+                            }
+                          ]
+                        },
+                        {
+                          "type": "text",
+                          "text": " CI"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Tag the release"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "blockquote",
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Never release on a Friday."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "horizontalRule"
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 3
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Unsafe input"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "bad link stays text;  is dropped."
+        }
+      ]
+    }
+  ]
+}
+
+## markdown
+# Release process
+
+This page describes **how** we ship. _Read it_ before your first release — it’s short.
+
+Formatting: underline, ~~strike~~, `inline code`, H2O, x2, red text and ==highlighted==.
+
+Line one\
+line two with a non-breaking space.
+
+## Links
+
+External: [example docs](https://example.com/docs?a=1&b=2). Page: [the other page](wcimport:page/200). Missing: [Not Exported](wcimport:missing/DOC/Not+Exported). Anchor: [jump to steps](#steps). Attachment: [the diagram](wcimport:attachment/300). Mail: [ops](mailto:ops@example.com).
+
+## Steps
+
+1. Freeze the branch
+
+   - tell the team
+   - wait for **green** CI
+2. Tag the release
+
+> Never release on a Friday.
+
+---
+
+### Unsafe input
+
+bad link stays text;  is dropped.
+
+## html
+<h1 id="release-process">Release process</h1>
+<p>This page describes <strong>how</strong> we ship. <em>Read it</em> before your first release — it’s short.</p>
+<p>Formatting: <u>underline</u>, <s>strike</s>, <code>inline code</code>, H<sub>2</sub>O, x<sup>2</sup>, <span style="color:rgb(255,86,48)">red text</span> and <mark style="background-color:yellow">highlighted</mark>.</p>
+<p>Line one<br>line two with a non-breaking space.</p>
+<h2 id="links">Links</h2>
+<p>External: <a href="https://example.com/docs?a=1&amp;b=2" rel="noopener noreferrer">example docs</a>. Page: the other page. Missing: Not Exported. Anchor: <a href="#steps" rel="noopener noreferrer">jump to steps</a>. Attachment: the diagram. Mail: <a href="mailto:ops@example.com" rel="noopener noreferrer">ops</a>.</p>
+<h2 id="steps">Steps</h2>
+<ol>
+<li>
+<p>Freeze the branch</p>
+<ul>
+<li>
+<p>tell the team</p>
+</li>
+<li>
+<p>wait for <strong>green</strong> CI</p>
+</li>
+</ul>
+</li>
+<li>
+<p>Tag the release</p>
+</li>
+</ol>
+<blockquote>
+<p>Never release on a Friday.</p>
+</blockquote>
+<hr>
+<h3 id="unsafe-input">Unsafe input</h3>
+<p>bad link stays text;  is dropped.</p>

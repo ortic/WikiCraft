@@ -1,0 +1,8 @@
+<ac:macro ac:name="info"><ac:parameter ac:name="title">Old syntax</ac:parameter><ac:rich-text-body><p>Still a callout.</p></ac:rich-text-body></ac:macro>
+<ac:macro ac:name="code"><ac:plain-text-body><![CDATA[echo legacy]]></ac:plain-text-body></ac:macro>
+<p>Text before]] &gt; a stray CDATA end and an unclosed <br> tag.</p>
+<div class="content-wrapper"><p>Wrapped in a div.</p><center>centered</center></div>
+<ac:structured-macro ac:name="unmigrated-wiki-markup"><ac:plain-text-body><![CDATA[h3. From wiki markup
+* first *bold* item
+* second _italic_ item
+{code}x = 1{code}]]></ac:plain-text-body></ac:structured-macro>

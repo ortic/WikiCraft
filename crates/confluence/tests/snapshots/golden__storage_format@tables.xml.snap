@@ -1,0 +1,404 @@
+---
+source: crates/confluence/tests/golden.rs
+expression: "report(&doc, &stats)"
+input_file: crates/confluence/tests/golden/tables.xml
+---
+## stats
+{
+  "bodies": 1,
+  "emoticons": 1
+}
+
+## prosemirror
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "table",
+      "attrs": {
+        "layout": "wide"
+      },
+      "content": [
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableHeader",
+              "attrs": {
+                "colspan": 1,
+                "colwidth": [
+                  200
+                ],
+                "rowspan": 1
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Service"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "attrs": {
+                "colspan": 1,
+                "colwidth": [
+                  400
+                ],
+                "rowspan": 1
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Owner"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableHeader",
+              "attrs": {
+                "colspan": 1,
+                "rowspan": 1
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Notes"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "attrs": {
+                "colspan": 1,
+                "colwidth": [
+                  200
+                ],
+                "rowspan": 1
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "API"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "attrs": {
+                "background": "#e3fcef",
+                "colspan": 1,
+                "colwidth": [
+                  400
+                ],
+                "rowspan": 1
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Team "
+                    },
+                    {
+                      "type": "text",
+                      "text": "A",
+                      "marks": [
+                        {
+                          "type": "bold"
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "attrs": {
+                "colspan": 1,
+                "rowspan": 2
+              },
+              "content": [
+                {
+                  "type": "bulletList",
+                  "content": [
+                    {
+                      "type": "listItem",
+                      "content": [
+                        {
+                          "type": "paragraph",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "scaled"
+                            }
+                          ]
+                        }
+                      ]
+                    },
+                    {
+                      "type": "listItem",
+                      "content": [
+                        {
+                          "type": "paragraph",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "monitored"
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "attrs": {
+                "colspan": 2,
+                "colwidth": [
+                  200,
+                  400
+                ],
+                "rowspan": 1
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Gateway and workers"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "attrs": {
+                "colspan": 1,
+                "colwidth": [
+                  200
+                ],
+                "rowspan": 1
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Empty next"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "attrs": {
+                "colspan": 1,
+                "colwidth": [
+                  400
+                ],
+                "rowspan": 1
+              },
+              "content": [
+                {
+                  "type": "paragraph"
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "attrs": {
+                "colspan": 1,
+                "rowspan": 1
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "emoticon",
+                      "attrs": {
+                        "name": "tick"
+                      }
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "table",
+      "content": [
+        {
+          "type": "tableRow",
+          "content": [
+            {
+              "type": "tableCell",
+              "attrs": {
+                "colspan": 1,
+                "rowspan": 1
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "no paragraph wrapper"
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "tableCell",
+              "attrs": {
+                "colspan": 1,
+                "rowspan": 1
+              },
+              "content": [
+                {
+                  "type": "paragraph",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "second"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+## markdown
+| Service | Owner | Notes |
+| --- | --- | --- |
+| API | Team **A** | • scaled<br>• monitored |
+| Gateway and workers |  |  |
+| Empty next |  | (/) |
+
+|  |  |
+| --- | --- |
+| no paragraph wrapper | second |
+
+## html
+<table>
+<tbody>
+<tr>
+<th>
+<p>Service</p>
+</th>
+<th>
+<p>Owner</p>
+</th>
+<th>
+<p>Notes</p>
+</th>
+</tr>
+<tr>
+<td>
+<p>API</p>
+</td>
+<td style="background-color:#e3fcef">
+<p>Team <strong>A</strong>
+</p>
+</td>
+<td rowspan="2">
+<ul>
+<li>
+<p>scaled</p>
+</li>
+<li>
+<p>monitored</p>
+</li>
+</ul>
+</td>
+</tr>
+<tr>
+<td colspan="2">
+<p>Gateway and workers</p>
+</td>
+</tr>
+<tr>
+<td>
+<p>Empty next</p>
+</td>
+<td>
+<p>
+</p>
+</td>
+<td>
+<p>
+<svg class="emoticon" viewBox="0 0 24 24" width="1.2em" height="1.2em" style="vertical-align:-0.25em" role="img" aria-label="tick">
+<circle cx="12" cy="12" r="10" fill="#2DA44E"/>
+<path d="m7.4 12.4 3 3 6.2-6.6" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+</p>
+</td>
+</tr>
+</tbody>
+</table>
+<table>
+<tbody>
+<tr>
+<td>
+<p>no paragraph wrapper</p>
+</td>
+<td>
+<p>second</p>
+</td>
+</tr>
+</tbody>
+</table>

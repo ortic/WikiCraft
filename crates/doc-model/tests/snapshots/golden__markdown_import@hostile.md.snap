@@ -1,0 +1,165 @@
+---
+source: crates/doc-model/tests/golden.rs
+expression: "format!(\"## prosemirror\\n{}\\n\\n## markdown\\n{}\\n\\n## html\\n{}\\n\",\nserde_json::to_string_pretty(&doc).unwrap(), exported.trim_end(),\nhtml::render(&doc, &html::HtmlOptions\n{ heading_ids: true }).replace(\"><\", \">\\n<\"),)"
+input_file: crates/doc-model/tests/golden/hostile.md
+---
+## prosemirror
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 1
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Inputs that must stay inert"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "js and data links."
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "language": "html"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "<script>alert('x')</script>"
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "language": "html"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "<img src=x onerror=alert(1)>"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "<a href=\"https://ok.example\" onclick=\"steal()\">",
+          "marks": [
+            {
+              "type": "code"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": "html link"
+        },
+        {
+          "type": "text",
+          "text": "</a>",
+          "marks": [
+            {
+              "type": "code"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "image",
+          "attrs": {
+            "alt": "bad"
+          }
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Text with "
+        },
+        {
+          "type": "text",
+          "text": "<b>",
+          "marks": [
+            {
+              "type": "code"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": "inline html"
+        },
+        {
+          "type": "text",
+          "text": "</b>",
+          "marks": [
+            {
+              "type": "code"
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": " and an entity © and a literal *star*."
+        }
+      ]
+    }
+  ]
+}
+
+## markdown
+# Inputs that must stay inert
+
+js and data links.
+
+```html
+<script>alert('x')</script>
+```
+
+```html
+<img src=x onerror=alert(1)>
+```
+
+`<a href="https://ok.example" onclick="steal()">`html link`</a>`
+
+![bad]()
+
+Text with `<b>`inline html`</b>` and an entity © and a literal \*star\*.
+
+## html
+<h1 id="inputs-that-must-stay-inert">Inputs that must stay inert</h1>
+<p>js and data links.</p>
+<pre>
+<code class="language-html">&lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt;</code>
+</pre>
+<pre>
+<code class="language-html">&lt;img src=x onerror=alert(1)&gt;</code>
+</pre>
+<p>
+<code>&lt;a href=&quot;https://ok.example&quot; onclick=&quot;steal()&quot;&gt;</code>html link<code>&lt;/a&gt;</code>
+</p>
+<p>
+<img src="" alt="bad" loading="lazy">
+</p>
+<p>Text with <code>&lt;b&gt;</code>inline html<code>&lt;/b&gt;</code> and an entity © and a literal *star*.</p>

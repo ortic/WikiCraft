@@ -1,0 +1,15 @@
+<ac:task-list>
+<ac:task><ac:task-id>1</ac:task-id><ac:task-status>complete</ac:task-status><ac:task-body>Write the plan</ac:task-body></ac:task>
+<ac:task><ac:task-id>2</ac:task-id><ac:task-status>incomplete</ac:task-status><ac:task-body><ac:link><ri:user ri:userkey="abc" /></ac:link> reviews by <time datetime="2027-01-15" /></ac:task-body></ac:task>
+<ac:task><ac:task-id>3</ac:task-id><ac:task-status>incomplete</ac:task-status><ac:task-body>Ask <ac:link><ri:user ri:account-id="557058:unknown" /></ac:link></ac:task-body></ac:task>
+</ac:task-list>
+<ac:layout>
+<ac:layout-section ac:type="two_equal"><ac:layout-cell><p>Left column</p></ac:layout-cell><ac:layout-cell><p>Right column</p></ac:layout-cell></ac:layout-section>
+<ac:layout-section ac:type="single"><ac:layout-cell><p>Full width below</p></ac:layout-cell></ac:layout-section>
+</ac:layout>
+<p><ac:image ac:width="300" ac:align="center" ac:alt="Architecture"><ri:attachment ri:filename="diagram.png" /><ac:caption><p>The architecture</p></ac:caption></ac:image></p>
+<p><ac:image><ri:url ri:value="https://example.com/logo.png" /></ac:image> <ac:image><ri:attachment ri:filename="missing.png" /></ac:image></p>
+<p>Done <ac:emoticon ac:name="tick" /> warning <ac:emoticon ac:name="warning" /> custom <ac:emoticon ac:name="blue-star" ac:emoji-shortname=":rocket:" ac:emoji-fallback="🚀" /></p>
+<p><ac:placeholder>Describe the goal here</ac:placeholder></p>
+<p>Some <ac:inline-comment-marker ac:ref="c0ffee">commented text</ac:inline-comment-marker> in a sentence.</p>
+<ac:adf-extension><ac:adf-node type="decision-list"><ac:adf-attribute key="local-id">dl1</ac:adf-attribute><ac:adf-node type="decision-item"><ac:adf-attribute key="state">DECIDED</ac:adf-attribute><ac:adf-content>Ship weekly</ac:adf-content></ac:adf-node></ac:adf-node><ac:adf-fallback><ul><li>Ship weekly</li></ul></ac:adf-fallback></ac:adf-extension>

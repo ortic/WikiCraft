@@ -1,0 +1,249 @@
+---
+source: crates/doc-model/tests/golden.rs
+expression: "format!(\"## prosemirror\\n{}\\n\\n## markdown\\n{}\\n\\n## html\\n{}\\n\",\nserde_json::to_string_pretty(&doc).unwrap(), exported.trim_end(),\nhtml::render(&doc, &html::HtmlOptions\n{ heading_ids: true }).replace(\"><\", \">\\n<\"),)"
+input_file: crates/doc-model/tests/golden/details.md
+---
+## prosemirror
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 1
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "Folded content"
+        }
+      ]
+    },
+    {
+      "type": "details",
+      "content": [
+        {
+          "type": "detailsSummary",
+          "content": [
+            {
+              "type": "text",
+              "text": "Outer & more"
+            }
+          ]
+        },
+        {
+          "type": "detailsContent",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Outer text."
+                }
+              ]
+            },
+            {
+              "type": "details",
+              "attrs": {
+                "open": true
+              },
+              "content": [
+                {
+                  "type": "detailsSummary",
+                  "content": [
+                    {
+                      "type": "text",
+                      "text": "Inner"
+                    }
+                  ]
+                },
+                {
+                  "type": "detailsContent",
+                  "content": [
+                    {
+                      "type": "bulletList",
+                      "content": [
+                        {
+                          "type": "listItem",
+                          "content": [
+                            {
+                              "type": "paragraph",
+                              "content": [
+                                {
+                                  "type": "text",
+                                  "text": "inner item"
+                                }
+                              ]
+                            }
+                          ]
+                        }
+                      ]
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "After inner."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "details",
+      "content": [
+        {
+          "type": "detailsSummary",
+          "content": [
+            {
+              "type": "text",
+              "text": "One block"
+            }
+          ]
+        },
+        {
+          "type": "detailsContent",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "No blank lines inside."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "details",
+      "content": [
+        {
+          "type": "detailsSummary",
+          "content": [
+            {
+              "type": "text",
+              "text": "Details"
+            }
+          ]
+        },
+        {
+          "type": "detailsContent",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "No summary."
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "attrs": {
+        "language": "html"
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "<details><summary>Never closed</summary>"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Stays as it is."
+        }
+      ]
+    }
+  ]
+}
+
+## markdown
+# Folded content
+
+<details><summary>Outer &amp; more</summary>
+
+Outer text.
+
+<details open><summary>Inner</summary>
+
+- inner item
+
+</details>
+
+After inner.
+
+</details>
+
+<details><summary>One block</summary>
+
+No blank lines inside.
+
+</details>
+
+<details><summary>Details</summary>
+
+No summary.
+
+</details>
+
+```html
+<details><summary>Never closed</summary>
+```
+
+Stays as it is.
+
+## html
+<h1 id="folded-content">Folded content</h1>
+<details>
+<summary>Outer &amp; more</summary>
+<div class="details-content">
+<p>Outer text.</p>
+<details open>
+<summary>Inner</summary>
+<div class="details-content">
+<ul>
+<li>
+<p>inner item</p>
+</li>
+</ul>
+</div>
+</details>
+<p>After inner.</p>
+</div>
+</details>
+<details>
+<summary>One block</summary>
+<div class="details-content">
+<p>No blank lines inside.</p>
+</div>
+</details>
+<details>
+<summary>Details</summary>
+<div class="details-content">
+<p>No summary.</p>
+</div>
+</details>
+<pre>
+<code class="language-html">&lt;details&gt;&lt;summary&gt;Never closed&lt;/summary&gt;</code>
+</pre>
+<p>Stays as it is.</p>

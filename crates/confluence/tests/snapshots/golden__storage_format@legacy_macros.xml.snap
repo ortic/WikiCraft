@@ -1,0 +1,244 @@
+---
+source: crates/confluence/tests/golden.rs
+expression: "report(&doc, &stats)"
+input_file: crates/confluence/tests/golden/legacy_macros.xml
+---
+## stats
+{
+  "bodies": 1,
+  "lenient_parses": 1,
+  "macros": {
+    "code": [
+      1,
+      "native"
+    ],
+    "info": [
+      1,
+      "native"
+    ],
+    "unmigrated-wiki-markup": [
+      1,
+      "partial"
+    ]
+  }
+}
+
+## prosemirror
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "callout",
+      "attrs": {
+        "type": "info"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Old syntax",
+              "marks": [
+                {
+                  "type": "bold"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Still a callout."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "content": [
+        {
+          "type": "text",
+          "text": "echo legacy"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Text before]] > a stray CDATA end and an unclosed "
+        },
+        {
+          "type": "hardBreak"
+        },
+        {
+          "type": "text",
+          "text": " tag."
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Wrapped in a div."
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "centered"
+        }
+      ]
+    },
+    {
+      "type": "heading",
+      "attrs": {
+        "level": 3
+      },
+      "content": [
+        {
+          "type": "text",
+          "text": "From wiki markup"
+        }
+      ]
+    },
+    {
+      "type": "bulletList",
+      "content": [
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "first "
+                },
+                {
+                  "type": "text",
+                  "text": "bold",
+                  "marks": [
+                    {
+                      "type": "bold"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": " item"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "listItem",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "second "
+                },
+                {
+                  "type": "text",
+                  "text": "italic",
+                  "marks": [
+                    {
+                      "type": "italic"
+                    }
+                  ]
+                },
+                {
+                  "type": "text",
+                  "text": " item"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "codeBlock",
+      "content": [
+        {
+          "type": "text",
+          "text": "x = 1"
+        }
+      ]
+    }
+  ]
+}
+
+## markdown
+> [!NOTE]
+> **Old syntax**
+>
+> Still a callout.
+
+```
+echo legacy
+```
+
+Text before\]\] \> a stray CDATA end and an unclosed \
+ tag.
+
+Wrapped in a div.
+
+centered
+
+### From wiki markup
+
+- first **bold** item
+- second _italic_ item
+
+```
+x = 1
+```
+
+## html
+<div class="callout callout-info" data-type="callout">
+<svg class="callout-icon" viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.75" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+<circle cx="12" cy="12" r="9"/>
+<path d="M12 11v5.5"/>
+<path d="M12 7.6h.01"/>
+</svg>
+<div class="callout-body">
+<p>
+<strong>Old syntax</strong>
+</p>
+<p>Still a callout.</p>
+</div>
+</div>
+<pre>
+<code>echo legacy</code>
+</pre>
+<p>Text before]] &gt; a stray CDATA end and an unclosed <br> tag.</p>
+<p>Wrapped in a div.</p>
+<p>centered</p>
+<h3 id="from-wiki-markup">From wiki markup</h3>
+<ul>
+<li>
+<p>first <strong>bold</strong> item</p>
+</li>
+<li>
+<p>second <em>italic</em> item</p>
+</li>
+</ul>
+<pre>
+<code>x = 1</code>
+</pre>

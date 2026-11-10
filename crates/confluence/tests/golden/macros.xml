@@ -1,0 +1,25 @@
+<ac:structured-macro ac:name="toc"><ac:parameter ac:name="maxLevel">2</ac:parameter><ac:parameter ac:name="outline">true</ac:parameter></ac:structured-macro>
+<ac:structured-macro ac:name="info"><ac:parameter ac:name="title">Heads up</ac:parameter><ac:rich-text-body><p>Maintenance on <strong>Saturday</strong>.</p></ac:rich-text-body></ac:structured-macro>
+<ac:structured-macro ac:name="tip"><ac:rich-text-body><p>Use the CLI.</p></ac:rich-text-body></ac:structured-macro>
+<ac:structured-macro ac:name="note"><ac:rich-text-body><p>Read-only mode.</p></ac:rich-text-body></ac:structured-macro>
+<ac:structured-macro ac:name="warning"><ac:rich-text-body><p>Data loss possible.</p></ac:rich-text-body></ac:structured-macro>
+<ac:structured-macro ac:name="panel"><ac:parameter ac:name="bgColor">#eae6ff</ac:parameter><ac:parameter ac:name="title">Panel</ac:parameter><ac:rich-text-body><p>Inside a panel.</p></ac:rich-text-body></ac:structured-macro>
+<ac:structured-macro ac:name="code"><ac:parameter ac:name="language">python</ac:parameter><ac:parameter ac:name="title">deploy.py</ac:parameter><ac:parameter ac:name="linenumbers">true</ac:parameter><ac:plain-text-body><![CDATA[def deploy(env):
+    print(f"deploying to {env}")  # <not a tag>
+]]></ac:plain-text-body></ac:structured-macro>
+<ac:structured-macro ac:name="noformat"><ac:plain-text-body><![CDATA[plain   preformatted]]></ac:plain-text-body></ac:structured-macro>
+<ac:structured-macro ac:name="expand"><ac:parameter ac:name="title">Details</ac:parameter><ac:rich-text-body><p>Hidden until opened.</p></ac:rich-text-body></ac:structured-macro>
+<p>Status: <ac:structured-macro ac:name="status"><ac:parameter ac:name="colour">Green</ac:parameter><ac:parameter ac:name="title">On track</ac:parameter></ac:structured-macro> <ac:structured-macro ac:name="status"><ac:parameter ac:name="colour">Red</ac:parameter><ac:parameter ac:name="title">Blocked</ac:parameter><ac:parameter ac:name="subtle">true</ac:parameter></ac:structured-macro></p>
+<p><ac:structured-macro ac:name="anchor"><ac:parameter ac:name="">intro</ac:parameter></ac:structured-macro>Anchored paragraph.</p>
+<ac:structured-macro ac:name="children"><ac:parameter ac:name="depth">2</ac:parameter><ac:parameter ac:name="sort">title</ac:parameter></ac:structured-macro>
+<ac:structured-macro ac:name="include"><ac:parameter ac:name=""><ac:link><ri:page ri:content-title="Other Page" /></ac:link></ac:parameter></ac:structured-macro>
+<ac:structured-macro ac:name="excerpt"><ac:rich-text-body><p>The short version.</p></ac:rich-text-body></ac:structured-macro>
+<ac:structured-macro ac:name="jira"><ac:parameter ac:name="key">OPS-42</ac:parameter><ac:parameter ac:name="server">Acme Jira</ac:parameter></ac:structured-macro>
+<ac:structured-macro ac:name="mermaid"><ac:plain-text-body><![CDATA[graph TD; A-->B]]></ac:plain-text-body></ac:structured-macro>
+<ac:structured-macro ac:name="html"><ac:plain-text-body><![CDATA[<b>raw</b><script>x()</script>]]></ac:plain-text-body></ac:structured-macro>
+<ac:structured-macro ac:name="view-file"><ac:parameter ac:name="name"><ri:attachment ri:filename="diagram.png" /></ac:parameter></ac:structured-macro>
+<ac:structured-macro ac:name="widget"><ac:parameter ac:name="url"><ri:url ri:value="https://www.youtube.com/watch?v=dQw4w9WgXcQ" /></ac:parameter></ac:structured-macro>
+<ac:structured-macro ac:name="mathblock"><ac:plain-text-body><![CDATA[e^{i\pi} + 1 = 0]]></ac:plain-text-body></ac:structured-macro>
+<ac:structured-macro ac:name="details"><ac:rich-text-body><table><tbody><tr><th>Owner</th><td>Ops</td></tr><tr><th>Status</th><td>Live</td></tr></tbody></table></ac:rich-text-body></ac:structured-macro>
+<ac:structured-macro ac:name="contentbylabel"><ac:parameter ac:name="labels">runbook</ac:parameter><ac:parameter ac:name="max">5</ac:parameter></ac:structured-macro>
+<ac:structured-macro ac:name="vendor-app-calendar"><ac:parameter ac:name="calendarId">team</ac:parameter><ac:rich-text-body><p>kept body</p></ac:rich-text-body></ac:structured-macro>

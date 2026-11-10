@@ -1,0 +1,366 @@
+---
+source: crates/confluence/tests/golden.rs
+expression: "report(&doc, &stats)"
+input_file: crates/confluence/tests/golden/tasks_layouts_media.xml
+---
+## stats
+{
+  "attachment_refs": 2,
+  "attachment_refs_resolved": 1,
+  "bodies": 1,
+  "emoticons": 3,
+  "images": 3,
+  "inline_comment_markers": 1,
+  "layouts": 1,
+  "macros": {
+    "adf:decision-list": [
+      1,
+      "native"
+    ]
+  },
+  "missing_attachment_samples": [
+    "missing.png"
+  ],
+  "tasks": 3,
+  "user_refs": 2,
+  "user_refs_resolved": 1
+}
+
+## prosemirror
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "taskList",
+      "content": [
+        {
+          "type": "taskItem",
+          "attrs": {
+            "checked": true
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Write the plan"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "taskItem",
+          "attrs": {
+            "checked": false
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "mention",
+                  "attrs": {
+                    "id": "wcimport:user/abc",
+                    "label": "Ada Lovelace"
+                  }
+                },
+                {
+                  "type": "text",
+                  "text": " reviews by "
+                },
+                {
+                  "type": "date",
+                  "attrs": {
+                    "date": "2027-01-15"
+                  }
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "taskItem",
+          "attrs": {
+            "checked": false
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Ask "
+                },
+                {
+                  "type": "mention",
+                  "attrs": {
+                    "id": "wcimport:user/557058:unknown",
+                    "label": "Unknown user"
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "columns",
+      "attrs": {
+        "layout": "two_equal"
+      },
+      "content": [
+        {
+          "type": "column",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Left column"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "column",
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Right column"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Full width below"
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "image",
+          "attrs": {
+            "align": "center",
+            "alt": "Architecture",
+            "caption": "The architecture",
+            "src": "wcimport:attachment/300",
+            "width": 300
+          }
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "image",
+          "attrs": {
+            "src": "https://example.com/logo.png"
+          }
+        },
+        {
+          "type": "text",
+          "text": " "
+        },
+        {
+          "type": "image",
+          "attrs": {
+            "src": "wcimport:missing-attachment/missing.png"
+          }
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Done "
+        },
+        {
+          "type": "emoticon",
+          "attrs": {
+            "name": "tick"
+          }
+        },
+        {
+          "type": "text",
+          "text": " warning "
+        },
+        {
+          "type": "emoticon",
+          "attrs": {
+            "name": "warning"
+          }
+        },
+        {
+          "type": "text",
+          "text": " custom "
+        },
+        {
+          "type": "emoticon",
+          "attrs": {
+            "name": "blue-star"
+          }
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "instructionalText",
+          "attrs": {
+            "text": "Describe the goal here"
+          }
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Some "
+        },
+        {
+          "type": "text",
+          "text": "commented text",
+          "marks": [
+            {
+              "type": "comment",
+              "attrs": {
+                "commentId": "wcimport:inline/c0ffee"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": " in a sentence."
+        }
+      ]
+    },
+    {
+      "type": "decisionList",
+      "content": [
+        {
+          "type": "decisionItem",
+          "attrs": {
+            "state": "DECIDED"
+          },
+          "content": [
+            {
+              "type": "paragraph",
+              "content": [
+                {
+                  "type": "text",
+                  "text": "Ship weekly"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}
+
+## markdown
+- [x] Write the plan
+- [ ] @Ada Lovelace reviews by 2027-01-15
+- [ ] Ask @Unknown user
+
+Left column
+
+Right column
+
+Full width below
+
+![Architecture](wcimport:attachment/300 "The architecture")
+
+![](https://example.com/logo.png) ![](wcimport:missing-attachment/missing.png)
+
+Done (/) warning (!) custom (*b)
+
+
+
+Some commented text in a sentence.
+
+- **Decision:** Ship weekly
+
+## html
+<ul class="task-list" data-type="taskList">
+<li class="task-item" data-checked="true">
+<input type="checkbox" disabled checked> <div>
+<p>Write the plan</p>
+</div>
+</li>
+<li class="task-item" data-checked="false">
+<input type="checkbox" disabled> <div>
+<p>
+<span class="mention" data-id="wcimport:user/abc">@Ada Lovelace</span> reviews by <time datetime="2027-01-15">2027-01-15</time>
+</p>
+</div>
+</li>
+<li class="task-item" data-checked="false">
+<input type="checkbox" disabled> <div>
+<p>Ask <span class="mention" data-id="wcimport:user/557058:unknown">@Unknown user</span>
+</p>
+</div>
+</li>
+</ul>
+<div class="columns">
+<div class="column">
+<p>Left column</p>
+</div>
+<div class="column">
+<p>Right column</p>
+</div>
+</div>
+<p>Full width below</p>
+<p>
+<span class="image-block align-center">
+<img src="" alt="Architecture" width="300" loading="lazy">
+<span class="image-caption">The architecture</span>
+</span>
+</p>
+<p>
+<img src="https://example.com/logo.png" alt="" loading="lazy"> <img src="" alt="" loading="lazy">
+</p>
+<p>Done <svg class="emoticon" viewBox="0 0 24 24" width="1.2em" height="1.2em" style="vertical-align:-0.25em" role="img" aria-label="tick">
+<circle cx="12" cy="12" r="10" fill="#2DA44E"/>
+<path d="m7.4 12.4 3 3 6.2-6.6" fill="none" stroke="#fff" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/>
+</svg> warning <svg class="emoticon" viewBox="0 0 24 24" width="1.2em" height="1.2em" style="vertical-align:-0.25em" role="img" aria-label="warning">
+<path d="M10.3 3.4 1.9 18.1A2 2 0 0 0 3.6 21h16.8a2 2 0 0 0 1.7-2.9L13.7 3.4a2 2 0 0 0-3.4 0z" fill="#F5A524"/>
+<path d="M12 9v5" stroke="#3D2A00" stroke-width="2.2" stroke-linecap="round"/>
+<circle cx="12" cy="17.4" r="1.25" fill="#3D2A00"/>
+</svg> custom <svg class="emoticon" viewBox="0 0 24 24" width="1.2em" height="1.2em" style="vertical-align:-0.25em" role="img" aria-label="blue-star">
+<path d="m12 2.6 2.8 5.8 6.4.9-4.6 4.5 1.1 6.3L12 17.1l-5.7 3 1.1-6.3-4.6-4.5 6.4-.9z" fill="#58A6FF" stroke="#2F7FD8" stroke-width="1" stroke-linejoin="round"/>
+</svg>
+</p>
+<p>
+</p>
+<p>Some <span class="inline-comment" data-comment-id="wcimport:inline/c0ffee">commented text</span> in a sentence.</p>
+<ul class="decision-list">
+<li class="decision-item">
+<p>Ship weekly</p>
+</li>
+</ul>

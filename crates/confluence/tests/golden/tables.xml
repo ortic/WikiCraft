@@ -1,0 +1,8 @@
+<table data-layout="wide" data-table-width="1200"><colgroup><col style="width: 200.0px;" /><col style="width: 400.0px;" /></colgroup>
+<tbody>
+<tr><th><p>Service</p></th><th><p>Owner</p></th><th><p>Notes</p></th></tr>
+<tr><td><p>API</p></td><td data-highlight-colour="#e3fcef"><p>Team <strong>A</strong></p></td><td rowspan="2"><ul><li>scaled</li><li>monitored</li></ul></td></tr>
+<tr><td colspan="2"><p>Gateway and workers</p></td></tr>
+<tr><td><p>Empty next</p></td><td /><td><p><ac:emoticon ac:name="tick" /></p></td></tr>
+</tbody></table>
+<table class="relative-table"><tbody><tr><td>no paragraph wrapper</td><td>second</td></tr></tbody></table>
