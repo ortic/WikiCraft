@@ -131,6 +131,25 @@ export const Status = Node.create({
   },
 })
 
+/** Instructional text for authors (templates, Confluence's "instructional text"): shown in grey
+ *  while editing, hidden from readers, never exported. Typing over it replaces it. */
+export const InstructionalText = Node.create({
+  name: 'instructionalText',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: true,
+  addAttributes() {
+    return { text: { default: '', rendered: false } }
+  },
+  parseHTML() {
+    return [{ tag: 'span[data-type="instructional-text"]', getAttrs: (el) => ({ text: (el as HTMLElement).textContent ?? '' }) }]
+  },
+  renderHTML({ node, HTMLAttributes }) {
+    return ['span', mergeAttributes(HTMLAttributes, { 'data-type': 'instructional-text', class: 'instructional-text', title: 'Instructions: click and type to replace' }), node.attrs.text as string]
+  },
+})
+
 function DateView({ node, updateAttributes, editor }: ReactNodeViewProps) {
   const raw = (node.attrs.date as string) || ''
   const d = new Date(raw)

@@ -76,6 +76,9 @@ pub mod nodes {
     pub const MACRO: &str = "macro";
     /// an Excalidraw drawing: `scene` (JSON) and `preview` (PNG attachment URL)
     pub const DRAWING: &str = "drawing";
+    /// instructional text for authors (`text`), e.g. in templates; never shown to readers,
+    /// exported or indexed (Confluence's `ac:placeholder`)
+    pub const PLACEHOLDER: &str = "instructionalText";
 }
 
 /// Mark type names.
@@ -103,8 +106,65 @@ pub const MAX_DEPTH: usize = 40;
 
 /// Inline node types (live inside paragraphs/headings next to text).
 pub fn is_inline(kind: &str) -> bool {
-    matches!(kind, nodes::TEXT | nodes::HARD_BREAK | nodes::MENTION | nodes::STATUS | nodes::DATE | nodes::EMOTICON | nodes::MATH_INLINE | nodes::ANCHOR)
-        || kind == nodes::IMAGE // images are inline in our schema (Tiptap `inline: true`)
+    matches!(
+        kind,
+        nodes::TEXT
+            | nodes::HARD_BREAK
+            | nodes::MENTION
+            | nodes::STATUS
+            | nodes::DATE
+            | nodes::EMOTICON
+            | nodes::MATH_INLINE
+            | nodes::ANCHOR
+            | nodes::PLACEHOLDER
+    ) || kind == nodes::IMAGE // images are inline in our schema (Tiptap `inline: true`)
+}
+
+/// Turns `{?…}` in text into placeholder nodes (author instructions in Markdown templates).
+pub fn expand_placeholders(n: &mut Node) {
+    let has = |c: &Node| c.kind == nodes::TEXT && c.text.as_deref().is_some_and(|t| t.contains("{?"));
+    if n.content.iter().any(has) {
+        // the Markdown parser may split text runs; join neighbours with the same marks first
+        let mut joined: Vec<Node> = Vec::with_capacity(n.content.len());
+        for c in std::mem::take(&mut n.content) {
+            match joined.last_mut() {
+                Some(prev) if prev.kind == nodes::TEXT && c.kind == nodes::TEXT && prev.marks == c.marks => {
+                    let t = c.text.unwrap_or_default();
+                    prev.text.get_or_insert_with(String::new).push_str(&t);
+                }
+                _ => joined.push(c),
+            }
+        }
+        let mut out = Vec::with_capacity(joined.len());
+        for c in joined {
+            let text = match (&c.kind[..], &c.text) {
+                (nodes::TEXT, Some(t)) if t.contains("{?") => t.clone(),
+                _ => {
+                    out.push(c);
+                    continue;
+                }
+            };
+            let mut rest = text.as_str();
+            while let Some(i) = rest.find("{?") {
+                let Some(j) = rest[i + 2..].find('}') else { break };
+                if i > 0 {
+                    out.push(Node::text_marked(&rest[..i], c.marks.clone()));
+                }
+                let inner = rest[i + 2..i + 2 + j].trim();
+                if !inner.is_empty() {
+                    out.push(Node::new(nodes::PLACEHOLDER).attr("text", inner));
+                }
+                rest = &rest[i + 2 + j + 1..];
+            }
+            if !rest.is_empty() {
+                out.push(Node::text_marked(rest, c.marks.clone()));
+            }
+        }
+        n.content = out;
+    }
+    for c in &mut n.content {
+        expand_placeholders(c);
+    }
 }
 
 impl Node {

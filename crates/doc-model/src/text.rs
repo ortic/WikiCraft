@@ -152,6 +152,21 @@ pub fn drawing_text(n: &Node) -> String {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn placeholders_are_for_authors_only() {
+        use crate::node::{Node, expand_placeholders, nodes};
+        let mut doc = crate::markdown::markdown_to_pm("## Context\n\n{?What problem are we solving? Who's affected?} Then text.\n").doc;
+        expand_placeholders(&mut doc);
+        let p = &doc.content[1];
+        assert_eq!(p.content[0].kind, nodes::PLACEHOLDER);
+        assert_eq!(p.content[0].attr_str("text"), Some("What problem are we solving? Who's affected?"));
+        assert_eq!(p.content[1].text.as_deref(), Some(" Then text."));
+        let page = Node::doc(doc.content.clone());
+        assert!(!super::plain_text(&page).contains("problem"), "not indexed");
+        assert!(!crate::html::render(&page, &crate::html::HtmlOptions { heading_ids: false }).contains("problem"), "not rendered for readers");
+        assert!(!crate::markdown::pm_to_markdown(&page).contains("problem"), "not exported");
+    }
+
     use super::*;
 
     #[test]

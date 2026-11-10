@@ -409,7 +409,11 @@ impl Conv<'_> {
                     .unwrap_or_default();
                 if emoji.is_empty() { vec![] } else { vec![Node::text_marked(emoji, marks.to_vec())] }
             }
-            "ac:placeholder" => vec![],
+            // instructional text for authors: kept, but never shown to readers or exported
+            "ac:placeholder" => {
+                let t = el.text().split_whitespace().collect::<Vec<_>>().join(" ");
+                if t.is_empty() { vec![] } else { vec![Node::new(nodes::PLACEHOLDER).attr("text", t)] }
+            }
             "ac:inline-comment-marker" => {
                 self.stats.inline_comment_markers += 1;
                 let m = match el.attr("ac:ref") {
@@ -980,6 +984,14 @@ mod tests {
 
     fn json(n: &Node) -> String {
         serde_json::to_string(n).unwrap()
+    }
+
+    #[test]
+    fn instructional_text_becomes_placeholders() {
+        let (doc, _) = conv(r#"<p><ac:placeholder>Describe the   goal here</ac:placeholder></p><p><ac:placeholder ac:type="mention"/></p>"#);
+        let p = &doc.content[0].content[0];
+        assert_eq!((p.kind.as_str(), p.attr_str("text")), (nodes::PLACEHOLDER, Some("Describe the goal here")));
+        assert!(doc.content.get(1).is_none_or(|p| p.content.is_empty()), "empty placeholders are dropped: {}", json(&doc));
     }
 
     #[test]

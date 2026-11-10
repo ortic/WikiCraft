@@ -288,7 +288,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P1** File / attachment block with inline preview (PDF, Office, video, audio) `C D` (PDF/image preview only)
 - [~] **P1** Embeds: YouTube, Vimeo, Loom, Figma, Miro, Google Docs/Sheets/Slides, Airtable, Typeform, GitHub gist, iframe allowlist `C D O` (no Airtable/Typeform/gist)
 - [x] **P1** Anchors / table of contents block `C X`
-- [ ] **P1** Placeholder text (in templates) `C`
+- [x] **P1** Placeholder text (in templates) `C` — "Instructions" (/ slash command, `{?…}` in Markdown templates, Confluence `ac:placeholder`): shown to authors, replaced by typing, hidden from readers, exports and search
 - [ ] **P2** Synced blocks / excerpts: author once, reuse in many pages; edits propagate `C D`
 - [~] **P2** Transclusion (include another page or section) `C X` (plain-text preview; from import only)
 - [ ] **P2** Video / audio upload with streaming (HTTP range) and poster frame `C`

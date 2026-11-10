@@ -654,3 +654,8 @@ a.menu-item { color: inherit; text-decoration: none; }
 .chip:hover { background: var(--bg-hover); color: var(--text); }
 .chip.active { background: var(--accent-soft); border-color: transparent; color: var(--accent-text); font-weight: 600; }
 table.list tr.list-group td { padding: 18px 8px 6px; font-size: 12px; font-weight: 700; color: var(--text-soft); text-transform: uppercase; letter-spacing: .04em; background: none; }
+
+/* instructional text (template hints): visible to authors only */
+.instructional-text { color: var(--text-faint); font-style: italic; background: var(--bg-soft); border: 1px dashed var(--border-strong); border-radius: 4px; padding: 0 5px; cursor: text; }
+.ProseMirror-selectednode.instructional-text { outline: 2px solid var(--accent); outline-offset: 1px; }
+.ProseMirror[contenteditable="false"] .instructional-text, .public-page .instructional-text { display: none; }

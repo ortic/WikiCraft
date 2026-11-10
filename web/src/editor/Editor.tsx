@@ -25,7 +25,7 @@ import { WebsocketProvider } from 'y-websocket'
 import 'katex/dist/katex.min.css'
 import { Bold, Italic, Underline, Strikethrough, Code, Link as LinkIcon, Highlighter, MessageSquarePlus, Heading2, List, GripVertical } from 'lucide-react'
 import { api, initials, userColor, type Attachment, type User } from '../api'
-import { AttachmentNode, Anchor, Callout, ChildPages, Column, Columns, CommentMark, DateNode, DecisionItem, DecisionList, Embed, Emoticon, Include, Macro, Status, Toc } from './nodes'
+import { AttachmentNode, Anchor, Callout, ChildPages, Column, Columns, CommentMark, DateNode, DecisionItem, DecisionList, Embed, Emoticon, Include, InstructionalText, Macro, Status, Toc } from './nodes'
 import { EmoticonSuggest, PageLinkSuggest, SlashCommand, mentionSuggestion, slashItems } from './suggest'
 import { CodeBlock } from './CodeBlock'
 import { ImageView } from './ImageView'
@@ -184,6 +184,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
         Mention.configure({ HTMLAttributes: { class: 'mention' }, suggestion: mentionSuggestion as never, renderText: ({ node }) => `@${node.attrs.label ?? ''}` }),
         Callout,
         Status,
+        InstructionalText,
         Emoticon,
         DateNode,
         AttachmentNode,

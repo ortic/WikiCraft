@@ -38,7 +38,7 @@ const BUILTINS: &[Builtin] = &[
         icon: "decision",
         description: "Document an important decision (ADR style)",
         title: "Decision: ",
-        markdown: "> [!NOTE]\n> **Status:** proposed · **Owner:** @ · **Due date:** {date}\n\n## Context\n\nWhat is the issue that we're seeing that is motivating this decision?\n\n## Options considered\n\n| Option | Pros | Cons |\n| --- | --- | --- |\n| A |  |  |\n| B |  |  |\n\n## Decision\n\nWhat did we decide, and why?\n\n## Consequences\n\nWhat becomes easier or harder because of this change?\n",
+        markdown: "> [!NOTE]\n> **Status:** proposed · **Owner:** @ · **Due date:** {date}\n\n## Context\n\n{?What is the issue that we're seeing that is motivating this decision?}\n\n## Options considered\n\n| Option | Pros | Cons |\n| --- | --- | --- |\n| A |  |  |\n| B |  |  |\n\n## Decision\n\n{?What did we decide, and why?}\n\n## Consequences\n\n{?What becomes easier or harder because of this change?}\n",
     },
     Builtin {
         id: "builtin:how-to",
@@ -46,7 +46,7 @@ const BUILTINS: &[Builtin] = &[
         icon: "compass",
         description: "Step-by-step instructions",
         title: "How to ",
-        markdown: "Short introduction: what this guide helps you do.\n\n> [!TIP]\n> Prerequisites: list anything the reader needs first.\n\n## Steps\n\n1. First step\n2. Second step\n3. Third step\n\n## Related articles\n\n- \n",
+        markdown: "{?Short introduction: what this guide helps you do.}\n\n> [!TIP]\n> Prerequisites: list anything the reader needs first.\n\n## Steps\n\n1. First step\n2. Second step\n3. Third step\n\n## Related articles\n\n- \n",
     },
     Builtin {
         id: "builtin:retrospective",
@@ -78,7 +78,7 @@ const BUILTINS: &[Builtin] = &[
         icon: "flag",
         description: "Goals, scope, milestones, risks and the team",
         title: "Project plan: ",
-        markdown: "| Owner | Status | Target date | Budget |\n| --- | --- | --- | --- |\n| @ | Planning | {date} |  |\n\n## Background\n\nWhy are we doing this?\n\n## Goals and non-goals\n\n- Goal: \n- Not a goal: \n\n## Scope\n\n| In scope | Out of scope |\n| --- | --- |\n|  |  |\n\n## Milestones\n\n| Milestone | Date | Owner | Done |\n| --- | --- | --- | --- |\n| Kick-off | {date} | @ |  |\n\n## Risks\n\n| Risk | Likelihood | Impact | Mitigation |\n| --- | --- | --- | --- |\n|  |  |  |  |\n\n## Team\n\n- @\n",
+        markdown: "| Owner | Status | Target date | Budget |\n| --- | --- | --- | --- |\n| @ | Planning | {date} |  |\n\n## Background\n\n{?Why are we doing this? Link the request, the problem or the opportunity.}\n\n## Goals and non-goals\n\n- Goal: \n- Not a goal: \n\n## Scope\n\n| In scope | Out of scope |\n| --- | --- |\n|  |  |\n\n## Milestones\n\n| Milestone | Date | Owner | Done |\n| --- | --- | --- | --- |\n| Kick-off | {date} | @ |  |\n\n## Risks\n\n| Risk | Likelihood | Impact | Mitigation |\n| --- | --- | --- | --- |\n|  |  |  |  |\n\n## Team\n\n- @\n",
     },
     Builtin {
         id: "builtin:okrs",
@@ -177,7 +177,9 @@ pub async fn list(State(state): State<AppState>, CurrentUser(user): CurrentUser,
 /// Resolves a template id to (title, content).
 pub async fn resolve(state: &AppState, workspace: Uuid, id: &str) -> ApiResult<(Option<String>, Node)> {
     if let Some(b) = BUILTINS.iter().find(|b| b.id == id) {
-        return Ok((Some(fill(b.title)), markdown::markdown_to_pm(&fill(b.markdown)).doc));
+        let mut doc = markdown::markdown_to_pm(&fill(b.markdown)).doc;
+        wikicraft_doc_model::node::expand_placeholders(&mut doc);
+        return Ok((Some(fill(b.title)), doc));
     }
     let id: Uuid = id.parse().map_err(|_| ApiError::NotFound("template"))?;
     let row: Option<(Option<String>, Value)> =
