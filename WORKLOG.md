@@ -116,6 +116,10 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   publishing; blueprints (index pages for meeting notes etc.); profile pictures; draw.io diagrams (embed mode,
   Confluence draw.io macros import editable; e2e test with a stand-in for diagrams.net). The overview deck is in
   docs/presentation/.
+- Editor: text colour / highlight / alignment menu, three-column and sidebar layouts (imported Confluence section
+  types now render), image borders. Task reminders on the due date (assignee's time zone). Password-protected
+  public links. Atom feeds for blogs. A full gentle run of the Rust suite (`cargo test -j 4 --workspace --
+  --test-threads 2`) passed; it also caught nothing new, but a filtered run had missed a test the draw.io commit broke.
 - Note: running the whole test suite saturates this WSL machine (load ~100); a parallel demo server then hits DB
   pool timeouts, and the mail test's 4-second wait can flake. Both pass when the machine is idle.
 
