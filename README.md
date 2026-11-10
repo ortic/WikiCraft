@@ -4,7 +4,7 @@ A self-hosted team wiki with a **Rust backend**, a modern real-time editor, and 
 **Confluence migration**. Built for teams that need a home after Confluence Data Center goes
 end-of-life (2029-03-28).
 
-- **Spaces & page trees**: unlimited nesting, drag-and-drop reordering, trash with restore, archive, copy, labels, favorites; space templates (team, project, knowledge base, engineering), space categories, personal spaces, space key rename (old links keep working)
+- **Spaces & page trees**: unlimited nesting, drag-and-drop reordering, trash with restore, archive, copy, labels, favorites; space templates (team, project, knowledge base, engineering), space categories, personal spaces, space key rename (old links keep working), external links as page-tree items
 - **Real-time collaboration**: Google-Docs-style co-editing with live cursors (Yjs CRDT; the server speaks the y-websocket protocol via `yrs`)
 - **Rich editor**: slash commands, drag handles, tables (merge, colours, sort by column, normal / wide / full width), task lists, callouts with custom icons, expand blocks, code blocks with syntax highlighting and line numbers, math, mentions, status lozenges, dates, decisions with a live decision log, task reports, instructional text in templates, embeds and link previews, file previews, table of contents, child pages, includes, heading links, find & replace
 - **Drawings & images**: Excalidraw sketches stored in the page, image annotation (arrows, boxes, text), text wrap around images, lightbox
