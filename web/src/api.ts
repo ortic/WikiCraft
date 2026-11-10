@@ -225,13 +225,17 @@ export function userColor(seed: string): string {
   for (let i = 0; i < seed.length; i++) h = (h * 31 + seed.charCodeAt(i)) >>> 0
   const hue = h % 360
   const s = 0.7
-  const l = 0.45
-  const f = (n: number) => {
-    const k = (n + hue / 30) % 12
-    const c = l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(k - 3, 9 - k, 1))
-    return Math.round(c * 255).toString(16).padStart(2, '0')
-  }
-  return `#${f(0)}${f(8)}${f(4)}`
+  const rgb = (l: number) =>
+    [0, 8, 4].map((n) => {
+      const k = (n + hue / 30) % 12
+      return Math.round((l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(k - 3, 9 - k, 1))) * 255)
+    })
+  // white initials sit on this color: darken bright hues (greens, yellows) to at least 4.5:1 (with margin)
+  const luminance = (c: number[]) =>
+    c.map((v) => (v / 255 <= 0.03928 ? v / 255 / 12.92 : ((v / 255 + 0.055) / 1.055) ** 2.4)).reduce((a, v, i) => a + v * [0.2126, 0.7152, 0.0722][i], 0)
+  let l = 0.45
+  while (l > 0.2 && 1.05 / (luminance(rgb(l)) + 0.05) < 4.6) l -= 0.01
+  return `#${rgb(l).map((v) => v.toString(16).padStart(2, '0')).join('')}`
 }
 
 export function initials(name: string): string {
