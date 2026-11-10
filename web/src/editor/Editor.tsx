@@ -372,15 +372,32 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
   )
 }
 
+/** Who else is here; click someone to jump to their cursor. */
 export function PresenceAvatars({ users }: { users: Presence[] }) {
+  const [missing, setMissing] = useState<string | null>(null)
   if (!users.length) return null
+  const jump = (u: Presence) => {
+    const labels = [...document.querySelectorAll<HTMLElement>('.ProseMirror .collaboration-carets__label, .ProseMirror .collaboration-cursor__label')]
+    const caret = labels.find((l) => l.textContent === u.name)
+    if (caret) {
+      caret.scrollIntoView({ behavior: 'smooth', block: 'center' })
+      const host = caret.parentElement
+      host?.classList.add('caret-flash')
+      setTimeout(() => host?.classList.remove('caret-flash'), 1600)
+      setMissing(null)
+    } else {
+      setMissing(u.name)
+      setTimeout(() => setMissing(null), 2500)
+    }
+  }
   return (
     <div className="presence" title={users.map((u) => u.name).join(', ')}>
       {users.slice(0, 5).map((u) => (
-        <span key={u.clientId} className="avatar" style={{ background: u.color }}>
+        <button key={u.clientId} type="button" className="avatar presence-avatar" style={{ background: u.color }} title={`${u.name}: jump to their cursor`} onClick={() => jump(u)}>
           {initials(u.name)}
-        </span>
+        </button>
       ))}
+      {missing && <span className="presence-hint faint small">{missing} isn't editing right now</span>}
     </div>
   )
 }

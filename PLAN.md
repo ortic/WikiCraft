@@ -357,7 +357,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P1** "Who changed what" attribution during a session (colored authorship view) `C`
 - [ ] **P1** Collaborative drafts: unpublished changes visible to co-editors only; publish creates a version `C`
 - [x] **P1** Live docs: changes are live without publish; versions created by time/edit heuristics `C`
-- [ ] **P1** Follow a collaborator (jump to their cursor) `C`
+- [x] **P1** Follow a collaborator (jump to their cursor) `C`
 - [ ] **P2** Collaboration on comments, titles and page properties (not only body)
 - [x] **P2** Multi-node collab: document-affinity routing, failover, Redis/NATS awareness relay
 - [ ] **P2** Large-document performance (≥ 1 MB docs, 50 concurrent editors) with load tests
