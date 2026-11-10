@@ -158,9 +158,13 @@ pub async fn me(State(state): State<AppState>, MaybeUser(user): MaybeUser) -> Ap
         Some(u) => sqlx::query_as("SELECT id, name FROM workspaces WHERE id = $1").bind(u.workspace_id).fetch_optional(&state.db).await?,
         None => sqlx::query_as("SELECT id, name FROM workspaces ORDER BY created_at LIMIT 1").fetch_optional(&state.db).await?,
     };
+    let logo = match &ws {
+        Some((id, _)) => crate::routes::branding::logo_version(&state, *id).await?,
+        None => None,
+    };
     Ok(Json(json!({
         "user": user,
-        "workspace": ws.map(|(id, name)| json!({"id": id, "name": name})),
+        "workspace": ws.map(|(id, name)| json!({"id": id, "name": name, "logoVersion": logo})),
     })))
 }
 

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Upload, FileSearch, CheckCircle2, XCircle, UserPlus, Users, Activity, Database, RefreshCw, Mail, Send, Globe, Megaphone } from 'lucide-react'
+import { Upload, FileSearch, CheckCircle2, XCircle, UserPlus, Users, Activity, Database, RefreshCw, Mail, Send, Globe, Megaphone, Building2 } from 'lucide-react'
 import { api, formatBytes, formatDate, type Job } from '../api'
 import { Avatar, Modal, Spinner, useMe, useToast, type Features } from '../ui'
 import AdminWebhooks from './AdminWebhooks'
@@ -78,9 +78,95 @@ function Overview() {
           <Upload size={14} /> Import from Confluence
         </Link>
       </div>
+      <BrandingSettings />
       <WorkspaceSettings />
       <AnnouncementSettings />
       <MailStatus />
+    </div>
+  )
+}
+
+/** Admin → Overview: workspace name and logo (header, sign-in and shared pages). */
+function BrandingSettings() {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const me = useMe()
+  const ws = me.data?.workspace
+  const [name, setName] = useState<string | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+  if (!ws) return null
+  const value = name ?? ws.name
+  const done = (message: string) => {
+    qc.invalidateQueries({ queryKey: ['me'] })
+    toast(message)
+  }
+  const fail = (e: unknown) => toast(e instanceof Error ? e.message : 'Could not save')
+  return (
+    <div className="card" style={{ marginTop: 24, maxWidth: 720 }}>
+      <h3 style={{ marginTop: 0 }} className="row"><Building2 size={17} /> Workspace</h3>
+      <div className="field">
+        <label htmlFor="ws-name">Name</label>
+        <div className="row">
+          <input id="ws-name" className="input" style={{ maxWidth: 320 }} value={value} maxLength={80} onChange={(e) => setName(e.target.value)} />
+          <button
+            className="btn"
+            disabled={!value.trim() || value === ws.name}
+            onClick={async () => {
+              try {
+                await api.put('/admin/workspace', { name: value })
+                setName(null)
+                done('Workspace renamed')
+              } catch (e) {
+                fail(e)
+              }
+            }}
+          >
+            Save
+          </button>
+        </div>
+      </div>
+      <div className="field" style={{ marginBottom: 0 }}>
+        <label>Logo</label>
+        <div className="row" style={{ flexWrap: 'wrap' }}>
+          <span className="logo-preview">{ws.logoVersion ? <img src={`/api/workspace/logo?v=${encodeURIComponent(ws.logoVersion)}`} alt="Current logo" /> : <span className="faint small">WikiCraft mark</span>}</span>
+          <input
+            ref={fileRef}
+            type="file"
+            accept="image/png,image/jpeg,image/webp"
+            hidden
+            onChange={async (e) => {
+              const f = e.target.files?.[0]
+              e.target.value = ''
+              if (!f) return
+              const form = new FormData()
+              form.append('file', f)
+              try {
+                await api.upload('/admin/workspace/logo', form)
+                done('Logo updated')
+              } catch (err) {
+                fail(err)
+              }
+            }}
+          />
+          <button className="btn" onClick={() => fileRef.current?.click()}>Upload logo</button>
+          {ws.logoVersion && (
+            <button
+              className="btn"
+              onClick={async () => {
+                try {
+                  await api.del('/admin/workspace/logo')
+                  done('Logo removed')
+                } catch (e) {
+                  fail(e)
+                }
+              }}
+            >
+              Remove
+            </button>
+          )}
+        </div>
+        <p className="faint small" style={{ margin: '6px 0 0' }}>PNG, JPEG or WebP up to 1 MB, about 26 px high in the header. Shown with the workspace name on every page, the sign-in page and shared pages.</p>
+      </div>
     </div>
   )
 }

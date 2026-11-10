@@ -18,6 +18,16 @@ export function useFeatures(): Partial<Features> {
 }
 
 export function Logo() {
+  // a workspace logo (Admin → Overview) replaces the WikiCraft mark, next to the workspace name
+  const ws = useMe().data?.workspace
+  if (ws?.logoVersion) {
+    return (
+      <span className="logo">
+        <img className="logo-img" src={`/api/workspace/logo?v=${encodeURIComponent(ws.logoVersion)}`} alt="" />
+        {ws.name}
+      </span>
+    )
+  }
   return (
     <span className="logo">
       <svg viewBox="0 0 32 32" aria-hidden>

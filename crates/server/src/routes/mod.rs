@@ -6,6 +6,7 @@ pub mod announcement;
 pub mod archive;
 pub mod attachments;
 pub mod auth;
+pub mod branding;
 pub mod comments;
 pub mod exports;
 pub mod imports;
@@ -65,6 +66,9 @@ pub fn router(state: AppState) -> Router {
         .route("/admin/signup", get(account::get_signup_settings).put(account::put_signup_settings))
         .route("/announcement", get(announcement::get))
         .route("/features", get(share::features))
+        .route("/admin/workspace", put(branding::rename))
+        .route("/admin/workspace/logo", post(branding::upload_logo).delete(branding::delete_logo))
+        .route("/workspace/logo", get(branding::logo))
         .route("/admin/announcement", put(announcement::put))
         .route("/me/preferences", get(account::get_preferences).put(account::put_preferences))
         .route("/me/space", get(spaces::my_space).post(spaces::create_my_space))

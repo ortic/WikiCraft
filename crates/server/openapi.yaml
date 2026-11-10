@@ -4309,6 +4309,101 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /admin/workspace:
+    put:
+      tags:
+      - Admin
+      summary: Rename the workspace
+      operationId: put_admin_workspace
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: *id001
+              required:
+              - name
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  name: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /admin/workspace/logo:
+    post:
+      tags:
+      - Admin
+      summary: Upload the workspace logo (PNG, JPEG or WebP, up to 1 MB)
+      operationId: post_admin_workspace_logo
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  logoVersion: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+      - Admin
+      summary: Remove the workspace logo
+      operationId: delete_admin_workspace_logo
+      responses:
+        '200':
+          description: OK
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /workspace/logo:
+    get:
+      tags:
+      - Admin
+      summary: The workspace logo image
+      operationId: get_workspace_logo
+      responses:
+        '200':
+          description: OK
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - {}
+      - session: []
+      - token: []
   /admin/mail:
     get:
       tags:

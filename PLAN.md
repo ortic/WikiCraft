@@ -191,7 +191,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P1** Multi-workspace (multi-tenant) mode for SaaS / large orgs, each with its own branding, users and settings `C`
 - [ ] **P2** XWiki-style "subwikis" / wiki farm: isolated wikis sharing users `X`
 - [ ] **P1** Custom domain per workspace; base-path deployments (`/wiki`) `C X`
-- [ ] **P1** Workspace-level settings: name, logo, favicon, colors, default language, timezone, date format `C D X`
+- [ ] **P1** Workspace-level settings: name, logo, favicon, colors, default language, timezone, date format `C D X` — partial: name and logo (Admin → Overview; header, sign-in and shared pages)
 - [ ] **P2** Sandbox / staging workspace cloned from production `C`
 - [ ] **P2** Release tracks (choose when new features roll out) `C`
 
@@ -615,7 +615,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Admin console: users (invite, deactivate, reset MFA, change role), groups, spaces overview `C D X B`
 - [x] **P0** Email (SMTP) settings with a test send `D X B`
 - [~] **P0** Storage settings (local / S3) and usage `D` (env config only; usage in admin stats)
-- [ ] **P1** Branding: logo, colors, login page, custom CSS (scoped), custom HTML header/footer (admin opt-in) `C X B`
+- [ ] **P1** Branding: logo, colors, login page, custom CSS (scoped), custom HTML header/footer (admin opt-in) `C X B` — partial: logo (also on the sign-in page)
 - [x] **P1** Global announcement banner `C` — Admin → Overview; info / warning / good-news styles, clickable links, dismissed per person until it changes
 - [x] **P1** Feature toggles (disable public links, disable exports, disable AI, disable personal spaces) `D` — Admin → Overview; enforced server-side (exports stay available to admins), `GET /api/features` for clients
 - [~] **P1** Global templates & default space permissions `C` (global templates via API only)

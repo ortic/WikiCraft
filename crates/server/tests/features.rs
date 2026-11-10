@@ -454,3 +454,37 @@ async fn space_categories() {
     assert_eq!(app.patch(&owner, "/spaces/CAT", json!({"name": "Platform"})).await.1["category"], "Teams");
     assert!(app.patch(&owner, "/spaces/CAT", json!({"category": ""})).await.1["category"].is_null());
 }
+
+#[tokio::test]
+async fn workspace_name_and_logo() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, _) = app.user(&owner, "wl@acme.test", "member").await;
+    assert_eq!(app.put(&member, "/admin/workspace", json!({"name": "Hijack"})).await.0, 403);
+    assert_eq!(app.put(&owner, "/admin/workspace", json!({"name": "  "})).await.0, 400);
+    assert_eq!(app.put(&owner, "/admin/workspace", json!({"name": " Acme  Corp "})).await.1["name"], "Acme Corp");
+    let (_, me) = app.get(&member, "/me").await;
+    assert_eq!(me["workspace"]["name"], "Acme Corp");
+    assert!(me["workspace"]["logoVersion"].is_null());
+    assert_eq!(app.get(&common::client(), "/workspace/logo").await.0, 404);
+
+    let upload = |c: &reqwest::Client, bytes: Vec<u8>, name: &str| {
+        let form = reqwest::multipart::Form::new().part("file", reqwest::multipart::Part::bytes(bytes).file_name(name.to_string()));
+        c.post(app.url("/admin/workspace/logo")).multipart(form).send()
+    };
+    let png = b"\x89PNG\r\n\x1a\n\0\0\0\rIHDR fake but typed".to_vec();
+    let svg = b"<svg xmlns='http://www.w3.org/2000/svg'><script>alert(1)</script></svg>".to_vec();
+    assert_eq!(upload(&member, png.clone(), "logo.png").await.unwrap().status(), 403);
+    assert_eq!(upload(&owner, svg, "logo.svg").await.unwrap().status(), 400, "no SVG");
+    assert_eq!(upload(&owner, png.clone(), "logo.png").await.unwrap().status(), 200);
+    let (_, me) = app.get(&member, "/me").await;
+    assert!(me["workspace"]["logoVersion"].is_string());
+    // public, typed and not sniffable
+    let r = common::client().get(app.url("/workspace/logo")).send().await.unwrap();
+    assert_eq!(r.status(), 200);
+    assert_eq!(r.headers()["content-type"], "image/png");
+    assert_eq!(r.headers()["x-content-type-options"], "nosniff");
+    assert_eq!(r.bytes().await.unwrap().to_vec(), png);
+    assert_eq!(app.delete(&owner, "/admin/workspace/logo").await, 204);
+    assert_eq!(app.get(&common::client(), "/workspace/logo").await.0, 404);
+}

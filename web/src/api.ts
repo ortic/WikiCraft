@@ -54,7 +54,7 @@ export interface User {
 
 export interface Me {
   user: User | null
-  workspace: { id: string; name: string } | null
+  workspace: { id: string; name: string; logoVersion?: string | null } | null
 }
 
 export interface Space {
