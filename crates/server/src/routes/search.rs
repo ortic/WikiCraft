@@ -160,6 +160,45 @@ async fn filtered(state: &AppState, p: &Principal, rows: Vec<PageListItem>) -> A
 
 const LIST_SELECT: &str = "SELECT p.id, p.title, p.space_id, s.key AS space_key, s.name AS space_name, p.updated_at, u.name AS updated_by_name";
 
+#[derive(Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct PopularItem {
+    #[serde(flatten)]
+    #[sqlx(flatten)]
+    page: PageListItem,
+    views: i64,
+    viewers: i64,
+}
+
+/// `GET /api/popular?days=30`: the most viewed pages the caller can see (people, not bots:
+/// signed-in viewers only), excluding archived spaces and pages.
+pub async fn popular(State(state): State<AppState>, CurrentUser(user): CurrentUser, Query(q): Query<PopularQuery>) -> ApiResult<Json<Vec<PopularItem>>> {
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    let days = q.days.unwrap_or(30).clamp(1, 365);
+    let rows = sqlx::query_as::<_, PopularItem>(sqlx::AssertSqlSafe(format!(
+        "{LIST_SELECT}, NULL::timestamptz AS at, v.views, v.viewers
+         FROM (SELECT page_id, sum(views)::bigint AS views, count(DISTINCT user_id) AS viewers FROM page_views
+               WHERE day >= current_date - $2::int AND user_id IS NOT NULL GROUP BY page_id) v
+         JOIN pages p ON p.id = v.page_id JOIN spaces s ON s.id = p.space_id LEFT JOIN users u ON u.id = p.updated_by
+         WHERE p.workspace_id = $1 AND p.deleted_at IS NULL AND p.archived_at IS NULL AND s.archived_at IS NULL
+         ORDER BY v.viewers DESC, v.views DESC LIMIT 80"
+    )))
+    .bind(user.workspace_id)
+    .bind(days as i32)
+    .fetch_all(&state.db)
+    .await?;
+    let spaces = visible_spaces(&state, &p).await?;
+    let pairs: Vec<(Uuid, Uuid)> = rows.iter().map(|r| (r.page.id, r.page.space_id)).collect();
+    let visible = filter_visible(&state, &p, &spaces, &pairs).await?;
+    let archived = crate::authz::archived_among(&state, &rows.iter().map(|r| r.page.id).collect::<Vec<_>>()).await?;
+    Ok(Json(rows.into_iter().filter(|r| visible.contains(&r.page.id) && !archived.contains(&r.page.id)).take(20).collect()))
+}
+
+#[derive(Deserialize)]
+pub struct PopularQuery {
+    days: Option<i64>,
+}
+
 /// Recently viewed pages of the user plus recently updated pages in the workspace.
 pub async fn recent(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Value>> {
     let p = Principal::load(&state, Some(user.clone())).await?;

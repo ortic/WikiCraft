@@ -141,3 +141,28 @@ async fn changed_since_last_visit() {
     let (_, p) = app.get(&owner, &format!("/pages/{pg}")).await;
     assert!(p["changedSince"].is_null());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn popular_pages() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, _) = app.user(&owner, "pop@acme.test", "member").await;
+    app.post(&owner, "/spaces", json!({"key": "POP", "name": "Popular"})).await;
+    let mk = |t: &'static str| {
+        let (app, owner) = (&app, &owner);
+        async move { app.post(owner, "/pages", json!({"spaceKey": "POP", "title": t})).await.1["id"].as_str().unwrap().to_string() }
+    };
+    let (hot, warm, secret) = (mk("Hot page").await, mk("Warm page").await, mk("Secret page").await);
+    for (c, id) in [(&owner, &hot), (&member, &hot), (&owner, &warm), (&owner, &secret), (&member, &warm), (&member, &warm)] {
+        app.get(c, &format!("/pages/{id}")).await;
+    }
+    let (_, me) = app.get(&owner, "/me").await;
+    let owner_id = me["user"]["id"].as_str().unwrap().to_string();
+    app.put(&owner, &format!("/pages/{secret}/restrictions"), json!({"restrictions": [{"kind": "view", "subjectType": "user", "subjectId": owner_id}]})).await;
+    let (_, list) = app.get(&member, "/popular").await;
+    let titles: Vec<&str> = list.as_array().unwrap().iter().map(|r| r["title"].as_str().unwrap()).collect();
+    assert_eq!(titles[..2], ["Warm page", "Hot page"], "by viewers, then views: {list}");
+    assert!(!titles.contains(&"Secret page"));
+    assert_eq!(list[0]["viewers"], 2);
+    assert_eq!(list[0]["views"], 3);
+}

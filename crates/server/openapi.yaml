@@ -2963,6 +2963,27 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /popular:
+    get:
+      tags:
+      - Search
+      summary: Most viewed pages you can see (last N days, signed-in viewers)
+      operationId: get_popular
+      parameters:
+      - name: days
+        in: query
+        required: false
+        description: 1-365, default 30
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /labels/{name}:
     get:
       tags:

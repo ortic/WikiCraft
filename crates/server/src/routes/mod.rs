@@ -118,6 +118,7 @@ pub fn router(state: AppState) -> Router {
         .route("/search", get(search::search))
         .route("/recent", get(search::recent))
         .route("/favorites", get(search::favorites))
+        .route("/popular", get(search::popular))
         .route("/labels/{name}", get(search::by_label))
         .route("/pages/{id}/access/{who}", get(inspect::explain))
         .route("/pages/{id}/like", put(likes::like_page).delete(likes::unlike_page))

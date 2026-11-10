@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { FileText, Plus, Star } from 'lucide-react'
+import { FileText, Plus, Star, TrendingUp } from 'lucide-react'
 import { api, formatDate, type PageListItem, type Space } from '../api'
 import { SpaceIcon, useMe } from '../ui'
 import CreateSpaceDialog from '../components/CreateSpaceDialog'
@@ -27,11 +27,16 @@ function PageList({ items, empty, timeLabel }: { items: PageListItem[] | undefin
 
 export default function Home() {
   const me = useMe()
-  const [tab, setTab] = useState<'viewed' | 'updated' | 'starred'>('viewed')
+  const [tab, setTab] = useState<'viewed' | 'updated' | 'popular' | 'starred'>('viewed')
   const [create, setCreate] = useState(false)
   const spaces = useQuery({ queryKey: ['spaces'], queryFn: () => api.get<Space[]>('/spaces') })
   const recent = useQuery({ queryKey: ['recent'], queryFn: () => api.get<{ viewed: PageListItem[]; updated: PageListItem[] }>('/recent'), enabled: !!me.data?.user })
   const favs = useQuery({ queryKey: ['favorites'], queryFn: () => api.get<PageListItem[]>('/favorites'), enabled: !!me.data?.user })
+  const popular = useQuery({
+    queryKey: ['popular'],
+    queryFn: () => api.get<(PageListItem & { views: number; viewers: number })[]>('/popular?days=30'),
+    enabled: !!me.data?.user && tab === 'popular',
+  })
   const name = me.data?.user?.name?.split(' ')[0]
   return (
     <div className="content-pad">
@@ -71,12 +76,25 @@ export default function Home() {
             <button className={`tab ${tab === 'updated' ? 'active' : ''}`} onClick={() => setTab('updated')}>
               Recently updated
             </button>
+            <button className={`tab ${tab === 'popular' ? 'active' : ''}`} onClick={() => setTab('popular')}>
+              <TrendingUp size={13} /> Popular
+            </button>
             <button className={`tab ${tab === 'starred' ? 'active' : ''}`} onClick={() => setTab('starred')}>
               <Star size={13} /> Starred
             </button>
           </div>
           {tab === 'viewed' && <PageList items={recent.data?.viewed} empty="Pages you visit show up here." timeLabel={(p) => formatDate(p.at)} />}
           {tab === 'updated' && <PageList items={recent.data?.updated} empty="Nothing updated yet." timeLabel={(p) => `${p.updatedByName ?? ''} · ${formatDate(p.updatedAt)}`} />}
+          {tab === 'popular' && (
+            <PageList
+              items={popular.data}
+              empty="Pages people read most in the last 30 days show up here."
+              timeLabel={(p) => {
+                const x = p as PageListItem & { viewers: number; views: number }
+                return `${x.viewers} ${x.viewers === 1 ? 'reader' : 'readers'} · ${x.views} views`
+              }}
+            />
+          )}
           {tab === 'starred' && <PageList items={favs.data} empty="Star pages to find them quickly." timeLabel={(p) => formatDate(p.updatedAt)} />}
         </>
       )}

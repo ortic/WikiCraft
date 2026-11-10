@@ -168,6 +168,7 @@ op("/attachments/{id}/content", "get", "Attachments", "Download (images/PDF inli
 op("/search", "get", "Discovery", "Full-text search over visible pages", res=resp(arr(S("SearchHit"))), query=[q("q", "query"), q("space", "space key")], public=True)
 op("/recent", "get", "Discovery", "Recently viewed and recently updated pages")
 op("/favorites", "get", "Discovery", "Starred pages", res=resp(arr(S("PageListItem"))))
+op("/popular", "get", "Search", "Most viewed pages you can see (last N days, signed-in viewers)", query=[q("days", "1-365, default 30")])
 op("/labels/{name}", "get", "Discovery", "Pages with a label", res=resp(arr(S("PageListItem"))), public=True)
 op("/resolve", "get", "Discovery", "Find a page by space + title or by imported Confluence id", query=[q("space", "space key"), q("title", "page title"), q("source", "confluence:<id>")], public=True)
 op("/notifications", "get", "Notifications", "Notifications", res=resp(arr(S("Notification"))))
