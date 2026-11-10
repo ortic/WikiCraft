@@ -191,3 +191,100 @@ async fn personal_spaces_are_private() {
     let (_, r) = app.get(&bob, "/search?q=quokka").await;
     assert_eq!(r.as_array().unwrap().len(), 0);
 }
+
+/// Trash for good: one page (with its trashed sub-pages and files), the whole trash, and the
+/// retention period. A file another page still uses stays.
+#[tokio::test(flavor = "multi_thread")]
+async fn trash_purge_and_retention() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (editor, editor_id) = app.user(&owner, "ed@acme.test", "member").await;
+    let (_, space) = app.post(&owner, "/spaces", json!({"key": "PUR", "name": "Purge"})).await;
+    let space_id = space["id"].as_str().unwrap().to_string();
+    app.put(&owner, "/spaces/PUR/permissions", json!({"defaultRole": "viewer", "grants": [{"subjectType": "user", "subjectId": editor_id, "role": "editor"}]}))
+        .await;
+    let page = |title: &'static str, parent: Option<String>| {
+        let (app, owner) = (&app, &owner);
+        async move { app.post(owner, "/pages", json!({"spaceKey": "PUR", "title": title, "parentId": parent})).await.1["id"].as_str().unwrap().to_string() }
+    };
+    let upload = |page: String, bytes: &'static [u8]| {
+        let (app, owner) = (&app, &owner);
+        async move {
+            let form = reqwest::multipart::Form::new().part("file", reqwest::multipart::Part::bytes(bytes.to_vec()).file_name("notes.txt"));
+            let r = owner.post(app.url(&format!("/pages/{page}/attachments"))).multipart(form).send().await.unwrap();
+            assert_eq!(r.status(), 201);
+        }
+    };
+    let (a, keep) = (page("Old plan", None).await, page("Live page", None).await);
+    let b = page("Old plan details", Some(a.clone())).await;
+    upload(b.clone(), b"only in the old plan").await;
+    upload(a.clone(), b"shared file").await;
+    upload(keep.clone(), b"shared file").await;
+    let key_of = |s: &str| wikicraft::blobs::BlobStore::key_for(s.as_bytes());
+    let blob_exists = |k: String| {
+        let db = app.state.db.clone();
+        async move { sqlx::query_scalar::<_, bool>("SELECT EXISTS (SELECT 1 FROM blobs WHERE key = $1)").bind(k).fetch_one(&db).await.unwrap() }
+    };
+    assert_eq!(app.delete(&owner, &format!("/pages/{a}")).await, 204);
+
+    // space admins only, and only for trashed pages
+    assert_eq!(app.post(&editor, &format!("/pages/{a}/purge"), json!({})).await.0, 403);
+    assert_eq!(app.post(&owner, &format!("/pages/{keep}/purge"), json!({})).await.0, 404);
+    let (st, r) = app.post(&owner, &format!("/pages/{a}/purge"), json!({})).await;
+    assert_eq!(st, 200, "{r}");
+    assert_eq!(r["purged"], 2, "the trashed sub-page goes too");
+    let left: i64 = sqlx::query_scalar("SELECT count(*) FROM pages WHERE id IN ($1::uuid, $2::uuid)").bind(&a).bind(&b).fetch_one(&app.state.db).await.unwrap();
+    assert_eq!(left, 0);
+    assert!(!blob_exists(key_of("only in the old plan")).await, "its own file is gone");
+    assert!(app.state.blobs.get(&key_of("only in the old plan")).await.is_err(), "from storage too");
+    assert!(blob_exists(key_of("shared file")).await, "a file another page uses stays");
+    let (_, att) = app.get(&owner, &format!("/pages/{keep}/attachments")).await;
+    let att_id = att[0]["id"].as_str().unwrap();
+    let r = owner.get(app.url(&format!("/attachments/{att_id}/content"))).send().await.unwrap();
+    assert_eq!(r.bytes().await.unwrap().as_ref(), b"shared file");
+
+    // retention: only what has been in the trash longer than the period
+    let (old, recent) = (page("Ancient", None).await, page("Recent", None).await);
+    app.delete(&owner, &format!("/pages/{old}")).await;
+    app.delete(&owner, &format!("/pages/{recent}")).await;
+    sqlx::query("UPDATE pages SET deleted_at = now() - interval '40 days' WHERE id = $1::uuid").bind(&old).execute(&app.state.db).await.unwrap();
+    assert_eq!(wikicraft::purge::purge_expired(&app.state).await.unwrap(), 0, "kept forever by default");
+    let (st, s) = app.put(&owner, "/admin/settings", json!({"trashRetentionDays": 30})).await;
+    assert_eq!((st, &s["trashRetentionDays"]), (200, &json!(30)), "{s}");
+    assert_eq!(app.put(&owner, "/admin/settings", json!({"trashRetentionDays": -1})).await.0, 400);
+    assert_eq!(wikicraft::purge::purge_expired(&app.state).await.unwrap(), 1);
+    let (_, trash) = app.get(&owner, "/spaces/PUR/trash").await;
+    let titles: Vec<&str> = trash.as_array().unwrap().iter().map(|t| t["title"].as_str().unwrap()).collect();
+    assert_eq!(titles, ["Recent"]);
+
+    // empty the trash
+    assert_eq!(app.post(&editor, "/spaces/PUR/trash/empty", json!({})).await.0, 403);
+    let (_, r) = app.post(&owner, "/spaces/PUR/trash/empty", json!({})).await;
+    assert_eq!(r, json!({"purged": 1, "kept": 0}));
+    let (_, trash) = app.get(&owner, "/spaces/PUR/trash").await;
+    assert_eq!(trash, json!([]));
+    let _ = space_id;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn starred_spaces() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, _) = app.user(&owner, "star@acme.test", "member").await;
+    app.post(&owner, "/spaces", json!({"key": "AAA", "name": "Alpha"})).await;
+    app.post(&owner, "/spaces", json!({"key": "ZZZ", "name": "Zulu"})).await;
+    let starred = |c: &reqwest::Client| {
+        let (app, c) = (&app, c.clone());
+        async move {
+            let (_, list) = app.get(&c, "/spaces").await;
+            list.as_array().unwrap().iter().filter(|s| s["starred"] == true).map(|s| s["key"].as_str().unwrap().to_string()).collect::<Vec<_>>()
+        }
+    };
+    assert_eq!(app.put(&member, "/spaces/ZZZ/star", json!({})).await.0, 204);
+    assert_eq!(starred(&member).await, ["ZZZ"]);
+    assert!(starred(&owner).await.is_empty(), "stars are personal");
+    let (_, s) = app.get(&member, "/spaces/ZZZ").await;
+    assert_eq!(s["starred"], true);
+    assert_eq!(app.delete(&member, "/spaces/ZZZ/star").await, 204);
+    assert!(starred(&member).await.is_empty());
+}

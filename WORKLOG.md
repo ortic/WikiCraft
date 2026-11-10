@@ -88,6 +88,11 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   JSON and Yjs, live rooms updated via a new "system change" that is saved without counting as an edit).
   Docs: user guide, admin guide, "Leaving Confluence Data Center" (docs/). Golden snapshot tests (insta) for the
   Confluence converter and Markdown import, which found six conversion bugs (all fixed, see PLAN §4.28).
+  Document format version (pages.schema_version) with a background upgrade of old pages. Page status picker, copy
+  dialog, comment filters, label suggestions. Trash: delete forever, empty trash, retention period (unused files
+  are removed from storage; a test caught that content-addressed files need their hashed path). Folders (view +
+  create), starred spaces, command palette actions. The axe check caught 22 px buttons side by side (WCAG 2.2
+  target size).
 - Note: running the whole test suite saturates this WSL machine (load ~100); a parallel demo server then hits DB
   pool timeouts, and the mail test's 4-second wait can flake. Both pass when the machine is idle.
 

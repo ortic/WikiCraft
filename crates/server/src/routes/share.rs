@@ -160,7 +160,11 @@ async fn switches(state: &AppState, ws: Uuid) -> ApiResult<serde_json::Map<Strin
 /// personalSpaces}`; a PUT changes the ones it names).
 pub async fn get_settings(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Value>> {
     require_admin(&user)?;
-    Ok(Json(Value::Object(switches(&state, user.workspace_id).await?)))
+    let mut out = switches(&state, user.workspace_id).await?;
+    let days: Option<i32> =
+        sqlx::query_scalar("SELECT (settings->>'trashRetentionDays')::int FROM workspaces WHERE id = $1").bind(user.workspace_id).fetch_one(&state.db).await?;
+    out.insert("trashRetentionDays".into(), json!(days.unwrap_or(0)));
+    Ok(Json(Value::Object(out)))
 }
 
 pub async fn put_settings(
@@ -170,6 +174,17 @@ pub async fn put_settings(
 ) -> ApiResult<Json<Value>> {
     require_admin(&user)?;
     for (key, v) in &req {
+        if key == "trashRetentionDays" {
+            // days a page stays in the trash before it's deleted for good; 0 = forever
+            let days = v.as_i64().filter(|d| (0..=3650).contains(d)).ok_or_else(|| ApiError::bad("trashRetentionDays must be 0 (keep forever) to 3650"))?;
+            sqlx::query("UPDATE workspaces SET settings = settings || jsonb_build_object('trashRetentionDays', $2::int) WHERE id = $1")
+                .bind(user.workspace_id)
+                .bind(days as i32)
+                .execute(&state.db)
+                .await?;
+            audit::log(&state, user.workspace_id, Some(user.id), "workspace.settings", None, None, json!({ "trashRetentionDays": days })).await;
+            continue;
+        }
         let (Some(key), Some(v)) = (SWITCHES.iter().find(|k| *k == key), v.as_bool()) else {
             return Err(ApiError::bad(format!("unknown setting {key} (expected true/false for one of {})", SWITCHES.join(", "))));
         };

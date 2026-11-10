@@ -444,7 +444,7 @@ async fn feature_switches() {
     app.eventually(|| async { (app.get(&member, &format!("/jobs/{job}")).await.1["status"] == "succeeded").then_some(()) }).await;
     let (st, s) = app.put(&owner, "/admin/settings", json!({"exports": false, "personalSpaces": false})).await;
     assert_eq!(st, 200, "{s}");
-    assert_eq!(s, json!({"publicLinks": true, "exports": false, "ai": true, "personalSpaces": false}));
+    assert_eq!(s, json!({"publicLinks": true, "exports": false, "ai": true, "personalSpaces": false, "trashRetentionDays": 0}));
 
     // ... can't be downloaded after it; members can't export any more, admins still can
     assert_eq!(app.get(&member, &format!("/jobs/{job}/download")).await.0, 400);

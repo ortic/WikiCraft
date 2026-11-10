@@ -2,7 +2,7 @@ import { useMemo, useState, type DragEvent } from 'react'
 import { LineIcon, parseSymbol } from '../icons'
 import { useMatch, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { ChevronRight, ChevronDown, FileText, Folder, Plus, Lock, Link2, ExternalLink } from 'lucide-react'
+import { ChevronRight, ChevronDown, FileText, Folder, FolderPlus, Plus, Lock, Link2, ExternalLink } from 'lucide-react'
 import { api, type Space, type TreeNode } from '../api'
 import { useToast } from '../ui'
 
@@ -50,8 +50,8 @@ export default function SpaceTree({ space }: { space: Space }) {
     return e
   }, [open, active, parentOf])
 
-  const createChild = async (parentId: string | null) => {
-    const r = await api.post<{ id: string }>('/pages', { spaceKey: space.key, parentId, title: 'Untitled' })
+  const createChild = async (parentId: string | null, kind: 'page' | 'folder' = 'page') => {
+    const r = await api.post<{ id: string }>('/pages', { spaceKey: space.key, parentId, kind, title: kind === 'folder' ? 'New folder' : 'Untitled' })
     if (parentId) setOpen((o) => ({ ...o, [parentId]: true }))
     await qc.invalidateQueries({ queryKey: ['tree', space.key] })
     nav(`/pages/${r.id}?new=1`)
@@ -149,9 +149,14 @@ export default function SpaceTree({ space }: { space: Space }) {
       <div className="sidebar-section" style={{ marginTop: 8 }}>
         Pages <span className="spacer" />
         {canEdit && (
-          <button className="icon-btn" style={{ width: 22, height: 22 }} title="New page at top level" onClick={() => createChild(null)}>
-            <Plus size={14} />
-          </button>
+          <>
+            <button className="icon-btn" style={{ width: 24, height: 24 }} title="New folder at top level" aria-label="New folder at top level" onClick={() => createChild(null, 'folder')}>
+              <FolderPlus size={14} />
+            </button>
+            <button className="icon-btn" style={{ width: 24, height: 24 }} title="New page at top level" aria-label="New page at top level" onClick={() => createChild(null)}>
+              <Plus size={14} />
+            </button>
+          </>
         )}
       </div>
       {tree.isLoading ? <div style={{ padding: 8 }} className="spinner" /> : renderNodes('', 0)}

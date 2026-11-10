@@ -98,6 +98,7 @@ pub fn router(state: AppState) -> Router {
         .route("/spaces/{key}/tree", get(spaces::tree))
         .route("/spaces/{key}/permissions", get(spaces::get_permissions).put(spaces::put_permissions))
         .route("/spaces/{key}/trash", get(spaces::trash))
+        .route("/spaces/{key}/trash/empty", post(spaces::empty_trash))
         .route("/spaces/{key}/blog", get(spaces::blog))
         // pages
         .route("/pages", post(pages::create))
@@ -106,6 +107,7 @@ pub fn router(state: AppState) -> Router {
         .route("/pages/{id}/move", post(pages::move_page))
         .route("/pages/{id}/copy", post(pages::copy))
         .route("/pages/{id}/restore", post(pages::restore))
+        .route("/pages/{id}/purge", post(pages::purge))
         .route("/pages/{id}/children", get(pages::children))
         .route("/pages/{id}/versions", get(pages::versions).post(pages::save_version))
         .route("/pages/{id}/versions/{version}", get(pages::get_version))
@@ -151,6 +153,7 @@ pub fn router(state: AppState) -> Router {
         .route("/pages/{id}/unarchive", post(archive::unarchive))
         .route("/spaces/{key}/archived", get(archive::list))
         .route("/spaces/{key}/watch", put(spaces::watch).delete(spaces::unwatch))
+        .route("/spaces/{key}/star", put(spaces::star).delete(spaces::unstar))
         .route("/reports/verification", get(verification::report))
         .route("/ai/status", get(ai::status))
         .route("/ai/ask", post(ai::ask))

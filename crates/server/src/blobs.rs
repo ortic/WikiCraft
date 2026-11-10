@@ -102,6 +102,16 @@ impl BlobStore {
         Ok(())
     }
 
+    /// Removes a content-addressed file (see [`Self::put`]); the caller made sure nothing uses it.
+    pub async fn delete_blob(&self, key: &str) -> anyhow::Result<()> {
+        if key.len() < 4 || !key.bytes().all(|b| b.is_ascii_hexdigit()) {
+            anyhow::bail!("not a content key: {key}");
+        }
+        self.store.delete(&Self::path(key)).await?;
+        Ok(())
+    }
+
+    /// Removes a non-content-addressed object (export archives, uploads).
     pub async fn delete_key(&self, key: &str) -> anyhow::Result<()> {
         self.store.delete(&Path::from(key)).await?;
         Ok(())

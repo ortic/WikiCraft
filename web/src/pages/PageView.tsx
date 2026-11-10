@@ -7,6 +7,7 @@ import { ApiError, api, formatDate, type Page, type Space } from '../api'
 import { PageDecor } from '../components/PageDecor'
 import { ErrorBox, Modal, Spinner, useFeatures, useMe, useToast } from '../ui'
 import { PageStatus } from '../components/PageStatus'
+import { FolderView } from '../components/FolderView'
 import Editor, { PresenceAvatars, type Presence } from '../editor/Editor'
 import CommentsPanel from '../components/CommentsPanel'
 import AttachmentsPanel from '../components/AttachmentsPanel'
@@ -376,6 +377,10 @@ export default function PageView() {
               <button className="icon-btn" title="Dismiss" onClick={() => setChanged({ id: '', info: changed.info })}><X size={14} /></button>
             </div>
           )}
+          {p.kind === 'folder' ? (
+            <FolderView page={p} canEdit={canEdit} />
+          ) : (
+          <>
           <Editor key={p.id} pageId={p.id} user={user} editable={canEdit} onPresence={onPresence} onStats={onStats} onCommentClick={onCommentClick} onRequestComment={p.access.comment ? onRequestComment : undefined} />
 
           <div className="page-reactions">
@@ -398,6 +403,8 @@ export default function PageView() {
               </span>
             )}
           </div>
+          </>
+          )}
 
           <div className="labels">
             <Tag size={14} className="faint" />

@@ -57,8 +57,8 @@ The first visit shows the setup wizard: workspace name and the **owner** account
 else is configured afterwards:
 
 - *Administration → Overview*: workspace name and logo, announcement banner, sharing and feature
-  switches (public links, exports, *Ask the wiki*, personal spaces), e-mail status and a test
-  message, usage numbers.
+  switches (public links, exports, *Ask the wiki*, personal spaces), how long trashed pages are
+  kept, e-mail status and a test message, usage numbers.
 - *Administration → Users / Groups*: people and groups.
 - *Administration → Import*: Confluence, Word, Markdown, HTML, Notion and Obsidian imports, space
   backups.
@@ -134,6 +134,15 @@ To restore: restore the database dump and the blobs, start WikiCraft, run `wikic
 **Space backups** are a second layer: *Space settings → Export → Backup* produces a zip with
 pages, history, comments, attachments and permissions, which *Administration → Import → Restore a
 space backup* restores into a new space (also on another WikiCraft).
+
+## Deleting content for good
+
+Deleted pages go to their space's trash (*Space settings → Trash*), where editors can restore
+them. Space admins can **Delete forever** single pages or **Empty trash**; that removes the pages
+with their history, comments and attachments, and files no other page uses are removed from
+storage. To do this automatically, set *Delete trashed pages for good after … days* under
+*Administration → Overview* (0, the default, keeps them until someone deletes them). Purges are
+recorded in the audit log.
 
 ## Upgrades
 

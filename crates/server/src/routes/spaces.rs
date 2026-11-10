@@ -91,6 +91,8 @@ pub struct SpaceView {
     page_count: i64,
     /// the caller watches the whole space
     watching: bool,
+    /// the caller starred the space
+    starred: bool,
 }
 
 /// Lists the spaces visible to the caller.
@@ -108,12 +110,17 @@ pub async fn list(State(state): State<AppState>, MaybeUser(user): MaybeUser) -> 
         .fetch_all(&state.db)
         .await?;
     let counts: std::collections::HashMap<Uuid, i64> = counts.into_iter().collect();
+    let starred: HashSet<Uuid> = match &p.user {
+        Some(u) => sqlx::query_scalar("SELECT space_id FROM space_favorites WHERE user_id = $1").bind(u.id).fetch_all(&state.db).await?.into_iter().collect(),
+        None => HashSet::new(),
+    };
     let mut out = Vec::new();
     for s in spaces {
         let role = space_role(&state, &p, &s.access_row()).await?;
         if role > Role::None {
             let page_count = counts.get(&s.id).copied().unwrap_or(0);
-            out.push(SpaceView { space: s, role, page_count, watching: false });
+            let starred = starred.contains(&s.id);
+            out.push(SpaceView { space: s, role, page_count, watching: false, starred });
         }
     }
     Ok(Json(out))
@@ -342,17 +349,20 @@ pub async fn get(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path
     let (space, role) = load_space(&state, &p, &key).await?;
     let page_count: i64 =
         sqlx::query_scalar("SELECT count(*) FROM pages WHERE space_id = $1 AND deleted_at IS NULL").bind(space.id).fetch_one(&state.db).await?;
-    let watching: bool = match &p.user {
+    let (watching, starred): (bool, bool) = match &p.user {
         Some(u) => {
-            sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM space_watches WHERE user_id = $1 AND space_id = $2)")
-                .bind(u.id)
-                .bind(space.id)
-                .fetch_one(&state.db)
-                .await?
+            sqlx::query_as(
+                "SELECT EXISTS (SELECT 1 FROM space_watches WHERE user_id = $1 AND space_id = $2),
+                        EXISTS (SELECT 1 FROM space_favorites WHERE user_id = $1 AND space_id = $2)",
+            )
+            .bind(u.id)
+            .bind(space.id)
+            .fetch_one(&state.db)
+            .await?
         }
-        None => false,
+        None => (false, false),
     };
-    Ok(Json(SpaceView { space, role, page_count, watching }))
+    Ok(Json(SpaceView { space, role, page_count, watching, starred }))
 }
 
 #[derive(Deserialize)]
@@ -635,6 +645,29 @@ pub async fn trash(State(state): State<AppState>, CurrentUser(user): CurrentUser
     Ok(Json(rows.into_iter().filter(|r| visible.contains(&r.id)).collect()))
 }
 
+/// `POST /spaces/{key}/trash/empty` — deletes everything in the space's trash for good (space
+/// admins; trashed pages they can't see because of restrictions stay).
+pub async fn empty_trash(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(key): Path<String>) -> ApiResult<Json<serde_json::Value>> {
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    let (space, role) = load_space(&state, &p, &key).await?;
+    if role < Role::Admin {
+        return Err(ApiError::Forbidden);
+    }
+    let trashed: Vec<Uuid> = sqlx::query_scalar(
+        "SELECT p.id FROM pages p LEFT JOIN pages parent ON parent.id = p.parent_id
+          WHERE p.space_id = $1 AND p.deleted_at IS NOT NULL AND (parent.id IS NULL OR parent.deleted_at IS NULL)",
+    )
+    .bind(space.id)
+    .fetch_all(&state.db)
+    .await?;
+    let pairs: Vec<(Uuid, Option<Uuid>)> = sqlx::query_as("SELECT id, parent_id FROM pages WHERE space_id = $1").bind(space.id).fetch_all(&state.db).await?;
+    let visible = visible_page_ids(&state, &p, space.id, role, &pairs).await?;
+    let roots: Vec<Uuid> = trashed.iter().copied().filter(|id| visible.contains(id)).collect();
+    let gone = crate::purge::purge_pages(&state, &roots).await?;
+    audit::log(&state, user.workspace_id, Some(user.id), "space.trash_emptied", Some("space"), Some(space.id), json!({"count": gone.len()})).await;
+    Ok(Json(json!({ "purged": gone.len(), "kept": trashed.len() - roots.len() })))
+}
+
 #[derive(Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct BlogItem {
@@ -669,6 +702,26 @@ pub async fn watch(State(state): State<AppState>, CurrentUser(user): CurrentUser
     let p = Principal::load(&state, Some(user.clone())).await?;
     let (space, _) = load_space(&state, &p, &key).await?;
     sqlx::query("INSERT INTO space_watches (user_id, space_id) VALUES ($1, $2) ON CONFLICT DO NOTHING").bind(user.id).bind(space.id).execute(&state.db).await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `PUT /api/spaces/{key}/star`: the space shows up first in the directory and in the sidebar.
+pub async fn star(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(key): Path<String>) -> ApiResult<StatusCode> {
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    let (space, _) = load_space(&state, &p, &key).await?;
+    sqlx::query("INSERT INTO space_favorites (user_id, space_id) VALUES ($1, $2) ON CONFLICT DO NOTHING")
+        .bind(user.id)
+        .bind(space.id)
+        .execute(&state.db)
+        .await?;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// `DELETE /api/spaces/{key}/star`
+pub async fn unstar(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(key): Path<String>) -> ApiResult<StatusCode> {
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    let (space, _) = load_space(&state, &p, &key).await?;
+    sqlx::query("DELETE FROM space_favorites WHERE user_id = $1 AND space_id = $2").bind(user.id).bind(space.id).execute(&state.db).await?;
     Ok(StatusCode::NO_CONTENT)
 }
 

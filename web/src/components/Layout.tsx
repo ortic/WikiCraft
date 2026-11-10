@@ -1,12 +1,12 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Search, Home as HomeIcon, LayoutGrid, Star, Settings, Plus, LogOut, Moon, Shield, Menu, Trash2, UserCog, Newspaper, ListChecks, Download, Info, TriangleAlert, CircleCheck, X } from 'lucide-react'
+import { Search, Home as HomeIcon, LayoutGrid, Star, Settings, Plus, LogOut, Moon, Shield, Menu, Trash2, UserCog, Newspaper, ListChecks, Download, Info, TriangleAlert, CircleCheck, X, Keyboard, FolderPlus } from 'lucide-react'
 import ShortcutsDialog from './ShortcutsDialog'
 import { api, type Page, type Space } from '../api'
 import { Avatar, Logo, SpaceIcon, useFeatures, useMe } from '../ui'
 import SpaceTree from './SpaceTree'
-import SearchPalette from './SearchPalette'
+import SearchPalette, { type PaletteAction } from './SearchPalette'
 import CreateSpaceDialog from './CreateSpaceDialog'
 import NotificationsMenu from './NotificationsMenu'
 import TemplatePicker from './TemplatePicker'
@@ -63,6 +63,48 @@ export default function Layout() {
       /* ignore */
     }
   }
+
+  // Ctrl+K actions, for where you are and what you may do
+  const canCreate = !!user && !!current && current.role !== 'viewer' && current.role !== 'commenter'
+  const isAdmin = !!user && (user.role === 'owner' || user.role === 'admin')
+  const paletteActions: PaletteAction[] = [
+    ...(canCreate
+      ? [
+          { id: 'create-page', label: 'Create page', hint: `in ${current!.name}`, keywords: 'new add template', icon: <Plus size={14} />, run: () => setCreatePage(true) },
+          {
+            id: 'create-folder',
+            label: 'Create folder',
+            hint: `in ${current!.name}`,
+            keywords: 'new add',
+            icon: <FolderPlus size={14} />,
+            run: async () => {
+              const r = await api.post<{ id: string }>('/pages', { spaceKey: current!.key, kind: 'folder', title: 'New folder' })
+              qc.invalidateQueries({ queryKey: ['tree', current!.key] })
+              nav(`/pages/${r.id}?new=1`)
+            },
+          },
+        ]
+      : []),
+    ...(user && user.role !== 'guest' ? [{ id: 'create-space', label: 'Create space', keywords: 'new add', icon: <LayoutGrid size={14} />, run: () => setCreateSpace(true) }] : []),
+    { id: 'home', label: 'Go to Home', keywords: 'dashboard recent', icon: <HomeIcon size={14} />, run: () => nav('/') },
+    { id: 'spaces', label: 'Go to Spaces', keywords: 'directory all', icon: <LayoutGrid size={14} />, run: () => nav('/spaces') },
+    ...(user ? [{ id: 'tasks', label: 'Go to My tasks', keywords: 'todo assigned', icon: <ListChecks size={14} />, run: () => nav('/tasks') }] : []),
+    ...(current
+      ? [
+          { id: 'space-blog', label: 'Open the blog', hint: current.name, keywords: 'news posts', icon: <Newspaper size={14} />, run: () => nav(`/spaces/${current.key}/blog`) },
+          ...(current.role === 'admin' || current.role === 'editor'
+            ? [{ id: 'space-trash', label: 'Open the trash', hint: current.name, keywords: 'deleted restore', icon: <Trash2 size={14} />, run: () => nav(`/spaces/${current.key}/settings?tab=trash`) }]
+            : []),
+          ...(current.role === 'admin'
+            ? [{ id: 'space-settings', label: 'Space settings', hint: current.name, keywords: 'permissions details', icon: <Settings size={14} />, run: () => nav(`/spaces/${current.key}/settings`) }]
+            : []),
+        ]
+      : []),
+    ...(user ? [{ id: 'profile', label: 'Profile and settings', keywords: 'account password api token two-factor notifications', icon: <UserCog size={14} />, run: () => nav('/settings') }] : []),
+    ...(isAdmin ? [{ id: 'admin', label: 'Administration', keywords: 'admin users groups import audit', icon: <Shield size={14} />, run: () => nav('/admin') }] : []),
+    { id: 'theme', label: 'Toggle dark mode', keywords: 'theme light dark', icon: <Moon size={14} />, run: toggleTheme },
+    { id: 'shortcuts', label: 'Keyboard shortcuts', keywords: 'keys help', icon: <Keyboard size={14} />, run: () => window.dispatchEvent(new Event('wikicraft:shortcuts')) },
+  ]
 
   return (
     <div className={`shell ${mobileOpen ? 'sidebar-open' : ''}`}>
@@ -204,11 +246,14 @@ export default function Layout() {
                 </button>
               )}
             </div>
-            {spaces.data?.map((s) => (
-              <NavLink key={s.id} to={`/spaces/${s.key}`} className="nav-item">
-                <SpaceIcon space={s} size={20} /> {s.name}
-              </NavLink>
-            ))}
+            {[...(spaces.data ?? [])]
+              .sort((a, b) => Number(!!b.starred) - Number(!!a.starred))
+              .map((s) => (
+                <NavLink key={s.id} to={`/spaces/${s.key}`} className="nav-item">
+                  <SpaceIcon space={s} size={20} /> <span className="nav-item-text">{s.name}</span>
+                  {s.starred && <Star size={12} className="nav-star" fill="currentColor" aria-label="starred" />}
+                </NavLink>
+              ))}
           </>
         )}
       </aside>
@@ -218,7 +263,7 @@ export default function Layout() {
         <Outlet />
           <ShortcutsDialog />
       </main>
-      {search && <SearchPalette onClose={() => setSearch(false)} />}
+      {search && <SearchPalette onClose={() => setSearch(false)} actions={paletteActions} />}
       {createSpace && <CreateSpaceDialog onClose={() => setCreateSpace(false)} />}
       {createPage && current && <TemplatePicker spaceKey={current.key} onClose={() => setCreatePage(false)} />}
     </div>

@@ -216,7 +216,8 @@ function AnnouncementSettings() {
 function WorkspaceSettings() {
   const qc = useQueryClient()
   const toast = useToast()
-  const settings = useQuery({ queryKey: ['admin-settings'], queryFn: () => api.get<Features>('/admin/settings') })
+  const settings = useQuery({ queryKey: ['admin-settings'], queryFn: () => api.get<Features & { trashRetentionDays: number }>('/admin/settings') })
+  const [retention, setRetention] = useState<string | null>(null)
   if (!settings.data) return null
   const set = async (key: keyof Features, on: boolean, message: string) => {
     try {
@@ -252,7 +253,42 @@ function WorkspaceSettings() {
         <input type="checkbox" checked={s.personalSpaces} onChange={(e) => set('personalSpaces', e.target.checked, e.target.checked ? 'People can create personal spaces' : 'No new personal spaces')} />
         Personal spaces (a private space per person for drafts and notes)
       </label>
-      <p className="faint small" style={{ margin: '2px 0 0 24px' }}>Turning this off stops new personal spaces; existing ones stay.</p>
+      <p className="faint small" style={{ margin: '2px 0 12px 24px' }}>Turning this off stops new personal spaces; existing ones stay.</p>
+      <div className="field" style={{ marginBottom: 0 }}>
+        <label htmlFor="trash-retention">Trash</label>
+        <div className="row">
+          <span className="small">Delete trashed pages for good after</span>
+          <input
+            id="trash-retention"
+            className="input"
+            type="number"
+            min={0}
+            max={3650}
+            style={{ width: 90 }}
+            value={retention ?? String(s.trashRetentionDays)}
+            onChange={(e) => setRetention(e.target.value)}
+          />
+          <span className="small">days</span>
+          <button
+            className="btn"
+            disabled={retention === null || retention === String(s.trashRetentionDays)}
+            onClick={async () => {
+              const days = Math.max(0, Math.min(3650, Math.round(Number(retention) || 0)))
+              try {
+                await api.put('/admin/settings', { trashRetentionDays: days })
+                qc.invalidateQueries({ queryKey: ['admin-settings'] })
+                setRetention(null)
+                toast(days ? `Trashed pages are deleted after ${days} days` : 'Trashed pages are kept until someone deletes them')
+              } catch (e) {
+                toast(e instanceof Error ? e.message : 'Could not save')
+              }
+            }}
+          >
+            Save
+          </button>
+        </div>
+        <p className="faint small" style={{ margin: '4px 0 0' }}>0 keeps them until a space admin deletes them. Deleting removes the pages with their history, comments and attachments.</p>
+      </div>
     </div>
   )
 }

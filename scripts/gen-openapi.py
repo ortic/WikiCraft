@@ -16,7 +16,7 @@ anyobj = {"type": "object", "additionalProperties": True}
 schemas = {
     "Error": obj({"error": txt, "message": txt}),
     "User": obj({"id": uuid, "workspaceId": uuid, "email": {"type": ["string", "null"]}, "name": txt, "role": {"enum": ["owner", "admin", "member", "guest"]}, "status": {"enum": ["active", "invited", "deactivated", "placeholder"]}, "avatarUrl": {"type": ["string", "null"]}}),
-    "Space": obj({"id": uuid, "key": txt, "name": txt, "description": {"type": ["string", "null"]}, "icon": {"type": ["string", "null"], "description": "symbol[:color] from the WikiCraft icon set"}, "homePageId": uuid, "category": {"type": ["string", "null"]}, "defaultRole": {"enum": ["none", "viewer", "commenter", "editor", "admin"]}, "anonymousAccess": boolean, "role": txt}),
+    "Space": obj({"id": uuid, "key": txt, "name": txt, "description": {"type": ["string", "null"]}, "icon": {"type": ["string", "null"], "description": "symbol[:color] from the WikiCraft icon set"}, "homePageId": uuid, "category": {"type": ["string", "null"]}, "defaultRole": {"enum": ["none", "viewer", "commenter", "editor", "admin"]}, "anonymousAccess": boolean, "role": txt, "starred": boolean, "watching": boolean}),
     "PmNode": {"type": "object", "description": "ProseMirror / Tiptap JSON node (type, attrs, content, text, marks)", "additionalProperties": True},
     "PageAccess": obj({"view": boolean, "comment": boolean, "edit": boolean, "admin": boolean}),
     "Page": obj({"id": uuid, "spaceId": uuid, "spaceKey": txt, "spaceName": txt, "parentId": {"type": ["string", "null"], "format": "uuid"}, "kind": {"enum": ["page", "folder", "blog"]}, "title": txt, "content": S("PmNode"), "version": num, "labels": arr(txt), "restricted": boolean, "createdAt": dt, "updatedAt": dt, "updatedByName": {"type": ["string", "null"]}, "breadcrumbs": arr(obj({"id": uuid, "title": txt})), "access": S("PageAccess")}),
@@ -117,6 +117,7 @@ op("/spaces/{key}", "delete", "Spaces", "Archive a space", res=NO)
 op("/spaces/{key}/tree", "get", "Spaces", "Page tree (visible pages)", public=True)
 op("/spaces/{key}/permissions", "get", "Spaces", "Space role grants")
 op("/spaces/{key}/permissions", "put", "Spaces", "Replace space role grants", req=body(obj({"defaultRole": txt, "anonymousAccess": boolean, "grants": arr(obj({"subjectType": txt, "subjectId": uuid, "role": txt}))})), res=NO)
+op("/spaces/{key}/trash/empty", "post", "Spaces", "Empty the space's trash: delete every trashed page you can see for good (space admins)", res=resp(obj({"purged": num, "kept": num})))
 op("/spaces/{key}/trash", "get", "Spaces", "Trashed pages")
 op("/spaces/{key}/blog", "get", "Spaces", "Blog posts", public=True)
 op("/spaces/{key}/export", "post", "Import & export", "Export a space (HTML site, Markdown, backup) as a job", req=body(obj({"format": {"enum": ["html", "markdown", "backup"]}})), res=resp(obj({"jobId": uuid}), "202", "Queued"))
@@ -128,6 +129,7 @@ op("/pages/{id}", "delete", "Pages", "Move a page and its sub-pages to the trash
 op("/pages/{id}/content", "put", "Pages", "Replace the content (live editors get the change)", req=body(obj({"content": S("PmNode"), "markdown": txt, "message": txt})))
 op("/pages/{id}/move", "post", "Pages", "Move (parent, position, other space)", req=body(obj({"parentId": uuid, "spaceKey": txt, "position": {"type": "number"}})), res=NO)
 op("/pages/{id}/copy", "post", "Pages", "Copy a page (optionally with sub-pages)", req=body(obj({"includeChildren": boolean, "parentId": uuid})))
+op("/pages/{id}/purge", "post", "Pages", "Delete a trashed page for good, with its trashed sub-pages, history, comments and attachments (space admins)", res=resp(obj({"purged": num})))
 op("/pages/{id}/restore", "post", "Pages", "Restore from the trash", res=NO)
 op("/pages/{id}/children", "get", "Pages", "Child pages", query=[q("depth", "levels", num)], public=True)
 op("/pages/{id}/versions", "get", "Pages", "Version history")
@@ -151,6 +153,8 @@ op("/pages/{id}/owner", "put", "Pages", "Hand the page over to someone who can e
 op("/pages/{id}/archive", "post", "Pages", "Archive a page and everything under it (read-only, hidden from tree and search)", res=resp(None, "204", "Archived"))
 op("/pages/{id}/unarchive", "post", "Pages", "Restore an archived page", res=resp(None, "204", "Restored"))
 op("/spaces/{key}/archived", "get", "Spaces", "Archived pages of a space", res=resp(arr(obj({"id": uuid, "title": txt, "archivedAt": txt, "archivedBy": txt, "descendants": num, "canRestore": boolean}))))
+op("/spaces/{key}/star", "put", "Spaces", "Star a space (shown first in the directory and in the sidebar)", res=NO)
+op("/spaces/{key}/star", "delete", "Spaces", "Unstar a space", res=NO)
 op("/spaces/{key}/watch", "put", "Spaces", "Watch the space (new and updated pages)", res=NO)
 op("/spaces/{key}/watch", "delete", "Spaces", "Stop watching the space", res=NO)
 op("/pages/{id}/access-request", "post", "Pages", "Ask the page's admins for access (always 204; reveals nothing about the page)", req=body(obj({"message": txt})), res=resp(None, "204", "Sent"))
@@ -219,8 +223,8 @@ op("/admin/reindex", "post", "Admin", "Rebuild the search index")
 op("/admin/spaces", "get", "Admin", "All spaces incl. archived, with size and activity")
 op("/admin/spaces/{key}", "delete", "Admin", "Permanently delete an archived space", req=body(obj({"confirm": {"type": "string", "description": "the space key"}})), res=NO)
 op("/admin/spaces/{key}/unarchive", "post", "Admin", "Restore an archived space", res=NO)
-SWITCHES = obj({"publicLinks": boolean, "exports": boolean, "ai": boolean, "personalSpaces": boolean})
-op("/admin/settings", "get", "Admin", "Workspace switches (public links, exports, Ask the wiki, personal spaces)", res=resp(SWITCHES))
+SWITCHES = obj({"publicLinks": boolean, "exports": boolean, "ai": boolean, "personalSpaces": boolean, "trashRetentionDays": {"type": "integer", "minimum": 0, "maximum": 3650, "description": "days pages stay in the trash before they are deleted for good; 0 = forever"}})
+op("/admin/settings", "get", "Admin", "Workspace switches (public links, exports, Ask the wiki, personal spaces) and the trash retention period", res=resp(SWITCHES))
 op("/admin/settings", "put", "Admin", "Turn workspace switches on or off (only the ones named change)", req=body(SWITCHES), res=resp(SWITCHES))
 op("/features", "get", "Admin", "The switches as they apply to the caller (admins can always export)", res=resp(SWITCHES))
 op("/activity", "get", "Search", "Activity feed: pages created, edited and commented on, newest first (visible pages only)", query=[q("scope", "all | watching"), q("limit", "events (max 100)")], res=resp(arr(obj({"kind": {"enum": ["created", "edited", "commented"]}, "pageId": uuid, "pageTitle": txt, "spaceKey": txt, "spaceName": txt, "actorName": {"type": ["string", "null"]}, "at": dt, "detail": {"type": ["string", "null"]}, "count": num}))))

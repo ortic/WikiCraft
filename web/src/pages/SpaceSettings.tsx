@@ -254,8 +254,37 @@ function TrashList({ space }: { space: Space }) {
   const qc = useQueryClient()
   const toast = useToast()
   const trash = useQuery({ queryKey: ['trash', space.key], queryFn: () => api.get<{ id: string; title: string; deletedAt: string; deletedByName: string | null }[]>(`/spaces/${space.key}/trash`) })
+  const isAdmin = space.role === 'admin'
+  const refresh = () => qc.invalidateQueries({ queryKey: ['trash', space.key] })
+  const purge = async (id: string, title: string) => {
+    if (!confirm(`Delete “${title}” for good? Its history, comments, attachments and the trashed pages below it go too. This can't be undone.`)) return
+    try {
+      const r = await api.post<{ purged: number }>(`/pages/${id}/purge`)
+      refresh()
+      toast(r.purged > 1 ? `Deleted ${r.purged} pages for good` : 'Deleted for good')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not delete')
+    }
+  }
+  const empty = async () => {
+    if (!confirm(`Delete everything in the trash of ${space.name} for good? This can't be undone.`)) return
+    try {
+      const r = await api.post<{ purged: number; kept: number }>(`/spaces/${space.key}/trash/empty`)
+      refresh()
+      toast(`Deleted ${r.purged} page${r.purged === 1 ? '' : 's'} for good${r.kept ? ` · ${r.kept} restricted ones you can't see stay` : ''}`)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not empty the trash')
+    }
+  }
   return (
     <div>
+      {isAdmin && !!trash.data?.length && (
+        <div className="row" style={{ marginBottom: 12 }}>
+          <span className="faint small">Restore pages, or delete them for good.</span>
+          <span className="spacer" />
+          <button className="btn btn-danger" onClick={empty}><Trash2 size={14} /> Empty trash</button>
+        </div>
+      )}
       {trash.data?.length === 0 && <div className="empty"><Trash2 size={28} /><br />Trash is empty.</div>}
       <table className="list">
         <tbody>
@@ -263,18 +292,25 @@ function TrashList({ space }: { space: Space }) {
             <tr key={t.id}>
               <td><b>{t.title}</b></td>
               <td className="faint small">Deleted {formatDate(t.deletedAt)} by {t.deletedByName ?? 'someone'}</td>
-              <td style={{ width: 120 }}>
-                <button
-                  className="btn btn-sm"
-                  onClick={async () => {
-                    await api.post(`/pages/${t.id}/restore`)
-                    qc.invalidateQueries({ queryKey: ['trash', space.key] })
-                    qc.invalidateQueries({ queryKey: ['tree', space.key] })
-                    toast('Restored')
-                  }}
-                >
-                  <RotateCcw size={13} /> Restore
-                </button>
+              <td style={{ width: isAdmin ? 250 : 120 }}>
+                <div className="row" style={{ gap: 6, justifyContent: 'flex-end' }}>
+                  <button
+                    className="btn btn-sm"
+                    onClick={async () => {
+                      await api.post(`/pages/${t.id}/restore`)
+                      qc.invalidateQueries({ queryKey: ['trash', space.key] })
+                      qc.invalidateQueries({ queryKey: ['tree', space.key] })
+                      toast('Restored')
+                    }}
+                  >
+                    <RotateCcw size={13} /> Restore
+                  </button>
+                  {isAdmin && (
+                    <button className="btn btn-sm btn-danger" onClick={() => purge(t.id, t.title)}>
+                      Delete forever
+                    </button>
+                  )}
+                </div>
               </td>
             </tr>
           ))}

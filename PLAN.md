@@ -199,7 +199,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P0** Create / edit / delete spaces (name, key, description, icon/emoji, cover) `C D X O B` (no cover image)
 - [x] **P0** Space home / overview page `C D X`
 - [x] **P0** Personal spaces per user `C D`
-- [~] **P1** Space directory with search, categories, filters (team, personal, archived, starred) `C X` (name/key filter only)
+- [~] **P1** Space directory with search, categories, filters (team, personal, archived, starred) `C X` (name/key filter, categories, starred filter and starred first; archived spaces in Admin → Spaces; no personal-space filter)
 - [x] **P1** Space categories / tags `C` — one category per space (Space settings → Details); the space directory groups and filters by it
 - [x] **P1** Space archive (read-only, hidden from search by default) and restore `C`
 - [~] **P1** Space sidebar: page tree, shortcuts/links, blog, whiteboards, databases, custom sections `C` (page tree + blog only)
@@ -217,7 +217,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 ### 4.3 Content types & information architecture
 - [x] **P0** Pages with unlimited nesting (page tree) `C D X O B`
 - [x] **P0** Drag & drop reorder / move in the tree (with permission checks and link preservation) `C D X O`
-- [~] **P1** Folders (containers without content) `C` (API only; no create UI)
+- [x] **P1** Folders (containers without content) `C` — new folder from the tree header, a folder or the command palette; a folder shows its contents (pages, folders, excerpts) with New page / New folder instead of an editor; Confluence Cloud folders import as folders
 - [~] **P1** Blog posts / news per space (date-based, separate from tree, RSS/Atom) `C X` (no RSS/Atom feed)
 - [~] **P1** Live docs (always-live document, no publish step) vs. classic pages (draft → publish) as a per-page mode `C` (live mode only; no draft/publish)
 - [x] **P1** Smart link / embed nodes in the tree (link to an external resource as a tree item) `C` — Create → "Link to a website": a tree item that opens the URL in a new tab (its page shows a link preview)
@@ -231,7 +231,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** Page owner (distinct from creator) and ownership transfer `C`
 - [x] **P1** Page status lozenge (Rough draft / In progress / Ready for review / Verified / custom) `C` — picker on the lozenge and in the page menu (Rough draft, In progress, Ready for review, custom text); "Verified" is the separate page verification
 - [x] **P1** Archive page / subtree `C`
-- [~] **P1** Trash with restore and purge (per space; retention period) `C D X` (no purge or retention period)
+- [x] **P1** Trash with restore and purge (per space; retention period) `C D X` — Delete forever per page and Empty trash (space admins), workspace retention period (`trashRetentionDays`, 0 = forever) applied every 10 minutes; purged pages take history, comments and attachments along, unused files are removed from storage
 - [x] **P1** Duplicate titles allowed (Cloud allows them; the importer must handle both) `C`
 - [ ] **P2** Page tree lazy loading & virtualization (≥ 100k pages per space) `C X`
 - [ ] **P2** Hide pages from tree / navigation `X`
@@ -488,10 +488,10 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 ### 4.14 Navigation, home & personalization
 - [~] **P0** Home dashboard: recent pages, starred, drafts, tasks assigned to me `C D O` (no drafts; personal space for unpublished work)
 - [x] **P0** Recently viewed / recently edited `C D O`
-- [~] **P1** Starred/favorite pages and spaces `C D O` (pages only)
+- [x] **P1** Starred/favorite pages and spaces `C D O` — pages (sidebar, Home) and spaces (`space_favorites`; star in the directory, starred filter, starred first in directory and sidebar)
 - [ ] **P1** Activity feed (following people/spaces; popular in my org) `C X` — partial: Home → Activity (everything visible, or watched pages and spaces) and Popular; following people not yet
 - [~] **P1** "For you" / popular pages `C` (popular pages; no personalisation)
-- [~] **P1** Command palette (Ctrl/Cmd+K): jump to page/space/action `C O` (page search only; no actions)
+- [x] **P1** Command palette (Ctrl/Cmd+K): jump to page/space/action `C O` — pages (search, recently viewed) plus actions for the context (create page / folder / space, go to Home, Spaces, My tasks, blog, trash, space settings, profile, administration, dark mode, shortcuts); `>` lists actions only
 - [~] **P1** Dark mode, theme switching, high-contrast `C D O` (no high-contrast theme)
 - [ ] **P1** UI localization (i18n; ≥ EN, DE, FR, ES, PT, IT, NL, PL, JA, ZH, KO); RTL support (AR, HE) `C D X`
 - [ ] **P2** Customizable home per workspace (announcements, featured spaces) `C X`
@@ -508,7 +508,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P2** Content review reminders (page owner must re-verify every N days) `D(EE)`
 
 ### 4.16 Content lifecycle & governance
-- [~] **P1** Trash, restore, permanent delete `C D X` (no permanent delete)
+- [x] **P1** Trash, restore, permanent delete `C D X` — see the trash item in §4.3
 - [~] **P1** Archive pages/spaces `C` (space archive via API only)
 - [x] **P1** Page verification: request review, approve, "verified" badge with expiry `D(EE) C`
 - [ ] **P2** Approval workflows (draft → review → approved → published; multiple approvers; per space) `C(apps e.g. Comala) X(change requests)`

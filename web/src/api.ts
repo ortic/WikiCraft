@@ -71,6 +71,8 @@ export interface Space {
   pageCount: number
   updatedAt: string
   archivedAt?: string | null
+  /** the signed-in person starred it */
+  starred?: boolean
 }
 
 export interface TreeNode {

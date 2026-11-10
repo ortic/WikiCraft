@@ -90,6 +90,8 @@ components:
         anonymousAccess: &id003
           type: boolean
         role: *id001
+        starred: *id003
+        watching: *id003
     PmNode:
       type: object
       description: ProseMirror / Tiptap JSON node (type, attrs, content, text, marks)
@@ -1743,6 +1745,33 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /spaces/{key}/trash/empty:
+    post:
+      tags:
+      - Spaces
+      summary: 'Empty the space''s trash: delete every trashed page you can see for good (space admins)'
+      operationId: post_spaces_key_trash_empty
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  purged: *id005
+                  kept: *id005
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /spaces/{key}/trash:
     get:
       tags:
@@ -2012,6 +2041,32 @@ paths:
       responses:
         '200':
           description: OK
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /pages/{id}/purge:
+    post:
+      tags:
+      - Pages
+      summary: Delete a trashed page for good, with its trashed sub-pages, history, comments and attachments (space admins)
+      operationId: post_pages_id_purge
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  purged: *id005
         4XX:
           description: Error
           content:
@@ -2581,6 +2636,43 @@ paths:
                     archivedBy: *id001
                     descendants: *id005
                     canRestore: *id003
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /spaces/{key}/star:
+    put:
+      tags:
+      - Spaces
+      summary: Star a space (shown first in the directory and in the sidebar)
+      operationId: put_spaces_key_star
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '204': *id007
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+      - Spaces
+      summary: Unstar a space
+      operationId: delete_spaces_key_star
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '204': *id007
         4XX:
           description: Error
           content:
@@ -4318,7 +4410,7 @@ paths:
     get:
       tags:
       - Admin
-      summary: Workspace switches (public links, exports, Ask the wiki, personal spaces)
+      summary: Workspace switches (public links, exports, Ask the wiki, personal spaces) and the trash retention period
       operationId: get_admin_settings
       responses:
         '200':
@@ -4332,6 +4424,11 @@ paths:
                   exports: *id003
                   ai: *id003
                   personalSpaces: *id003
+                  trashRetentionDays:
+                    type: integer
+                    minimum: 0
+                    maximum: 3650
+                    description: days pages stay in the trash before they are deleted for good; 0 = forever
         4XX:
           description: Error
           content:

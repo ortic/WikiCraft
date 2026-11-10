@@ -769,6 +769,31 @@ pub async fn restore(State(state): State<AppState>, CurrentUser(user): CurrentUs
     Ok(StatusCode::NO_CONTENT)
 }
 
+/// `POST /pages/{id}/purge` — deletes a page that is in the trash for good, with its trashed
+/// sub-pages, history, comments and attachments (space admins).
+pub async fn purge(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<Json<Value>> {
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    let row: Option<(Uuid, String, Option<chrono::DateTime<chrono::Utc>>)> =
+        sqlx::query_as("SELECT space_id, title, deleted_at FROM pages WHERE id = $1 AND workspace_id = $2")
+            .bind(id)
+            .bind(user.workspace_id)
+            .fetch_optional(&state.db)
+            .await?;
+    let Some((space_id, title, Some(_))) = row else { return Err(ApiError::NotFound("deleted page")) };
+    let sa = crate::authz::load_space_access(&state, space_id).await?;
+    let role = crate::authz::space_role(&state, &p, &sa).await?;
+    if role < Role::Admin {
+        return Err(ApiError::Forbidden);
+    }
+    let pairs: Vec<(Uuid, Option<Uuid>)> = sqlx::query_as("SELECT id, parent_id FROM pages WHERE space_id = $1").bind(space_id).fetch_all(&state.db).await?;
+    if !crate::authz::visible_page_ids(&state, &p, space_id, role, &pairs).await?.contains(&id) {
+        return Err(ApiError::NotFound("deleted page"));
+    }
+    let gone = crate::purge::purge_pages(&state, &[id]).await?;
+    audit::log(&state, user.workspace_id, Some(user.id), "page.purge", Some("page"), Some(id), json!({"title": title, "count": gone.len()})).await;
+    Ok(Json(json!({ "purged": gone.len() })))
+}
+
 #[derive(Serialize, sqlx::FromRow)]
 #[serde(rename_all = "camelCase")]
 pub struct ChildRow {

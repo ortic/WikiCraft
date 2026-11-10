@@ -9,8 +9,13 @@ Mac) in the app for the keyboard shortcuts.
   and the activity in the spaces you follow.
 - **Spaces** hold the pages of a team or project, as a tree in the sidebar. Drag pages in the
   tree to reorder or nest them.
-- **Search** (`Ctrl K` / `Cmd K` jumps straight to a page) finds pages, blog posts and comments;
-  filter by space, type, label, contributor and date, and save searches you repeat.
+- **Search** (`Ctrl K` / `Cmd K` jumps straight to a page or runs an action: create a page or
+  folder, open the trash, dark mode …; start with `>` for actions only) finds pages, blog posts
+  and comments; filter by space, type, label, contributor and date, and save searches you repeat.
+- **Star** pages and spaces you use often: they come first in the sidebar and the space
+  directory.
+- **Folders** group pages without content of their own; create one with the folder icon in the
+  page tree.
 - **My tasks** lists every task assigned to you, across spaces.
 
 ## Writing
@@ -86,6 +91,11 @@ space as a browsable HTML site, a Markdown folder tree or a full backup.
 - **Labels** group pages across spaces (suggestions show the labels already in use); click a
   label for all its pages.
 - **Status** (page menu → *Set status…*): rough draft, in progress, ready for review, or your own.
+
+## Trash
+
+Deleting a page moves it, with the pages below it, to the space's trash (*Space settings →
+Trash*). Restore it from there; space admins can also delete pages for good.
 
 ## Your profile
 
