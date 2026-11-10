@@ -98,7 +98,8 @@ Every editing session ends in a version. The clock icon shows all versions with 
 (per block, changed words marked) and lets you restore an older one; restoring creates a new
 version, nothing is lost. *Compared with* picks any other version; *Side by side* shows both next
 to each other.
-After you've been away, a banner offers *what changed since your last visit*. Uploading a file with
+After you've been away, a banner offers *what changed since your last visit*, and the new and
+changed parts of the page are tinted until you hide the highlights or dismiss the banner. Uploading a file with
 the same name as an attachment adds a new version of it; the attachments panel lists the versions
 and can make an earlier one current again.
 

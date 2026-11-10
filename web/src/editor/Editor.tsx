@@ -38,6 +38,7 @@ import { FindBar, FindReplace, findKey } from './FindReplace'
 import { HeadingIds } from './HeadingIds'
 import { Drawing } from './Drawing'
 import { BLOCK_ID_ATTR, BlockIds, blockAt, blockHash, revealAnchor } from './BlockIds'
+import { ChangeHighlights, setChangeHighlights } from './ChangeHighlights'
 import { useToast } from '../ui'
 
 const lowlight = createLowlight(common)
@@ -143,6 +144,8 @@ interface Props {
   onCommentClick?: (commentId: string) => void
   onRequestComment?: (text: string, apply: (commentId: string) => void) => void
   onStats?: (words: number) => void
+  /** block ids to tint as changed since the reader's last visit */
+  highlightBlocks?: string[]
 }
 
 async function uploadFiles(pageId: string, files: File[]): Promise<Attachment[]> {
@@ -162,7 +165,7 @@ function pickFiles(accept: string): Promise<File[]> {
   })
 }
 
-export default function Editor({ pageId, user, editable, onPresence, onSynced, onCommentClick, onRequestComment, onStats }: Props) {
+export default function Editor({ pageId, user, editable, onPresence, onSynced, onCommentClick, onRequestComment, onStats, highlightBlocks }: Props) {
   const navigate = useNavigate()
   const [synced, setSynced] = useState(false)
   const [status, setStatus] = useState<'connecting' | 'connected' | 'disconnected'>('connecting')
@@ -237,6 +240,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
         FindReplace,
         HeadingIds,
         BlockIds,
+        ChangeHighlights,
         SlashCommand.configure({ items: slashItems((e) => pickFiles('image/*').then((f) => upload(e, f, true)), (e) => pickFiles('*/*').then((f) => upload(e, f, false))) }),
       ],
       editorProps: {
@@ -346,6 +350,13 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
   }, [editor])
+
+  // blocks changed since the last visit, once the document is there
+  const highlightKey = (highlightBlocks ?? []).join(',')
+  useEffect(() => {
+    if (!synced || !editor) return
+    setChangeHighlights(editor, highlightKey ? highlightKey.split(',') : [])
+  }, [synced, editor, highlightKey])
 
   // `#block-<id>` / `#heading` in the URL: scroll to it once the document is there
   const { hash } = useLocation()

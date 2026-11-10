@@ -45,6 +45,7 @@ export default function PageView() {
   const [verifyOpen, setVerifyOpen] = useState(false)
   // the first answer for this page says what changed since the last visit; later refetches don't
   const [changed, setChanged] = useState<{ id: string; info: NonNullable<Page['changedSince']> } | null>(null)
+  const [showChanges, setShowChanges] = useState(true)
   useEffect(() => {
     const c = page.data?.changedSince
     if (c && page.data && changed?.id !== page.data.id) setChanged({ id: page.data.id, info: c })
@@ -445,6 +446,11 @@ export default function PageView() {
                 {' '}({changed.info.versions} {changed.info.versions === 1 ? 'version' : 'versions'}).
               </span>
               <Link to={`/pages/${p.id}/history?since=${changed.info.version}`}>View changes</Link>
+              {!!changed.info.blocks?.length && p.kind !== 'folder' && (
+                <button className="btn btn-ghost btn-sm" aria-pressed={showChanges} onClick={() => setShowChanges(!showChanges)}>
+                  {showChanges ? 'Hide highlights' : `Highlight ${changed.info.blocks.length === 1 ? 'the change' : 'changes'}`}
+                </button>
+              )}
               <button className="icon-btn" title="Dismiss" onClick={() => setChanged({ id: '', info: changed.info })}><X size={14} /></button>
             </div>
           )}
@@ -452,7 +458,17 @@ export default function PageView() {
             <FolderView page={p} canEdit={canEdit} />
           ) : (
           <>
-          <Editor key={p.id} pageId={p.id} user={user} editable={canEdit} onPresence={onPresence} onStats={onStats} onCommentClick={onCommentClick} onRequestComment={p.access.comment ? onRequestComment : undefined} />
+          <Editor
+            key={p.id}
+            pageId={p.id}
+            user={user}
+            editable={canEdit}
+            onPresence={onPresence}
+            onStats={onStats}
+            onCommentClick={onCommentClick}
+            onRequestComment={p.access.comment ? onRequestComment : undefined}
+            highlightBlocks={changed?.id === p.id && showChanges ? changed.info.blocks : undefined}
+          />
 
           <div className="page-reactions">
             {user ? (

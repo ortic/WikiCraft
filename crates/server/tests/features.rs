@@ -119,14 +119,14 @@ async fn changed_since_last_visit() {
     let owner = app.setup().await;
     let (member, _) = app.user(&owner, "mia@acme.test", "member").await;
     app.post(&owner, "/spaces", json!({"key": "CHG", "name": "Changes"})).await;
-    let (_, pg) = app.post(&owner, "/pages", json!({"spaceKey": "CHG", "title": "Policy", "markdown": "v1"})).await;
+    let (_, pg) = app.post(&owner, "/pages", json!({"spaceKey": "CHG", "title": "Policy", "markdown": "v1\n\nStays the same"})).await;
     let pg = pg["id"].as_str().unwrap().to_string();
     // first visit: nothing to report
     let (_, p) = app.get(&member, &format!("/pages/{pg}")).await;
     assert!(p["changedSince"].is_null());
     let v1 = p["version"].as_i64().unwrap();
     // the owner edits twice
-    for text in ["v2", "v3"] {
+    for text in ["v2\n\nStays the same", "v3\n\nStays the same\n\nA new rule"] {
         let (st, _) = app.put(&owner, &format!("/pages/{pg}/content"), json!({"markdown": text})).await;
         assert_eq!(st, 200);
     }
@@ -135,6 +135,17 @@ async fn changed_since_last_visit() {
     assert_eq!(c["version"].as_i64().unwrap(), v1, "{p}");
     assert_eq!(c["versions"], 2);
     assert_eq!(c["editors"], json!(["Owner"]));
+    // the blocks to highlight: the changed and the new paragraph, not the unchanged one
+    let texts: Vec<String> = c["blocks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|id| {
+            let block = p["content"]["content"].as_array().unwrap().iter().find(|b| b["attrs"]["blockId"] == *id).unwrap_or_else(|| panic!("{id} not in {p}"));
+            block["content"][0]["text"].as_str().unwrap().to_string()
+        })
+        .collect();
+    assert_eq!(texts, vec!["v3", "A new rule"]);
     // reported once; the editor's own changes are never reported to them
     let (_, p) = app.get(&member, &format!("/pages/{pg}")).await;
     assert!(p["changedSince"].is_null());

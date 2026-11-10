@@ -466,6 +466,36 @@ test('a page moves to another space from the page menu', async ({ browser }) => 
   await ctx.close()
 })
 
+test('blocks changed since your last visit are highlighted', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState })
+  const page = await ctx.newPage()
+  await page.goto('/')
+  const erin = { email: 'erin@e2e.test', password: 'password-456' }
+  const id = await page.evaluate(async (who) => {
+    const h = { 'content-type': 'application/json', 'x-wikicraft': '1' }
+    await fetch('/api/users', { method: 'POST', headers: h, body: JSON.stringify({ ...who, name: 'Erin Editor', role: 'member' }) })
+    const r = await fetch('/api/pages', { method: 'POST', headers: h, body: JSON.stringify({ spaceKey: 'PRODUCT', title: 'House rules', markdown: 'Rule one\n\nRule two' }) })
+    const pid = (await r.json()).id as string
+    // the owner has seen this version
+    await fetch(`/api/pages/${pid}`)
+    return pid
+  }, erin)
+  const other = await login(browser, erin)
+  const st = await other.evaluate(async (pid) => {
+    const r = await fetch(`/api/pages/${pid}/content`, { method: 'PUT', headers: { 'content-type': 'application/json', 'x-wikicraft': '1' }, body: JSON.stringify({ markdown: 'Rule one\n\nRule two, revised' }) })
+    return r.status
+  }, id)
+  expect(st).toBe(200)
+  await other.context().close()
+
+  await page.goto(`/pages/${id}`)
+  await expect(page.locator('.changed-banner')).toContainText('Changed since your last visit')
+  await expect(page.locator('.ProseMirror .changed-block')).toHaveText('Rule two, revised', { timeout: 20_000 })
+  await page.getByRole('button', { name: 'Hide highlights' }).click()
+  await expect(page.locator('.ProseMirror .changed-block')).toHaveCount(0)
+  await ctx.close()
+})
+
 test('page properties: typed values in a panel, and a properties report that filters by them', async ({ browser }) => {
   const ctx = await browser.newContext({ storageState: ownerState })
   const page = await ctx.newPage()

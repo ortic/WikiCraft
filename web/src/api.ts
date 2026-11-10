@@ -157,7 +157,7 @@ export interface Page {
   /** the template new pages below this one start from */
   childTemplate?: string | null
   /** set when other people changed the page since the reader's previous visit */
-  changedSince?: { version: number; at: string; versions: number; editors: string[] } | null
+  changedSince?: { version: number; at: string; versions: number; editors: string[]; blocks?: string[] } | null
   fullWidth: boolean
   createdByName: string | null
   createdAt: string

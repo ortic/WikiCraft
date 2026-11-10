@@ -899,3 +899,6 @@ button.page-prop-key-btn:hover, button.page-prop-key-btn:focus-visible { backgro
 .attachment-rules { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 0 14px; }
 .attachment-rules .field { display: flex; flex-direction: column; gap: 3px; }
 .space-shortcuts .ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* blocks changed since the reader's last visit */
+.ProseMirror .changed-block { background: color-mix(in srgb, var(--warning) 11%, transparent); box-shadow: -10px 0 0 color-mix(in srgb, var(--warning) 11%, transparent), -13px 0 0 var(--warning); border-radius: 2px; }
+.ProseMirror li.changed-block, .ProseMirror table.changed-block { box-shadow: none; outline: 2px solid color-mix(in srgb, var(--warning) 55%, transparent); outline-offset: 2px; }

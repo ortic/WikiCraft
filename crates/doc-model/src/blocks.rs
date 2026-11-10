@@ -131,6 +131,43 @@ pub fn find<'a>(doc: &'a Node, id: &str) -> Option<&'a Node> {
     found
 }
 
+/// Blocks of `new` that are new or changed compared with `old` (matched by block id): for each
+/// change the innermost block it is in, at most `limit`. Removed blocks aren't listed.
+pub fn changed_blocks(old: &Node, new: &Node, limit: usize) -> Vec<String> {
+    let mut before: std::collections::HashMap<&str, &Node> = std::collections::HashMap::new();
+    old.walk(&mut |n| {
+        if let Some(id) = n.attr_str(ATTR) {
+            before.insert(id, n);
+        }
+    });
+    fn diff(n: &Node, before: &std::collections::HashMap<&str, &Node>, out: &mut Vec<String>, limit: usize) -> bool {
+        if out.len() >= limit {
+            return false;
+        }
+        let inner = |out: &mut Vec<String>| n.content.iter().fold(false, |any, c| diff(c, before, out, limit) | any);
+        match n.attr_str(ATTR) {
+            Some(id) => match before.get(id) {
+                None => {
+                    out.push(id.to_string());
+                    true
+                }
+                Some(old) if *old == n => false,
+                Some(_) => {
+                    // the change is inside a child block, or in this block's own text and attributes
+                    if !inner(out) {
+                        out.push(id.to_string());
+                    }
+                    true
+                }
+            },
+            None => inner(out),
+        }
+    }
+    let mut out = Vec::new();
+    diff(new, &before, &mut out, limit);
+    out
+}
+
 /// Whether [`ensure_ydoc_ids`] would change anything (read only).
 pub fn ydoc_needs_ids(doc: &Doc) -> bool {
     let frag = doc.get_or_insert_xml_fragment(FIELD);
@@ -191,7 +228,33 @@ pub fn ensure_ydoc_ids(doc: &Doc) -> bool {
 
 #[cfg(test)]
 mod tests {
+
     use super::*;
+
+    #[test]
+    fn changed_blocks_are_the_innermost_changes() {
+        let p = |id: &str, t: &str| Node::paragraph(vec![Node::text(t)]).attr(ATTR, id);
+        let item = |id: &str, pid: &str, t: &str| Node::new(nodes::LIST_ITEM).attr(ATTR, id).with_content(vec![p(pid, t)]);
+        let old = Node::doc(vec![
+            p("aaaaaaa1", "Intro"),
+            Node::new(nodes::BULLET_LIST).attr(ATTR, "lst00001").with_content(vec![item("itm00001", "par00001", "one"), item("itm00002", "par00002", "two")]),
+            p("aaaaaaa2", "Gone"),
+            p("aaaaaaa3", "Same"),
+        ]);
+        let new = Node::doc(vec![
+            p("aaaaaaa1", "Intro, longer"),
+            Node::new(nodes::BULLET_LIST).attr(ATTR, "lst00001").with_content(vec![
+                item("itm00001", "par00001", "one"),
+                item("itm00002", "par00002", "TWO"),
+                item("itm00003", "par00003", "three"),
+            ]),
+            p("aaaaaaa3", "Same"),
+            p("bbbbbbb1", "New"),
+        ]);
+        assert_eq!(changed_blocks(&old, &new, 100), vec!["aaaaaaa1", "par00002", "itm00003", "bbbbbbb1"]);
+        assert_eq!(changed_blocks(&old, &new, 2).len(), 2);
+        assert!(changed_blocks(&new, &new, 100).is_empty());
+    }
     use crate::node::nodes;
     use crate::ydoc;
 

@@ -569,8 +569,9 @@ pub async fn breadcrumbs(state: &AppState, page_id: Uuid) -> ApiResult<Vec<Crumb
 }
 
 /// Records that `user` saw `version` and returns what changed since their previous visit:
-/// `{version, at, versions, editors}` when other people saved versions in between.
-async fn changed_since(state: &AppState, user: Uuid, page: Uuid, version: i32) -> ApiResult<Value> {
+/// `{version, at, versions, editors, blocks}` when other people saved versions in between
+/// (`blocks`: ids of the new and changed blocks of `current`, for highlighting).
+async fn changed_since(state: &AppState, user: Uuid, page: Uuid, version: i32, current: &Value) -> ApiResult<Value> {
     let prev: Option<(i32, chrono::DateTime<chrono::Utc>)> = sqlx::query_as(
         "WITH old AS (SELECT version, seen_at FROM page_seen WHERE user_id = $1 AND page_id = $2)
          , up AS (INSERT INTO page_seen (user_id, page_id, version, seen_at) VALUES ($1, $2, $3, now())
@@ -597,7 +598,13 @@ async fn changed_since(state: &AppState, user: Uuid, page: Uuid, version: i32) -
     if count == 0 {
         return Ok(Value::Null);
     }
-    Ok(json!({ "version": seen, "at": at, "versions": count, "editors": editors }))
+    let old: Option<Value> =
+        sqlx::query_scalar("SELECT content FROM page_versions WHERE page_id = $1 AND version = $2").bind(page).bind(seen).fetch_optional(&state.db).await?;
+    let blocks = match (old.and_then(|o| Node::from_json(&o).ok()), Node::from_json(current)) {
+        (Some(old), Ok(new)) => wikicraft_doc_model::blocks::changed_blocks(&old, &new, 300),
+        _ => Vec::new(),
+    };
+    Ok(json!({ "version": seen, "at": at, "versions": count, "editors": editors, "blocks": blocks }))
 }
 
 pub async fn get(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path(id): Path<Uuid>) -> ApiResult<Json<Value>> {
@@ -649,7 +656,7 @@ pub async fn get(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path
         .await?;
     // what changed since this reader's last visit (versions by other people)
     let changed_since = match &user {
-        Some(u) => changed_since(&state, u.id, id, page.version).await?,
+        Some(u) => changed_since(&state, u.id, id, page.version, &page.content).await?,
         None => Value::Null,
     };
     // watching it directly (maybe with the pages below), or through a page above it
