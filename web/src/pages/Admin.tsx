@@ -787,7 +787,7 @@ function RestoreBackup({ onJob }: { onJob: (id: string) => void }) {
   )
 }
 
-/** Admin → Import: Word documents, Markdown folders, Obsidian vaults and Notion exports into a space. */
+/** Admin → Import: Word documents, Markdown/HTML folders, Obsidian vaults, Notion and Confluence HTML exports into a space. */
 function MarkdownImport() {
   const toast = useToast()
   const file = useRef<HTMLInputElement>(null)
@@ -815,15 +815,15 @@ function MarkdownImport() {
   }
   return (
     <div className="card" style={{ marginBottom: 18 }}>
-      <h3 style={{ marginTop: 0 }}>Import Word, Markdown, Notion or Obsidian</h3>
+      <h3 style={{ marginTop: 0 }}>Import Word, Markdown, HTML, Notion or Obsidian</h3>
       <p className="muted" style={{ marginTop: 0 }}>
-        Upload a Word document (<b>.docx</b>), a <b>.md</b> file or a <b>.zip</b> of them: a Notion export (“Markdown &amp; CSV”), an Obsidian vault, a folder of Word
-        files or any docs folder. Folders become page trees, images become attachments, links and <code>[[wiki links]]</code> are rewritten, Notion databases become
+        Upload a Word document (<b>.docx</b>), a <b>.md</b> or <b>.html</b> file or a <b>.zip</b> of them: a Notion export (“Markdown &amp; CSV” or HTML), an Obsidian
+        vault, a Confluence HTML space export, a folder of Word files or any docs or HTML site folder. Folders become page trees, images and linked files become attachments, links and <code>[[wiki links]]</code> are rewritten, Notion databases become
         tables, and front matter titles and tags are kept. Word headings, lists, tables, images, links, code and footnotes are converted.
       </p>
-      <input ref={file} type="file" accept=".zip,.md,.markdown,.docx" hidden onChange={(e) => setSelected(e.target.files?.[0] ?? null)} />
+      <input ref={file} type="file" accept=".zip,.md,.markdown,.docx,.html,.htm" hidden onChange={(e) => setSelected(e.target.files?.[0] ?? null)} />
       <div className="row" style={{ flexWrap: 'wrap' }}>
-        <button className="btn" onClick={() => file.current?.click()}><Upload size={15} /> {selected ? selected.name : 'Choose file (.docx, .md or .zip)'}</button>
+        <button className="btn" onClick={() => file.current?.click()}><Upload size={15} /> {selected ? selected.name : 'Choose file (.docx, .md, .html or .zip)'}</button>
         {selected && <span className="faint small">{formatBytes(selected.size)}</span>}
         <span className="spacer" />
         <select className="select" style={{ width: 220 }} value={space} onChange={(e) => setSpace(e.target.value)}>
