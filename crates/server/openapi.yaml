@@ -4309,6 +4309,58 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /activity:
+    get:
+      tags:
+      - Search
+      summary: 'Activity feed: pages created, edited and commented on, newest first (visible pages only)'
+      operationId: get_activity
+      parameters:
+      - name: scope
+        in: query
+        required: false
+        description: all | watching
+        schema: *id001
+      - name: limit
+        in: query
+        required: false
+        description: events (max 100)
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    kind:
+                      enum:
+                      - created
+                      - edited
+                      - commented
+                    pageId: *id002
+                    pageTitle: *id001
+                    spaceKey: *id001
+                    spaceName: *id001
+                    actorName:
+                      type:
+                      - string
+                      - 'null'
+                    at: *id004
+                    detail:
+                      type:
+                      - string
+                      - 'null'
+                    count: *id005
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /admin/workspace:
     put:
       tags:

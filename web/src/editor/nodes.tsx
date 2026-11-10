@@ -534,6 +534,10 @@ export const DecisionItem = Node.create({
   addAttributes() {
     return { state: { default: 'DECIDED' } }
   },
+  addKeyboardShortcuts() {
+    // Enter starts the next decision; on an empty one it leaves the list
+    return { Enter: () => this.editor.commands.splitListItem(this.name) }
+  },
   parseHTML() {
     return [{ tag: 'li[data-type="decisionItem"]' }]
   },

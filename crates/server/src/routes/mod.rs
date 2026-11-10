@@ -1,5 +1,6 @@
 pub mod access_request;
 pub mod account;
+pub mod activity;
 pub mod admin;
 pub mod ai;
 pub mod announcement;
@@ -66,6 +67,7 @@ pub fn router(state: AppState) -> Router {
         .route("/admin/signup", get(account::get_signup_settings).put(account::put_signup_settings))
         .route("/announcement", get(announcement::get))
         .route("/features", get(share::features))
+        .route("/activity", get(activity::feed))
         .route("/admin/workspace", put(branding::rename))
         .route("/admin/workspace/logo", post(branding::upload_logo).delete(branding::delete_logo))
         .route("/workspace/logo", get(branding::logo))

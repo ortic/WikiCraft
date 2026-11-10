@@ -499,3 +499,52 @@ async fn workspace_name_and_logo() {
     assert_eq!(app.delete(&owner, "/admin/workspace/logo").await, 204);
     assert_eq!(app.get(&common::client(), "/workspace/logo").await.0, 404);
 }
+
+#[tokio::test]
+async fn activity_feed() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, _) = app.user(&owner, "act@acme.test", "member").await;
+    app.post(&owner, "/spaces", json!({"key": "ACT", "name": "Activity", "defaultRole": "editor"})).await;
+    let (_, a) = app.post(&owner, "/pages", json!({"spaceKey": "ACT", "title": "Roadmap", "markdown": "v1"})).await;
+    let a = a["id"].as_str().unwrap().to_string();
+    for text in ["v2", "v3"] {
+        assert_eq!(app.put(&owner, &format!("/pages/{a}/content"), json!({"markdown": text})).await.0, 200);
+    }
+    let (st, c) = app.post(&member, &format!("/pages/{a}/comments"), json!({"text": "Looks good to me"})).await;
+    assert_eq!(st, 201, "{c}");
+    let (_, secret) = app.post(&owner, "/pages", json!({"spaceKey": "ACT", "title": "Salaries", "markdown": "x"})).await;
+    let (_, me) = app.get(&owner, "/me").await;
+    let owner_id = me["user"]["id"].as_str().unwrap();
+    app.put(
+        &owner,
+        &format!("/pages/{}/restrictions", secret["id"].as_str().unwrap()),
+        json!({"restrictions": [{"kind": "view", "subjectType": "user", "subjectId": owner_id}]}),
+    )
+    .await;
+
+    let (st, feed) = app.get(&member, "/activity").await;
+    assert_eq!(st, 200, "{feed}");
+    let kinds: Vec<(String, String, i64)> = feed
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|e| (e["kind"].as_str().unwrap().into(), e["pageTitle"].as_str().unwrap().into(), e["count"].as_i64().unwrap()))
+        .collect();
+    assert_eq!(
+        kinds,
+        vec![
+            ("commented".into(), "Roadmap".into(), 1),
+            ("edited".into(), "Roadmap".into(), 2),
+            ("created".into(), "Roadmap".into(), 1),
+            ("created".into(), "Activity".into(), 1), // the space's home page
+        ],
+        "two edits folded, restricted page hidden"
+    );
+    assert_eq!(feed[0]["detail"], "Looks good to me");
+    // watching: nothing until the member watches the page
+    assert_eq!(app.get(&member, "/activity?scope=watching").await.1, json!([]));
+    app.put(&member, &format!("/pages/{a}/watch"), json!({})).await;
+    assert_eq!(app.get(&member, "/activity?scope=watching").await.1.as_array().unwrap().len(), 3);
+    assert_ne!(app.get(&common::client(), "/activity").await.0, 200);
+}

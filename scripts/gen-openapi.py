@@ -221,6 +221,7 @@ SWITCHES = obj({"publicLinks": boolean, "exports": boolean, "ai": boolean, "pers
 op("/admin/settings", "get", "Admin", "Workspace switches (public links, exports, Ask the wiki, personal spaces)", res=resp(SWITCHES))
 op("/admin/settings", "put", "Admin", "Turn workspace switches on or off (only the ones named change)", req=body(SWITCHES), res=resp(SWITCHES))
 op("/features", "get", "Admin", "The switches as they apply to the caller (admins can always export)", res=resp(SWITCHES))
+op("/activity", "get", "Search", "Activity feed: pages created, edited and commented on, newest first (visible pages only)", query=[q("scope", "all | watching"), q("limit", "events (max 100)")], res=resp(arr(obj({"kind": {"enum": ["created", "edited", "commented"]}, "pageId": uuid, "pageTitle": txt, "spaceKey": txt, "spaceName": txt, "actorName": {"type": ["string", "null"]}, "at": dt, "detail": {"type": ["string", "null"]}, "count": num}))))
 op("/admin/workspace", "put", "Admin", "Rename the workspace", req=body(obj({"name": txt}, ["name"])), res=resp(obj({"name": txt})))
 op("/admin/workspace/logo", "post", "Admin", "Upload the workspace logo (PNG, JPEG or WebP, up to 1 MB)", req=body(obj({"file": {"type": "string", "format": "binary"}}), "multipart/form-data"), res=resp(obj({"logoVersion": txt})))
 op("/admin/workspace/logo", "delete", "Admin", "Remove the workspace logo")

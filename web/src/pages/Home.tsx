@@ -1,9 +1,9 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { FileText, ListChecks, Plus, Star, TrendingUp } from 'lucide-react'
+import { Activity, FileText, ListChecks, MessageSquare, PencilLine, Plus, Star, TrendingUp, FilePlus2 } from 'lucide-react'
 import { api, formatDate, type PageListItem, type Space } from '../api'
-import { SpaceIcon, useMe } from '../ui'
+import { Avatar, SpaceIcon, useMe } from '../ui'
 import CreateSpaceDialog from '../components/CreateSpaceDialog'
 
 function PageList({ items, empty, timeLabel }: { items: PageListItem[] | undefined; empty: string; timeLabel: (p: PageListItem) => string }) {
@@ -25,9 +25,61 @@ function PageList({ items, empty, timeLabel }: { items: PageListItem[] | undefin
   )
 }
 
+interface ActivityEvent {
+  kind: 'created' | 'edited' | 'commented'
+  pageId: string
+  pageTitle: string
+  spaceKey: string
+  spaceName: string
+  actorId: string | null
+  actorName: string | null
+  at: string
+  detail: string | null
+  count: number
+}
+
+/** Who created, edited or commented on what, across the spaces you can see (or what you watch). */
+function ActivityFeed() {
+  const [scope, setScope] = useState<'all' | 'watching'>('all')
+  const q = useQuery({ queryKey: ['activity', scope], queryFn: () => api.get<ActivityEvent[]>(`/activity?scope=${scope}&limit=40`) })
+  const verb = (e: ActivityEvent) =>
+    e.kind === 'created' ? 'created' : e.kind === 'commented' ? 'commented on' : e.count > 1 ? `edited (${e.count} versions)` : 'edited'
+  const Icon = ({ kind }: { kind: ActivityEvent['kind'] }) =>
+    kind === 'created' ? <FilePlus2 size={13} /> : kind === 'commented' ? <MessageSquare size={13} /> : <PencilLine size={13} />
+  return (
+    <div>
+      <div className="chips" style={{ margin: '4px 0 12px' }}>
+        <button className={`chip${scope === 'all' ? ' active' : ''}`} onClick={() => setScope('all')}>Everything</button>
+        <button className={`chip${scope === 'watching' ? ' active' : ''}`} onClick={() => setScope('watching')}>Pages and spaces I watch</button>
+      </div>
+      {!q.data ? (
+        <div className="spinner" />
+      ) : !q.data.length ? (
+        <div className="empty">{scope === 'watching' ? 'Watch pages or spaces to follow their changes here.' : 'Nothing has happened yet.'}</div>
+      ) : (
+        <ul className="activity">
+          {q.data.map((e, i) => (
+            <li key={`${e.pageId}-${e.at}-${i}`}>
+              <Avatar name={e.actorName ?? '?'} id={e.actorId ?? undefined} size={28} />
+              <div className="activity-body">
+                <div>
+                  <b>{e.actorName ?? 'Someone'}</b> <span className="activity-verb"><Icon kind={e.kind} /> {verb(e)}</span>{' '}
+                  <Link to={`/pages/${e.pageId}`}>{e.pageTitle}</Link>
+                </div>
+                {e.detail && <div className="activity-detail">{e.detail}</div>}
+                <div className="faint small">{e.spaceName} · {formatDate(e.at)}</div>
+              </div>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 export default function Home() {
   const me = useMe()
-  const [tab, setTab] = useState<'viewed' | 'updated' | 'popular' | 'starred'>('viewed')
+  const [tab, setTab] = useState<'viewed' | 'updated' | 'activity' | 'popular' | 'starred'>('viewed')
   const [create, setCreate] = useState(false)
   const spaces = useQuery({ queryKey: ['spaces'], queryFn: () => api.get<Space[]>('/spaces') })
   const recent = useQuery({ queryKey: ['recent'], queryFn: () => api.get<{ viewed: PageListItem[]; updated: PageListItem[] }>('/recent'), enabled: !!me.data?.user })
@@ -100,6 +152,9 @@ export default function Home() {
             <button className={`tab ${tab === 'updated' ? 'active' : ''}`} onClick={() => setTab('updated')}>
               Recently updated
             </button>
+            <button className={`tab ${tab === 'activity' ? 'active' : ''}`} onClick={() => setTab('activity')}>
+              <Activity size={13} /> Activity
+            </button>
             <button className={`tab ${tab === 'popular' ? 'active' : ''}`} onClick={() => setTab('popular')}>
               <TrendingUp size={13} /> Popular
             </button>
@@ -109,6 +164,7 @@ export default function Home() {
           </div>
           {tab === 'viewed' && <PageList items={recent.data?.viewed} empty="Pages you visit show up here." timeLabel={(p) => formatDate(p.at)} />}
           {tab === 'updated' && <PageList items={recent.data?.updated} empty="Nothing updated yet." timeLabel={(p) => `${p.updatedByName ?? ''} · ${formatDate(p.updatedAt)}`} />}
+          {tab === 'activity' && <ActivityFeed />}
           {tab === 'popular' && (
             <PageList
               items={popular.data}
