@@ -228,7 +228,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** Breadcrumbs `C D X O B`
 - [~] **P1** Permanent links (`/p/<id>`) + human URLs (`/s/<space>/<slug>`); redirects after rename/move `C X` (id permalinks + Confluence redirects; no slug URLs)
 - [~] **P1** Copy page (with or without children, attachments, labels, permissions) `C X D` (no attachments; UI copies single page only)
-- [ ] **P1** Page owner (distinct from creator) and ownership transfer `C`
+- [x] **P1** Page owner (distinct from creator) and ownership transfer `C`
 - [~] **P1** Page status lozenge (Rough draft / In progress / Ready for review / Verified / custom) `C` (API + badge only; no picker)
 - [x] **P1** Archive page / subtree `C`
 - [~] **P1** Trash with restore and purge (per space; retention period) `C D X` (no purge or retention period)

@@ -2375,6 +2375,43 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /pages/{id}/owner:
+    put:
+      tags:
+      - Pages
+      summary: Hand the page over to someone who can edit it (page admins or the owner)
+      operationId: put_pages_id_owner
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId: *id002
+              required:
+              - userId
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ownerId: *id002
+                  ownerName: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /pages/{id}/archive:
     post:
       tags:

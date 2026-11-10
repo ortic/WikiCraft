@@ -315,3 +315,29 @@ async fn space_default_template() {
     let (_, s) = app.get(&owner, "/spaces/MTG").await;
     assert!(s["defaultTemplate"].is_null());
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn page_ownership() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (_, ed_id) = app.user(&owner, "ed@acme.test", "member").await;
+    let (_, vi_id) = app.user(&owner, "vi@acme.test", "member").await;
+    let (_, sp) = app.post(&owner, "/spaces", json!({"key": "OWN", "name": "Own", "defaultRole": "none"})).await;
+    let _ = sp;
+    app.put(
+        &owner,
+        "/spaces/OWN/permissions",
+        json!({"grants": [{"subjectType": "user", "subjectId": ed_id, "role": "editor"}, {"subjectType": "user", "subjectId": vi_id, "role": "viewer"}]}),
+    )
+    .await;
+    let (_, pg) = app.post(&owner, "/pages", json!({"spaceKey": "OWN", "title": "Policy"})).await;
+    let pg = pg["id"].as_str().unwrap().to_string();
+    let (_, p) = app.get(&owner, &format!("/pages/{pg}")).await;
+    assert_eq!(p["ownerName"], "Owner", "the creator owns it at first");
+    assert_eq!(app.put(&owner, &format!("/pages/{pg}/owner"), json!({"userId": vi_id})).await.0, 400, "viewers can't own it");
+    let (st, r) = app.put(&owner, &format!("/pages/{pg}/owner"), json!({"userId": ed_id})).await;
+    assert_eq!(st, 200, "{r}");
+    let (_, p) = app.get(&owner, &format!("/pages/{pg}")).await;
+    assert_eq!(p["ownerId"], ed_id.as_str());
+    assert_eq!(p["ownerName"], "ed");
+}

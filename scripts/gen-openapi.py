@@ -143,6 +143,7 @@ VERIFICATION = obj({"status": {"enum": ["none", "verified", "expired"]}, "verifi
 op("/pages/{id}/verification", "get", "Pages", "Verification state of a page", res=resp(VERIFICATION), public=True)
 op("/pages/{id}/verification", "put", "Pages", "Verify a page (editors), optionally until a number of days from now", req=body(obj({"days": num, "note": txt})), res=resp(VERIFICATION))
 op("/pages/{id}/verification", "delete", "Pages", "Remove the verification (editors)", res=resp(None, "204", "Removed"))
+op("/pages/{id}/owner", "put", "Pages", "Hand the page over to someone who can edit it (page admins or the owner)", req=body(obj({"userId": uuid}, ["userId"])), res=resp(obj({"ownerId": uuid, "ownerName": txt})))
 op("/pages/{id}/archive", "post", "Pages", "Archive a page and everything under it (read-only, hidden from tree and search)", res=resp(None, "204", "Archived"))
 op("/pages/{id}/unarchive", "post", "Pages", "Restore an archived page", res=resp(None, "204", "Restored"))
 op("/spaces/{key}/archived", "get", "Spaces", "Archived pages of a space", res=resp(arr(obj({"id": uuid, "title": txt, "archivedAt": txt, "archivedBy": txt, "descendants": num, "canRestore": boolean}))))

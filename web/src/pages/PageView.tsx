@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate, FileText, BadgeCheck, UserCheck, Archive, RotateCcw } from 'lucide-react'
-import { NoAccess, RequestReviewDialog, VerificationBadge, VerifyDialog } from '../components/Verification'
+import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate, FileText, BadgeCheck, UserCheck, Archive, RotateCcw, UserCog } from 'lucide-react'
+import { NoAccess, OwnerDialog, RequestReviewDialog, VerificationBadge, VerifyDialog } from '../components/Verification'
 import { ApiError, api, formatDate, type Page, type Space } from '../api'
 import { PageDecor } from '../components/PageDecor'
 import { ErrorBox, Spinner, useMe, useToast } from '../ui'
@@ -37,6 +37,7 @@ export default function PageView() {
     if (c && page.data && changed?.id !== page.data.id) setChanged({ id: page.data.id, info: c })
   }, [page.data, changed?.id])
   const [reviewOpen, setReviewOpen] = useState(false)
+  const [ownerOpen, setOwnerOpen] = useState(false)
   const [focusComment, setFocusComment] = useState<string | null>(null)
   const [pendingComment, setPendingComment] = useState<{ text: string; apply: (id: string) => void } | null>(null)
   const [words, setWords] = useState(0)
@@ -233,6 +234,11 @@ export default function PageView() {
                     <BadgeCheck size={15} /> Verify page…
                   </div>
                 )}
+                {user && (p.access.admin || (p as Page & { ownerId?: string }).ownerId === user.id) && (
+                  <div className="menu-item" onClick={() => { setMenu(false); setOwnerOpen(true) }}>
+                    <UserCog size={15} /> Change owner…
+                  </div>
+                )}
                 {user && (
                   <div className="menu-item" onClick={() => { setMenu(false); setReviewOpen(true) }}>
                     <UserCheck size={15} /> Request review…
@@ -306,6 +312,12 @@ export default function PageView() {
             <span>
               Updated {formatDate(p.updatedAt)} by {p.updatedByName ?? 'someone'}
             </span>
+            {(p as Page & { ownerName?: string }).ownerName && (
+              <>
+                <span>·</span>
+                <span title="Responsible for this page">Owner: {(p as Page & { ownerName?: string }).ownerName}</span>
+              </>
+            )}
             <span>·</span>
             <span>v{p.version}</span>
             {p.views > 0 && (
@@ -423,6 +435,7 @@ export default function PageView() {
       {restrictions && <RestrictionsDialog page={p} onClose={() => setRestrictions(false)} />}
       {verifyOpen && <VerifyDialog pageId={p.id} onClose={() => setVerifyOpen(false)} />}
       {reviewOpen && <RequestReviewDialog pageId={p.id} onClose={() => setReviewOpen(false)} />}
+      {ownerOpen && <OwnerDialog pageId={p.id} current={(p as Page & { ownerName?: string }).ownerName ?? null} onClose={() => setOwnerOpen(false)} />}
       {share && <ShareDialog pageId={p.id} title={p.title} restricted={!!p.restricted} onClose={() => setShare(false)} />}
     </div>
   )

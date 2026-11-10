@@ -219,6 +219,11 @@ pub struct PageRow {
     pub full_width: bool,
     pub created_by: Option<Uuid>,
     pub created_by_name: Option<String>,
+    /// responsible person: the owner if set, else the creator
+    #[sqlx(default)]
+    pub owner_id: Option<Uuid>,
+    #[sqlx(default)]
+    pub owner_name: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_by: Option<Uuid>,
     pub updated_by_name: Option<String>,
@@ -227,8 +232,10 @@ pub struct PageRow {
 }
 
 const PAGE_SELECT: &str = "SELECT p.id, p.space_id, s.key AS space_key, s.name AS space_name, p.parent_id, p.kind, p.title, p.icon, p.cover, p.content, p.version, p.status, p.page_status, p.full_width,
-    p.created_by, cu.name AS created_by_name, p.created_at, p.updated_by, uu.name AS updated_by_name, p.updated_at, p.deleted_at
-    FROM pages p JOIN spaces s ON s.id = p.space_id LEFT JOIN users cu ON cu.id = p.created_by LEFT JOIN users uu ON uu.id = p.updated_by";
+    p.created_by, cu.name AS created_by_name, COALESCE(p.owner_id, p.created_by) AS owner_id, COALESCE(ou.name, cu.name) AS owner_name,
+    p.created_at, p.updated_by, uu.name AS updated_by_name, p.updated_at, p.deleted_at
+    FROM pages p JOIN spaces s ON s.id = p.space_id LEFT JOIN users cu ON cu.id = p.created_by LEFT JOIN users uu ON uu.id = p.updated_by
+    LEFT JOIN users ou ON ou.id = p.owner_id";
 
 #[derive(Serialize, sqlx::FromRow)]
 pub struct Crumb {
@@ -1163,4 +1170,42 @@ pub async fn markdown_to_doc(CurrentUser(_user): CurrentUser, Json(req): Json<Ma
     }
     let doc = tokio::task::spawn_blocking(move || markdown::markdown_to_pm(&req.markdown).doc).await.map_err(|e| ApiError::Internal(e.into()))?;
     Ok(Json(json!({ "content": doc })))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OwnerReq {
+    user_id: Uuid,
+}
+
+/// `PUT /api/pages/{id}/owner {userId}`: hands the page over (page admins, or its owner).
+/// The new owner must be able to edit the page.
+pub async fn set_owner(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(req): Json<OwnerReq>,
+) -> ApiResult<Json<Value>> {
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    let (access, _) = require_page(&state, &p, id, Need::View).await?;
+    let owner: Option<Uuid> = sqlx::query_scalar("SELECT COALESCE(owner_id, created_by) FROM pages WHERE id = $1").bind(id).fetch_one(&state.db).await?;
+    if !access.admin && owner != Some(user.id) {
+        return Err(ApiError::Forbidden);
+    }
+    let new_owner = sqlx::query_as::<_, crate::auth::User>(sqlx::AssertSqlSafe(format!(
+        "SELECT {} FROM users WHERE id = $1 AND workspace_id = $2 AND status = 'active'",
+        crate::auth::USER_COLUMNS
+    )))
+    .bind(req.user_id)
+    .bind(user.workspace_id)
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(ApiError::NotFound("user"))?;
+    let np = Principal::load(&state, Some(new_owner.clone())).await?;
+    if !crate::authz::page_access(&state, &np, id).await.map(|(a, _)| a.edit).unwrap_or(false) {
+        return Err(ApiError::bad("the new owner must be able to edit the page"));
+    }
+    sqlx::query("UPDATE pages SET owner_id = $2 WHERE id = $1").bind(id).bind(new_owner.id).execute(&state.db).await?;
+    audit::log(&state, user.workspace_id, Some(user.id), "page.owner", Some("page"), Some(id), json!({"owner": new_owner.id})).await;
+    Ok(Json(json!({ "ownerId": new_owner.id, "ownerName": new_owner.name })))
 }

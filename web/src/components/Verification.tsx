@@ -206,3 +206,32 @@ export function NoAccess({ pageId, signedIn }: { pageId: string; signedIn: boole
     </div>
   )
 }
+
+/** Hands a page to someone else (they must be able to edit it). */
+export function OwnerDialog({ pageId, current, onClose }: { pageId: string; current: string | null; onClose: () => void }) {
+  const toast = useToast()
+  const qc = useQueryClient()
+  const [query, setQuery] = useState('')
+  const users = useQuery({ queryKey: ['user-search', query], queryFn: () => api.get<{ id: string; name: string }[]>(`/users?q=${encodeURIComponent(query)}`), enabled: query.trim().length > 0 })
+  const pick = async (u: { id: string; name: string }) => {
+    try {
+      await api.put(`/pages/${pageId}/owner`, { userId: u.id })
+      qc.invalidateQueries({ queryKey: ['page', pageId] })
+      toast(`${u.name} owns this page now`)
+      onClose()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not change the owner')
+    }
+  }
+  return (
+    <Modal title="Change the page owner" onClose={onClose} width={440}>
+      <p className="muted" style={{ marginTop: 0 }}>
+        The owner is the person responsible for keeping this page current{current ? ` (now ${current})` : ''}. Pick someone who can edit it.
+      </p>
+      <input className="input" autoFocus placeholder="Search people" value={query} onChange={(e) => setQuery(e.target.value)} />
+      {(users.data ?? []).slice(0, 8).map((u) => (
+        <div key={u.id} className="menu-item" onClick={() => pick(u)}>{u.name}</div>
+      ))}
+    </Modal>
+  )
+}
