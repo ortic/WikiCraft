@@ -31,6 +31,7 @@ import { CodeBlock } from './CodeBlock'
 import { ImageView } from './ImageView'
 import { TableMenu } from './TableMenu'
 import { FindBar, FindReplace, findKey } from './FindReplace'
+import { HeadingIds } from './HeadingIds'
 
 const lowlight = createLowlight(common)
 
@@ -178,6 +179,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
         EmoticonSuggest,
         CommentMark,
         FindReplace,
+        HeadingIds,
         SlashCommand.configure({ items: slashItems((e) => pickFiles('image/*').then((f) => upload(e, f, true)), (e) => pickFiles('*/*').then((f) => upload(e, f, false))) }),
       ],
       editorProps: {

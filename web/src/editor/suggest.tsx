@@ -11,6 +11,7 @@ import {
   Hash, ListTree, CalendarDays, Tag, Sigma, Image as ImageIcon, Link2, Columns2, Paperclip, StickyNote, FileText, FilePlus2,
 } from 'lucide-react'
 import { api } from '../api'
+import { headingIds } from './HeadingIds'
 
 export interface MenuItem {
   title: string
@@ -236,8 +237,24 @@ export const PageLinkSuggest = Extension.create<{ pageId: string }>({
         allowSpaces: true,
         allowedPrefixes: null,
         pluginKey: new PluginKey('pageLinkSuggest'),
-        items: async ({ query }) => {
+        items: async ({ query, editor }) => {
           const q = query.replace(/\]+$/, '').trim()
+          const link = (ed: Editor, range: Range, href: string, text: string) =>
+            ed.chain().focus().deleteRange(range).insertContent([{ type: 'text', text, marks: [{ type: 'link', attrs: { href } }] }, { type: 'text', text: ' ' }]).run()
+          // [[#… → a heading on this page
+          if (q.startsWith('#')) {
+            const term = q.slice(1).toLowerCase()
+            return headingIds(editor.state.doc)
+              .filter((h) => h.text.toLowerCase().includes(term))
+              .slice(0, 10)
+              .map((h) => ({
+                title: h.text || 'Untitled heading',
+                description: `#${h.id}`,
+                group: 'Headings on this page',
+                icon: <Hash size={16} />,
+                command: (ed: Editor, range: Range) => link(ed, range, `#${h.id}`, h.text),
+              }))
+          }
           let hits: SearchHit[] = []
           if (q) {
             hits = await api.get<SearchHit[]>(`/search?q=${encodeURIComponent(q)}`).catch(() => [])
@@ -255,6 +272,28 @@ export const PageLinkSuggest = Extension.create<{ pageId: string }>({
               icon: <FileText size={16} />,
               command: (editor, range) => insertLink(editor, range, h.pageId, h.title),
             }))
+          // attachments of this page
+          if (q && pageId) {
+            const files = await api.get<{ id: string; filename: string; size: number }[]>(`/pages/${pageId}/attachments`).catch(() => [])
+            for (const f of files.filter((f) => f.filename.toLowerCase().includes(q.toLowerCase())).slice(0, 4)) {
+              items.push({
+                title: f.filename,
+                description: 'Attachment on this page',
+                group: 'Attachments',
+                icon: <Paperclip size={16} />,
+                command: (ed: Editor, range: Range) => link(ed, range, `/api/attachments/${f.id}/content`, f.filename),
+              })
+            }
+          }
+          if (!q) {
+            items.push({
+              title: 'Link to a heading…',
+              description: 'Type # and the heading',
+              group: 'Tip',
+              icon: <Hash size={16} />,
+              command: (ed: Editor, range: Range) => ed.chain().focus().insertContentAt(range, '[[#').run(),
+            })
+          }
           if (q && !hits.some((h) => h.title.toLowerCase() === q.toLowerCase())) {
             items.push({
               title: `Create “${q}”`,

@@ -256,7 +256,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 
 #### 4.4.2 Text & inline
 - [x] **P0** Headings H1–H6, paragraph, bold, italic, underline, strikethrough, inline code, sub/superscript `C D X O`
-- [~] **P0** Links (URL, page link with search picker, anchor link, attachment link, email) `C D X O` (`[[` page picker; no anchor/attachment picker)
+- [x] **P0** Links (URL, page link with search picker, anchor link, attachment link, email) `C D X O`
 - [~] **P0** @mentions of users (with notification) and pages `C D O` (users only; no page mentions)
 - [~] **P0** Emoji (picker, `:shortcode:` autocomplete, custom emoji P2) `C D O` (`:name` autocomplete for our SVG emoticon set; no emoji by design)
 - [~] **P1** Text color & highlight color (limited, theme-aware palette) `C D` (highlight toggle only; no color picker)
