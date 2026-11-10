@@ -88,6 +88,12 @@ and can make an earlier one current again.
   that day (from 8:00 in the time zone of their profile) they get a reminder, in the bell and by
   e-mail like other notifications; mute it under Settings if you don't want it.
 
+## Appearance
+
+The moon icon switches between light and dark. *Settings → Appearance* also offers a high-contrast
+theme (black text, strong borders, underlined links, a clear focus ring); with *System*, WikiCraft
+follows the device, including its "more contrast" setting.
+
 ## People
 
 *People* in the sidebar lists everybody with an account: search by name, job, department or

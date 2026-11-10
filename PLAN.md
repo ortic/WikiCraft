@@ -492,7 +492,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P1** Activity feed (following people/spaces; popular in my org) `C X` — partial: Home → Activity (everything visible, or watched pages and spaces) and Popular; following people not yet
 - [~] **P1** "For you" / popular pages `C` (popular pages; no personalisation)
 - [x] **P1** Command palette (Ctrl/Cmd+K): jump to page/space/action `C O` — pages (search, recently viewed) plus actions for the context (create page / folder / space, go to Home, Spaces, My tasks, blog, trash, space settings, profile, administration, dark mode, shortcuts); `>` lists actions only
-- [~] **P1** Dark mode, theme switching, high-contrast `C D O` (no high-contrast theme)
+- [x] **P1** Dark mode, theme switching, high-contrast `C D O` — Settings → Appearance (system / light / dark / high contrast); the high-contrast theme also follows the system's "more contrast" setting and is checked against WCAG AAA contrast (7:1) on the main screens in the e2e suite
 - [ ] **P1** UI localization (i18n; ≥ EN, DE, FR, ES, PT, IT, NL, PL, JA, ZH, KO); RTL support (AR, HE) `C D X`
 - [ ] **P2** Customizable home per workspace (announcements, featured spaces) `C X`
 - [ ] **P2** Sidebar customization per user (pinned items) `C`

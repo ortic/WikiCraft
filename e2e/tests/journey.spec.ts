@@ -437,6 +437,26 @@ test('history compares two versions word by word, inline or side by side', async
   await ctx.close()
 })
 
+test('the high-contrast theme meets WCAG AAA contrast (7:1) on the main screens', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState })
+  await ctx.addInitScript(() => localStorage.setItem('wc-theme', 'contrast'))
+  const page = await ctx.newPage()
+  const problems: string[] = []
+  for (const url of ['/', pageUrl, '/spaces', '/people', '/settings']) {
+    await page.goto(url)
+    if (url === pageUrl) await expect(page.locator('.ProseMirror')).toContainText('iOS app', { timeout: 20_000 })
+    else await expect(page.locator('.sidebar')).toBeVisible()
+    await page.waitForLoadState('networkidle').catch(() => {})
+    expect(await page.evaluate(() => document.documentElement.dataset.theme)).toBe('contrast')
+    const { violations } = await new AxeBuilder({ page }).withRules(['color-contrast-enhanced']).analyze()
+    for (const v of violations) {
+      problems.push(`${url}: ${v.nodes.length} × ${v.id}\n${v.nodes.slice(0, 6).map((n) => `    ${n.target.join(' ')}: ${(n.failureSummary ?? '').split('\n').slice(1, 2).join(' ')}`).join('\n')}`)
+    }
+  }
+  await ctx.close()
+  expect(problems.length, `contrast below 7:1:\n\n${problems.join('\n\n')}\n`).toBe(0)
+})
+
 test('main screens have no serious accessibility violations (axe, WCAG 2.2 AA)', async ({ browser }) => {
   const problems: string[] = []
   const audit = async (p: Page, name: string) => {

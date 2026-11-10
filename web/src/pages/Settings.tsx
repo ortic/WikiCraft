@@ -15,6 +15,42 @@ interface Token {
   scope?: 'read' | 'write'
 }
 
+/** Light, dark or high-contrast theme for this browser (System follows the device). */
+function Appearance() {
+  const [theme, setTheme] = useState(() => {
+    try {
+      return localStorage.getItem('wc-theme') ?? ''
+    } catch {
+      return ''
+    }
+  })
+  const choose = (t: string) => {
+    setTheme(t)
+    if (t) document.documentElement.dataset.theme = t
+    else delete document.documentElement.dataset.theme
+    try {
+      if (t) localStorage.setItem('wc-theme', t)
+      else localStorage.removeItem('wc-theme')
+    } catch {
+      /* private mode */
+    }
+  }
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <h3 style={{ marginTop: 0 }}>Appearance</h3>
+      <div className="field" style={{ marginBottom: 0 }}>
+        <label htmlFor="theme">Theme (this browser)</label>
+        <select id="theme" className="select" style={{ maxWidth: 320 }} value={theme} onChange={(e) => choose(e.target.value)}>
+          <option value="">System (light or dark, more contrast if the device asks for it)</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+          <option value="contrast">High contrast</option>
+        </select>
+      </div>
+    </div>
+  )
+}
+
 export default function Settings() {
   const me = useMe()
   const qc = useQueryClient()
@@ -64,6 +100,8 @@ export default function Settings() {
       </div>
 
       <ProfileFields userId={user.id} />
+
+      <Appearance />
 
       <EmailPreferences />
 
