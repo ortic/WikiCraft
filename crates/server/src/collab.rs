@@ -295,10 +295,27 @@ pub async fn persist(state: &AppState, room: &Room) -> anyhow::Result<()> {
 /// Like [`persist`], optionally without the automatic version (callers that create an explicit,
 /// labelled version right afterwards).
 pub async fn persist_with(state: &AppState, room: &Room, auto_version: bool) -> anyhow::Result<()> {
-    if !room.dirty.swap(false, Ordering::SeqCst) || room.closed.load(Ordering::SeqCst) {
+    let dirty = room.dirty.swap(false, Ordering::SeqCst);
+    if room.closed.load(Ordering::SeqCst) {
         return Ok(());
     }
     let editor = *room.last_editor.lock().expect("lock");
+    if dirty {
+        save(state, room, editor).await?;
+    }
+    // the version is due even when the periodic flush already stored the content: otherwise a
+    // flush between the last edit and the last disconnect would skip the automatic version
+    let due = auto_version && (room.connections() == 0 || room.last_version_at.lock().expect("lock").elapsed() > VERSION_INTERVAL);
+    if due && room.edited_since_version.swap(false, Ordering::SeqCst) {
+        crate::routes::pages::create_version(state, room.page_id, editor, None).await?;
+        *room.last_version_at.lock().expect("lock") = Instant::now();
+    }
+    Ok(())
+}
+
+/// Writes the room's document to the page row (Yjs state, ProseMirror JSON, plain text) and
+/// updates search, tasks and mentions. On failure the room stays dirty for the next tick.
+async fn save(state: &AppState, room: &Room, editor: Option<Uuid>) -> anyhow::Result<()> {
     let res: anyhow::Result<Node> = async {
         let mut tx = state.db.begin().await?;
         if state.relay.is_some() {
@@ -339,11 +356,6 @@ pub async fn persist_with(state: &AppState, room: &Room, auto_version: bool) -> 
     }
     if let Err(e) = crate::routes::notifications::notify_page_mentions(state, room.page_id, &pm, editor).await {
         tracing::warn!("mention notifications failed: {e:#}");
-    }
-    let due = auto_version && (room.connections() == 0 || room.last_version_at.lock().expect("lock").elapsed() > VERSION_INTERVAL);
-    if due && room.edited_since_version.swap(false, Ordering::SeqCst) {
-        crate::routes::pages::create_version(state, room.page_id, editor, None).await?;
-        *room.last_version_at.lock().expect("lock") = Instant::now();
     }
     Ok(())
 }

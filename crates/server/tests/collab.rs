@@ -45,6 +45,9 @@ async fn live_collaboration_roundtrip() {
     assert!(content.contains("Reply from B"));
     assert!(!content.contains("vandalism"), "read-only updates must be ignored");
 
+    // the periodic flush stores the content while people are still connected (this used to make
+    // the version on the last disconnect get skipped: nothing was dirty any more)
+    wikicraft::collab::flush_all(&app.state).await;
     // everyone leaves → persisted to the DB with a new version
     drop(a);
     drop(b);
