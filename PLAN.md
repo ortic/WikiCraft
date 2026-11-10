@@ -275,7 +275,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Task / checklist items (assignee via @mention, due date via date node) `C D O`
 - [x] **P0** Code blocks with syntax highlighting, language picker, line numbers, wrap, copy button `C D X O B`
 - [x] **P0** Blockquote `C D O`
-- [~] **P0** Callouts / panels: info, note, tip/success, warning, error, custom (emoji + color) `C D X O` (no custom emoji/color picker)
+- [x] **P0** Callouts / panels: info, note, tip/success, warning, error, custom (emoji + color) `C D X O` (custom icon from the SVG set, by design no emoji)
 - [x] **P0** Tables (see §4.4.4) `C D X O B`
 - [x] **P0** Images (see §4.4.5) `C D X O B`
 - [x] **P1** Expand / collapse (toggle) blocks `C D O`

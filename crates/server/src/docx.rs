@@ -572,7 +572,13 @@ impl Renderer<'_> {
                 let width = ctx.width - ctx.indent;
                 let inner = Ctx { indent: 0, depth: 0, width: width - 400, bold: false };
                 let mut blocks = self.blocks(&n.content, inner);
-                if let Some(run) = self.icon_run(&format!("callout:{kind}"), || line_icon_svg("callout", kind, &format!("#{edge}"))) {
+                let custom = n.attr_str("icon").and_then(icons::parse_symbol);
+                let icon_key = custom.map(|(name, colour)| format!("symbol:{name}:{colour}")).unwrap_or_else(|| format!("callout:{kind}"));
+                let draw = || match custom {
+                    Some((name, colour)) => line_icon_svg("symbols", name, colour),
+                    None => line_icon_svg("callout", kind, &format!("#{edge}")),
+                };
+                if let Some(run) = self.icon_run(&icon_key, draw) {
                     let icon = run;
                     match blocks.first_mut() {
                         Some(Block::P(p)) => {

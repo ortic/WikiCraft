@@ -163,7 +163,13 @@ impl Renderer<'_> {
             nodes::DETAILS_CONTENT => self.wrap("<div class=\"details-content\">", n, "</div>"),
             nodes::CALLOUT => {
                 let kind = n.attr_str("type").filter(|k| matches!(*k, "info" | "note" | "success" | "warning" | "error")).unwrap_or("info");
-                let icon = crate::icons::line_svg("callout", kind, "callout-icon", "20").unwrap_or_default();
+                // a custom symbol from the icon set (validated), else the type's own glyph
+                let icon = match n.attr_str("icon").and_then(crate::icons::parse_symbol) {
+                    Some((name, colour)) => crate::icons::line_svg("symbols", name, "callout-icon", "20")
+                        .map(|svg| format!("<span style=\"color:{colour}\">{svg}</span>"))
+                        .unwrap_or_default(),
+                    None => crate::icons::line_svg("callout", kind, "callout-icon", "20").unwrap_or_default(),
+                };
                 let open = format!("<div class=\"callout callout-{kind}\" data-type=\"callout\">{icon}<div class=\"callout-body\">");
                 self.wrap(&open, n, "</div></div>");
             }
@@ -309,6 +315,21 @@ fn wrap_mark(m: &Mark, inner: String) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn callout_custom_icon() {
+        let mut ok = Node::new(nodes::CALLOUT).attr("type", "note").attr("icon", "rocket:violet");
+        ok.content = vec![Node::paragraph(vec![Node::text("x")])];
+        let html = render(&Node::doc(vec![ok]), &HtmlOptions::default());
+        assert!(html.contains("callout-note") && html.contains("color:#7C3AED"), "{html}");
+        let mut bad = Node::new(nodes::CALLOUT).attr("icon", "rocket:x\"><script>alert(1)</script>");
+        bad.content = vec![Node::paragraph(vec![Node::text("x")])];
+        let html = render(&Node::doc(vec![bad]), &HtmlOptions::default());
+        assert!(!html.contains("<script"), "{html}");
+        let mut unknown = Node::new(nodes::CALLOUT).attr("icon", "nope:violet");
+        unknown.content = vec![Node::paragraph(vec![Node::text("x")])];
+        assert!(render(&Node::doc(vec![unknown]), &HtmlOptions::default()).contains("callout-info"));
+    }
 
     #[test]
     fn hostile_attributes_stay_inert() {

@@ -18,6 +18,18 @@ pub fn inner_markup(group: &str, name: &str) -> Option<&'static str> {
     markup(group, name)
 }
 
+/// The hex colour of a symbol colour name (`blue`, `violet`, …).
+pub fn symbol_color(name: &str) -> Option<&'static str> {
+    markup("symbolColors", name)
+}
+
+/// A `symbol:colour` value from the icon set (space icons, page icons, callouts), validated.
+pub fn parse_symbol(value: &str) -> Option<(&'static str, &'static str)> {
+    let (name, colour) = value.split_once(':').unwrap_or((value, "blue"));
+    let key = ICONS.get("symbols")?.as_object()?.keys().find(|k| *k == name)?;
+    Some((key.as_str(), symbol_color(colour).or_else(|| symbol_color("blue"))?))
+}
+
 /// A line icon (`callout`, `symbols` or `ui` group) as an inline `<svg>` using `currentColor`.
 pub fn line_svg(group: &str, name: &str, class: &str, size: &str) -> Option<String> {
     markup(group, name).map(|inner| {

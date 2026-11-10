@@ -1,29 +1,53 @@
 // Custom Tiptap nodes/marks. Names and attributes mirror crates/doc-model (server schema),
 // so documents imported from Confluence or written via the API load without loss.
 
+import { useState } from 'react'
 import { Mark, Node, mergeAttributes } from '@tiptap/core'
 import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
 import { FileText, Paperclip, ListTree, Hash, Puzzle, Link2, Download } from 'lucide-react'
 import { api, type Page, type PmNode } from '../api'
-import { Emoticon as EmoticonIcon, LineIcon } from '../icons'
+import { Emoticon as EmoticonIcon, LineIcon, SYMBOL_COLORS, SymbolPicker, parseSymbol } from '../icons'
 import { LIVE_MACROS, LiveMacro } from './MacroView'
+import { useEditable } from './useEditable'
 
 const CALLOUT_TYPES = ['info', 'note', 'success', 'warning', 'error']
 
 function CalloutView({ node, updateAttributes, editor }: ReactNodeViewProps) {
   const type = CALLOUT_TYPES.includes(node.attrs.type as string) ? (node.attrs.type as string) : 'info'
-  const cycle = () => {
-    if (!editor.isEditable) return
-    const next = CALLOUT_TYPES[(CALLOUT_TYPES.indexOf(type) + 1) % CALLOUT_TYPES.length]
-    updateAttributes({ type: next, emoji: null })
-  }
+  const custom = parseSymbol(node.attrs.icon as string | null)
+  const [open, setOpen] = useState(false)
+  const editable = useEditable(editor)
   return (
     <NodeViewWrapper className="callout" data-callout={type}>
-      <span className="callout-icon" contentEditable={false} onClick={cycle} title={editor.isEditable ? 'Change panel type' : undefined} style={{ cursor: editor.isEditable ? 'pointer' : 'default' }}>
-        <LineIcon group="callout" name={type} size={20} />
+      <span
+        className="callout-icon"
+        contentEditable={false}
+        onClick={() => editable && setOpen((o) => !o)}
+        title={editable ? 'Panel type and icon' : undefined}
+        style={{ cursor: editable ? 'pointer' : 'default', ...(custom ? { color: SYMBOL_COLORS[custom.color] } : {}) }}
+      >
+        {custom ? <LineIcon group="symbols" name={custom.name} size={20} /> : <LineIcon group="callout" name={type} size={20} />}
       </span>
+      {open && editable && (
+        <div className="callout-menu" contentEditable={false} onMouseLeave={() => setOpen(false)}>
+          <div className="callout-types">
+            {CALLOUT_TYPES.map((t) => (
+              <button key={t} type="button" className={`callout-type ${t === type ? 'active' : ''}`} data-callout={t} title={t} onClick={() => updateAttributes({ type: t })}>
+                <LineIcon group="callout" name={t} size={16} /> {t[0].toUpperCase() + t.slice(1)}
+              </button>
+            ))}
+          </div>
+          <div className="faint small" style={{ margin: '8px 0 4px' }}>Icon</div>
+          <SymbolPicker value={(node.attrs.icon as string | null) ?? null} onChange={(v) => updateAttributes({ icon: v, emoji: null })} />
+          {custom && (
+            <button type="button" className="btn btn-sm" style={{ marginTop: 6 }} onClick={() => updateAttributes({ icon: null })}>
+              Use the panel's own icon
+            </button>
+          )}
+        </div>
+      )}
       <NodeViewContent className="callout-body" />
     </NodeViewWrapper>
   )
@@ -35,7 +59,7 @@ export const Callout = Node.create({
   content: 'block+',
   defining: true,
   addAttributes() {
-    return { type: { default: 'info' }, emoji: { default: null } }
+    return { type: { default: 'info' }, emoji: { default: null }, icon: { default: null } }
   },
   parseHTML() {
     return [{ tag: 'div[data-type="callout"]' }]

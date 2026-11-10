@@ -3,6 +3,7 @@
 import { useEffect, useId, useState } from 'react'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react'
+import { useEditable } from './useEditable'
 
 const LANGUAGES = ['', 'bash', 'c', 'cpp', 'csharp', 'css', 'diff', 'go', 'graphql', 'html', 'java', 'javascript', 'json', 'kotlin', 'markdown', 'mermaid', 'php', 'plaintext', 'python', 'ruby', 'rust', 'scss', 'shell', 'sql', 'swift', 'typescript', 'xml', 'yaml']
 
@@ -56,17 +57,7 @@ function CodeBlockView({ node, updateAttributes, editor }: ReactNodeViewProps) {
   const wrap = !!node.attrs.wrap
   const lines = Math.max(1, node.textContent.split('\n').length)
   const [copied, setCopied] = useState(false)
-  // the editor turns editable after the first sync; node views don't re-render by themselves
-  const [editable, setEditable] = useState(editor.isEditable)
-  useEffect(() => {
-    const update = () => setEditable(editor.isEditable)
-    editor.on('update', update)
-    editor.on('transaction', update)
-    return () => {
-      editor.off('update', update)
-      editor.off('transaction', update)
-    }
-  }, [editor])
+  const editable = useEditable(editor)
   const copy = async () => {
     try {
       await navigator.clipboard?.writeText(node.textContent)

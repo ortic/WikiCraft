@@ -596,3 +596,14 @@ a.menu-item { color: inherit; text-decoration: none; }
 .ProseMirror h1, .ProseMirror h2, .ProseMirror h3, .ProseMirror table, .ProseMirror pre, .ProseMirror hr, .public-article h1, .public-article h2, .public-article h3 { clear: both; }
 @media (max-width: 600px) { .image-block.align-wrap-left, .image-block.align-wrap-right { float: none; max-width: 100%; margin: .6em 0; } }
 .ProseMirror, .public-article { display: flow-root; }
+/* callout type / icon menu */
+.callout { position: relative; }
+.callout-menu { position: absolute; top: 34px; left: 6px; z-index: 20; width: min(330px, 80vw); padding: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 10px; box-shadow: var(--shadow); }
+.callout-types { display: flex; flex-wrap: wrap; gap: 4px; }
+.callout-type { display: inline-flex; align-items: center; gap: 5px; padding: 3px 8px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); color: var(--text-soft); font: inherit; font-size: 12.5px; cursor: pointer; }
+.callout-type[data-callout="info"] svg { color: var(--c-info); }
+.callout-type[data-callout="note"] svg { color: var(--c-note); }
+.callout-type[data-callout="success"] svg { color: var(--c-success); }
+.callout-type[data-callout="warning"] svg { color: var(--c-warning); }
+.callout-type[data-callout="error"] svg { color: var(--c-error); }
+.callout-type.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
