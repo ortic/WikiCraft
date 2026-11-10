@@ -107,6 +107,10 @@ pub struct PagePlan {
     pub view_restrictions: Vec<(Option<String>, Option<String>)>,
     pub edit_restrictions: Vec<(Option<String>, Option<String>)>,
     pub page_status: Option<String>,
+    /// user keys of people watching the page
+    pub watchers: Vec<String>,
+    /// user keys of people who marked the page as favourite
+    pub favourited_by: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -120,6 +124,10 @@ pub struct SpacePlan {
     pub pages: Vec<PagePlan>,
     pub blog_posts: Vec<PagePlan>,
     pub permissions: Vec<SpacePermission>,
+    /// user keys of people watching the whole space
+    pub watchers: Vec<String>,
+    /// user keys of people who marked the space as favourite
+    pub favourited_by: Vec<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -313,6 +321,36 @@ impl<'e> Planner<'e> {
             let name = if l.namespace == "my" || l.namespace == "personal" { continue } else { l.name.clone() };
             labels.entry(l.content_id.as_str()).or_default().push(name);
         }
+        // watches and favourites by content / space id (a reference to an old version means the page)
+        let current = |id: &'e str| -> &'e str { ex.contents.get(id).and_then(|c| c.original_version_id.as_deref()).unwrap_or(id) };
+        let mut watchers: HashMap<&str, Vec<String>> = HashMap::new();
+        let mut space_watchers: HashMap<&str, Vec<String>> = HashMap::new();
+        for w in &ex.watches {
+            match (&w.content_id, &w.space_id) {
+                (Some(c), _) => watchers.entry(current(c)).or_default().push(w.user_key.clone()),
+                (None, Some(s)) => space_watchers.entry(s.as_str()).or_default().push(w.user_key.clone()),
+                _ => {}
+            }
+        }
+        let mut favourites: HashMap<&str, Vec<String>> = HashMap::new();
+        for f in &ex.favourites {
+            favourites.entry(current(&f.content_id)).or_default().push(f.user_key.clone());
+        }
+        // older Confluence: a personal `my:favourite` label (on a space: on its description)
+        for l in &ex.labellings {
+            if matches!(l.namespace.as_str(), "my" | "personal")
+                && matches!(l.name.to_ascii_lowercase().as_str(), "favourite" | "favorite")
+                && let Some(owner) = &l.owner
+            {
+                favourites.entry(current(&l.content_id)).or_default().push(owner.clone());
+            }
+        }
+        let people = |m: &HashMap<&str, Vec<String>>, id: Option<&str>| -> Vec<String> {
+            let mut v = id.and_then(|id| m.get(id)).cloned().unwrap_or_default();
+            v.sort();
+            v.dedup();
+            v
+        };
         let mut comments: HashMap<&str, Vec<&Content>> = HashMap::new();
         let mut attachments: HashMap<&str, Vec<&Content>> = HashMap::new();
         let mut children_count: HashMap<&str, usize> = HashMap::new();
@@ -529,6 +567,8 @@ impl<'e> Planner<'e> {
                     view_restrictions: view,
                     edit_restrictions: edit,
                     page_status: ex.property(&c.id, "status").map(String::from),
+                    watchers: people(&watchers, Some(&c.id)),
+                    favourited_by: people(&favourites, Some(&c.id)),
                 }
             };
 
@@ -555,6 +595,12 @@ impl<'e> Planner<'e> {
                     .count() as u64,
             );
             report.count("labels", pages.iter().chain(&blog_posts).map(|p| p.labels.len() as u64).sum());
+            report.count("watches", pages.iter().chain(&blog_posts).map(|p| p.watchers.len() as u64).sum());
+            report.count("favourites", pages.iter().chain(&blog_posts).map(|p| p.favourited_by.len() as u64).sum());
+            let space_watchers = people(&space_watchers, Some(&s.id));
+            let space_favourites = people(&favourites, s.description_id.as_deref());
+            report.count("space_watches", space_watchers.len() as u64);
+            report.count("space_favourites", space_favourites.len() as u64);
             spaces.push(SpacePlan {
                 source_id: s.id.clone(),
                 key: s.key.clone(),
@@ -564,6 +610,8 @@ impl<'e> Planner<'e> {
                 pages,
                 blog_posts,
                 permissions: ex.space_permissions.iter().filter(|p| p.space_id == s.id).cloned().collect(),
+                watchers: space_watchers,
+                favourited_by: space_favourites,
             });
         }
 
@@ -795,5 +843,36 @@ mod tests {
         let ids: Vec<&str> = plan.spaces[0].pages.iter().map(|p| p.source_id.as_str()).collect();
         assert_eq!(ids, ["1", "10", "5"], "root pages sort by title");
         assert_eq!(plan.spaces[0].pages[2].parent_source_id, None, "its parent isn't imported");
+    }
+
+    #[test]
+    fn watches_and_favourites() {
+        let mut ex = export(vec![content("1", ContentStatus::Current, None, None), content("2", ContentStatus::Current, None, Some("1"))]);
+        ex.spaces[0].description_id = Some("d".into());
+        let watch = |user: &str, content: Option<&str>, space: Option<&str>| Watch {
+            user_key: user.into(),
+            content_id: content.map(String::from),
+            space_id: space.map(String::from),
+        };
+        ex.watches = vec![watch("bob", Some("1"), None), watch("ann", Some("2"), None), watch("bob", Some("1"), None), watch("cid", None, Some("S"))];
+        ex.favourites = vec![Favourite { user_key: "ann".into(), content_id: "1".into() }];
+        let label = |content: &str, name: &str, namespace: &str, owner: Option<&str>| Labelling {
+            content_id: content.into(),
+            name: name.into(),
+            namespace: namespace.into(),
+            owner: owner.map(String::from),
+        };
+        ex.labellings = vec![label("1", "favourite", "my", Some("bob")), label("d", "favorite", "my", Some("ann")), label("1", "favourite", "global", None)];
+        let plan = Planner::new(&ex, PlanOptions::default()).plan();
+        let space = &plan.spaces[0];
+        let page = &space.pages[0];
+        // a watch on an old version is a watch on the page; duplicates collapse
+        assert_eq!(page.watchers, ["ann", "bob"]);
+        assert_eq!(page.favourited_by, ["ann", "bob"]);
+        assert_eq!(page.labels, ["favourite"], "a global label is just a label");
+        assert_eq!(space.watchers, ["cid"]);
+        assert_eq!(space.favourited_by, ["ann"], "favourite label on the space description");
+        assert_eq!(plan.report.counts["watches"], 2);
+        assert_eq!(plan.report.counts["space_favourites"], 1);
     }
 }

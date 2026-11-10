@@ -20,7 +20,9 @@ It works the same for Confluence Server, Data Center and Cloud exports.
 | Deleted pages (trash) | Trash | with their attachments and comments, so admins can restore them; the trash retention period starts at the import; skip with `--skip-trash`. Pages that were below a deleted page move up to its parent, as in Confluence |
 | Attachments (all versions) | Attachments | identical files are stored once |
 | Page and inline comments, threads, resolved state | Comments | inline comments stay anchored to their text |
-| Labels | Labels | |
+| Labels | Labels | personal (`my:`) labels are not imported, except favourites |
+| Watches (pages, blog posts, spaces) | Watches | people keep getting notified about what they watched; daily digests and network follows are not watches |
+| Favourites / saved for later | Starred pages and spaces | from the favourite relation and from older `my:favourite` labels |
 | Tasks (with assignees and due dates) | Task lists | they show up under *My tasks* |
 | Users referenced anywhere | Accounts or *imported authors* | see [step 5](#5-people-imported-authors) |
 | Groups | Groups | |

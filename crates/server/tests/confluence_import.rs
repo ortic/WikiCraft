@@ -87,6 +87,10 @@ async fn imports_classic_xml_export() {
     assert_eq!(st, 200);
     // Cloud's shared drafts of published pages are not old versions
     assert_eq!(result["report"]["counts"]["skipped_drafts_of_published_pages"], 48);
+    // 149 watch rows = 124 distinct (person, page) pairs (34 rows point at an old version of the page)
+    assert_eq!(result["created"]["watches"], 124);
+    // the export's only label is someone's my:favourite on the space description
+    assert_eq!(result["created"]["spaceFavourites"], 1);
 
     let home = tree["homePageId"].as_str().unwrap();
     let (_, home_page) = app.get(&c, &format!("/pages/{home}")).await;
@@ -312,4 +316,71 @@ async fn drafts_and_trash_from_confluence() {
     let result = import(&app, &c, zip2, json!({"skipDrafts": true, "skipTrash": true})).await;
     assert_eq!(result["created"]["pages"], 1);
     assert!(result["created"]["drafts"].is_null() && result["created"]["trashedPages"].is_null(), "{}", result["created"]);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn watches_and_favourites_from_confluence() {
+    let app = common::spawn().await;
+    let c = app.setup().await;
+    let (bob, _) = app.user(&c, "bob@acme.test", "member").await;
+    let page = |title: &'static str| -> Vec<(&'static str, &'static str)> {
+        vec![("title", title), ("contentStatus", "current"), ("space", "@Space:1"), ("creator", "@ConfluenceUserImpl:u-owner"), ("version", "1")]
+    };
+    let zip = entities_zip(&[
+        ("Space", "1", &[("key", "WAT"), ("name", "Watched"), ("description", "@SpaceDescription:5")]),
+        ("SpaceDescription", "5", &[("space", "@Space:1"), ("contentStatus", "current")]),
+        ("ConfluenceUserImpl", "u-owner", &[("name", "owner"), ("email", "owner@acme.test")]),
+        ("ConfluenceUserImpl", "u-bob", &[("name", "bob"), ("email", "bob@acme.test")]),
+        ("Page", "10", &page("Runbook")),
+        ("Page", "11", &page("Changelog")),
+        // bob watches the runbook and the space; a daily digest subscription is not a watch
+        (
+            "Notification",
+            "30",
+            &[("content", "@Page:10"), ("receiver", "@ConfluenceUserImpl:u-bob"), ("type", "page"), ("digest", "false"), ("network", "false")],
+        ),
+        ("Notification", "31", &[("space", "@Space:1"), ("receiver", "@ConfluenceUserImpl:u-bob"), ("digest", "false"), ("network", "false")]),
+        ("Notification", "32", &[("receiver", "@ConfluenceUserImpl:u-owner"), ("digest", "true"), ("network", "false")]),
+        // favourites: the newer relation and the older personal label (on the space: its description)
+        (
+            "User2ContentRelationEntity",
+            "40",
+            &[("sourceContent", "u-bob"), ("targetContent", "@Page:11"), ("relationName", "favourite"), ("targetType", "PAGE")],
+        ),
+        (
+            "User2ContentRelationEntity",
+            "41",
+            &[("sourceContent", "u-owner"), ("targetContent", "@Page:10"), ("relationName", "touched"), ("targetType", "PAGE")],
+        ),
+        ("Label", "50", &[("name", "favourite"), ("namespace", "my")]),
+        ("Labelling", "51", &[("label", "@Label:50"), ("content", "@Page:10"), ("owningUser", "@ConfluenceUserImpl:u-owner")]),
+        ("Labelling", "52", &[("label", "@Label:50"), ("content", "@SpaceDescription:5"), ("owningUser", "@ConfluenceUserImpl:u-bob")]),
+    ]);
+    let result = import(&app, &c, zip, json!({})).await;
+    eprintln!("{}", serde_json::to_string_pretty(&result["created"]).unwrap());
+    assert_eq!(result["created"]["watches"], 1);
+    assert_eq!(result["created"]["spaceWatches"], 1);
+    assert_eq!(result["created"]["favourites"], 2);
+    assert_eq!(result["created"]["spaceFavourites"], 1);
+
+    // bob's favourites list has the changelog; the owner's has the runbook ("touched" isn't a favourite)
+    let (_, favs) = app.get(&bob, "/favorites").await;
+    let titles: Vec<&str> = favs.as_array().unwrap().iter().map(|p| p["title"].as_str().unwrap()).collect();
+    assert_eq!(titles, ["Changelog"]);
+    let (_, favs) = app.get(&c, "/favorites").await;
+    let titles: Vec<&str> = favs.as_array().unwrap().iter().map(|p| p["title"].as_str().unwrap()).collect();
+    assert_eq!(titles, ["Runbook"]);
+    let watching: Vec<String> =
+        sqlx::query_scalar("SELECT p.title FROM watches w JOIN pages p ON p.id = w.page_id JOIN users u ON u.id = w.user_id WHERE u.email = 'bob@acme.test'")
+            .fetch_all(&app.state.db)
+            .await
+            .unwrap();
+    assert_eq!(watching, ["Runbook"]);
+    let (_, space) = app.get(&bob, "/spaces/WAT").await;
+    assert_eq!(space["watching"], true, "{space}");
+    let starred: i64 = sqlx::query_scalar("SELECT count(*) FROM space_favorites f JOIN users u ON u.id = f.user_id WHERE u.email = 'bob@acme.test'")
+        .fetch_one(&app.state.db)
+        .await
+        .unwrap();
+    assert_eq!(starred, 1);
 }

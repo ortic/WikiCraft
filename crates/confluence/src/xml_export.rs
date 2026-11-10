@@ -43,7 +43,7 @@ struct Pending {
     // ContentProperty id → (name, value)
     content_properties: HashMap<String, (String, String)>,
     labels: HashMap<String, (String, String)>,             // label id → (name, namespace)
-    labellings: Vec<(String, String)>,                     // (label id, content id)
+    labellings: Vec<(String, String, Option<String>)>,     // (label id, content id, owner)
     perm_sets: HashMap<String, (String, RestrictionKind)>, // set id → (content id, kind)
     perms: Vec<(String, Option<String>, Option<String>)>,  // (set id, user key, group)
 }
@@ -257,7 +257,34 @@ fn dispatch(o: RawObject, export: &mut Export, pending: &mut Pending) {
         }
         "Labelling" => {
             if let (Some(l), Some(c)) = (o.get("label"), o.get("content").or_else(|| o.get("labelableId"))) {
-                pending.labellings.push((l, c));
+                pending.labellings.push((l, c, o.get("owningUser").or_else(|| o.get("owner"))));
+            }
+        }
+        // watches: of a page / blog post (`content`) or of a whole space (`space`, no type or
+        // type "page"); digests, network follows, label watches and blog-only space watches are
+        // something else
+        "Notification" => {
+            let flag = |k: &str| o.get(k).is_some_and(|v| v == "true" || v == "1");
+            let ty = o.get("type");
+            if let Some(user) = o.get("receiver").or_else(|| o.get("userName")).or_else(|| o.get("username"))
+                && !flag("digest")
+                && !flag("network")
+                && o.get("label").is_none()
+            {
+                match (o.get("content"), o.get("space")) {
+                    (Some(c), _) => export.watches.push(Watch { user_key: user, content_id: Some(c), space_id: None }),
+                    (None, Some(s)) if ty.as_deref().is_none_or(|t| t == "page") => {
+                        export.watches.push(Watch { user_key: user, content_id: None, space_id: Some(s) })
+                    }
+                    _ => {}
+                }
+            }
+        }
+        "User2ContentRelationEntity" => {
+            if o.get("relationName").is_some_and(|r| r.eq_ignore_ascii_case("favourite") || r.eq_ignore_ascii_case("favorite"))
+                && let (Some(user), Some(c)) = (o.get("sourceContent"), o.get("targetContent"))
+            {
+                export.favourites.push(Favourite { user_key: user, content_id: c });
             }
         }
         "SpacePermission" => {
@@ -295,9 +322,9 @@ fn resolve_pending(p: Pending, export: &mut Export) {
             }
         }
     }
-    for (label_id, content_id) in p.labellings {
+    for (label_id, content_id, owner) in p.labellings {
         if let Some((name, ns)) = p.labels.get(&label_id) {
-            export.labellings.push(Labelling { content_id, name: name.clone(), namespace: ns.clone() });
+            export.labellings.push(Labelling { content_id, name: name.clone(), namespace: ns.clone(), owner });
         }
     }
     for (set, user, group) in p.perms {

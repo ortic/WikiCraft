@@ -571,6 +571,17 @@ async fn import(state: &AppState, job: Uuid, ws: Uuid, actor: Uuid, path: &Path,
                     .await?;
             }
         }
+        for (table, keys, counter) in [("space_watches", &s.watchers, "spaceWatches"), ("space_favorites", &s.favourited_by, "spaceFavourites")] {
+            for key in keys {
+                let Some(uid) = user_of(&Some(key.clone())) else {
+                    count("watchesAndFavouritesWithoutUser", 1);
+                    continue;
+                };
+                let sql = format!("INSERT INTO {table} (user_id, space_id) VALUES ($1, $2) ON CONFLICT DO NOTHING");
+                let r = sqlx::query(sqlx::AssertSqlSafe(sql)).bind(uid).bind(space.id).execute(&state.db).await?;
+                count(counter, r.rows_affected() as i64);
+            }
+        }
         // never publish an imported space automatically: report it, an admin decides
         sqlx::query("UPDATE spaces SET default_role = $2, anonymous_access = false WHERE id = $1").bind(space.id).bind(default_role).execute(&state.db).await?;
 
@@ -591,6 +602,22 @@ async fn import(state: &AppState, job: Uuid, ws: Uuid, actor: Uuid, path: &Path,
             }
             if !opts.skip_comments {
                 import_comments(&mut tx, id, pg, &planner, &links, &comment_ids, &user_of, &mut stats, &mut rs).await?;
+            }
+            // watches and favourites (a draft only keeps its author's: nobody else sees it)
+            let author = user_of(&pg.created_by);
+            for (table, keys, counter) in [("watches", &pg.watchers, "watches"), ("favorites", &pg.favourited_by, "favourites")] {
+                for key in keys {
+                    let Some(uid) = user_of(&Some(key.clone())) else {
+                        count("watchesAndFavouritesWithoutUser", 1);
+                        continue;
+                    };
+                    if pg.status == ContentStatus::Draft && Some(uid) != author {
+                        continue;
+                    }
+                    let sql = format!("INSERT INTO {table} (user_id, page_id) VALUES ($1, $2) ON CONFLICT DO NOTHING");
+                    let r = sqlx::query(sqlx::AssertSqlSafe(sql)).bind(uid).bind(id).execute(&mut *tx).await?;
+                    count(counter, r.rows_affected() as i64);
+                }
             }
             sqlx::query("INSERT INTO import_mappings (workspace_id, source, source_type, source_id, target_id, job_id) VALUES ($1, 'confluence', 'page', $2, $3, $4) ON CONFLICT (workspace_id, source, source_type, source_id) DO UPDATE SET target_id = EXCLUDED.target_id")
                 .bind(ws)

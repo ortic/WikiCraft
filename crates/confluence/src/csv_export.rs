@@ -174,7 +174,7 @@ pub fn read(source: &Source, export: &mut Export) -> Result<(), crate::Error> {
             if let (Some(lid), Some(cid)) = (get(&r, "labelid"), get(&r, "contentid"))
                 && let Some((name, ns)) = labels.get(&lid)
             {
-                export.labellings.push(Labelling { content_id: cid, name: name.clone(), namespace: ns.clone() });
+                export.labellings.push(Labelling { content_id: cid, name: name.clone(), namespace: ns.clone(), owner: get(&r, "owner") });
             }
         })?;
     }
@@ -214,6 +214,33 @@ pub fn read(source: &Source, export: &mut Export) -> Result<(), crate::Error> {
                 && let Some((cid, kind)) = sets.get(&set)
             {
                 export.restrictions.push(Restriction { content_id: cid.clone(), kind: *kind, user_key: get(&r, "username"), group: get(&r, "groupname") });
+            }
+        })?;
+    }
+
+    // Watches (NOTIFICATIONS: USERNAME holds the user key) and favourites (USERCONTENT_RELATION)
+    if let Some(n) = find(source, &names, "notifications") {
+        for_each_row(source, &n, |r| {
+            let flag = |k: &str| get(&r, k).is_some_and(|v| v != "0" && v != "f" && v != "false");
+            let Some(user) = get(&r, "username") else { return };
+            if flag("digest") || flag("network") || get(&r, "labelid").is_some() {
+                return;
+            }
+            match (get(&r, "contentid"), get(&r, "spaceid")) {
+                (Some(c), _) => export.watches.push(Watch { user_key: user, content_id: Some(c), space_id: None }),
+                (None, Some(s)) if get(&r, "contenttype").is_none_or(|t| t.eq_ignore_ascii_case("page")) => {
+                    export.watches.push(Watch { user_key: user, content_id: None, space_id: Some(s) })
+                }
+                _ => {}
+            }
+        })?;
+    }
+    if let Some(n) = find(source, &names, "usercontent_relation") {
+        for_each_row(source, &n, |r| {
+            if get(&r, "relationname").is_some_and(|v| v.eq_ignore_ascii_case("favourite") || v.eq_ignore_ascii_case("favorite"))
+                && let (Some(user), Some(c)) = (get(&r, "sourceuser"), get(&r, "targetcontentid"))
+            {
+                export.favourites.push(Favourite { user_key: user, content_id: c });
             }
         })?;
     }

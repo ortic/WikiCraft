@@ -180,6 +180,23 @@ pub struct Labelling {
     pub content_id: String,
     pub name: String,
     pub namespace: String,
+    /// user key of a personal (`my:`) label's owner
+    pub owner: Option<String>,
+}
+
+/// Someone watching a page or blog post (`content_id`) or a whole space (`space_id`).
+#[derive(Debug, Clone, Serialize)]
+pub struct Watch {
+    pub user_key: String,
+    pub content_id: Option<String>,
+    pub space_id: Option<String>,
+}
+
+/// A page (or, through its description, a space) someone marked as favourite / saved for later.
+#[derive(Debug, Clone, Serialize)]
+pub struct Favourite {
+    pub user_key: String,
+    pub content_id: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -222,6 +239,8 @@ pub struct Export {
     pub labellings: Vec<Labelling>,
     pub space_permissions: Vec<SpacePermission>,
     pub restrictions: Vec<Restriction>,
+    pub watches: Vec<Watch>,
+    pub favourites: Vec<Favourite>,
     /// content id → (property name → string value)
     pub properties: HashMap<String, BTreeMap<String, String>>,
     /// Paths of attachment binaries inside the export, keyed by attachment content id → version → path.

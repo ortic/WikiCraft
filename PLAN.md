@@ -762,14 +762,14 @@ attachments, labels, permissions or inline-task file, though the descriptor says
 - [ ] **P1** Layouts (`ac:layout*`, legacy `section`/`column`) → columns; ADF extensions (`ac:adf-extension`) → native blocks where known (decision list), else render `ac:adf-fallback`
 - [ ] **P1** Formatting: `data-highlight-colour`, inline `style` colors (map to palette), `data-layout`/`data-width` for images and tables, `data-card-appearance` → smart link inline/card/embed
 - [ ] **P1** Keep Confluence `local-id`s as block IDs and store `source_content_id` per page, so deep links and anchors can be redirected (`/display/SPACE/Title`, `/pages/viewpage.action?pageId=`, `/wiki/spaces/KEY/pages/ID/...`)
-- [ ] **P1** **Redirect table for old Confluence URLs** (all URL shapes above + tiny links `/x/AbCd`) so bookmarks keep working
-- [ ] **P1** Wiki-markup converter (`bodytype 0`, `unmigrated-wiki-markup`) for old content and space descriptions
+- [x] **P1** **Redirect table for old Confluence URLs** (all URL shapes above + tiny links `/x/AbCd`) so bookmarks keep working — `/display/KEY/Title`, `/pages/viewpage.action?pageId=`, `/wiki/spaces/KEY/pages/ID/…` and `/x/…` redirect via `import_mappings` (also after space key renames); covered by the XML import test
+- [x] **P1** Wiki-markup converter (`bodytype 0`, `unmigrated-wiki-markup`) for old content and space descriptions — `wiki.rs` (golden snapshot test)
 - [ ] **P1** Space permissions: map the 16 Confluence permission types and user/group/anonymous (`allUsersSubject`) grants to our model; page restrictions (`ContentPermissionSet` view/edit) → page restrictions
-- [ ] **P1** Labels (global/personal `my:` namespaces), watches (`Notification`), favourites (`User2ContentRelationEntity`), blog posts, space description/home page
+- [x] **P1** Labels (global/personal `my:` namespaces), watches (`Notification`), favourites (`User2ContentRelationEntity`), blog posts, space description/home page — global labels; page, blog and space watches (digests, network follows and label watches left out; 124 from the 149 rows of fixture B, the rest are duplicates via old versions); favourites from the `favourite` relation and `my:favourite` labels (on the space description = space favourite); personal labels otherwise skipped; CSV `notifications` / `usercontent_relation` read by DB column names (unverified)
 - [ ] **P1** Custom content: content properties (consume), page status, team calendars, whiteboards and databases (placeholder + report until supported)
-- [ ] **P1** **Dry-run mode** that produces exactly this kind of report (counts, unresolved refs, unknown macros, warnings per page) before writing anything
+- [x] **P1** **Dry-run mode** that produces exactly this kind of report (counts, unresolved refs, unknown macros, warnings per page) before writing anything — `analyze-confluence` CLI, `POST /imports/confluence/analyze`, Analyze button in Admin → Import
 - [ ] **P1** Idempotent, resumable import job with checkpoints and source-id mapping (re-import updates instead of duplicating)
-- [ ] **P1** Security: zip-slip, zip bombs, XML entity expansion off, size/time limits, sanitize any `html` macro content and SVGs
+- [~] **P1** Security: zip-slip, zip bombs, XML entity expansion off, size/time limits, sanitize any `html` macro content and SVGs (zip paths with `..` / absolute / backslashes ignored, declared sizes never trusted, entry size cap; quick-xml never expands DTD entities; `html` macro → code block, never rendered; no overall time limit)
 
 ### 6.4 Golden fixtures to build next
 - [ ] **P0** Create a free Confluence Cloud site and build a **"kitchen sink" space** exercising every macro, element, table
