@@ -182,6 +182,7 @@ export interface Attachment {
 export interface Version {
   version: number
   title: string
+  createdBy?: string | null
   createdByName: string | null
   createdAt: string
   message: string | null

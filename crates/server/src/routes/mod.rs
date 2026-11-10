@@ -88,6 +88,9 @@ pub fn router(state: AppState) -> Router {
         // users & groups
         .route("/users", get(users::list).post(users::create))
         .route("/people", get(people::directory))
+        .route("/people/avatars", get(people::avatars))
+        .route("/me/avatar", post(people::upload_avatar).delete(people::delete_avatar).layer(DefaultBodyLimit::max(people::MAX_AVATAR_UPLOAD + (64 << 10))))
+        .route("/users/{id}/avatar", get(people::avatar))
         .route("/people/{id}", get(people::profile))
         .route("/me/profile", put(people::update_mine))
         .route("/users/{id}", axum::routing::patch(users::update))

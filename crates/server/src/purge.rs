@@ -58,7 +58,8 @@ async fn collect_blobs(state: &AppState, keys: Vec<String>) {
             "DELETE FROM blobs b WHERE b.key = $1
                AND NOT EXISTS (SELECT 1 FROM attachments WHERE blob_key = $1)
                AND NOT EXISTS (SELECT 1 FROM attachment_versions WHERE blob_key = $1)
-               AND NOT EXISTS (SELECT 1 FROM workspaces WHERE settings->'logo'->>'key' = $1)",
+               AND NOT EXISTS (SELECT 1 FROM workspaces WHERE settings->'logo'->>'key' = $1)
+               AND NOT EXISTS (SELECT 1 FROM users WHERE avatar_key = $1)",
         )
         .bind(&key)
         .execute(&state.db)

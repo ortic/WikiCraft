@@ -39,7 +39,24 @@ export function Logo() {
   )
 }
 
+/** Profile pictures by person id (signed-in people only; guests and visitors see initials). */
+export function useAvatarUrls() {
+  const me = useMe()
+  return useQuery({
+    queryKey: ['avatar-urls'],
+    queryFn: () => api.get<Record<string, string>>('/people/avatars'),
+    enabled: !!me.data?.user,
+    staleTime: 5 * 60_000,
+  })
+}
+
 export function Avatar({ name, id, size = 26 }: { name: string; id?: string; size?: number }) {
+  const urls = useAvatarUrls()
+  const [broken, setBroken] = useState(false)
+  const src = id && !broken ? urls.data?.[id] : undefined
+  if (src) {
+    return <img className="avatar avatar-img" src={src} alt="" title={name} width={size} height={size} style={{ width: size, height: size }} onError={() => setBroken(true)} />
+  }
   return (
     <span className="avatar" style={{ background: userColor(id ?? name), width: size, height: size, fontSize: size * 0.42 }} title={name}>
       {initials(name)}

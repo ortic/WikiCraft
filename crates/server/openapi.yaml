@@ -1358,6 +1358,92 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /people/avatars:
+    get:
+      tags:
+      - People
+      summary: Picture URLs by person id (people who uploaded one)
+      operationId: get_people_avatars
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/avatar:
+    post:
+      tags:
+      - People
+      summary: Upload a profile picture (PNG, JPEG, WebP or GIF up to 8 MB; cropped square, scaled to 256 px, stored as PNG)
+      operationId: post_me_avatar
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+              - file
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  avatarUrl: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+      - People
+      summary: Remove your profile picture
+      operationId: delete_me_avatar
+      responses:
+        '204': *id007
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /users/{id}/avatar:
+    get:
+      tags:
+      - People
+      summary: A profile picture (PNG)
+      operationId: get_users_id_avatar
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /me/profile:
     put:
       tags:

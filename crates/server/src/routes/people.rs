@@ -162,3 +162,91 @@ pub async fn update_mine(State(state): State<AppState>, CurrentUser(user): Curre
     }
     profile(State(state), CurrentUser(user.clone()), Path(user.id)).await
 }
+
+/// Uploads up to this size are accepted (they're scaled down anyway).
+pub const MAX_AVATAR_UPLOAD: usize = 8 << 20;
+const AVATAR_SIZE: u32 = 256;
+
+/// A profile picture from an upload: decoded within limits, cropped to a centred square, scaled
+/// to 256 px and stored as PNG. Re-encoding drops whatever else the file carried (EXIF, GPS
+/// position, scripts in a disguised file).
+fn avatar_png(data: &[u8]) -> Option<Vec<u8>> {
+    let mut reader = image::ImageReader::new(std::io::Cursor::new(data)).with_guessed_format().ok()?;
+    if !matches!(reader.format(), Some(image::ImageFormat::Png | image::ImageFormat::Jpeg | image::ImageFormat::WebP | image::ImageFormat::Gif)) {
+        return None;
+    }
+    let mut limits = image::Limits::default();
+    limits.max_image_width = Some(10_000);
+    limits.max_image_height = Some(10_000);
+    limits.max_alloc = Some(256 << 20);
+    reader.limits(limits);
+    let img = reader.decode().ok()?;
+    let side = img.width().min(img.height());
+    let square = img.crop_imm((img.width() - side) / 2, (img.height() - side) / 2, side, side);
+    let small = if side > AVATAR_SIZE { square.resize_exact(AVATAR_SIZE, AVATAR_SIZE, image::imageops::FilterType::Lanczos3) } else { square };
+    let mut out = std::io::Cursor::new(Vec::new());
+    small.write_to(&mut out, image::ImageFormat::Png).ok()?;
+    Some(out.into_inner())
+}
+
+/// `POST /me/avatar` — a new profile picture (PNG, JPEG, WebP or GIF).
+pub async fn upload_avatar(State(state): State<AppState>, CurrentUser(user): CurrentUser, mut mp: axum::extract::Multipart) -> ApiResult<Json<Value>> {
+    let mut data = None;
+    while let Some(field) = mp.next_field().await.map_err(|e| ApiError::bad(format!("multipart: {e}")))? {
+        if field.file_name().is_some() {
+            data = Some(field.bytes().await.map_err(|_| ApiError::bad("pictures are limited to 8 MB"))?);
+            break;
+        }
+    }
+    let data = data.ok_or_else(|| ApiError::bad("no file in request"))?;
+    if data.len() > MAX_AVATAR_UPLOAD {
+        return Err(ApiError::bad("pictures are limited to 8 MB"));
+    }
+    let png = tokio::task::spawn_blocking(move || avatar_png(&data))
+        .await
+        .map_err(|e| ApiError::Internal(e.into()))?
+        .ok_or_else(|| ApiError::bad("use a PNG, JPEG, WebP or GIF picture"))?;
+    let key = state.blobs.put(&state.db, bytes::Bytes::from(png)).await.map_err(ApiError::Internal)?;
+    // the URL changes with the picture, so browsers may keep it for good
+    let url = format!("/api/users/{}/avatar?v={}", user.id, &key[..12]);
+    sqlx::query("UPDATE users SET avatar_key = $2, avatar_url = $3 WHERE id = $1").bind(user.id).bind(&key).bind(&url).execute(&state.db).await?;
+    Ok(Json(json!({ "avatarUrl": url })))
+}
+
+/// `DELETE /me/avatar` — back to initials.
+pub async fn delete_avatar(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<axum::http::StatusCode> {
+    sqlx::query("UPDATE users SET avatar_key = NULL, avatar_url = NULL WHERE id = $1").bind(user.id).execute(&state.db).await?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}
+
+/// `GET /users/{id}/avatar` — a profile picture (people of the same workspace).
+pub async fn avatar(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<axum::response::Response> {
+    use axum::http::header;
+    use axum::response::IntoResponse;
+    let key: Option<Option<String>> = sqlx::query_scalar("SELECT avatar_key FROM users WHERE id = $1 AND workspace_id = $2")
+        .bind(id)
+        .bind(user.workspace_id)
+        .fetch_optional(&state.db)
+        .await?;
+    let Some(Some(key)) = key else { return Err(ApiError::NotFound("picture")) };
+    let data = state.blobs.get(&key).await.map_err(ApiError::Internal)?;
+    Ok((
+        [(header::CONTENT_TYPE, "image/png"), (header::CACHE_CONTROL, "private, max-age=31536000, immutable"), (header::X_CONTENT_TYPE_OPTIONS, "nosniff")],
+        data,
+    )
+        .into_response())
+}
+
+/// `GET /people/avatars` — id → picture URL of everybody who has one (for showing pictures
+/// wherever a person appears). Guests get none, like the directory.
+pub async fn avatars(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Value>> {
+    if user.is_guest() {
+        return Ok(Json(json!({})));
+    }
+    let rows: Vec<(Uuid, String)> =
+        sqlx::query_as("SELECT id, avatar_url FROM users WHERE workspace_id = $1 AND avatar_url LIKE '/api/users/%' AND status <> 'placeholder'")
+            .bind(user.workspace_id)
+            .fetch_all(&state.db)
+            .await?;
+    Ok(Json(Value::Object(rows.into_iter().map(|(id, url)| (id.to_string(), Value::String(url))).collect())))
+}

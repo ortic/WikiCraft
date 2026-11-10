@@ -86,7 +86,8 @@ and can make an earlier one current again.
 location, or pick a department. A profile shows what someone does, where they are and their local
 time, their personal space and the pages they worked on lately (only the ones you can see). Click
 an @mention (Ctrl/Cmd+click while editing) or an author's name to open their profile. Fill in
-yours under *Settings → About you*.
+yours under *Settings → About you*, where you can also upload a picture (cropped to a square and
+scaled down; photo metadata such as the location is not kept).
 
 ## Watching and notifications
 

@@ -900,3 +900,46 @@ async fn scheduled_publishing() {
     let draft_still: bool = sqlx::query_scalar("SELECT draft FROM pages WHERE id = $1::uuid").bind(&d3).fetch_one(&app.state.db).await.unwrap();
     assert!(draft_still);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn profile_pictures() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (bob, _) = app.user(&owner, "bob@acme.test", "member").await;
+    let (_, me) = app.get(&owner, "/me").await;
+    let owner_id = me["user"]["id"].as_str().unwrap().to_string();
+    let upload = |bytes: Vec<u8>, name: &'static str| {
+        let (app, owner) = (&app, &owner);
+        async move {
+            let form = reqwest::multipart::Form::new().part("file", reqwest::multipart::Part::bytes(bytes).file_name(name));
+            let r = owner.post(app.url("/me/avatar")).multipart(form).send().await.unwrap();
+            (r.status().as_u16(), r.json::<serde_json::Value>().await.unwrap_or_default())
+        }
+    };
+    // a 600×400 photo becomes a 256×256 PNG
+    let img = image::RgbImage::from_fn(600, 400, |x, y| image::Rgb([(x % 256) as u8, (y % 256) as u8, 128]));
+    let mut png = std::io::Cursor::new(Vec::new());
+    image::DynamicImage::ImageRgb8(img).write_to(&mut png, image::ImageFormat::Png).unwrap();
+    let (st, r) = upload(png.into_inner(), "me.png").await;
+    assert_eq!(st, 200, "{r}");
+    let url = r["avatarUrl"].as_str().unwrap().to_string();
+    assert!(url.starts_with(&format!("/api/users/{owner_id}/avatar?v=")));
+    let res = bob.get(format!("{}{url}", app.base)).send().await.unwrap();
+    assert_eq!(res.status(), 200);
+    assert_eq!(res.headers()["content-type"], "image/png");
+    let served = image::load_from_memory(&res.bytes().await.unwrap()).unwrap();
+    assert_eq!((served.width(), served.height()), (256, 256));
+    let (_, map) = app.get(&bob, "/people/avatars").await;
+    assert_eq!(map[&owner_id], url.as_str());
+
+    // not a picture, whatever its name says
+    let (st, _) = upload(b"<html><script>alert(1)</script></html>".to_vec(), "evil.png").await;
+    assert_eq!(st, 400);
+
+    // removed: initials again
+    assert_eq!(app.delete(&owner, "/me/avatar").await, 204);
+    let (_, map) = app.get(&bob, "/people/avatars").await;
+    assert!(map.get(&owner_id).is_none());
+    let res = bob.get(format!("{}/api/users/{owner_id}/avatar", app.base)).send().await.unwrap();
+    assert_eq!(res.status(), 404);
+}

@@ -91,7 +91,7 @@ export default function History() {
           {versions.isLoading && <Spinner />}
           {versions.data?.map((v) => (
             <div key={v.version} className={`menu-item ${v.version === sel ? 'selected' : ''}`} onClick={() => setSelected(v.version)}>
-              <Avatar name={v.createdByName ?? '?'} size={24} />
+              <Avatar name={v.createdByName ?? '?'} id={v.createdBy ?? undefined} size={24} />
               <div style={{ minWidth: 0 }}>
                 <div>
                   <b>v{v.version}</b> <span className="faint small">{formatDate(v.createdAt)}</span>

@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Briefcase, Clock, FileText, Mail, MapPin, Search, Users } from 'lucide-react'
@@ -161,6 +161,7 @@ export function ProfileFields({ userId }: { userId: string }) {
     }
   }, [])
   const [form, setForm] = useState<{ jobTitle: string; department: string; location: string; timezone: string; bio: string } | null>(null)
+  const pictureInput = useRef<HTMLInputElement>(null)
   useEffect(() => {
     if (profile.data && !form) {
       const p = profile.data
@@ -169,11 +170,34 @@ export function ProfileFields({ userId }: { userId: string }) {
   }, [profile.data, form])
   if (!form) return null
   const set = (k: keyof typeof form) => (e: { target: { value: string } }) => setForm({ ...form, [k]: e.target.value })
+  const refreshPicture = () => {
+    qc.invalidateQueries({ queryKey: ['avatar-urls'] })
+    qc.invalidateQueries({ queryKey: ['person', userId] })
+  }
+  const uploadPicture = async (f: File) => {
+    const body = new FormData()
+    body.append('file', f)
+    try {
+      await api.upload('/me/avatar', body)
+      refreshPicture()
+      toast('Picture saved')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not use that picture')
+    }
+  }
   const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone
   return (
     <div className="card" style={{ marginBottom: 16 }}>
       <h3 style={{ marginTop: 0 }}>About you</h3>
       <p className="muted small" style={{ marginTop: 0 }}>Shown on your profile and in the <Link to="/people">people directory</Link>.</p>
+      <div className="row" style={{ gap: 12, marginBottom: 14 }}>
+        <Avatar name={profile.data?.name ?? ''} id={userId} size={56} />
+        <input ref={pictureInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void uploadPicture(f) }} />
+        <button className="btn btn-sm" onClick={() => pictureInput.current?.click()}>Upload picture</button>
+        {profile.data?.avatarUrl?.startsWith('/api/users/') && (
+          <button className="btn btn-sm" onClick={async () => { await api.del('/me/avatar'); refreshPicture() }}>Remove</button>
+        )}
+      </div>
       <div className="profile-fields">
         <div className="field"><label htmlFor="pf-title">Job title</label><input id="pf-title" className="input" maxLength={100} value={form.jobTitle} onChange={set('jobTitle')} /></div>
         <div className="field">

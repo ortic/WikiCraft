@@ -99,6 +99,10 @@ op("/me/mfa/recovery-codes", "post", "Account", "Replace the recovery codes", re
 # users & groups
 op("/people", "get", "People", "People directory (accounts, not imported authors); q searches name, title, department, location", query=[q("q", "search"), q("department", "only this department")], res=resp(obj({"people": arr(obj({"id": uuid, "name": txt, "jobTitle": {"type": ["string", "null"]}, "department": {"type": ["string", "null"]}, "location": {"type": ["string", "null"]}, "timezone": {"type": ["string", "null"]}, "avatarUrl": {"type": ["string", "null"]}})), "departments": arr(obj({"name": txt, "count": num}))})))
 op("/people/{id}", "get", "People", "A profile: job, department, location, time zone, bio, personal space and the pages they edited lately (those you can see); e-mail for admins and themself")
+op("/people/avatars", "get", "People", "Picture URLs by person id (people who uploaded one)", res=resp({"type": "object", "additionalProperties": txt}))
+op("/me/avatar", "post", "People", "Upload a profile picture (PNG, JPEG, WebP or GIF up to 8 MB; cropped square, scaled to 256 px, stored as PNG)", req=multipart({"file": {"type": "string", "format": "binary"}}), res=resp(obj({"avatarUrl": txt})))
+op("/me/avatar", "delete", "People", "Remove your profile picture", res=NO)
+op("/users/{id}/avatar", "get", "People", "A profile picture (PNG)")
 op("/me/profile", "put", "People", "Update your profile (fields left out stay; empty clears)", req=body(obj({"jobTitle": txt, "department": txt, "location": txt, "timezone": {"type": "string", "description": "IANA name, e.g. Europe/Zurich"}, "bio": txt})))
 op("/users", "get", "Users", "People in the workspace", res=resp(arr(S("User"))), query=[q("q", "name/e-mail filter"), q("include_placeholders", "include imported authors", boolean)])
 op("/users", "post", "Users", "Create a user with a password (admins)", req=body(obj({"email": txt, "name": txt, "password": txt, "role": txt})))
