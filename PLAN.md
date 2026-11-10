@@ -262,7 +262,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P1** Text color & highlight color (limited, theme-aware palette) `C D` (highlight toggle only; no color picker)
 - [x] **P1** Date / time inline node (localized rendering, timezone aware) `C`
 - [x] **P1** Status lozenges (colored labels inline) `C`
-- [ ] **P1** Inline smart links (unfurl title/icon via oEmbed/OpenGraph) `C D`
+- [x] **P1** Inline smart links (unfurl title/icon via oEmbed/OpenGraph) `C D` — link cards from OpenGraph / <title> (server-side fetch with SSRF guards, 1-day cache); no site icons yet
 - [x] **P1** Hard line break, horizontal rule `C D`
 - [~] **P1** Text alignment, indentation `C D` (alignment via shortcuts only; no indent)
 - [x] **P1** Inline math (KaTeX) `D O`

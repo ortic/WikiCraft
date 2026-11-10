@@ -183,6 +183,7 @@ op("/me/searches", "post", "Search", "Save a search (the search page's query str
 op("/me/searches/{id}", "delete", "Search", "Delete a saved search", res=NO)
 op("/space-templates", "get", "Spaces", "Space templates (pass `template` when creating a space)", res=resp(arr(obj({"id": txt, "name": txt, "icon": txt, "description": txt, "pages": arr(txt)}))))
 op("/markdown", "post", "Pages", "Convert Markdown to document content (paste)", req=body(obj({"markdown": txt}, ["markdown"])), res=resp(obj({"content": anyobj})))
+op("/unfurl", "get", "Pages", "Link preview of an external page (title, description, site name), fetched with SSRF protections and cached", query=[q("url", "http(s) URL")], res=resp(obj({"url": txt, "title": txt, "description": txt, "siteName": txt})))
 op("/labels/{name}", "get", "Discovery", "Pages with a label", res=resp(arr(S("PageListItem"))), public=True)
 op("/resolve", "get", "Discovery", "Find a page by space + title or by imported Confluence id", query=[q("space", "space key"), q("title", "page title"), q("source", "confluence:<id>")], public=True)
 op("/notifications", "get", "Notifications", "Notifications", res=resp(arr(S("Notification"))))

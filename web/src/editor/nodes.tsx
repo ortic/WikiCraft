@@ -233,15 +233,41 @@ export function embedUrl(url: string): string | null {
 function EmbedView({ node }: ReactNodeViewProps) {
   const url = (node.attrs.url as string) || ''
   const frame = embedUrl(url)
+  // other sites get a preview card (title, description, site), fetched by the server
+  const preview = useQuery({
+    queryKey: ['unfurl', url],
+    queryFn: () => api.get<{ title: string | null; description: string | null; siteName: string | null }>(`/unfurl?url=${encodeURIComponent(url)}`),
+    enabled: !frame && /^https?:\/\//i.test(url),
+    staleTime: 3_600_000,
+    retry: false,
+  })
+  let host = ''
+  try {
+    host = new URL(url).hostname.replace(/^www\./, '')
+  } catch {
+    host = ''
+  }
+  const p = preview.data
   return (
     <NodeViewWrapper className="block-card" contentEditable={false}>
-      <div className="block-label">
-        <Link2 size={13} /> Embed
-      </div>
-      {frame ? <iframe className="embed-frame" src={frame} title={url} sandbox="allow-scripts allow-same-origin allow-popups allow-presentation" allowFullScreen /> : null}
-      <a href={url} target="_blank" rel="noreferrer noopener">
-        {url}
-      </a>
+      {frame ? (
+        <>
+          <div className="block-label">
+            <Link2 size={13} /> Embed
+          </div>
+          <iframe className="embed-frame" src={frame} title={url} sandbox="allow-scripts allow-same-origin allow-popups allow-presentation" allowFullScreen />
+          <a href={url} target="_blank" rel="noreferrer noopener">{url}</a>
+        </>
+      ) : (
+        <a className="link-card" href={url} target="_blank" rel="noreferrer noopener">
+          <span className="link-card-site faint small">
+            <Link2 size={12} /> {p?.siteName || host || 'Link'}
+          </span>
+          <span className="link-card-title">{p?.title || url}</span>
+          {p?.description && <span className="link-card-desc faint small">{p.description}</span>}
+          {p?.title && <span className="link-card-url faint small">{url}</span>}
+        </a>
+      )}
     </NodeViewWrapper>
   )
 }

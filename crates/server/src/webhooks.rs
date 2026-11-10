@@ -226,7 +226,7 @@ pub fn validate_url(url: &str) -> anyhow::Result<openidconnect::url::Url> {
 }
 
 /// Resolves the target and refuses private addresses (unless allowed); returns the address to pin.
-async fn resolve(u: &openidconnect::url::Url, allow_private: bool) -> anyhow::Result<SocketAddr> {
+pub(crate) async fn resolve(u: &openidconnect::url::Url, allow_private: bool) -> anyhow::Result<SocketAddr> {
     let host = u.host_str().unwrap_or_default().trim_start_matches('[').trim_end_matches(']').to_string();
     let port = u.port_or_known_default().unwrap_or(443);
     let addrs: Vec<SocketAddr> = tokio::time::timeout(Duration::from_secs(5), tokio::net::lookup_host((host.as_str(), port)))

@@ -341,3 +341,40 @@ async fn page_ownership() {
     assert_eq!(p["ownerId"], ed_id.as_str());
     assert_eq!(p["ownerName"], "ed");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn link_previews() {
+    // a little site: an HTML page, a redirect to it, and a binary file
+    let site = axum::Router::new()
+        .route(
+            "/post",
+            axum::routing::get(|| async {
+                (
+                    [("content-type", "text/html; charset=utf-8")],
+                    "<html><head><title>x</title><meta property=\"og:title\" content=\"Quarterly results\"><meta name=\"description\" content=\"Revenue up 12%\"></head></html>",
+                )
+            }),
+        )
+        .route("/old", axum::routing::get(|| async { (axum::http::StatusCode::MOVED_PERMANENTLY, [("location", "/post")]) }))
+        .route("/file", axum::routing::get(|| async { ([("content-type", "application/zip")], vec![0u8; 10]) }));
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, site).await.unwrap() });
+
+    let app = common::spawn().await; // tests allow private targets
+    let owner = app.setup().await;
+    let (st, r) = app.get(&owner, &format!("/unfurl?url={base}/old")).await;
+    assert_eq!(st, 200, "{r}");
+    assert_eq!(r["title"], "Quarterly results");
+    assert_eq!(r["description"], "Revenue up 12%");
+    let (_, r) = app.get(&owner, &format!("/unfurl?url={base}/file")).await;
+    assert!(r["title"].is_null() && r["error"].is_string());
+    assert_eq!(app.get(&owner, "/unfurl?url=file:///etc/passwd").await.0, 400);
+    assert_ne!(app.get(&common::client(), &format!("/unfurl?url={base}/post")).await.0, 200, "signed-in only");
+
+    // with the default (no private targets) the local site is refused
+    let strict = common::spawn_with(|c| c.webhook_allow_private = false).await;
+    let o = strict.setup().await;
+    let (_, r) = strict.get(&o, &format!("/unfurl?url={base}/post")).await;
+    assert!(r["title"].is_null() && r["error"].as_str().unwrap().contains("private"), "{r}");
+}

@@ -22,6 +22,7 @@ pub mod space_templates;
 pub mod spaces;
 pub mod tasks;
 pub mod templates;
+pub mod unfurl;
 pub mod users;
 pub mod verification;
 pub mod webhooks;
@@ -127,6 +128,7 @@ pub fn router(state: AppState) -> Router {
         .route("/me/searches/{id}", delete(search::delete_search))
         .route("/space-templates", get(space_templates::list))
         .route("/markdown", post(pages::markdown_to_doc))
+        .route("/unfurl", get(unfurl::unfurl))
         .route("/labels/{name}", get(search::by_label))
         .route("/pages/{id}/access/{who}", get(inspect::explain))
         .route("/pages/{id}/like", put(likes::like_page).delete(likes::unlike_page))

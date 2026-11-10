@@ -3378,6 +3378,36 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /unfurl:
+    get:
+      tags:
+      - Pages
+      summary: Link preview of an external page (title, description, site name), fetched with SSRF protections and cached
+      operationId: get_unfurl
+      parameters:
+      - name: url
+        in: query
+        required: false
+        description: http(s) URL
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url: *id001
+                  title: *id001
+                  description: *id001
+                  siteName: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /labels/{name}:
     get:
       tags:

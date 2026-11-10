@@ -157,7 +157,7 @@ export function slashItems(onImage: (editor: Editor) => void, onAttachment: (edi
       },
     },
     { group: 'Media', title: 'File', description: 'Upload a file with preview', icon: ic(Paperclip), keywords: 'attachment pdf upload', command: (e, r) => { e.chain().focus().deleteRange(r).run(); onAttachment(e) } },
-    { group: 'Media', title: 'Embed', description: 'YouTube, Loom, Figma, Miro, Google Docs…', icon: ic(Link2), keywords: 'iframe video', command: (e, r) => { const url = window.prompt('URL to embed'); if (url) e.chain().focus().deleteRange(r).insertContent({ type: 'embed', attrs: { url } }).run() } },
+    { group: 'Media', title: 'Embed or link preview', description: 'YouTube, Loom, Figma, Miro… or a preview card for any page', icon: ic(Link2), keywords: 'iframe video smart link card unfurl preview', command: (e, r) => { const url = window.prompt('URL to embed'); if (url) e.chain().focus().deleteRange(r).insertContent({ type: 'embed', attrs: { url } }).run() } },
     { group: 'Macros', title: 'Table of contents', icon: ic(Hash), keywords: 'toc headings', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'toc' }).run() },
     { group: 'Macros', title: 'Child pages', icon: ic(ListTree), keywords: 'children tree', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'childPages', attrs: { depth: 1 } }).run() },
     { group: 'Macros', title: 'Status', icon: ic(Tag), keywords: 'lozenge label', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'status', attrs: { text: 'IN PROGRESS', color: 'blue' } }).run() },
