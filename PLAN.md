@@ -98,12 +98,12 @@
 
 ### 3.1 High-level shape
 - [ ] **P0** Modular monolith: one `wikicraft` binary (HTTP API, WebSocket collab, background workers, CLI) with
-      role flags (`--role api,collab,worker`) so it can scale out later without a microservice rewrite
-- [ ] **P0** PostgreSQL as the system of record (≥ 15), object storage (S3-compatible, or local FS) for blobs
-- [ ] **P0** Optional Redis/Valkey, only for multi-node pub/sub and rate limits. Single-node mode needs Postgres only
-      (use `LISTEN/NOTIFY` and a Postgres job queue)
-- [ ] **P0** Frontend: TypeScript SPA (React + Tiptap/ProseMirror + Yjs). The Rust ecosystem has no
-      ProseMirror-class editor, so we don't fight it. Served by the binary (embedded static assets)
+      role flags (`--role api,collab,worker`) so it can scale out later without a microservice rewrite — partial: one binary runs the HTTP API, WebSocket collab, background workers (jobs, mail, webhooks) and CLI subcommands (`migrate`, `import-confluence`, `reindex`, …) / no `--role` flags: every replica runs every role
+- [x] **P0** PostgreSQL as the system of record (≥ 15), object storage (S3-compatible, or local FS) for blobs
+- [x] **P0** Optional Redis/Valkey, only for multi-node pub/sub and rate limits. Single-node mode needs Postgres only
+      (use `LISTEN/NOTIFY` and a Postgres job queue) — no Redis at all: multi-node uses Postgres LISTEN/NOTIFY (`WIKICRAFT_CLUSTER=postgres`), jobs a `SKIP LOCKED` queue, login throttling a Postgres table
+- [x] **P0** Frontend: TypeScript SPA (React + Tiptap/ProseMirror + Yjs). The Rust ecosystem has no
+      ProseMirror-class editor, so we don't fight it. Served by the binary (embedded static assets) — assets are served from `WIKICRAFT_STATIC_DIR` (`web/dist`), not embedded in the binary
 - [ ] **P2** Horizontal scaling: stateless API nodes; collab sessions pinned by document id (consistent hashing),
       cross-node awareness via Redis/NATS
 - [ ] **P3** Desktop/offline client sharing the Yjs document model
@@ -154,13 +154,13 @@
 | Testing | `cargo-nextest`, `insta` (snapshots), `proptest`, `testcontainers`, Playwright (e2e), `k6`/`goose` (load) | — |
 
 ### 3.4 Core data model (first cut)
-- [ ] **P0** `workspace` (tenant) → `space` → `node` (page | folder | blog_post | whiteboard | database | live_doc | smart_link)
-- [ ] **P0** Page tree: `parent_id` + fractional-index `position` (stable concurrent reordering); closure table or `ltree` for fast subtree queries
-- [ ] **P0** `page_version` (immutable snapshots: ProseMirror JSON + author + message + timestamp), `page_draft`, `yjs_update` log + periodic `yjs_snapshot`
-- [ ] **P0** `attachment` (+ `attachment_version`) → content-addressed `blob` (sha256, dedup)
-- [ ] **P0** `comment` (page / inline with anchor + thread + resolved state), `reaction`
-- [ ] **P0** `user`, `group`, `group_member`, `identity` (external IdP links), `session`, `api_token`
-- [ ] **P0** `acl_entry` (subject: user/group/anonymous/guest/role × resource: workspace/space/node × permission × allow/deny × inherit)
+- [ ] **P0** `workspace` (tenant) → `space` → `node` (page | folder | blog_post | whiteboard | database | live_doc | smart_link) — partial: workspaces → spaces → pages with kind page | folder | blog | link / no whiteboard, database or live_doc node kinds (drawings are blocks inside pages)
+- [x] **P0** Page tree: `parent_id` + fractional-index `position` (stable concurrent reordering); closure table or `ltree` for fast subtree queries — float `position` with midpoint inserts (siblings renumbered when the gap runs out); subtree queries use recursive CTEs, no closure table / `ltree`
+- [ ] **P0** `page_version` (immutable snapshots: ProseMirror JSON + author + message + timestamp), `page_draft`, `yjs_update` log + periodic `yjs_snapshot` — partial: immutable `page_versions` (PM JSON, author, message, timestamp); live Yjs state stored merged in `pages.ydoc` / no `page_draft`, no `yjs_update` log or separate `yjs_snapshot` table
+- [x] **P0** `attachment` (+ `attachment_version`) → content-addressed `blob` (sha256, dedup)
+- [x] **P0** `comment` (page / inline with anchor + thread + resolved state), `reaction` — reactions are likes (`page_likes`, `comment_likes`); the emoji `reactions` table is unused
+- [x] **P0** `user`, `group`, `group_member`, `identity` (external IdP links), `session`, `api_token`
+- [ ] **P0** `acl_entry` (subject: user/group/anonymous/guest/role × resource: workspace/space/node × permission × allow/deny × inherit) — partial: role-based grants instead of generic ACL rows: workspace roles, `space_permissions` (user/group → role), space default role and anonymous access, page view (inherited) / edit restrictions / no deny entries, no per-permission matrix
 - [ ] **P1** `label`, `node_label`, `page_property` (typed key/values), `link` (outgoing link graph for backlinks and broken-link reports)
 - [ ] **P1** `watch`, `notification`, `notification_preference`, `mention`
 - [ ] **P1** `template`, `blueprint`
@@ -168,13 +168,13 @@
 - [ ] **P1** `job`, `import_run`, `import_mapping` (source id → new id, for re-runs and link fixups)
 - [ ] **P2** `database`, `database_field`, `database_row` (JSONB values + typed indexes), `database_view`
 - [ ] **P2** `embedding` (chunk, vector, node, version, acl fingerprint)
-- [ ] **P0** Every row carries `workspace_id`; optional Postgres Row-Level Security as defense-in-depth (P2)
-- [ ] **P0** IDs: UUIDv7 (sortable); human-friendly short slugs for URLs; permanent URLs survive renames and moves
+- [ ] **P0** Every row carries `workspace_id`; optional Postgres Row-Level Security as defense-in-depth (P2) — partial: top-level tables (users, groups, spaces, pages, attachments, jobs, audit_events, import_mappings, webhooks, templates) carry `workspace_id` / child tables (page_versions, comments, attachment_versions, labels, sessions, notifications, …) only via their parent; no RLS
+- [ ] **P0** IDs: UUIDv7 (sortable); human-friendly short slugs for URLs; permanent URLs survive renames and moves — partial: UUIDv7 ids (`app::new_id`), permanent `/pages/<id>` URLs survive renames and moves / no human-friendly slugs
 
 ### 3.5 Document model
-- [ ] **P0** Canonical format = versioned ProseMirror JSON schema (like Confluence's ADF), with a `schema_version` and forward migrations
-- [ ] **P0** Live state in Yjs (`yrs`); a published version is a frozen ProseMirror JSON snapshot
-- [ ] **P0** Derived renditions cached per version: sanitized HTML, plain text (search), Markdown (export / AI)
+- [ ] **P0** Canonical format = versioned ProseMirror JSON schema (like Confluence's ADF), with a `schema_version` and forward migrations — partial: ProseMirror JSON is the canonical stored format (`doc-model`) / no `schema_version` field, no forward migrations
+- [x] **P0** Live state in Yjs (`yrs`); a published version is a frozen ProseMirror JSON snapshot — live mode only: versions are snapshots taken when the last editor leaves, every 10 min, or explicitly; no separate publish step
+- [ ] **P0** Derived renditions cached per version: sanitized HTML, plain text (search), Markdown (export / AI) — partial: HTML, Markdown and plain-text renderers exist (`doc-model`); plain text is stored for the current page / HTML and Markdown are rendered on demand, nothing is cached per version
 - [ ] **P0** Stable block IDs on every block (needed for deep links, inline comments, synced blocks, AI citations)
 - [ ] **P1** "Extension node" envelope for macros: `{type: "macro", name, params, body?, fallback_html}`, so unknown or imported
       macros survive round-trips (lesson from the Confluence `ac:adf-extension` + `ac:adf-fallback` design)
@@ -661,7 +661,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 ### 4.28 Quality & documentation
 - [~] **P0** CI: fmt, clippy (pedantic for core crates), nextest, sqlx offline check, frontend lint/typecheck/test (fmt/clippy/tests/typecheck; no nextest or frontend lint)
 - [~] **P0** Integration tests with `testcontainers` (Postgres, MinIO) (local Postgres/MinIO, not testcontainers)
-- [ ] **P0** Snapshot tests (`insta`) for doc-model conversions and importers (golden fixtures, §6.4)
+- [ ] **P0** Snapshot tests (`insta`) for doc-model conversions and importers (golden fixtures, §6.4) — partial: assert-based unit tests in `doc-model` / `confluence` plus real-export runs (`crates/confluence/tests/real_exports.rs`, `crates/server/tests/confluence_import.rs`) / `insta` is a dev-dependency but there are no snapshot tests and no committed golden fixtures
 - [ ] **P1** Property tests (`proptest`) for the tree ops, permission inheritance and CRDT convergence
 - [ ] **P1** E2E with Playwright (multi-browser co-editing scenarios)
 - [ ] **P1** Load tests (collab WebSocket fan-out, search, page tree)
@@ -745,20 +745,20 @@ We **cannot yet claim** full Cloud-CSV support: the public mirror only contains 
 attachments, labels, permissions or inline-task file, though the descriptor says `inlineTasksFileIncluded=true`).
 
 ### 6.3 Importer requirements derived from the run
-- [ ] **P0** Auto-detect format from `exportDescriptor.properties` (`exportType`, `exportFormat=csv`, `source=cloud|server`, `buildNumber`) and support **both** XML (`entities.xml`) and Cloud CSV (`*.csv.gz`)
-- [ ] **P0** Streaming parsers only: `entities.xml` and `bodycontent.csv` can be multiple GB; CSV fields hold multi-MB bodies (raise field limits); constant memory
-- [ ] **P0** Import **full version history** (`prevver` / `originalVersion`): fixture A averages ~6.7 versions per page
-- [ ] **P0** Map content statuses: current → page, draft → user draft (or skip, configurable), deleted → trash, archived → archived, historical → version
-- [ ] **P0** Storage-format normalization before parsing:
+- [x] **P0** Auto-detect format from `exportDescriptor.properties` (`exportType`, `exportFormat=csv`, `source=cloud|server`, `buildNumber`) and support **both** XML (`entities.xml`) and Cloud CSV (`*.csv.gz`) — detection uses `exportFormat` plus the file names; `source` / `buildNumber` go into the report
+- [ ] **P0** Streaming parsers only: `entities.xml` and `bodycontent.csv` can be multiple GB; CSV fields hold multi-MB bodies (raise field limits); constant memory — partial: `quick-xml` / `csv` readers stream entries out of the zip / every body is collected into the in-memory `Export`, so memory grows with the export (not constant)
+- [x] **P0** Import **full version history** (`prevver` / `originalVersion`): fixture A averages ~6.7 versions per page
+- [ ] **P0** Map content statuses: current → page, draft → user draft (or skip, configurable), deleted → trash, archived → archived, historical → version — partial: current → page, historical → page_versions; drafts skipped by default (`include_drafts` imports them as normal pages) / deleted content is never imported (not to trash); archived only sets `pages.status = 'archived'`, which the archive feature (`archived_at`) ignores
+- [x] **P0** Storage-format normalization before parsing:
       1. un-escape the CDATA terminator `]] >` → `]]>` (Confluence's export escape; caused **all** XML parse failures in fixture B);
-      2. map HTML named entities → characters (full HTML5 entity table, not just the 38 seen);
+      2. map HTML named entities → characters (full HTML5 entity table, not just the 38 seen); — HTML 4 table plus common HTML5 names (`entities.rs`), not the full HTML5 set; unknown names are kept as text
       3. wrap the body in a root that declares the `ac:`, `ri:`, `at:` namespaces
-- [ ] **P0** Users: resolve `ri:user` by `ri:userkey` (legacy, dominant), `ri:account-id` (Cloud) and `ri:username` (old Server); build an import user-mapping step (export users have only id + display name, no email, so match by email/name or invite); unresolved users become an "unknown user (id)" placeholder that admins can remap later
-- [ ] **P0** Links: resolve `ri:page` by **(space key, title)**, falling back to `ri:content-id`; links to missing titles (21% in A!) become "missing page" links (red link + "create page"); cross-space links stay pending and get **re-resolved after every subsequent import** (global source-id → target-id mapping table)
-- [ ] **P0** Attachments: resolve `ri:attachment` by filename within the containing page (or `ri:page` / `ri:blog-post` child for attachments on other pages); import all attachment versions; read media type and size from `ContentProperty` (`MEDIA_TYPE`, `FILESIZE`) in XML exports; dedupe blobs by sha256
-- [ ] **P0** Tree: preserve `parent` + `position`/`child_position`; null positions sort alphabetically; orphans attach to the space root with a warning; cycles are broken and reported; duplicate titles are allowed
-- [ ] **P0** Tasks: `ac:task-list`/`ac:task` (`task-id`, `task-uuid`, `task-status`, `task-body`) → task blocks, with assignees from `ri:user` and due dates from `<time datetime>`
-- [ ] **P0** Comments: footer comments with threading (`parentcommentid` / `parent`); **inline comments** = `ac:inline-comment-marker ac:ref` + content properties (`inline-marker-ref`, `inline-original-selection`, `inline-comment`), anchored to our inline-comment model; resolved state
+- [ ] **P0** Users: resolve `ri:user` by `ri:userkey` (legacy, dominant), `ri:account-id` (Cloud) and `ri:username` (old Server); build an import user-mapping step (export users have only id + display name, no email, so match by email/name or invite); unresolved users become an "unknown user (id)" placeholder that admins can remap later — partial: all three ref kinds resolve; authors match existing users by `external_ref` or e-mail, the rest become placeholder users that are claimed on invite / SSO with the same e-mail / no interactive user-mapping step, no admin action to remap a placeholder (most have no e-mail)
+- [x] **P0** Links: resolve `ri:page` by **(space key, title)**, falling back to `ri:content-id`; links to missing titles (21% in A!) become "missing page" links (red link + "create page"); cross-space links stay pending and get **re-resolved after every subsequent import** (global source-id → target-id mapping table) — `ri:content-id` is tried first, then (space, title) incl. former titles; pending links resolve when clicked (`/missing` → `/api/resolve` via `import_mappings` or space + title) instead of being rewritten after later imports
+- [x] **P0** Attachments: resolve `ri:attachment` by filename within the containing page (or `ri:page` / `ri:blog-post` child for attachments on other pages); import all attachment versions; read media type and size from `ContentProperty` (`MEDIA_TYPE`, `FILESIZE`) in XML exports; dedupe blobs by sha256
+- [x] **P0** Tree: preserve `parent` + `position`/`child_position`; null positions sort alphabetically; orphans attach to the space root with a warning; cycles are broken and reported; duplicate titles are allowed
+- [x] **P0** Tasks: `ac:task-list`/`ac:task` (`task-id`, `task-uuid`, `task-status`, `task-body`) → task blocks, with assignees from `ri:user` and due dates from `<time datetime>`
+- [x] **P0** Comments: footer comments with threading (`parentcommentid` / `parent`); **inline comments** = `ac:inline-comment-marker ac:ref` + content properties (`inline-marker-ref`, `inline-original-selection`, `inline-comment`), anchored to our inline-comment model; resolved state
 - [ ] **P1** Layouts (`ac:layout*`, legacy `section`/`column`) → columns; ADF extensions (`ac:adf-extension`) → native blocks where known (decision list), else render `ac:adf-fallback`
 - [ ] **P1** Formatting: `data-highlight-colour`, inline `style` colors (map to palette), `data-layout`/`data-width` for images and tables, `data-card-appearance` → smart link inline/card/embed
 - [ ] **P1** Keep Confluence `local-id`s as block IDs and store `source_content_id` per page, so deep links and anchors can be redirected (`/display/SPACE/Title`, `/pages/viewpage.action?pageId=`, `/wiki/spaces/KEY/pages/ID/...`)
