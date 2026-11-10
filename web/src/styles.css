@@ -571,3 +571,10 @@ a.menu-item { color: inherit; text-decoration: none; }
 .search-filters { flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .search-filters .select { width: auto; height: 32px; }
 .search-filters .input { width: 150px; height: 32px; }
+/* code blocks: line numbers and wrapping */
+.ProseMirror pre.with-lines { display: flex; gap: 14px; padding-left: 10px; }
+.ProseMirror pre.with-lines > code { flex: 1; min-width: 0; }
+.code-gutter { flex: none; display: flex; flex-direction: column; text-align: right; color: #6b6f84; user-select: none; border-right: 1px solid #34344a; padding-right: 10px; min-width: 2ch; }
+.code-gutter > span { display: block; }
+.ProseMirror pre.wrap, .ProseMirror pre.wrap > code { white-space: pre-wrap; overflow-wrap: anywhere; }
+.code-toolbar button.on { background: #4f46e5; border-color: #6366f1; color: #fff; }

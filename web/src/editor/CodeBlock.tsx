@@ -52,10 +52,34 @@ function MermaidPreview({ code }: { code: string }) {
 function CodeBlockView({ node, updateAttributes, editor }: ReactNodeViewProps) {
   const language = (node.attrs.language as string | null) ?? ''
   const isDiagram = language === 'mermaid'
+  const lineNumbers = !!node.attrs.lineNumbers
+  const wrap = !!node.attrs.wrap
+  const lines = Math.max(1, node.textContent.split('\n').length)
+  const [copied, setCopied] = useState(false)
+  // the editor turns editable after the first sync; node views don't re-render by themselves
+  const [editable, setEditable] = useState(editor.isEditable)
+  useEffect(() => {
+    const update = () => setEditable(editor.isEditable)
+    editor.on('update', update)
+    editor.on('transaction', update)
+    return () => {
+      editor.off('update', update)
+      editor.off('transaction', update)
+    }
+  }, [editor])
+  const copy = async () => {
+    try {
+      await navigator.clipboard?.writeText(node.textContent)
+      setCopied(true)
+      setTimeout(() => setCopied(false), 1200)
+    } catch {
+      /* clipboard refused */
+    }
+  }
   return (
     <NodeViewWrapper className="code-block">
       <div className="code-toolbar" contentEditable={false}>
-        {editor.isEditable ? (
+        {editable ? (
           <select value={language} onChange={(e) => updateAttributes({ language: e.target.value || null })} aria-label="Code language">
             {LANGUAGES.map((l) => (
               <option key={l} value={l}>
@@ -66,11 +90,28 @@ function CodeBlockView({ node, updateAttributes, editor }: ReactNodeViewProps) {
         ) : (
           <span>{language}</span>
         )}
-        <button className="copy-code" onClick={() => navigator.clipboard?.writeText(node.textContent)}>
-          Copy
+        {editable && !isDiagram && (
+          <>
+            <button className={lineNumbers ? 'on' : ''} title="Line numbers" aria-pressed={lineNumbers} onClick={() => updateAttributes({ lineNumbers: !lineNumbers })}>
+              1 2 3
+            </button>
+            <button className={wrap ? 'on' : ''} title="Wrap long lines" aria-pressed={wrap} onClick={() => updateAttributes({ wrap: !wrap })}>
+              Wrap
+            </button>
+          </>
+        )}
+        <button className="copy-code" onClick={copy}>
+          {copied ? 'Copied' : 'Copy'}
         </button>
       </div>
-      <pre>
+      <pre className={`${lineNumbers ? 'with-lines' : ''} ${wrap ? 'wrap' : ''}`}>
+        {lineNumbers && (
+          <span className="code-gutter" contentEditable={false} aria-hidden>
+            {Array.from({ length: lines }, (_, i) => (
+              <span key={i}>{i + 1}</span>
+            ))}
+          </span>
+        )}
         <NodeViewContent<'code'> as="code" />
       </pre>
       {isDiagram && <MermaidPreview code={node.textContent} />}
@@ -79,6 +120,13 @@ function CodeBlockView({ node, updateAttributes, editor }: ReactNodeViewProps) {
 }
 
 export const CodeBlock = CodeBlockLowlight.extend({
+  addAttributes() {
+    return {
+      ...this.parent?.(),
+      lineNumbers: { default: false, rendered: false },
+      wrap: { default: false, rendered: false },
+    }
+  },
   addNodeView() {
     return ReactNodeViewRenderer(CodeBlockView)
   },
