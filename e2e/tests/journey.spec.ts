@@ -228,3 +228,43 @@ test('phone layout never scrolls sideways', async ({ browser }) => {
   }
   await ctx.close()
 })
+
+test('template instructions, decisions and the decision log', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState })
+  const page = await ctx.newPage()
+  await page.goto('/')
+  const create = (body: object) =>
+    page.evaluate(async (b) => {
+      const r = await fetch('/api/pages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-wikicraft': '1' }, body: JSON.stringify(b) })
+      return (await r.json()).id as string
+    }, body)
+  // the decision template carries instructions: visible while editing, replaced by typing
+  const decision = await create({ spaceKey: 'PRODUCT', templateId: 'builtin:decision', title: 'Decision: launch region' })
+  await page.goto(`/pages/${decision}`)
+  const hint = page.locator('.ProseMirror .instructional-text')
+  await expect(hint).toHaveCount(3, { timeout: 20_000 })
+  await hint.nth(1).click()
+  await page.keyboard.press('Backspace')
+  await page.keyboard.type('/decision')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('Launch in Europe first')
+  await expect(page.locator('.ProseMirror li[data-type="decisionItem"]')).toContainText('Launch in Europe first')
+  await expect(hint).toHaveCount(2)
+  // exports leave the remaining instructions out
+  await expect
+    .poll(async () => page.evaluate(async (id) => (await fetch(`/api/pages/${id}/export?format=md`)).text(), decision), { timeout: 15_000 })
+    .toContain('Launch in Europe first')
+  const md = await page.evaluate(async (id) => (await fetch(`/api/pages/${id}/export?format=md`)).text(), decision)
+  expect(md).not.toContain('easier or harder')
+
+  // a decision log on another page lists it
+  const log = await create({ spaceKey: 'PRODUCT', title: 'Decisions', blank: true })
+  await page.goto(`/pages/${log}`)
+  const editor = page.locator('.ProseMirror[contenteditable="true"]')
+  await expect(editor).toBeVisible({ timeout: 20_000 })
+  await editor.click()
+  await page.keyboard.type('/decisionrep')
+  await page.keyboard.press('Enter')
+  await expect(page.locator('.macro-table')).toContainText('Launch in Europe first', { timeout: 15_000 })
+  await ctx.close()
+})
