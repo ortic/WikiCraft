@@ -4,7 +4,7 @@
 
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { CheckSquare, Clock, Download, FileText, ListTree, Paperclip, Puzzle, Table2, Tag } from 'lucide-react'
+import { CheckSquare, Clock, Download, FileText, ListTree, Milestone, Paperclip, Puzzle, Table2, Tag } from 'lucide-react'
 import { api, formatBytes, formatDate, type Attachment, type Page } from '../api'
 
 type Params = Record<string, string>
@@ -20,7 +20,7 @@ interface ReportPage {
   labels: string[]
 }
 
-export const LIVE_MACROS = new Set(['contentbylabel', 'recently-updated', 'detailssummary', 'content-report-table', 'tasks-report-macro', 'attachments', 'pagetree'])
+export const LIVE_MACROS = new Set(['contentbylabel', 'recently-updated', 'detailssummary', 'content-report-table', 'tasks-report-macro', 'decisionreport', 'attachments', 'pagetree'])
 
 const csv = (s: string | undefined) => (s ?? '').split(',').map((x) => x.trim().replace(/^["']|["']$/g, '')).filter(Boolean)
 
@@ -208,6 +208,53 @@ function TasksReport({ params, page }: { params: Params; page: Page | undefined 
   )
 }
 
+interface DecisionRow {
+  pageId: string
+  pageTitle: string
+  spaceKey: string
+  text: string
+  decided: boolean
+  updatedAt: string
+}
+
+/** Decision log (`decisionreport`): the decisions recorded in a space's pages. */
+function DecisionsReport({ params, page }: { params: Params; page: Page | undefined }) {
+  const spec = querySpec(params, page?.spaceKey)
+  const spaces = spec.spaces.length ? spec.spaces : page ? [page.spaceKey] : []
+  const max = Number(params.max ?? params.maxResults ?? 30) || 30
+  const q = useQuery({
+    queryKey: ['report-decisions', spaces, spec.labels, max],
+    queryFn: () => api.get<DecisionRow[]>(`/reports/decisions?${qs({ spaces: spaces.join(','), labels: spec.labels.join(','), max })}`),
+    enabled: spaces.length > 0,
+  })
+  const rows = q.data ?? []
+  return (
+    <>
+      <Header icon={<Milestone size={13} />} title="Decision log" detail={[spaces.length ? `in ${spaces.join(', ')}` : '', spec.labels.length ? `labels: ${spec.labels.join(', ')}` : ''].filter(Boolean).join(' ')} />
+      {rows.length === 0 ? (
+        <Empty q={q} text="No decisions recorded yet. Add one with /decision on any page." />
+      ) : (
+        <div className="macro-table-wrap">
+          <table className="macro-table">
+            <thead>
+              <tr><th>Decision</th><th>Page</th><th>Updated</th></tr>
+            </thead>
+            <tbody>
+              {rows.map((d, i) => (
+                <tr key={`${d.pageId}-${i}`}>
+                  <td>{d.text}{!d.decided && <span className="badge badge-warning" style={{ marginLeft: 6 }}>open</span>}</td>
+                  <td><Link to={`/pages/${d.pageId}`}>{d.pageTitle}</Link></td>
+                  <td className="faint">{formatDate(d.updatedAt)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </>
+  )
+}
+
 function globToRegex(glob: string) {
   return new RegExp('^' + glob.replace(/[.+^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '.*').replace(/\?/g, '.') + '$', 'i')
 }
@@ -292,6 +339,8 @@ export function LiveMacro({ name, params, pageId }: { name: string; params: Para
       return <PropertiesReport params={params} page={page.data} />
     case 'tasks-report-macro':
       return <TasksReport params={params} page={page.data} />
+    case 'decisionreport':
+      return <DecisionsReport params={params} page={page.data} />
     case 'attachments':
       return <AttachmentsList params={params} pageId={pageId} />
     case 'pagetree':

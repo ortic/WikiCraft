@@ -9,7 +9,7 @@ import { forwardRef, useEffect, useImperativeHandle, useState, type ReactNode } 
 import {
   Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Quote, Code2, Minus, Table, Info, AlertTriangle, CheckCircle2, XCircle, ChevronRight,
   Hash, ListTree, CalendarDays, Tag, Sigma, Image as ImageIcon, Link2, Columns2, Paperclip, StickyNote, FileText, FilePlus2, PenTool,
-  MessageSquareDashed,
+  MessageSquareDashed, Milestone,
 } from 'lucide-react'
 import { api } from '../api'
 import { headingIds } from './HeadingIds'
@@ -162,6 +162,9 @@ export function slashItems(onImage: (editor: Editor) => void, onAttachment: (edi
     { group: 'Macros', title: 'Table of contents', icon: ic(Hash), keywords: 'toc headings', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'toc' }).run() },
     { group: 'Macros', title: 'Child pages', icon: ic(ListTree), keywords: 'children tree', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'childPages', attrs: { depth: 1 } }).run() },
     { group: 'Macros', title: 'Status', icon: ic(Tag), keywords: 'lozenge label', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'status', attrs: { text: 'IN PROGRESS', color: 'blue' } }).run() },
+    { group: 'Macros', title: 'Decision', description: 'Record a decision (shows up in decision logs)', icon: ic(Milestone), keywords: 'decided adr choice', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'decisionList', content: [{ type: 'decisionItem', attrs: { state: 'DECIDED' }, content: [{ type: 'paragraph' }] }] }).run() },
+    { group: 'Macros', title: 'Decision log', description: 'Decisions recorded in this space', icon: ic(Milestone), keywords: 'decisions report decisionreport', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'macro', attrs: { name: 'decisionreport', params: {} } }).run() },
+    { group: 'Macros', title: 'Task report', description: 'Open tasks in this space', icon: ic(ListChecks), keywords: 'tasks report todo', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'macro', attrs: { name: 'tasks-report-macro', params: {} } }).run() },
     { group: 'Macros', title: 'Instructions', description: 'Hint for authors, hidden from readers', icon: ic(MessageSquareDashed), keywords: 'placeholder instructional text template hint', command: (e, r) => { const text = window.prompt('Instructions for whoever fills in this page (readers never see them)', 'Describe the goal here'); if (text?.trim()) e.chain().focus().deleteRange(r).insertContent({ type: 'instructionalText', attrs: { text: text.trim() } }).run() } },
     { group: 'Macros', title: 'Date', icon: ic(CalendarDays), keywords: 'today time', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'date', attrs: { date: new Date().toISOString().slice(0, 10) } }).run() },
     { group: 'Macros', title: 'Math', description: 'LaTeX formula', icon: ic(Sigma), keywords: 'latex katex equation', command: (e, r) => { const latex = window.prompt('LaTeX', 'E = mc^2'); if (latex) e.chain().focus().deleteRange(r).insertContent({ type: 'blockMath', attrs: { latex } }).run() } },

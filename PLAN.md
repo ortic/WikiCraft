@@ -336,7 +336,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** `widget` / `iframe` / `multimedia` → embed block (with allowlist)
 - [ ] **P1** `livesearch` → search box block
 - [~] **P1** `tasks-report-macro` → task report block (by space, assignee, label, status, due) (no assignee filter)
-- [ ] **P1** `decisionreport` → decisions report block
+- [x] **P1** `decisionreport` → decisions report block — "Decision log" block (live, permission-filtered, Word export evaluates it); `/decision` and `/decision log` slash commands
 - [ ] **P1** `create-from-template` → "create from template" button block
 - [x] **P1** `content-report-table` / blueprint index pages → query table block
 - [~] **P1** `jira` / `jiraissues` / Jira chart → issue tracker embed (Jira, GitHub, GitLab, Linear) (issue key kept as text; no live embed)

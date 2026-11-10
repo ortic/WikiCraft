@@ -93,3 +93,44 @@ async fn report_macros_respect_labels_spaces_and_permissions() {
     let (_, r) = app.get(&member, "/reports/tasks?spaces=PRJ&status=all").await;
     assert_eq!(r.as_array().unwrap().len(), 2);
 }
+
+fn decisions_doc(items: &[(&str, &str)]) -> Value {
+    json!({"type": "doc", "content": [
+        {"type": "paragraph", "content": [{"type": "text", "text": "Notes"}]},
+        {"type": "decisionList", "content": items.iter().map(|(text, state)| json!(
+            {"type": "decisionItem", "attrs": {"state": state}, "content": [{"type": "paragraph", "content": [{"type": "text", "text": text}]}]}
+        )).collect::<Vec<_>>()}
+    ]})
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn decision_log_lists_decisions_people_can_see() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, _) = app.user(&owner, "dora@acme.test", "member").await;
+    app.post(&owner, "/spaces", json!({"key": "ARCH", "name": "Architecture", "defaultRole": "viewer"})).await;
+    app.post(&owner, "/spaces", json!({"key": "OTHER", "name": "Other", "defaultRole": "viewer"})).await;
+    let mk = |space: &'static str, title: &'static str, doc: Value| {
+        let app = &app;
+        let owner = &owner;
+        async move { app.post(owner, "/pages", json!({"spaceKey": space, "title": title, "content": doc})).await.1["id"].as_str().unwrap().to_string() }
+    };
+    mk("ARCH", "Search backend", decisions_doc(&[("Use Postgres full-text search for several replicas", "DECIDED"), ("Index attachments?", "UNDECIDED")]))
+        .await;
+    let secret = mk("ARCH", "Vendor shortlist", decisions_doc(&[("Pick vendor B", "DECIDED")])).await;
+    mk("ARCH", "No decisions", json!({"type": "doc", "content": [{"type": "paragraph", "content": [{"type": "text", "text": "decisionItem"}]}]})).await;
+    mk("OTHER", "Elsewhere", decisions_doc(&[("Unrelated", "DECIDED")])).await;
+    let (_, me) = app.get(&owner, "/me").await;
+    let owner_id = me["user"]["id"].as_str().unwrap();
+    app.put(&owner, &format!("/pages/{secret}/restrictions"), json!({"restrictions": [{"kind": "view", "subjectType": "user", "subjectId": owner_id}]})).await;
+
+    let texts = |v: &Value| v.as_array().unwrap().iter().map(|d| d["text"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+    let (st, all) = app.get(&owner, "/reports/decisions?spaces=ARCH").await;
+    assert_eq!(st, 200, "{all}");
+    let mut t = texts(&all);
+    t.sort();
+    assert_eq!(t, vec!["Index attachments?", "Pick vendor B", "Use Postgres full-text search for several replicas"]);
+    let (_, decided) = app.get(&member, "/reports/decisions?spaces=ARCH&status=decided").await;
+    assert_eq!(texts(&decided), vec!["Use Postgres full-text search for several replicas"], "restricted page and undecided item left out");
+    assert_eq!(decided[0]["pageTitle"], "Search backend");
+}

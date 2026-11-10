@@ -198,6 +198,7 @@ op("/ai/status", "get", "Search", "Whether Ask the wiki is enabled", res=resp(ob
 op("/ai/ask", "post", "Search", "Ask the wiki: an answer from the pages you can see, with sources", req=body(obj({"question": txt, "spaceKey": txt}, ["question"])), res=resp(obj({"answer": txt, "answerHtml": txt, "sources": arr(obj({"n": num, "pageId": uuid, "title": txt, "spaceKey": txt, "spaceName": txt})), "model": txt})))
 op("/reports/verification", "get", "Reports", "Verified pages by state", query=[q("status", "expired | verified | edited"), q("space", "space key")], public=True)
 op("/reports/tasks", "get", "Reports", "Task report (tasks-report-macro)", query=[q("spaces", "keys"), q("labels", "labels"), q("status", "open | done | all")], public=True)
+op("/reports/decisions", "get", "Reports", "Decision log (decisionreport): decision items of the matching pages", query=[q("spaces", "keys"), q("labels", "labels"), q("status", "decided = only decided items"), q("max", "rows")], public=True)
 op("/templates", "get", "Templates", "Built-in and custom templates", query=[q("space", "space key")])
 op("/templates", "post", "Templates", "Save a template", req=body(obj({"name": txt, "description": txt, "spaceKey": txt, "content": S("PmNode"), "pageId": uuid})))
 op("/templates/{id}", "delete", "Templates", "Delete a template", res=NO)

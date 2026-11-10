@@ -164,6 +164,7 @@ pub fn router(state: AppState) -> Router {
         .route("/reports/pages", get(reports::pages_report))
         .route("/reports/properties", get(reports::properties_report))
         .route("/reports/tasks", get(reports::tasks_report))
+        .route("/reports/decisions", get(reports::decisions_report))
         .route("/resolve", get(search::resolve))
         // imports & jobs
         .route("/imports/confluence", post(imports::upload_confluence).layer(DefaultBodyLimit::max(max_upload)))

@@ -1,6 +1,6 @@
 //! Live queries behind Confluence's report macros: pages by label (`contentbylabel`),
 //! recently updated pages (`recently-updated`), page properties reports (`detailssummary`,
-//! `content-report-table`) and task reports (`tasks-report-macro`). Every result is filtered
+//! `content-report-table`), task reports (`tasks-report-macro`) and decision logs (`decisionreport`). Every result is filtered
 //! by what the caller may see.
 
 use std::collections::HashSet;
@@ -72,6 +72,19 @@ pub struct ReportPage {
 
 /// Candidate pages (label / space filters in SQL), then permission filtering.
 async fn pages(state: &AppState, p: &Principal, q: &ReportQuery, require_labels: bool, default_max: i64, with_content: bool) -> ApiResult<Vec<ReportPage>> {
+    pages_with(state, p, q, require_labels, default_max, with_content, None).await
+}
+
+/// [`pages`], optionally only pages whose content has a node of type `kind`.
+async fn pages_with(
+    state: &AppState,
+    p: &Principal,
+    q: &ReportQuery,
+    require_labels: bool,
+    default_max: i64,
+    with_content: bool,
+    kind: Option<&str>,
+) -> ApiResult<Vec<ReportPage>> {
     let ws = workspace_of(state, p).await?;
     let labels = q.labels();
     if require_labels && labels.is_empty() {
@@ -101,6 +114,7 @@ async fn pages(state: &AppState, p: &Principal, q: &ReportQuery, require_labels:
            AND (cardinality($3::text[]) = 0 OR (
                 CASE WHEN $4 THEN (SELECT count(DISTINCT l.name) FROM labels l WHERE l.page_id = p.id AND l.name = ANY($3)) = cardinality($3)
                      ELSE EXISTS (SELECT 1 FROM labels l WHERE l.page_id = p.id AND l.name = ANY($3)) END))
+           AND ($7::text IS NULL OR jsonb_path_exists(p.content, '$.** ? (@.type == $k)', jsonb_build_object('k', $7::text)))
          ORDER BY {order} LIMIT 2000"
     )))
     .bind(ws)
@@ -109,6 +123,7 @@ async fn pages(state: &AppState, p: &Principal, q: &ReportQuery, require_labels:
     .bind(q.all_labels())
     .bind(&space_ids)
     .bind(with_content)
+    .bind(kind)
     .fetch_all(&state.db)
     .await?;
     let pairs: Vec<(Uuid, Uuid)> = rows.iter().map(|r| (r.id, r.space_id)).collect();
@@ -219,6 +234,65 @@ async fn tasks_for(state: &AppState, p: &Principal, q: &ReportQuery) -> ApiResul
     let pairs: Vec<(Uuid, Uuid)> = rows.iter().map(|r| (r.page_id, r.space_id)).collect();
     let visible = filter_visible(state, p, &visible_sp, &pairs).await?;
     Ok(Json(rows.into_iter().filter(|r| visible.contains(&r.page_id)).take(q.max(50) as usize).collect()))
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DecisionRow {
+    page_id: Uuid,
+    page_title: String,
+    space_key: String,
+    text: String,
+    decided: bool,
+    updated_at: chrono::DateTime<chrono::Utc>,
+}
+
+/// Decision items (`decisionItem` blocks) in the visible pages matching `q`, newest pages first.
+async fn decisions_for(state: &AppState, p: &Principal, q: &ReportQuery) -> ApiResult<Vec<DecisionRow>> {
+    let max = q.max(50) as usize;
+    let mut out = Vec::new();
+    for page in pages_with(state, p, q, false, 500, true, Some(nodes::DECISION_ITEM)).await? {
+        let doc = Node::from_json(&page.content).unwrap_or_default();
+        let mut items = Vec::new();
+        collect_decisions(&doc, &mut items);
+        for (text, decided) in items {
+            if q.status.as_deref() == Some("decided") && !decided {
+                continue;
+            }
+            out.push(DecisionRow {
+                page_id: page.id,
+                page_title: page.title.clone(),
+                space_key: page.space_key.clone(),
+                text,
+                decided,
+                updated_at: page.updated_at,
+            });
+            if out.len() >= max {
+                return Ok(out);
+            }
+        }
+    }
+    Ok(out)
+}
+
+fn collect_decisions(n: &Node, out: &mut Vec<(String, bool)>) {
+    if n.kind == nodes::DECISION_ITEM {
+        let t = text::plain_text(&Node::doc(n.content.clone())).split_whitespace().collect::<Vec<_>>().join(" ");
+        if !t.is_empty() {
+            out.push((t.chars().take(500).collect(), !n.attr_str("state").is_some_and(|s| s.eq_ignore_ascii_case("undecided"))));
+        }
+        return;
+    }
+    for c in &n.content {
+        collect_decisions(c, out);
+    }
+}
+
+/// `GET /api/reports/decisions?spaces=&labels=&status=&max=` (decisionreport): the decision
+/// log of a space. `status=decided` leaves out undecided items.
+pub async fn decisions_report(State(state): State<AppState>, MaybeUser(user): MaybeUser, Query(q): Query<ReportQuery>) -> ApiResult<Json<Vec<DecisionRow>>> {
+    let p = Principal::load(&state, user).await?;
+    Ok(Json(decisions_for(&state, &p, &q).await?))
 }
 
 /// A report macro evaluated once, for static exports (Word): a titled table.
@@ -451,6 +525,22 @@ pub async fn snapshot(
                     })
                     .collect(),
                 empty: "No tasks.",
+            }
+        }
+        "decisionreport" => {
+            let spaces = if spaces.is_empty() { vec![space_key.to_uppercase()] } else { spaces };
+            let q = ReportQuery {
+                spaces: Some(spaces.join(",")),
+                labels: Some(labels.join(",")),
+                max: Some(num(&["max", "maxResults"], 30)),
+                ..Default::default()
+            };
+            let rows = decisions_for(state, p, &q).await?;
+            Snapshot {
+                title: "Decision log".into(),
+                header: vec!["Decision".into(), "Page".into(), "Updated".into()],
+                rows: rows.into_iter().map(|d| vec![(d.text, None), (d.page_title, link(d.page_id)), (date(d.updated_at), None)]).collect(),
+                empty: "No decisions recorded yet.",
             }
         }
         "attachments" => {

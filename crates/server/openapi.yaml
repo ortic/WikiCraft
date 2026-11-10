@@ -3819,6 +3819,46 @@ paths:
       - {}
       - session: []
       - token: []
+  /reports/decisions:
+    get:
+      tags:
+      - Reports
+      summary: 'Decision log (decisionreport): decision items of the matching pages'
+      operationId: get_reports_decisions
+      parameters:
+      - name: spaces
+        in: query
+        required: false
+        description: keys
+        schema: *id001
+      - name: labels
+        in: query
+        required: false
+        description: labels
+        schema: *id001
+      - name: status
+        in: query
+        required: false
+        description: decided = only decided items
+        schema: *id001
+      - name: max
+        in: query
+        required: false
+        description: rows
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - {}
+      - session: []
+      - token: []
   /templates:
     get:
       tags:
