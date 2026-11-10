@@ -249,7 +249,7 @@ test('find and replace in the editor', async ({ browser }) => {
 test('phone layout never scrolls sideways', async ({ browser }) => {
   const ctx = await browser.newContext({ storageState: ownerState, viewport: { width: 390, height: 844 } })
   const page = await ctx.newPage()
-  for (const url of ['/', pageUrl, '/search?q=mobile', '/spaces', '/admin/users', '/settings', `${pageUrl}/history`]) {
+  for (const url of ['/', pageUrl, '/search?q=mobile', '/spaces', '/people', '/admin/users', '/settings', `${pageUrl}/history`]) {
     await page.goto(url)
     await page.waitForLoadState('networkidle').catch(() => {})
     const { sw, cw } = await page.evaluate(() => ({ sw: document.documentElement.scrollWidth, cw: document.documentElement.clientWidth }))
@@ -327,7 +327,7 @@ test('main screens have no serious accessibility violations (axe, WCAG 2.2 AA)',
   }
   const ctx = await browser.newContext({ storageState: ownerState })
   const page = await ctx.newPage()
-  for (const url of ['/', pageUrl, '/spaces', '/search?q=mobile', '/settings', '/admin']) {
+  for (const url of ['/', pageUrl, '/spaces', '/people', '/search?q=mobile', '/settings', '/admin']) {
     await page.goto(url)
     if (url === pageUrl) await expect(page.locator('.ProseMirror')).toContainText('iOS app', { timeout: 20_000 })
     else await expect(page.locator('.sidebar')).toBeVisible()

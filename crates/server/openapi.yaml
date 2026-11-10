@@ -1272,6 +1272,121 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /people:
+    get:
+      tags:
+      - People
+      summary: People directory (accounts, not imported authors); q searches name, title, department, location
+      operationId: get_people
+      parameters:
+      - name: q
+        in: query
+        required: false
+        description: search
+        schema: *id001
+      - name: department
+        in: query
+        required: false
+        description: only this department
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  people:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: *id002
+                        name: *id001
+                        jobTitle:
+                          type:
+                          - string
+                          - 'null'
+                        department:
+                          type:
+                          - string
+                          - 'null'
+                        location:
+                          type:
+                          - string
+                          - 'null'
+                        timezone:
+                          type:
+                          - string
+                          - 'null'
+                        avatarUrl:
+                          type:
+                          - string
+                          - 'null'
+                  departments:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        name: *id001
+                        count: *id005
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /people/{id}:
+    get:
+      tags:
+      - People
+      summary: 'A profile: job, department, location, time zone, bio, personal space and the pages they edited lately (those
+        you can see); e-mail for admins and themself'
+      operationId: get_people_id
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/profile:
+    put:
+      tags:
+      - People
+      summary: Update your profile (fields left out stay; empty clears)
+      operationId: put_me_profile
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                jobTitle: *id001
+                department: *id001
+                location: *id001
+                timezone:
+                  type: string
+                  description: IANA name, e.g. Europe/Zurich
+                bio: *id001
+      responses:
+        '200':
+          description: OK
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /users:
     get:
       tags:

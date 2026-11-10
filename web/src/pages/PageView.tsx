@@ -361,12 +361,14 @@ export default function PageView() {
           />
           <div className="page-meta">
             <span>
-              Updated {formatDate(p.updatedAt)} by {p.updatedByName ?? 'someone'}
+              Updated {formatDate(p.updatedAt)} by {p.updatedBy && p.updatedByName ? <Link to={`/people/${p.updatedBy}`}>{p.updatedByName}</Link> : (p.updatedByName ?? 'someone')}
             </span>
             {(p as Page & { ownerName?: string }).ownerName && (
               <>
                 <span>·</span>
-                <span title="Responsible for this page">Owner: {(p as Page & { ownerName?: string }).ownerName}</span>
+                <span title="Responsible for this page">
+                  Owner: {p.ownerId ? <Link to={`/people/${p.ownerId}`}>{(p as Page & { ownerName?: string }).ownerName}</Link> : (p as Page & { ownerName?: string }).ownerName}
+                </span>
               </>
             )}
             <span>·</span>

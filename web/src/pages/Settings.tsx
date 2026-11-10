@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { KeyRound, Trash2, Copy, Bot, Mail } from 'lucide-react'
 import { api, formatDate } from '../api'
 import SecuritySettings from '../components/SecuritySettings'
+import { ProfileFields } from './People'
 import { useMe, useToast } from '../ui'
 
 interface Token {
@@ -61,6 +62,8 @@ export default function Settings() {
           Save
         </button>
       </div>
+
+      <ProfileFields userId={user.id} />
 
       <EmailPreferences />
 

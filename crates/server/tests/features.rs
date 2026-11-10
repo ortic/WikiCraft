@@ -787,3 +787,64 @@ async fn watching_a_page_and_the_pages_below() {
     app.put(&owner, &format!("/pages/{chapter}/content"), json!({"markdown": "chapter, typo fixed", "minor": true})).await;
     assert_eq!(bobs("page_updated").await.len(), before);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn people_directory_and_profiles() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (bob, bob_id) = app.user(&owner, "bob@acme.test", "member").await;
+    let (guest, _) = app.user(&owner, "gus@acme.test", "guest").await;
+    let (_, me) = app.get(&owner, "/me").await;
+    let owner_id = me["user"]["id"].as_str().unwrap().to_string();
+
+    let (st, p) = app
+        .put(
+            &owner,
+            "/me/profile",
+            json!({"jobTitle": "CTO", "department": "Engineering", "location": "Zurich", "timezone": "Europe/Zurich", "bio": "Builds wikis."}),
+        )
+        .await;
+    assert_eq!(st, 200, "{p}");
+    assert_eq!(p["jobTitle"], "CTO");
+    app.put(&bob, "/me/profile", json!({"jobTitle": "Developer", "department": "engineering"})).await;
+    for bad in [json!({"timezone": "not a zone"}), json!({"jobTitle": "x".repeat(101)})] {
+        let (st, _) = app.put(&bob, "/me/profile", bad).await;
+        assert_eq!(st, 400);
+    }
+    // empty clears a field, fields left out stay
+    app.put(&bob, "/me/profile", json!({"location": "Bern"})).await;
+    let (_, p) = app.put(&bob, "/me/profile", json!({"location": ""})).await;
+    assert_eq!((p["location"].clone(), p["jobTitle"].clone()), (serde_json::Value::Null, json!("Developer")));
+
+    // the directory: search, departments (case-insensitive), no e-mail addresses
+    let (_, d) = app.get(&bob, "/people").await;
+    let names: Vec<&str> = d["people"].as_array().unwrap().iter().map(|p| p["name"].as_str().unwrap()).collect();
+    assert!(names.contains(&"Owner") && names.contains(&"bob"), "{names:?}");
+    assert!(d["people"][0].get("email").is_none());
+    assert_eq!(d["departments"], json!([{"name": "Engineering", "count": 2}]));
+    let (_, d) = app.get(&bob, "/people?q=zurich").await;
+    assert_eq!(d["people"].as_array().unwrap().len(), 1);
+    let (_, d) = app.get(&bob, "/people?department=ENGINEERING").await;
+    assert_eq!(d["people"].as_array().unwrap().len(), 2);
+    let (_, d) = app.get(&guest, "/people").await;
+    assert!(d["people"].as_array().unwrap().is_empty(), "guests don't get the directory");
+
+    // a profile lists what the person edited lately, only what the viewer can see
+    app.post(&owner, "/spaces", json!({"key": "PPL", "name": "People"})).await;
+    let (_, open) = app.post(&owner, "/pages", json!({"spaceKey": "PPL", "title": "Open notes"})).await;
+    let (_, secret) = app.post(&owner, "/pages", json!({"spaceKey": "PPL", "title": "Salary review"})).await;
+    let secret = secret["id"].as_str().unwrap().to_string();
+    app.put(&owner, &format!("/pages/{secret}/restrictions"), json!({"restrictions": [{"kind": "view", "subjectType": "user", "subjectId": owner_id}]})).await;
+    let (st, prof) = app.get(&bob, &format!("/people/{owner_id}")).await;
+    assert_eq!(st, 200);
+    assert_eq!(prof["bio"], "Builds wikis.");
+    assert!(prof["email"].is_null(), "only admins and the person see the address");
+    let titles: Vec<&str> = prof["recentPages"].as_array().unwrap().iter().map(|p| p["title"].as_str().unwrap()).collect();
+    assert!(titles.contains(&"Open notes") && !titles.contains(&"Salary review"), "{titles:?}");
+    assert_eq!(prof["recentPages"][0]["spaceKey"], "PPL");
+    let _ = open;
+    let (_, own) = app.get(&bob, &format!("/people/{bob_id}")).await;
+    assert_eq!(own["email"], "bob@acme.test");
+    let (st, _) = app.get(&guest, &format!("/people/{owner_id}")).await;
+    assert_eq!(st, 404);
+}

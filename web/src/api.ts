@@ -127,8 +127,11 @@ export interface Page {
   fullWidth: boolean
   createdByName: string | null
   createdAt: string
+  updatedBy?: string | null
   updatedByName: string | null
   updatedAt: string
+  /** responsible person: the owner if set, else the creator */
+  ownerId?: string | null
   breadcrumbs: { id: string; title: string }[]
   labels: string[]
   likes?: { count: number; liked: boolean; names: string[] }

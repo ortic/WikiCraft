@@ -16,6 +16,7 @@ import Admin from './pages/Admin'
 import SpaceSettings from './pages/SpaceSettings'
 import LabelPage from './pages/LabelPage'
 import Settings from './pages/Settings'
+import { PeoplePage, ProfilePage } from './pages/People'
 import Blog from './pages/Blog'
 import TasksPage from './pages/Tasks'
 import PublicPageView from './pages/PublicPage'
@@ -74,6 +75,8 @@ export default function App() {
           <Route path="/labels/:name" element={<LabelPage />} />
           <Route path="/admin/*" element={<Admin />} />
           <Route path="/settings" element={<Settings />} />
+          <Route path="/people" element={<PeoplePage />} />
+          <Route path="/people/:id" element={<ProfilePage />} />
           <Route path="/tasks" element={<TasksPage />} />
           <Route path="*" element={<div className="empty">Not found</div>} />
         </Route>

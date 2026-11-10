@@ -97,6 +97,9 @@ op("/me/mfa/enable", "post", "Account", "Confirm TOTP enrolment; returns recover
 op("/me/mfa/disable", "post", "Account", "Turn off two-factor (password or code)", req=body(obj({"password": txt, "code": txt})), res=NO)
 op("/me/mfa/recovery-codes", "post", "Account", "Replace the recovery codes", req=body(obj({"code": txt})))
 # users & groups
+op("/people", "get", "People", "People directory (accounts, not imported authors); q searches name, title, department, location", query=[q("q", "search"), q("department", "only this department")], res=resp(obj({"people": arr(obj({"id": uuid, "name": txt, "jobTitle": {"type": ["string", "null"]}, "department": {"type": ["string", "null"]}, "location": {"type": ["string", "null"]}, "timezone": {"type": ["string", "null"]}, "avatarUrl": {"type": ["string", "null"]}})), "departments": arr(obj({"name": txt, "count": num}))})))
+op("/people/{id}", "get", "People", "A profile: job, department, location, time zone, bio, personal space and the pages they edited lately (those you can see); e-mail for admins and themself")
+op("/me/profile", "put", "People", "Update your profile (fields left out stay; empty clears)", req=body(obj({"jobTitle": txt, "department": txt, "location": txt, "timezone": {"type": "string", "description": "IANA name, e.g. Europe/Zurich"}, "bio": txt})))
 op("/users", "get", "Users", "People in the workspace", res=resp(arr(S("User"))), query=[q("q", "name/e-mail filter"), q("include_placeholders", "include imported authors", boolean)])
 op("/users", "post", "Users", "Create a user with a password (admins)", req=body(obj({"email": txt, "name": txt, "password": txt, "role": txt})))
 op("/users/invite", "post", "Users", "Invite someone by e-mail (admins)", req=body(obj({"email": txt, "name": txt, "role": txt})), res=resp(obj({"id": uuid, "inviteUrl": txt, "emailed": boolean}), "201", "Created"))

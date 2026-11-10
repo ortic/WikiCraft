@@ -73,6 +73,14 @@ and can make an earlier one current again.
   or your own threads.
 - In a task list, `@`-mention someone to assign the task and add a date for the due date.
 
+## People
+
+*People* in the sidebar lists everybody with an account: search by name, job, department or
+location, or pick a department. A profile shows what someone does, where they are and their local
+time, their personal space and the pages they worked on lately (only the ones you can see). Click
+an @mention (Ctrl/Cmd+click while editing) or an author's name to open their profile. Fill in
+yours under *Settings → About you*.
+
 ## Watching and notifications
 
 You automatically watch pages you create, edit or are mentioned on (once you stop watching a

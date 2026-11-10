@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Search, Home as HomeIcon, LayoutGrid, Star, Settings, Plus, LogOut, Moon, Shield, Menu, Trash2, UserCog, Newspaper, ListChecks, Download, Info, TriangleAlert, CircleCheck, X, Keyboard, FolderPlus } from 'lucide-react'
+import { Search, Home as HomeIcon, LayoutGrid, Star, Settings, Plus, LogOut, Moon, Shield, Menu, Trash2, UserCog, Newspaper, ListChecks, Download, Info, TriangleAlert, CircleCheck, X, Keyboard, FolderPlus, Users } from 'lucide-react'
 import ShortcutsDialog from './ShortcutsDialog'
 import { api, type Page, type Space } from '../api'
 import { Avatar, Logo, SpaceIcon, useFeatures, useMe } from '../ui'
@@ -88,6 +88,7 @@ export default function Layout() {
     ...(user && user.role !== 'guest' ? [{ id: 'create-space', label: 'Create space', keywords: 'new add', icon: <LayoutGrid size={14} />, run: () => setCreateSpace(true) }] : []),
     { id: 'home', label: 'Go to Home', keywords: 'dashboard recent', icon: <HomeIcon size={14} />, run: () => nav('/') },
     { id: 'spaces', label: 'Go to Spaces', keywords: 'directory all', icon: <LayoutGrid size={14} />, run: () => nav('/spaces') },
+    { id: 'people', label: 'Go to People', keywords: 'directory colleagues team profile', icon: <Users size={14} />, run: () => nav('/people') },
     ...(user ? [{ id: 'tasks', label: 'Go to My tasks', keywords: 'todo assigned', icon: <ListChecks size={14} />, run: () => nav('/tasks') }] : []),
     ...(current
       ? [
@@ -184,6 +185,11 @@ export default function Layout() {
         {user && (
           <NavLink to="/tasks" className="nav-item">
             <ListChecks size={16} /> My tasks
+          </NavLink>
+        )}
+        {user && user.role !== 'guest' && (
+          <NavLink to="/people" className="nav-item">
+            <Users size={16} /> People
           </NavLink>
         )}
         {user && (user.role === 'owner' || user.role === 'admin') && (

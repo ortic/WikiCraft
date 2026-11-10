@@ -17,6 +17,7 @@ pub mod likes;
 pub mod notifications;
 pub mod openapi;
 pub mod pages;
+pub mod people;
 pub mod reports;
 pub mod search;
 pub mod security;
@@ -86,6 +87,9 @@ pub fn router(state: AppState) -> Router {
         .route("/me/tokens/{id}", delete(auth::delete_token))
         // users & groups
         .route("/users", get(users::list).post(users::create))
+        .route("/people", get(people::directory))
+        .route("/people/{id}", get(people::profile))
+        .route("/me/profile", put(people::update_mine))
         .route("/users/{id}", axum::routing::patch(users::update))
         .route("/users/{id}/merge", post(users::merge))
         .route("/groups", get(users::list_groups).post(users::create_group))

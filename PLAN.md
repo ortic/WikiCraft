@@ -478,7 +478,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** LDAP / Active Directory (bind auth + group sync) `DC D X B`
 - [~] **P1** MFA: TOTP, WebAuthn/passkeys, recovery codes; enforce per workspace/group `C D` (TOTP + recovery codes; required for admins or everyone as a workspace setting, enforced on every session incl. SSO; no passkeys)
 - [~] **P1** Personal API tokens (scoped, expiring) and OAuth2 apps (authorization code + PKCE) `C D X O B` (read-only or read/write scope and expiry; read-only tokens also limit the MCP tools; no OAuth2 apps)
-- [~] **P1** User profiles (avatar, title, department, timezone, language, bio) and people directory `C X` (name/password only; no directory)
+- [~] **P1** User profiles (avatar, title, department, timezone, language, bio) and people directory `C X` (job title, department, location, time zone with local time, bio; People directory with search and departments; profiles list recent pages the viewer can see; mentions and bylines link to profiles; no avatar upload yet, initials avatars)
 - [ ] **P2** SCIM 2.0 provisioning (users + groups) `C D`
 - [x] **P2** JIT provisioning + group mapping from IdP claims `C D`
 - [ ] **P2** Service accounts / bot users `C`

@@ -381,6 +381,13 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
     const target = e.target as HTMLElement
     const commentEl = target.closest('[data-comment-id]') as HTMLElement | null
     if (commentEl && onCommentClick) onCommentClick(commentEl.dataset.commentId!)
+    // @mentions open the person's profile (while editing: Ctrl/Cmd+click, like links)
+    const mention = target.closest('[data-type="mention"]') as HTMLElement | null
+    if (mention?.dataset.id && (!editor?.isEditable || e.metaKey || e.ctrlKey)) {
+      e.preventDefault()
+      navigate(`/people/${mention.dataset.id}`)
+      return
+    }
     const a = target.closest('a') as HTMLAnchorElement | null
     if (!a || !a.getAttribute('href')) return
     const href = a.getAttribute('href')!
