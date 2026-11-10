@@ -59,6 +59,8 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/reset", post(account::reset))
         .route("/auth/invite", get(account::invite_info))
         .route("/auth/accept-invite", post(account::accept_invite))
+        .route("/auth/signup", get(account::signup_info).post(account::signup))
+        .route("/admin/signup", get(account::get_signup_settings).put(account::put_signup_settings))
         .route("/me/preferences", get(account::get_preferences).put(account::put_preferences))
         .route("/users/invite", post(account::invite))
         .route("/admin/mail", get(account::mail_status))

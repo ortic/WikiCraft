@@ -155,6 +155,37 @@ interface UserRow {
   lastLoginAt: string | null
 }
 
+/** Admin → Users: who may create an account without an invitation. */
+function SignupSettings() {
+  const toast = useToast()
+  const q = useQuery({ queryKey: ['admin-signup'], queryFn: () => api.get<{ domains: string[]; mailConfigured: boolean }>('/admin/signup') })
+  const [value, setValue] = useState<string | null>(null)
+  const text = value ?? (q.data?.domains ?? []).join(', ')
+  const save = async () => {
+    try {
+      const r = await api.put<{ domains: string[] }>('/admin/signup', { domains: text.split(/[\s,;]+/).filter(Boolean) })
+      setValue(r.domains.join(', '))
+      toast(r.domains.length ? `Sign-up open for ${r.domains.map((d) => '@' + d).join(', ')}` : 'Sign-up closed: invitation only')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not save')
+    }
+  }
+  if (!q.data) return null
+  return (
+    <div className="card" style={{ marginBottom: 14 }}>
+      <b>Sign-up</b>
+      <p className="muted small" style={{ margin: '4px 0 10px' }}>
+        People with an address at these domains can create an account themselves after confirming their e-mail. Leave empty for invitation only.
+        {!q.data.mailConfigured && ' Needs outgoing e-mail (WIKICRAFT_SMTP_URL).'}
+      </p>
+      <div className="row" style={{ flexWrap: 'wrap' }}>
+        <input className="input" style={{ flex: '1 1 260px' }} value={text} placeholder="acme.com, acme.ch" onChange={(e) => setValue(e.target.value)} disabled={!q.data.mailConfigured} />
+        <button className="btn" onClick={save} disabled={!q.data.mailConfigured}>Save</button>
+      </div>
+    </div>
+  )
+}
+
 function UsersAdmin() {
   const qc = useQueryClient()
   const toast = useToast()
@@ -180,6 +211,7 @@ function UsersAdmin() {
           <UserPlus size={15} /> Invite / add user
         </button>
       </div>
+      <SignupSettings />
       <table className="list">
         <thead>
           <tr><th>Name</th><th>E-mail</th><th>Role</th><th>Status</th><th>Last login</th><th /></tr>

@@ -81,6 +81,7 @@ export function Login() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(() => new URLSearchParams(location.search).get('error'))
   const info = useQuery({ queryKey: ['auth-providers'], queryFn: () => api.get<{ passwordLogin: boolean; passwordReset: boolean; providers: Provider[] }>('/auth/providers') })
+  const signup = useQuery({ queryKey: ['signup-info'], queryFn: () => api.get<{ enabled: boolean; domains: string[] }>('/auth/signup') })
   const next = new URLSearchParams(location.search).get('next') ?? '/'
   const [busy, setBusy] = useState(false)
   // `?mfa=1`: an SSO login or password reset left a challenge cookie for the code step
@@ -174,6 +175,11 @@ export function Login() {
             Log in
           </button>
         )}
+        {signup.data?.enabled && (
+          <p className="small" style={{ textAlign: 'center', marginBottom: 0 }}>
+            New here? <a href="/signup">Create an account</a>
+          </p>
+        )}
       </form>
     </div>
   )
@@ -183,6 +189,55 @@ const wideBtn = { width: '100%', justifyContent: 'center', height: 38 } as const
 
 function tokenParam() {
   return new URLSearchParams(location.search).get('token') ?? ''
+}
+
+/** `/signup` — people with an allowed e-mail domain ask for an account. */
+export function Signup() {
+  const info = useQuery({ queryKey: ['signup-info'], queryFn: () => api.get<{ enabled: boolean; domains: string[] }>('/auth/signup') })
+  const [email, setEmail] = useState('')
+  const [sent, setSent] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const submit = async (e: FormEvent) => {
+    e.preventDefault()
+    setBusy(true)
+    setError(null)
+    try {
+      await api.post('/auth/signup', { email })
+      setSent(true)
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Something went wrong')
+    } finally {
+      setBusy(false)
+    }
+  }
+  const domains = info.data?.domains ?? []
+  return (
+    <div className="auth">
+      <form className="auth-card" onSubmit={submit}>
+        <Logo />
+        <h1>Create an account</h1>
+        {info.data && !info.data.enabled ? (
+          <p className="muted">Accounts are by invitation. Ask an admin of this wiki to invite you.</p>
+        ) : sent ? (
+          <p className="muted">We sent a confirmation link to <b>{email}</b>. Open it to choose your name and password. It's valid for 48 hours.</p>
+        ) : (
+          <>
+            <p className="muted" style={{ marginTop: 0 }}>
+              Use your work e-mail{domains.length ? ` (${domains.map((d) => '@' + d).join(', ')})` : ''}. We'll send you a link to confirm it.
+            </p>
+            <div className="field">
+              <label>E-mail</label>
+              <input className="input" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
+            </div>
+            {error && <p className="error-text">{error}</p>}
+            <button className="btn btn-primary" style={wideBtn} disabled={busy}>Send confirmation link</button>
+          </>
+        )}
+        <p className="small" style={{ textAlign: 'center', marginBottom: 0 }}><a href="/login">Back to log in</a></p>
+      </form>
+    </div>
+  )
 }
 
 /** `/forgot-password` — asks for a reset link. */

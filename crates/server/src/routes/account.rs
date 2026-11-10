@@ -249,6 +249,125 @@ pub async fn accept_invite(State(state): State<AppState>, headers: HeaderMap, Js
     Ok(([(header::SET_COOKIE, cookie)], Json(json!({ "ok": true }))).into_response())
 }
 
+// ---- open sign-up for allowed e-mail domains ----------------------------------------------
+
+const SIGNUP_HOURS: i32 = 48;
+
+/// The workspace people sign up to (self-hosted installs have one) and its allowed domains.
+async fn signup_workspace(state: &AppState) -> ApiResult<Option<(Uuid, String, Vec<String>)>> {
+    Ok(sqlx::query_as("SELECT id, name, signup_domains FROM workspaces ORDER BY created_at LIMIT 1").fetch_optional(&state.db).await?)
+}
+
+fn signup_possible(state: &AppState) -> bool {
+    // the domain check means nothing without proving the address, so sign-up needs e-mail
+    state.config.smtp_url.is_some() && !state.config.disable_password_login
+}
+
+/// `GET /api/auth/signup` — whether sign-up is open, and for which domains.
+pub async fn signup_info(State(state): State<AppState>) -> ApiResult<Json<Value>> {
+    let domains = signup_workspace(&state).await?.map(|w| w.2).unwrap_or_default();
+    let enabled = signup_possible(&state) && !domains.is_empty();
+    Ok(Json(json!({ "enabled": enabled, "domains": if enabled { domains } else { vec![] } })))
+}
+
+#[derive(Deserialize)]
+pub struct SignupRequest {
+    email: String,
+}
+
+/// `POST /api/auth/signup {email}` — mails a confirmation link (the invitation page) to new
+/// addresses at an allowed domain. Answers the same for every address.
+pub async fn signup(State(state): State<AppState>, Json(req): Json<SignupRequest>) -> ApiResult<StatusCode> {
+    let Some((ws, workspace, domains)) = signup_workspace(&state).await? else { return Err(ApiError::bad("sign-up is not open")) };
+    if !signup_possible(&state) || domains.is_empty() {
+        return Err(ApiError::bad("sign-up is not open; ask an admin for an invitation"));
+    }
+    let email = validate_email(&req.email)?;
+    let domain = email.rsplit('@').next().unwrap_or("").to_lowercase();
+    if !domains.iter().any(|d| d.eq_ignore_ascii_case(&domain)) {
+        return Err(ApiError::bad(format!("sign-up is open for {} addresses only", domains.iter().map(|d| format!("@{d}")).collect::<Vec<_>>().join(", "))));
+    }
+    let existing: Option<(Uuid, String)> =
+        sqlx::query_as("SELECT id, status FROM users WHERE workspace_id = $1 AND lower(email) = $2").bind(ws).bind(&email).fetch_optional(&state.db).await?;
+    let id = match existing {
+        // existing accounts get nothing (no enumeration: the answer is the same)
+        Some((_, s)) if s == "active" || s == "deactivated" => return Ok(StatusCode::NO_CONTENT),
+        // pending invitations and imported authors (placeholders) can be claimed
+        Some((id, s)) => {
+            if s != "invited" {
+                sqlx::query("UPDATE users SET status = 'invited' WHERE id = $1").bind(id).execute(&state.db).await?;
+            }
+            id
+        }
+        None => {
+            let id = new_id();
+            sqlx::query("INSERT INTO users (id, workspace_id, email, name, role, status) VALUES ($1, $2, $3, $4, 'member', 'invited')")
+                .bind(id)
+                .bind(ws)
+                .bind(&email)
+                .bind(email.split('@').next().unwrap_or(&email))
+                .execute(&state.db)
+                .await?;
+            id
+        }
+    };
+    // at most three confirmation mails per address and hour
+    let recent: i64 =
+        sqlx::query_scalar("SELECT count(*) FROM user_tokens WHERE user_id = $1 AND purpose = 'invite' AND created_at > now() - interval '1 hour'")
+            .bind(id)
+            .fetch_one(&state.db)
+            .await?;
+    if recent >= 3 {
+        return Ok(StatusCode::NO_CONTENT);
+    }
+    let token = issue_token(&state, id, "invite", None, SIGNUP_HOURS).await?;
+    let url = format!("{}/accept-invite?token={token}", base(&state));
+    let (text, html) = crate::mail::action_mail(
+        "Hi,",
+        &format!("someone (hopefully you) asked to join {workspace} on WikiCraft with this address. Confirm it to choose your name and password."),
+        "Confirm your e-mail",
+        &url,
+        &format!("The link is valid for {SIGNUP_HOURS} hours. If you didn't ask for this, ignore this e-mail."),
+    );
+    crate::mail::queue(&state, &email, &format!("Confirm your e-mail to join {workspace}"), &text, Some(&html)).await.map_err(ApiError::Internal)?;
+    audit::log(&state, ws, None, "user.signup_requested", Some("user"), Some(id), json!({"email": email})).await;
+    Ok(StatusCode::NO_CONTENT)
+}
+
+#[derive(Deserialize)]
+pub struct SignupSettings {
+    domains: Vec<String>,
+}
+
+/// `GET/PUT /api/admin/signup` — the domains open for sign-up (admins).
+pub async fn get_signup_settings(State(state): State<AppState>, CurrentUser(admin): CurrentUser) -> ApiResult<Json<Value>> {
+    require_admin(&admin)?;
+    let domains: Vec<String> = sqlx::query_scalar("SELECT signup_domains FROM workspaces WHERE id = $1").bind(admin.workspace_id).fetch_one(&state.db).await?;
+    Ok(Json(json!({ "domains": domains, "mailConfigured": state.config.smtp_url.is_some() })))
+}
+
+pub async fn put_signup_settings(State(state): State<AppState>, CurrentUser(admin): CurrentUser, Json(req): Json<SignupSettings>) -> ApiResult<Json<Value>> {
+    require_admin(&admin)?;
+    let mut domains: Vec<String> = Vec::new();
+    for d in req.domains.iter().map(|d| d.trim().trim_start_matches('@').to_lowercase()).filter(|d| !d.is_empty()) {
+        let ok = d.len() <= 253
+            && d.contains('.')
+            && d.split('.').all(|l| !l.is_empty() && l.len() <= 63 && l.chars().all(|c| c.is_ascii_alphanumeric() || c == '-'));
+        if !ok {
+            return Err(ApiError::bad(format!("{d} is not a domain name")));
+        }
+        if !domains.contains(&d) {
+            domains.push(d);
+        }
+    }
+    if domains.len() > 50 {
+        return Err(ApiError::bad("at most 50 domains"));
+    }
+    sqlx::query("UPDATE workspaces SET signup_domains = $2 WHERE id = $1").bind(admin.workspace_id).bind(&domains).execute(&state.db).await?;
+    audit::log(&state, admin.workspace_id, Some(admin.id), "workspace.signup_domains", None, None, json!({"domains": domains})).await;
+    Ok(Json(json!({ "domains": domains, "mailConfigured": state.config.smtp_url.is_some() })))
+}
+
 // ---- preferences & admin -------------------------------------------------------------------
 
 #[derive(Deserialize)]

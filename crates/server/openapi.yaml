@@ -589,6 +589,121 @@ paths:
       - {}
       - session: []
       - token: []
+  /auth/signup:
+    get:
+      tags:
+      - Auth
+      summary: Whether sign-up is open and for which e-mail domains
+      operationId: get_auth_signup
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  enabled: *id003
+                  domains:
+                    type: array
+                    items: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - {}
+      - session: []
+      - token: []
+    post:
+      tags:
+      - Auth
+      summary: 'Ask for an account (allowed domains only): mails a confirmation link; same answer for every address'
+      operationId: post_auth_signup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email: *id001
+              required:
+              - email
+      responses:
+        '204':
+          description: Requested
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - {}
+      - session: []
+      - token: []
+  /admin/signup:
+    get:
+      tags:
+      - Admin
+      summary: Sign-up domains
+      operationId: get_admin_signup
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  domains:
+                    type: array
+                    items: *id001
+                  mailConfigured: *id003
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    put:
+      tags:
+      - Admin
+      summary: Set the sign-up domains (empty = invitation only)
+      operationId: put_admin_signup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                domains:
+                  type: array
+                  items: *id001
+              required:
+              - domains
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  domains:
+                    type: array
+                    items: *id001
+                  mailConfigured: *id003
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /auth/sso/{id}/login:
     get:
       tags:

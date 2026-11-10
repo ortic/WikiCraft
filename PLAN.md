@@ -204,11 +204,11 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** Space archive (read-only, hidden from search by default) and restore `C`
 - [~] **P1** Space sidebar: page tree, shortcuts/links, blog, whiteboards, databases, custom sections `C` (page tree + blog only)
 - [ ] **P1** Space-level look & feel: theme, colors, header image, sidebar config `C X`
-- [ ] **P1** Space templates (create a space prefilled with a page structure) `C X`
+- [x] **P1** Space templates (create a space prefilled with a page structure) `C X`
 - [x] **P1** Space permissions screen (users × groups × anonymous × guests matrix) `C DC X B`
 - [~] **P1** Space admins / owners, ownership transfer `C` (admin role only; no owner/transfer)
 - [~] **P1** Copy space; move pages between spaces `C X` (cross-space move via API only; no copy)
-- [ ] **P1** Space key rename with redirects `X`
+- [x] **P1** Space key rename with redirects `X`
 - [ ] **P2** Space-level announcement banner `C`
 - [ ] **P2** Space analytics (views, contributors, popular pages) `C`
 - [x] **P2** Space export / import (native format) `C DC X`
@@ -230,7 +230,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P1** Copy page (with or without children, attachments, labels, permissions) `C X D` (no attachments; UI copies single page only)
 - [ ] **P1** Page owner (distinct from creator) and ownership transfer `C`
 - [~] **P1** Page status lozenge (Rough draft / In progress / Ready for review / Verified / custom) `C` (API + badge only; no picker)
-- [ ] **P1** Archive page / subtree `C`
+- [x] **P1** Archive page / subtree `C`
 - [~] **P1** Trash with restore and purge (per space; retention period) `C D X` (no purge or retention period)
 - [x] **P1** Duplicate titles allowed (Cloud allows them; the importer must handle both) `C`
 - [ ] **P2** Page tree lazy loading & virtualization (≥ 100k pages per space) `C X`
@@ -242,7 +242,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** WYSIWYG block editor (Tiptap/ProseMirror) with slash `/` command menu `C D O N`
 - [x] **P0** Markdown shortcuts (`#`, `-`, `1.`, `>`, ```` ``` ````, `**`, `[]`, `---`) `C D O`
 - [x] **P0** Undo/redo (collaboration-aware, per user) `C D`
-- [~] **P0** Copy/paste from Word, Google Docs, web pages, Excel/Sheets (to tables), Markdown text, images from clipboard `C D O` (HTML + image paste; no Markdown paste)
+- [x] **P0** Copy/paste from Word, Google Docs, web pages, Excel/Sheets (to tables), Markdown text, images from clipboard `C D O`
 - [~] **P0** Drag & drop blocks (block handles), drag & drop files/images `C D O N` (file drop only; no block handles)
 - [x] **P0** Keyboard shortcuts + shortcut help dialog `C D O`
 - [~] **P1** Floating formatting toolbar + fixed toolbar option `C D` (bubble menu only)
@@ -273,7 +273,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 #### 4.4.3 Blocks
 - [x] **P0** Bullet, numbered, nested lists `C D X O B`
 - [x] **P0** Task / checklist items (assignee via @mention, due date via date node) `C D O`
-- [~] **P0** Code blocks with syntax highlighting, language picker, line numbers, wrap, copy button `C D X O B` (no line numbers or wrap toggle)
+- [x] **P0** Code blocks with syntax highlighting, language picker, line numbers, wrap, copy button `C D X O B`
 - [x] **P0** Blockquote `C D O`
 - [~] **P0** Callouts / panels: info, note, tip/success, warning, error, custom (emoji + color) `C D X O` (no custom emoji/color picker)
 - [x] **P0** Tables (see §4.4.4) `C D X O B`
@@ -379,7 +379,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Page (footer) comments with threads and replies `C D X O B`
 - [x] **P0** Inline comments anchored to a text range (Yjs relative positions; survive edits) `C D O`
 - [x] **P0** Resolve / reopen inline comments; show resolved comments `C D O`
-- [~] **P0** Edit / delete own comments; admins can moderate `C D X` (no comment edit UI)
+- [x] **P0** Edit / delete own comments; admins can moderate `C D X`
 - [~] **P1** Rich comments (formatting, mentions, emoji, images, code) `C D O` (Markdown + @mentions; no images)
 - [~] **P1** Reactions (emoji) on pages and comments `C O` (likes on pages and comments; no emoji by design)
 - [x] **P1** Page likes / "helpful" signal `C X`
@@ -432,9 +432,9 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P3** Gliffy → draw.io converter (import)
 
 ### 4.11 Search & discovery
-- [~] **P0** Full-text search across pages, titles, comments, labels with permission filtering `C D X O B` (comments not indexed)
+- [x] **P0** Full-text search across pages, titles, comments, labels with permission filtering `C D X O B`
 - [x] **P0** Quick search (as-you-type, title-weighted, recent items first) `C D O`
-- [~] **P0** Filters: space, type, author/contributor, label, date modified `C X` (space filter only)
+- [x] **P0** Filters: space, type, author/contributor, label, date modified `C X`
 - [x] **P1** Attachment content search (PDF, DOCX, XLSX, PPTX, TXT, CSV, ODT) `C D X`
 - [~] **P1** Highlighted snippets, typo tolerance, stemming per language, CJK tokenization `C X` (snippets only)
 - [x] **P1** Search within a space (scoped) and within a page (Ctrl+F style) `C`
@@ -470,9 +470,9 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P3** ABAC policies via `cedar-policy` (attributes like department, location)
 
 ### 4.13 Authentication & identity
-- [~] **P0** Local accounts: email + password (argon2id), email verification, password reset `D X B O` (reset done; no e-mail verification)
-- [~] **P0** Sessions: secure cookies, CSRF protection, session list + revoke, idle/absolute timeouts (no idle timeout)
-- [~] **P0** Invitations (email link), invite-only or open sign-up with domain restriction `C D O` (invite-only; no open sign-up)
+- [x] **P0** Local accounts: email + password (argon2id), email verification, password reset `D X B O` (addresses are verified by invitation/sign-up links)
+- [x] **P0** Sessions: secure cookies, CSRF protection, session list + revoke, idle/absolute timeouts
+- [x] **P0** Invitations (email link), invite-only or open sign-up with domain restriction `C D O`
 - [x] **P1** OIDC (Google, Microsoft Entra ID, Okta, Keycloak, Authentik, GitLab) `C D X B O`
 - [x] **P1** SAML 2.0 SSO `C D X B`
 - [x] **P1** LDAP / Active Directory (bind auth + group sync) `DC D X B`
@@ -490,7 +490,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Recently viewed / recently edited `C D O`
 - [~] **P1** Starred/favorite pages and spaces `C D O` (pages only)
 - [ ] **P1** Activity feed (following people/spaces; popular in my org) `C X`
-- [ ] **P1** "For you" / popular pages `C`
+- [~] **P1** "For you" / popular pages `C` (popular pages; no personalisation)
 - [~] **P1** Command palette (Ctrl/Cmd+K): jump to page/space/action `C O` (page search only; no actions)
 - [~] **P1** Dark mode, theme switching, high-contrast `C D O` (no high-contrast theme)
 - [ ] **P1** UI localization (i18n; ≥ EN, DE, FR, ES, PT, IT, NL, PL, JA, ZH, KO); RTL support (AR, HE) `C D X`
@@ -548,7 +548,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 
 ### 4.19 Export, print & publishing
 - [~] **P1** Export page / subtree to PDF (headers/footers, TOC, page numbers, cover page, custom CSS/template) `C X B` (browser print-to-PDF only)
-- [~] **P1** Export to Word (DOCX) `C X B` (single page, report macros evaluated; no subtree export)
+- [x] **P1** Export to Word (DOCX) `C X B` (page or page tree; report macros evaluated)
 - [x] **P1** Export to Markdown / HTML (zip with attachments) `D O B`
 - [x] **P1** Print-friendly view `C X B`
 - [x] **P1** Native space export/backup format (JSON + blobs, versioned) for move/restore between instances `C X`
@@ -629,7 +629,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 
 ### 4.26 Security & compliance
 - [~] **P0** OWASP ASVS L2 baseline; threat model per feature (import, uploads, embeds, plugins, AI) (internal security review; no formal ASVS)
-- [~] **P0** Strict HTML sanitization (`ammonia`) for all rendered/imported content; CSP with nonces; no inline user JS (escaping renderer; no app-wide CSP)
+- [~] **P0** Strict HTML sanitization (`ammonia`) for all rendered/imported content; CSP with nonces; no inline user JS (escaping renderer + app-wide CSP; no nonces needed: no inline scripts)
 - [~] **P0** Upload safety: content sniffing, `Content-Disposition: attachment` for risky types, serve user files from a separate origin/subdomain, SVG sanitization (no separate user-content origin)
 - [x] **P0** Rate limiting and brute-force protection on auth; account lockout policies
 - [~] **P0** Secure secrets handling (env/files, never in DB in plaintext); TLS everywhere; HSTS (no HSTS; TLS at proxy)

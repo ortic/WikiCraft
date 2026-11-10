@@ -161,3 +161,46 @@ async fn without_smtp_invites_still_return_a_link() {
     let (st, body) = app.post(&owner, "/admin/mail/test", json!({})).await;
     assert_eq!(st, 400, "{body}");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn open_signup_for_allowed_domains() {
+    if reqwest::get(format!("{MAILPIT}/api/v1/info")).await.is_err() {
+        eprintln!("skipping: mailpit not running");
+        return;
+    }
+    let app = common::spawn_with(|c| c.smtp_url = Some("smtp://127.0.0.1:11025".into())).await;
+    let owner = app.setup().await;
+    let tag = uuid::Uuid::new_v4().simple().to_string()[..8].to_string();
+    let domain = format!("{tag}.example");
+
+    // closed by default
+    let (_, info) = app.get(&client(), "/auth/signup").await;
+    assert_eq!(info["enabled"], false);
+    assert_eq!(app.post(&client(), "/auth/signup", json!({"email": format!("a@{domain}")})).await.0, 400);
+    // admins open it for a domain (validated)
+    let (member, _) = app.user(&owner, &format!("m-{tag}@acme.test"), "member").await;
+    assert_eq!(app.put(&member, "/admin/signup", json!({"domains": [domain]})).await.0, 403);
+    assert_eq!(app.put(&owner, "/admin/signup", json!({"domains": ["not a domain"]})).await.0, 400);
+    let (st, s) = app.put(&owner, "/admin/signup", json!({"domains": [format!("@{}", domain.to_uppercase())]})).await;
+    assert_eq!(st, 200);
+    assert_eq!(s["domains"], json!([domain]));
+    let (_, info) = app.get(&client(), "/auth/signup").await;
+    assert_eq!(info["enabled"], true);
+
+    // other domains are refused; the right one gets a confirmation link to the accept page
+    assert_eq!(app.post(&client(), "/auth/signup", json!({"email": format!("x-{tag}@elsewhere.test")})).await.0, 400);
+    let email = format!("newbie@{domain}");
+    assert_eq!(app.post(&client(), "/auth/signup", json!({"email": email})).await.0, 204);
+    let text = mail_to(&email, "Confirm your e-mail").await;
+    let token = token_in(&text, "/accept-invite");
+    let fresh = client();
+    let (st, r) = app.post(&fresh, "/auth/accept-invite", json!({"token": token, "name": "New Bie", "password": "newbie-pass-1"})).await;
+    assert_eq!(st, 200, "{r}");
+    let (_, me) = app.get(&fresh, "/me").await;
+    assert_eq!(me["user"]["email"], email.as_str());
+    assert_eq!(me["user"]["role"], "member");
+    // existing accounts: same answer, no mail
+    assert_eq!(app.post(&client(), "/auth/signup", json!({"email": email})).await.0, 204);
+    tokio::time::sleep(std::time::Duration::from_secs(2)).await;
+    assert_eq!(count_mails(&email, "Confirm your e-mail").await, 1);
+}
