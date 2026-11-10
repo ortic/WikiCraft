@@ -3292,6 +3292,48 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /spaces/{key}/copy:
+    post:
+      tags:
+      - Spaces
+      summary: 'Copy the space (space admins): settings, templates, people (includePermissions), and every published, not
+        archived page the caller sees with labels, properties, restrictions and attachments (includeAttachments); links between
+        the pages point at the copies. Up to 10,000 pages'
+      operationId: post_spaces_key_copy
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                key: *id001
+                name: *id001
+                includeAttachments: *id003
+                includePermissions: *id003
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: *id002
+                  key: *id001
+                  pages: *id005
+                  truncated: *id003
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /spaces/{key}/owner:
     put:
       tags:

@@ -922,24 +922,107 @@ pub async fn copy(
         None => None,
     };
     let with_attachments = req.include_attachments.unwrap_or(true);
-    if let Some(room) = state.rooms.get(id) {
-        crate::collab::persist_with(&state, &room, false).await?;
-    }
     // only descendants the caller can see are copied (restricted children stay private)
     let pairs: Vec<(Uuid, Option<Uuid>)> =
         sqlx::query_as("SELECT id, parent_id FROM pages WHERE space_id = $1 AND deleted_at IS NULL").bind(space).fetch_all(&state.db).await?;
     let visible = crate::authz::visible_page_ids(&state, &p, space, role, &pairs).await?;
-    let mut queue = vec![(id, target_parent)];
-    let mut map = std::collections::HashMap::new();
-    let mut first_new = None;
+    let title: String = sqlx::query_scalar("SELECT title FROM pages WHERE id = $1").bind(id).fetch_one(&state.db).await?;
+    let opts = TreeCopy {
+        actor: user.id,
+        workspace: user.workspace_id,
+        target_space,
+        include_children: req.include_children,
+        with_attachments,
+        relink: false,
+        first_title: Some(req.title.clone().unwrap_or_else(|| format!("Copy of {title}"))),
+        visible: &visible,
+        limit: 5000,
+    };
+    let copied = copy_tree(&state, &opts, vec![(id, target_parent)]).await?;
+    let first_new = copied.first().map(|(_, n)| *n);
+    audit::log(&state, user.workspace_id, Some(user.id), "page.copy", Some("page"), Some(id), json!({"copied": copied.len(), "toSpace": target_space})).await;
+    Ok((StatusCode::CREATED, Json(json!({ "id": first_new, "copied": copied.len() }))))
+}
+
+/// How [`copy_tree`] copies pages.
+pub struct TreeCopy<'a> {
+    pub actor: Uuid,
+    pub workspace: Uuid,
+    pub target_space: Uuid,
+    /// with the descendants of each root
+    pub include_children: bool,
+    /// the copies get their own attachments (sharing the stored files)
+    pub with_attachments: bool,
+    /// links between the copied pages point at the copies (a copied space links to itself)
+    pub relink: bool,
+    /// a new title for the first root
+    pub first_title: Option<String>,
+    /// the pages that may be copied (the caller sees them)
+    pub visible: &'a std::collections::HashSet<Uuid>,
+    /// at most this many pages
+    pub limit: usize,
+}
+
+/// Replaces every UUID in `s` that `map` knows (page links, attachment URLs, page ids in
+/// node attributes).
+pub fn remap_uuids(s: &str, map: &std::collections::HashMap<Uuid, Uuid>) -> String {
+    if map.is_empty() {
+        return s.to_string();
+    }
+    let b = s.as_bytes();
+    let mut out = String::with_capacity(s.len());
     let mut i = 0;
-    while i < queue.len() && i < 5000 {
-        let (src, parent) = queue[i];
+    let mut copied_to = 0;
+    while i + 36 <= b.len() {
+        let cand = &b[i..i + 36];
+        let shape = cand.iter().enumerate().all(|(j, c)| if matches!(j, 8 | 13 | 18 | 23) { *c == b'-' } else { c.is_ascii_hexdigit() });
+        if shape
+            && (i == 0 || !b[i - 1].is_ascii_hexdigit())
+            && let Ok(u) = Uuid::parse_str(&s[i..i + 36])
+            && let Some(n) = map.get(&u)
+        {
+            out.push_str(&s[copied_to..i]);
+            out.push_str(&n.to_string());
+            i += 36;
+            copied_to = i;
+            continue;
+        }
+        i += 1;
+    }
+    out.push_str(&s[copied_to..]);
+    out
+}
+
+/// Copies pages (with their labels, properties, restrictions and, optionally, attachments and
+/// visible descendants) into `opts.target_space`. `roots` are (source page, new parent).
+/// Returns (source, copy) pairs, parents before children.
+pub async fn copy_tree(state: &AppState, opts: &TreeCopy<'_>, roots: Vec<(Uuid, Option<Uuid>)>) -> ApiResult<Vec<(Uuid, Uuid)>> {
+    // plan first: every copy gets its id up front, so links between them can be rewritten
+    let mut plan: Vec<(Uuid, Uuid, Option<Uuid>)> = Vec::new();
+    let mut queue: std::collections::VecDeque<(Uuid, Option<Uuid>)> = roots.into_iter().collect();
+    while let Some((src, parent)) = queue.pop_front() {
+        if plan.len() >= opts.limit {
+            break;
+        }
+        if let Some(room) = state.rooms.get(src) {
+            crate::collab::persist_with(state, &room, false).await?;
+        }
+        let new = new_id();
+        plan.push((src, new, parent));
+        if opts.include_children {
+            let kids: Vec<Uuid> =
+                sqlx::query_scalar("SELECT id FROM pages WHERE parent_id = $1 AND deleted_at IS NULL ORDER BY position").bind(src).fetch_all(&state.db).await?;
+            queue.extend(kids.into_iter().filter(|k| opts.visible.contains(k)).map(|k| (k, Some(new))));
+        }
+    }
+    let mut ids: std::collections::HashMap<Uuid, Uuid> =
+        if opts.relink { plan.iter().map(|(src, new, _)| (*src, *new)).collect() } else { std::collections::HashMap::new() };
+    for (i, (src, new, parent)) in plan.iter().enumerate() {
         let (title, kind, content): (String, String, Value) =
             sqlx::query_as("SELECT title, kind, content FROM pages WHERE id = $1").bind(src).fetch_one(&state.db).await?;
-        let title = if i == 0 { req.title.clone().unwrap_or_else(|| format!("Copy of {title}")) } else { title };
+        let title = if i == 0 { opts.first_title.clone().unwrap_or(title) } else { title };
         // the copy's own attachments: same stored files, new records, content pointing at them
-        let attachments: Vec<(Uuid, String, String, i64, Option<String>, Option<String>)> = if with_attachments {
+        let attachments: Vec<(Uuid, String, String, i64, Option<String>, Option<String>)> = if opts.with_attachments {
             sqlx::query_as("SELECT id, filename, media_type, size, blob_key, text_content FROM attachments WHERE page_id = $1 AND deleted_at IS NULL")
                 .bind(src)
                 .fetch_all(&state.db)
@@ -948,23 +1031,20 @@ pub async fn copy(
             Vec::new()
         };
         let renamed: Vec<(Uuid, Uuid)> = attachments.iter().map(|a| (a.0, new_id())).collect();
-        let mut json = content.to_string();
-        for (old, new) in &renamed {
-            json = json.replace(&format!("/api/attachments/{old}/"), &format!("/api/attachments/{new}/"));
-        }
-        let content: Value = serde_json::from_str(&json).unwrap_or(content);
-        let new = insert_page(
+        ids.extend(renamed.iter().copied());
+        let content: Value = serde_json::from_str(&remap_uuids(&content.to_string(), &ids)).unwrap_or(content);
+        insert_page(
             &state.db,
             NewPage {
-                id: new_id(),
-                workspace_id: user.workspace_id,
-                space_id: target_space,
-                parent_id: parent,
+                id: *new,
+                workspace_id: opts.workspace,
+                space_id: opts.target_space,
+                parent_id: *parent,
                 kind,
                 title,
                 content: Node::from_json(&content).unwrap_or_else(|_| Node::empty_doc()),
-                position: next_position(&state, target_space, parent).await?,
-                created_by: Some(user.id),
+                position: next_position(state, opts.target_space, *parent).await?,
+                created_by: Some(opts.actor),
                 created_at: None,
                 source_ref: None,
                 draft: false,
@@ -984,14 +1064,14 @@ pub async fn copy(
                 "INSERT INTO attachments (id, workspace_id, page_id, filename, media_type, size, blob_key, version, text_content, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9)",
             )
             .bind(new_att)
-            .bind(user.workspace_id)
+            .bind(opts.workspace)
             .bind(new)
             .bind(filename)
             .bind(media_type)
             .bind(size)
             .bind(blob_key)
             .bind(text)
-            .bind(user.id)
+            .bind(opts.actor)
             .execute(&state.db)
             .await?;
             sqlx::query(
@@ -1002,7 +1082,7 @@ pub async fn copy(
             .bind(blob_key)
             .bind(size)
             .bind(media_type)
-            .bind(user.id)
+            .bind(opts.actor)
             .execute(&state.db)
             .await?;
         }
@@ -1012,18 +1092,23 @@ pub async fn copy(
             .bind(new)
             .execute(&state.db)
             .await?;
-        state.search.enqueue(new);
-        map.insert(src, new);
-        first_new.get_or_insert(new);
-        if req.include_children {
-            let kids: Vec<Uuid> =
-                sqlx::query_scalar("SELECT id FROM pages WHERE parent_id = $1 AND deleted_at IS NULL ORDER BY position").bind(src).fetch_all(&state.db).await?;
-            queue.extend(kids.into_iter().filter(|k| visible.contains(k)).map(|k| (k, Some(new))));
-        }
-        i += 1;
+        state.search.enqueue(*new);
     }
-    audit::log(&state, user.workspace_id, Some(user.id), "page.copy", Some("page"), Some(id), json!({"copied": map.len(), "toSpace": target_space})).await;
-    Ok((StatusCode::CREATED, Json(json!({ "id": first_new, "copied": map.len() }))))
+    if opts.relink {
+        // page-link properties to copied pages point at the copies
+        let (olds, news): (Vec<String>, Vec<String>) = plan.iter().map(|(s, n, _)| (s.to_string(), n.to_string())).unzip();
+        let copies: Vec<Uuid> = plan.iter().map(|(_, n, _)| *n).collect();
+        sqlx::query(
+            "UPDATE page_properties pp SET value = to_jsonb(m.new) FROM unnest($1::text[], $2::text[]) AS m(old, new)
+             WHERE pp.page_id = ANY($3) AND pp.kind = 'page' AND pp.value = to_jsonb(m.old)",
+        )
+        .bind(&olds)
+        .bind(&news)
+        .bind(&copies)
+        .execute(&state.db)
+        .await?;
+    }
+    Ok(plan.into_iter().map(|(src, new, _)| (src, new)).collect())
 }
 
 /// Moves a page and its descendants to the trash.

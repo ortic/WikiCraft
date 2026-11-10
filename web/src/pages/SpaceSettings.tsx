@@ -111,6 +111,7 @@ function Details({ space }: { space: Space }) {
       </div>
       <button className="btn btn-primary" onClick={save}>Save</button>
       {!space.personalOwnerId && <SpaceOwner space={space} />}
+      {!space.personalOwnerId && <CopySpace space={space} />}
       <div className="card danger-zone" style={{ marginTop: 28 }}>
         <b>Archive this space</b>
         <p className="muted small" style={{ margin: '4px 0 10px' }}>Archived spaces are read-only and leave search and the space list. Workspace admins can restore them under Admin → Spaces.</p>
@@ -126,6 +127,63 @@ function Details({ space }: { space: Space }) {
           Archive space
         </button>
       </div>
+    </div>
+  )
+}
+
+/** A new space with this one's pages, settings, templates and people. */
+function CopySpace({ space }: { space: Space }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const nav = useNavigate()
+  const [open, setOpen] = useState(false)
+  const [name, setName] = useState(`${space.name} (copy)`)
+  const [key, setKey] = useState(`${space.key}2`.slice(0, 32))
+  const [attachments, setAttachments] = useState(true)
+  const [people, setPeople] = useState(true)
+  const [busy, setBusy] = useState(false)
+  const run = async () => {
+    setBusy(true)
+    try {
+      const r = await api.post<{ key: string; pages: number; truncated: boolean }>(`/spaces/${space.key}/copy`, { key, name, includeAttachments: attachments, includePermissions: people })
+      qc.invalidateQueries({ queryKey: ['spaces'] })
+      toast(r.truncated ? `Copied the first ${r.pages} pages` : `Copied ${r.pages} pages`)
+      nav(`/spaces/${r.key}`)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not copy the space')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="card" style={{ marginTop: 28 }}>
+      <b>Copy this space</b>
+      <p className="muted small" style={{ margin: '4px 0 10px' }}>
+        A new space with the published pages you can see (not drafts or archived pages), their labels, properties and restrictions, and this space's settings and
+        templates. Links between the pages point at the copies.
+      </p>
+      {!open ? (
+        <button className="btn btn-sm" onClick={() => setOpen(true)}>Copy space…</button>
+      ) : (
+        <>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <div className="field" style={{ flex: '1 1 220px', marginBottom: 8 }}>
+              <label htmlFor="copy-name">Name</label>
+              <input id="copy-name" className="input" value={name} onChange={(e) => setName(e.target.value)} />
+            </div>
+            <div className="field" style={{ flex: '0 1 160px', marginBottom: 8 }}>
+              <label htmlFor="copy-key">Key</label>
+              <input id="copy-key" className="input" value={key} maxLength={32} onChange={(e) => setKey(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ''))} />
+            </div>
+          </div>
+          <label className="row small"><input type="checkbox" checked={attachments} onChange={(e) => setAttachments(e.target.checked)} /> With attachments</label>
+          <label className="row small"><input type="checkbox" checked={people} onChange={(e) => setPeople(e.target.checked)} /> With the people and groups of this space</label>
+          <div className="row" style={{ gap: 6, marginTop: 10 }}>
+            <button className="btn btn-primary btn-sm" disabled={busy || !name.trim() || !key} onClick={run}>{busy ? <Spinner /> : null} Copy</button>
+            <button className="btn btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+          </div>
+        </>
+      )}
     </div>
   )
 }

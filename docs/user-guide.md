@@ -165,6 +165,17 @@ space as a browsable HTML site, a Markdown folder tree or a full backup.
 - **Labels** group pages across spaces (suggestions show the labels already in use); click a
   label for all its pages.
 - **Status** (page menu → *Set status…*): rough draft, in progress, ready for review, or your own.
+- **Copy** or **move** a page (page menu), with the pages below it and its attachments, within the
+  space or to another one.
+
+## Spaces
+
+Space admins manage a space in *Space settings → Details*: name, icon, description, category,
+key, the template new pages start from, and its **owner**, the person responsible for it (hand
+it over with *Change owner…*; the new owner becomes a space admin). **Copy space…** makes a new
+space with the published pages you can see, the settings, templates and (optionally) the
+people of this one; links between its pages point at the copies. **Archive space** makes it
+read-only and takes it out of search; workspace admins can restore it.
 
 ## Trash
 

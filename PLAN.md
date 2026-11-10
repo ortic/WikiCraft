@@ -207,7 +207,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** Space templates (create a space prefilled with a page structure) `C X`
 - [x] **P1** Space permissions screen (users × groups × anonymous × guests matrix) `C DC X B`
 - [x] **P1** Space admins / owners, ownership transfer `C` — every space has an owner (its creator; personal spaces their person), shown in Space settings → Details and Admin → Spaces (flagged when the owner's account is gone); space admins hand it over to an active non-guest account, who becomes a space admin and is notified (`PUT /api/spaces/{key}/owner`, audited)
-- [~] **P1** Copy space; move pages between spaces `C X` (move and copy pages with their sub-pages and attachments to another space from the page menu; no whole-space copy yet)
+- [x] **P1** Copy space; move pages between spaces `C X` — move and copy pages with their sub-pages and attachments to another space from the page menu; Space settings → Details → Copy space (space admins): settings, templates, people, and every published, not archived page the caller sees (labels, properties, restrictions, attachments), with links between the pages pointing at the copies (`POST /api/spaces/{key}/copy`, up to 10,000 pages, synchronous)
 - [x] **P1** Space key rename with redirects `X`
 - [ ] **P2** Space-level announcement banner `C`
 - [ ] **P2** Space analytics (views, contributors, popular pages) `C`

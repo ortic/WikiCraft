@@ -225,6 +225,133 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
     Ok((StatusCode::CREATED, Json(space)))
 }
 
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct CopySpace {
+    key: String,
+    name: String,
+    /// the copies get their own attachments (sharing the stored files); default yes
+    include_attachments: Option<bool>,
+    /// copy the space's people and groups too; default yes
+    include_permissions: Option<bool>,
+}
+
+/// `POST /api/spaces/{key}/copy {key, name}` (space admins): a new space with this one's
+/// settings, templates, permissions and every published, not archived page the caller can
+/// see; links between the pages point at the copies. Up to 10,000 pages.
+pub async fn copy(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(key): Path<String>,
+    Json(req): Json<CopySpace>,
+) -> ApiResult<(StatusCode, Json<serde_json::Value>)> {
+    if user.is_guest() {
+        return Err(ApiError::Forbidden);
+    }
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    let (src, role) = load_space(&state, &p, &key).await?;
+    if role < Role::Admin {
+        return Err(ApiError::Forbidden);
+    }
+    if src.personal_owner_id.is_some() {
+        return Err(ApiError::bad("personal spaces can't be copied; copy their pages instead"));
+    }
+    let new_key = validate_key(&req.key)?;
+    let name = req.name.trim();
+    if name.is_empty() {
+        return Err(ApiError::bad("name is required"));
+    }
+    let former: Option<String> =
+        sqlx::query_scalar("SELECT s.name FROM space_key_aliases a JOIN spaces s ON s.id = a.space_id WHERE a.workspace_id = $1 AND lower(a.key) = lower($2)")
+            .bind(user.workspace_id)
+            .bind(&new_key)
+            .fetch_optional(&state.db)
+            .await?;
+    if let Some(n) = former {
+        return Err(ApiError::Conflict(format!("the key {new_key} was used by the space “{n}” and still links there")));
+    }
+    let space =
+        create_space(&state, user.workspace_id, Some(user.id), &new_key, name, src.description.as_deref(), src.icon.as_deref(), &src.default_role, None)
+            .await?;
+    sqlx::query("UPDATE spaces SET category = $2 WHERE id = $1").bind(space.id).bind(&src.category).execute(&state.db).await?;
+    sqlx::query("INSERT INTO space_permissions (space_id, subject_type, subject_id, role) VALUES ($1, 'user', $2, 'admin') ON CONFLICT DO NOTHING")
+        .bind(space.id)
+        .bind(user.id)
+        .execute(&state.db)
+        .await?;
+    if req.include_permissions.unwrap_or(true) {
+        sqlx::query(
+            "INSERT INTO space_permissions (space_id, subject_type, subject_id, role) SELECT $2, subject_type, subject_id, role FROM space_permissions WHERE space_id = $1
+             ON CONFLICT DO NOTHING",
+        )
+        .bind(src.id)
+        .bind(space.id)
+        .execute(&state.db)
+        .await?;
+    }
+    // the space's own templates (and which one new pages start from)
+    let templates: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM templates WHERE space_id = $1").bind(src.id).fetch_all(&state.db).await?;
+    let mut default_template = src.default_template.clone();
+    for t in templates {
+        let copy = new_id();
+        sqlx::query(
+            "INSERT INTO templates (id, workspace_id, space_id, name, description, icon, title, content, created_by)
+             SELECT $2, workspace_id, $3, name, description, icon, title, content, $4 FROM templates WHERE id = $1",
+        )
+        .bind(t)
+        .bind(copy)
+        .bind(space.id)
+        .bind(user.id)
+        .execute(&state.db)
+        .await?;
+        if default_template.as_deref() == Some(t.to_string().as_str()) {
+            default_template = Some(copy.to_string());
+        }
+    }
+    sqlx::query("UPDATE spaces SET default_template = $2 WHERE id = $1").bind(space.id).bind(&default_template).execute(&state.db).await?;
+
+    // pages: what the caller sees, without drafts and archived sections
+    let rows: Vec<(Uuid, Option<Uuid>, bool)> =
+        sqlx::query_as("SELECT id, parent_id, draft FROM pages WHERE space_id = $1 AND deleted_at IS NULL").bind(src.id).fetch_all(&state.db).await?;
+    let pairs: Vec<(Uuid, Option<Uuid>)> = rows.iter().map(|(id, parent, _)| (*id, *parent)).collect();
+    let mut visible = crate::authz::visible_page_ids(&state, &p, src.id, role, &pairs).await?;
+    let all: Vec<Uuid> = rows.iter().map(|r| r.0).collect();
+    let archived = crate::authz::archived_among(&state, &all).await?;
+    visible.retain(|id| !archived.contains(id) && !rows.iter().any(|(r, _, draft)| r == id && *draft));
+    let roots: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM pages WHERE space_id = $1 AND parent_id IS NULL AND deleted_at IS NULL ORDER BY position")
+        .bind(src.id)
+        .fetch_all(&state.db)
+        .await?;
+    let roots: Vec<(Uuid, Option<Uuid>)> = roots.into_iter().filter(|r| visible.contains(r)).map(|r| (r, None)).collect();
+    let opts = crate::routes::pages::TreeCopy {
+        actor: user.id,
+        workspace: user.workspace_id,
+        target_space: space.id,
+        include_children: true,
+        with_attachments: req.include_attachments.unwrap_or(true),
+        relink: true,
+        first_title: None,
+        visible: &visible,
+        limit: 10_000,
+    };
+    let copied = crate::routes::pages::copy_tree(&state, &opts, roots).await?;
+    let home = src.home_page_id.and_then(|h| copied.iter().find(|(s, _)| *s == h).map(|(_, n)| *n));
+    sqlx::query("UPDATE spaces SET home_page_id = $2 WHERE id = $1").bind(space.id).bind(home).execute(&state.db).await?;
+    audit::log(
+        &state,
+        user.workspace_id,
+        Some(user.id),
+        "space.copy",
+        Some("space"),
+        Some(space.id),
+        json!({"from": src.key, "key": new_key, "pages": copied.len()}),
+    )
+    .await;
+    crate::webhooks::emit(&state, user.workspace_id, "space.created", Some(space.id), json!({"space": {"id": space.id, "key": space.key, "name": space.name}}))
+        .await;
+    Ok((StatusCode::CREATED, Json(json!({ "id": space.id, "key": space.key, "pages": copied.len(), "truncated": copied.len() >= 10_000 }))))
+}
+
 fn welcome_doc(name: &str) -> wikicraft_doc_model::Node {
     use wikicraft_doc_model::{Node, nodes};
     Node::doc(vec![

@@ -175,6 +175,7 @@ op("/pages/{id}/unarchive", "post", "Pages", "Restore an archived page", res=res
 op("/spaces/{key}/archived", "get", "Spaces", "Archived pages of a space", res=resp(arr(obj({"id": uuid, "title": txt, "archivedAt": txt, "archivedBy": txt, "descendants": num, "canRestore": boolean}))))
 op("/spaces/{key}/star", "put", "Spaces", "Star a space (shown first in the directory and in the sidebar)", res=NO)
 op("/spaces/{key}/star", "delete", "Spaces", "Unstar a space", res=NO)
+op("/spaces/{key}/copy", "post", "Spaces", "Copy the space (space admins): settings, templates, people (includePermissions), and every published, not archived page the caller sees with labels, properties, restrictions and attachments (includeAttachments); links between the pages point at the copies. Up to 10,000 pages", req=body(obj({"key": txt, "name": txt, "includeAttachments": boolean, "includePermissions": boolean})), res=resp(obj({"id": uuid, "key": txt, "pages": num, "truncated": boolean}), "201", "Created"))
 op("/spaces/{key}/owner", "put", "Spaces", "Hand the space over (space admins): the new owner becomes a space admin and is notified", req=body(obj({"userId": uuid})), res=resp(S("Space")))
 op("/spaces/{key}/watch", "put", "Spaces", "Watch the space (new and updated pages)", res=NO)
 op("/spaces/{key}/watch", "delete", "Spaces", "Stop watching the space", res=NO)

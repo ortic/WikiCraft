@@ -338,3 +338,78 @@ async fn space_owner_handover() {
     assert_eq!(app.get(&owner, &format!("/spaces/{key}")).await.1["ownerId"], owner_id.as_str());
     assert_eq!(app.put(&owner, &format!("/spaces/{key}/owner"), json!({"userId": owner_id})).await.0, 400);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn copying_a_whole_space() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (rita, rita_id) = app.user(&owner, "rita@acme.test", "member").await;
+    let (_, sp) = app.post(&owner, "/spaces", json!({"key": "SRC", "name": "Source", "defaultRole": "viewer"})).await;
+    let home = sp["homePageId"].as_str().unwrap().to_string();
+    app.put(&owner, "/spaces/SRC/permissions", json!({"grants": [{"subjectType": "user", "subjectId": rita_id, "role": "editor"}]})).await;
+    let (_, me) = app.get(&owner, "/me").await;
+    let owner_id = me["user"]["id"].as_str().unwrap().to_string();
+
+    let mk = |title: &str, parent: &str| json!({"spaceKey": "SRC", "title": title, "parentId": parent});
+    let (_, guide) = app.post(&owner, "/pages", mk("Guide", &home)).await;
+    let guide = guide["id"].as_str().unwrap().to_string();
+    let (_, setup) = app.post(&owner, "/pages", mk("Setup", &guide)).await;
+    let setup = setup["id"].as_str().unwrap().to_string();
+    let form = reqwest::multipart::Form::new().part("file", reqwest::multipart::Part::bytes(b"\x89PNG\r\n\x1a\nimg".to_vec()).file_name("shot.png"));
+    let rows: Value = owner.post(app.url(&format!("/pages/{setup}/attachments"))).multipart(form).send().await.unwrap().json().await.unwrap();
+    let att = rows[0]["id"].as_str().unwrap().to_string();
+    app.put(&owner, &format!("/pages/{setup}/content"), json!({"markdown": format!("![shot](/api/attachments/{att}/content)")})).await;
+    app.put(&owner, &format!("/pages/{guide}/content"), json!({"markdown": format!("Start with [the setup](/pages/{setup}).")})).await;
+    app.put(&owner, &format!("/pages/{guide}/labels"), json!({"labels": ["howto"]})).await;
+    app.put(&owner, &format!("/pages/{guide}/properties"), json!({"properties": [{"key": "Next", "type": "page", "value": setup}]})).await;
+    let (_, secret) = app.post(&owner, "/pages", mk("Secret", &home)).await;
+    let secret = secret["id"].as_str().unwrap().to_string();
+    app.put(&owner, &format!("/pages/{secret}/restrictions"), json!({"restrictions": [{"kind": "view", "subjectType": "user", "subjectId": owner_id}]})).await;
+    let (_, old) = app.post(&owner, "/pages", mk("Old stuff", &home)).await;
+    app.post(&owner, &format!("/pages/{}/archive", old["id"].as_str().unwrap()), json!({})).await;
+    let (st, _) = app.post(&rita, "/pages", json!({"spaceKey": "SRC", "title": "Rita's draft", "parentId": home, "draft": true})).await;
+    assert_eq!(st, 201);
+    let (st, tpl) = app.post(&owner, "/templates", json!({"name": "Ops checklist", "pageId": setup, "spaceKey": "SRC"})).await;
+    assert_eq!(st, 201, "{tpl}");
+    let tpl = tpl["id"].as_str().unwrap().to_string();
+    app.patch(&owner, "/spaces/SRC", json!({"defaultTemplate": tpl})).await;
+
+    // only space admins copy a space
+    assert_eq!(app.post(&rita, "/spaces/SRC/copy", json!({"key": "DST", "name": "Copy"})).await.0, 403);
+    let (st, r) = app.post(&owner, "/spaces/SRC/copy", json!({"key": "DST", "name": "Copy"})).await;
+    assert_eq!(st, 201, "{r}");
+    assert_eq!(r["pages"], 4, "home, guide, setup, secret: no drafts, nothing archived");
+    assert_eq!(app.post(&owner, "/spaces/SRC/copy", json!({"key": "DST", "name": "Again"})).await.0, 409);
+
+    let (_, tree) = app.get(&owner, "/spaces/DST/tree").await;
+    let nodes = tree["nodes"].as_array().unwrap();
+    let id_of = |t: &str| nodes.iter().find(|n| n["title"] == t).map(|n| n["id"].as_str().unwrap().to_string()).unwrap_or_else(|| panic!("{t} missing"));
+    let mut titles: Vec<&str> = nodes.iter().map(|n| n["title"].as_str().unwrap()).collect();
+    titles.sort();
+    assert_eq!(titles, vec!["Guide", "Secret", "Setup", "Source"]);
+    assert_eq!(tree["homePageId"].as_str().unwrap(), id_of("Source"));
+    // links, attachments and page properties point at the copies
+    let (new_guide, new_setup) = (id_of("Guide"), id_of("Setup"));
+    let (_, g) = app.get(&owner, &format!("/pages/{new_guide}")).await;
+    assert!(g["content"].to_string().contains(&format!("/pages/{new_setup}")), "{}", g["content"]);
+    assert_eq!(g["labels"], json!(["howto"]));
+    assert_eq!(g["properties"][0]["value"], new_setup.as_str());
+    let (_, s) = app.get(&owner, &format!("/pages/{new_setup}")).await;
+    let (_, atts) = app.get(&owner, &format!("/pages/{new_setup}/attachments")).await;
+    let new_att = atts[0]["id"].as_str().unwrap();
+    assert_ne!(new_att, att);
+    assert!(s["content"].to_string().contains(&format!("/api/attachments/{new_att}/")), "{}", s["content"]);
+    // the original is untouched
+    let (_, orig) = app.get(&owner, &format!("/pages/{guide}")).await;
+    assert!(orig["content"].to_string().contains(&format!("/pages/{setup}")));
+    // people, restrictions, settings and templates came along
+    let (_, d) = app.get(&rita, "/spaces/DST").await;
+    assert_eq!(d["role"], "editor");
+    assert_eq!(d["defaultRole"], "viewer");
+    assert_eq!(d["ownerId"], owner_id.as_str());
+    assert_eq!(app.get(&rita, &format!("/pages/{}", id_of("Secret"))).await.0, 404, "restrictions are copied");
+    let (_, templates) = app.get(&owner, "/templates?spaceKey=DST").await;
+    let copied_tpl = templates.as_array().unwrap().iter().find(|t| t["name"] == "Ops checklist").cloned().unwrap();
+    assert_ne!(copied_tpl["id"], tpl.as_str());
+    assert_eq!(d["defaultTemplate"], copied_tpl["id"]);
+}
