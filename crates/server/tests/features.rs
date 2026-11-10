@@ -848,3 +848,55 @@ async fn people_directory_and_profiles() {
     let (st, _) = app.get(&guest, &format!("/people/{owner_id}")).await;
     assert_eq!(st, 404);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn scheduled_publishing() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    app.post(&owner, "/spaces", json!({"key": "PUB", "name": "Publishing", "defaultRole": "editor"})).await;
+    let (bob, _) = app.user(&owner, "bob@acme.test", "member").await;
+    let (_, d) = app.post(&owner, "/pages", json!({"spaceKey": "PUB", "title": "Launch post", "draft": true})).await;
+    let draft = d["id"].as_str().unwrap().to_string();
+    let soon = |secs: i64| (chrono::Utc::now() + chrono::Duration::seconds(secs)).to_rfc3339();
+
+    for at in [soon(-60), soon(400 * 24 * 3600)] {
+        let (st, _) = app.put(&owner, &format!("/pages/{draft}/publish-schedule"), json!({ "at": at })).await;
+        assert_eq!(st, 400, "{at}");
+    }
+    let (st, _) = app.put(&bob, &format!("/pages/{draft}/publish-schedule"), json!({ "at": soon(3600) })).await;
+    assert!(st >= 400, "someone else's draft");
+    let (st, r) = app.put(&owner, &format!("/pages/{draft}/publish-schedule"), json!({ "at": soon(3600) })).await;
+    assert_eq!(st, 200, "{r}");
+    let (_, p) = app.get(&owner, &format!("/pages/{draft}")).await;
+    assert!(p["publishAt"].is_string() && p["draft"] == true);
+    // not due yet: nothing happens
+    assert_eq!(wikicraft::routes::pages::publish_scheduled(&app.state).await.unwrap(), 0);
+
+    // its time has come
+    sqlx::query("UPDATE pages SET publish_at = now() - interval '1 second' WHERE id = $1::uuid").bind(&draft).execute(&app.state.db).await.unwrap();
+    assert_eq!(wikicraft::routes::pages::publish_scheduled(&app.state).await.unwrap(), 1);
+    let (st, p) = app.get(&bob, &format!("/pages/{draft}")).await;
+    assert_eq!(st, 200, "everybody sees it now");
+    assert_eq!((p["draft"].as_bool(), p["publishAt"].is_null()), (Some(false), true));
+    let (_, versions) = app.get(&owner, &format!("/pages/{draft}/versions")).await;
+    assert!(versions.as_array().unwrap().iter().any(|v| v["message"] == "Published"));
+
+    // cancelled schedules stay drafts
+    let (_, d2) = app.post(&owner, "/pages", json!({"spaceKey": "PUB", "title": "Maybe later", "draft": true})).await;
+    let d2 = d2["id"].as_str().unwrap().to_string();
+    app.put(&owner, &format!("/pages/{d2}/publish-schedule"), json!({ "at": soon(3600) })).await;
+    assert_eq!(app.delete(&owner, &format!("/pages/{d2}/publish-schedule")).await, 204);
+    let (_, p) = app.get(&owner, &format!("/pages/{d2}")).await;
+    assert!(p["publishAt"].is_null() && p["draft"] == true);
+
+    // an author who can't edit there any more doesn't publish
+    let (_, d3) = app.post(&bob, "/pages", json!({"spaceKey": "PUB", "title": "Bob's post", "draft": true})).await;
+    let d3 = d3["id"].as_str().unwrap().to_string();
+    let (st, _) = app.put(&bob, &format!("/pages/{d3}/publish-schedule"), json!({ "at": soon(3600) })).await;
+    assert_eq!(st, 200);
+    app.patch(&owner, "/spaces/PUB", json!({"defaultRole": "viewer"})).await;
+    sqlx::query("UPDATE pages SET publish_at = now() - interval '1 second' WHERE id = $1::uuid").bind(&d3).execute(&app.state.db).await.unwrap();
+    assert_eq!(wikicraft::routes::pages::publish_scheduled(&app.state).await.unwrap(), 0);
+    let draft_still: bool = sqlx::query_scalar("SELECT draft FROM pages WHERE id = $1::uuid").bind(&d3).fetch_one(&app.state.db).await.unwrap();
+    assert!(draft_still);
+}

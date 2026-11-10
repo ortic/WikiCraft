@@ -22,7 +22,9 @@ Mac) in the app for the keyboard shortcuts.
 
 New pages start as **private drafts**: only you see them (and pages you add below them) until
 you press **Publish**; nobody is notified before that. Your drafts are listed on Home. Untick
-*Start as a private draft* in the Create dialog to publish right away.
+*Start as a private draft* in the Create dialog to publish right away. **Schedule…** in the draft
+banner publishes it by itself at a time you pick (up to a year ahead), as long as you can still
+edit the page then.
 
 Click into a page you may edit and start typing: there's no edit mode and no "save" button.
 Everyone on the page edits together and sees each other's cursors; click a person's avatar to

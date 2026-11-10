@@ -196,7 +196,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P2** Release tracks (choose when new features roll out) `C`
 
 ### 4.2 Spaces
-- [~] **P0** Create / edit / delete spaces (name, key, description, icon/emoji, cover) `C D X O B` (no cover image)
+- [x] **P0** Create / edit / delete spaces (name, key, description, icon/emoji, cover) `C D X O B` — a space opens on its home page, so its cover is the home page's cover (gradient, uploaded image or link); the directory is a list, where a separate cover image wouldn't show
 - [x] **P0** Space home / overview page `C D X`
 - [x] **P0** Personal spaces per user `C D`
 - [~] **P1** Space directory with search, categories, filters (team, personal, archived, starred) `C X` (name/key filter, categories, starred filter and starred first; archived spaces in Admin → Spaces; no personal-space filter)
@@ -369,7 +369,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P1** "What changed since my last visit" highlighting `C` (banner + diff since the last seen version; no inline highlight)
 - [x] **P1** Minor edit flag (no notifications) `C X` — "Minor change" switch while editing (per person and editing session, `PUT /pages/{id}/minor-edit`): the session's version is minor when everybody who edited it said so, watchers aren't notified, history shows *minor*; `minor` on named versions; webhooks carry it
 - [x] **P1** Personal unpublished drafts (new pages not yet published) and a drafts list `C D` — `pages.draft`: only the creator sees a draft and the pages below it (space admins included; enforced in the central access checks), no mentions / watcher notifications / webhooks until Publish (which also creates a "Published" version); new pages from the Create dialog start as drafts (remembered choice); draft banner + Publish, draft badge in the tree, Drafts on Home, `GET /me/drafts`
-- [ ] **P1** Scheduled publishing `C(apps)`
+- [x] **P1** Scheduled publishing `C(apps)` — drafts publish themselves at a chosen time (`PUT /pages/{id}/publish-schedule`, up to a year ahead) on behalf of their author, only if they can still edit the page then; claimed by one replica (`FOR UPDATE SKIP LOCKED`); schedule shown in the draft banner and Home → Drafts
 - [x] **P1** Attachment versioning (upload a new version of the same file name) `C X` — version history in the attachments panel: download any version, make an earlier one current again (as a new version); `GET /attachments/{id}/versions`
 - [ ] **P2** Version retention rules (keep N versions / X days; per space) `C DC`
 - [ ] **P2** Version history for page properties, labels, permissions (audit-backed)

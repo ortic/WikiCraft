@@ -2207,6 +2207,61 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /pages/{id}/publish-schedule:
+    put:
+      tags:
+      - Pages
+      summary: Publish your draft automatically at a time (up to a year ahead); it publishes only if you can still edit it
+        then
+      operationId: put_pages_id_publish_schedule
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                at: *id004
+              required:
+              - at
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  publishAt: *id004
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+      - Pages
+      summary: Cancel the scheduled publishing of your draft
+      operationId: delete_pages_id_publish_schedule
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '204': *id007
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /me/drafts:
     get:
       tags:

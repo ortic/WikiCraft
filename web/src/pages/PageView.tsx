@@ -15,6 +15,7 @@ import AttachmentsPanel from '../components/AttachmentsPanel'
 import RestrictionsDialog from '../components/RestrictionsDialog'
 import ShareDialog from '../components/ShareDialog'
 import MinorEditToggle from '../components/MinorEdit'
+import DraftBanner from '../components/DraftBanner'
 
 type Panel = 'comments' | 'attachments' | null
 
@@ -334,14 +335,7 @@ export default function PageView() {
           {space.data?.archivedAt && (
             <div className="archived-banner">This space was archived on {formatDate(space.data.archivedAt)} and is read-only.</div>
           )}
-          {p.draft && (
-            <div className="draft-banner" role="status">
-              <b>Draft</b>
-              <span>Only you can see this page{p.kind === 'blog' ? ' post' : ''} and the pages below it. Publish it when it's ready.</span>
-              <span className="spacer" />
-              <button className="btn btn-primary btn-sm" onClick={publish}>Publish</button>
-            </div>
-          )}
+          {p.draft && <DraftBanner page={p} onPublish={publish} />}
           <PageDecor page={p} canEdit={canEdit} onChange={() => qc.invalidateQueries({ queryKey: ['page', p.id] })} />
           <textarea
             ref={titleRef}

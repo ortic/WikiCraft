@@ -182,7 +182,7 @@ export default function Home() {
             />
           )}
           {tab === 'starred' && <PageList items={favs.data} empty="Star pages to find them quickly." timeLabel={(p) => formatDate(p.updatedAt)} />}
-          {tab === 'drafts' && <PageList items={drafts.data} empty="No unpublished drafts." timeLabel={(p) => `edited ${formatDate(p.updatedAt)}`} />}
+          {tab === 'drafts' && <PageList items={drafts.data} empty="No unpublished drafts." timeLabel={(p) => (p.publishAt ? `publishes ${new Date(p.publishAt).toLocaleString(undefined, { dateStyle: 'medium', timeStyle: 'short' })}` : `edited ${formatDate(p.updatedAt)}`)} />}
         </>
       )}
       {create && <CreateSpaceDialog onClose={() => setCreate(false)} />}

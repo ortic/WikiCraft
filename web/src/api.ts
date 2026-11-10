@@ -89,6 +89,8 @@ export interface TreeNode {
   url?: string
   /** your unpublished draft */
   draft?: boolean
+  /** when the draft publishes itself */
+  publishAt?: string | null
 }
 
 export interface PageAccess {
@@ -203,6 +205,8 @@ export interface PageListItem {
   updatedAt: string
   updatedByName: string | null
   at: string | null
+  /** drafts: when it publishes itself */
+  publishAt?: string | null
 }
 
 export interface Job {

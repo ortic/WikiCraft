@@ -27,6 +27,7 @@ pub fn spawn_worker(state: &AppState) {
     tokio::spawn(async move {
         let mut tick = tokio::time::interval(Duration::from_secs(2));
         let mut last_purge: Option<std::time::Instant> = None;
+        let mut last_schedule: Option<std::time::Instant> = None;
         loop {
             tick.tick().await;
             if state.shutting_down.load(std::sync::atomic::Ordering::SeqCst) {
@@ -37,6 +38,15 @@ pub fn spawn_worker(state: &AppState) {
             }
             if let Err(e) = expire_exports(&state).await {
                 tracing::warn!("export cleanup failed: {e}");
+            }
+            // drafts whose publishing time has come, every 20 seconds
+            if last_schedule.is_none_or(|t| t.elapsed() > Duration::from_secs(20)) {
+                last_schedule = Some(std::time::Instant::now());
+                match crate::routes::pages::publish_scheduled(&state).await {
+                    Ok(0) => {}
+                    Ok(n) => tracing::info!(pages = n, "published scheduled drafts"),
+                    Err(e) => tracing::warn!("scheduled publishing failed: {e:#}"),
+                }
             }
             // trash past its retention period, every 10 minutes
             if last_purge.is_none_or(|t| t.elapsed() > Duration::from_secs(600)) {

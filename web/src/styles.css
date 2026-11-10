@@ -88,6 +88,8 @@ code, pre { font-family: var(--mono); }
 /* Admin → Import: options of an update import */
 .update-import { display: flex; flex-direction: column; gap: 6px; margin-top: 10px; }
 .update-import .badge { margin-left: 4px; }
+/* a compact input (in banners and toolbars) */
+.input-sm { padding: 3px 8px; font-size: 13px; min-height: 28px; width: auto; }
 /* a line of information in a menu */
 .menu-note { padding: 4px 12px 6px 34px; }
 .minor-toggle { border: 1px solid var(--border); background: transparent; cursor: pointer; font-family: inherit; min-height: 24px; }

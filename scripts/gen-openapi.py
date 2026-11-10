@@ -133,6 +133,8 @@ op("/pages/{id}/content", "put", "Pages", "Replace the content (live editors get
 op("/pages/{id}/move", "post", "Pages", "Move (parent, position, other space)", req=body(obj({"parentId": uuid, "spaceKey": txt, "position": {"type": "number"}})), res=NO)
 op("/pages/{id}/copy", "post", "Pages", "Copy a page (optionally with sub-pages)", req=body(obj({"includeChildren": boolean, "parentId": uuid})))
 op("/pages/{id}/publish", "post", "Pages", "Publish your unpublished draft: everyone who can see its place in the space sees it", res=NO)
+op("/pages/{id}/publish-schedule", "put", "Pages", "Publish your draft automatically at a time (up to a year ahead); it publishes only if you can still edit it then", req=body(obj({"at": dt}, ["at"])), res=resp(obj({"publishAt": dt})))
+op("/pages/{id}/publish-schedule", "delete", "Pages", "Cancel the scheduled publishing of your draft", res=NO)
 op("/me/drafts", "get", "Account", "My unpublished drafts", res=resp(arr(obj({"id": uuid, "title": txt, "spaceKey": txt, "spaceName": txt, "updatedAt": dt}))))
 op("/pages/{id}/viewers", "get", "Pages", "Who viewed the page and when (editors; only when an admin turned on the viewer list)", res=resp(arr(obj({"userId": uuid, "name": txt, "lastViewed": {"type": "string", "format": "date"}, "views": num}))))
 op("/pages/{id}/purge", "post", "Pages", "Delete a trashed page for good, with its trashed sub-pages, history, comments and attachments (space admins)", res=resp(obj({"purged": num})))

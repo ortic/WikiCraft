@@ -252,27 +252,112 @@ async fn announce_new_page(state: &AppState, id: Uuid, doc: &Node, actor: Uuid) 
 pub async fn publish(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
     let p = Principal::load(&state, Some(user.clone())).await?;
     require_page(&state, &p, id, Need::Edit).await?;
-    let published = sqlx::query("UPDATE pages SET draft = false, updated_at = now(), updated_by = $2 WHERE id = $1 AND draft AND created_by = $2")
-        .bind(id)
-        .bind(user.id)
-        .execute(&state.db)
-        .await?;
-    if published.rows_affected() == 0 {
+    if !publish_draft(&state, id, &user).await? {
         return Err(ApiError::bad("this page isn't your unpublished draft"));
+    }
+    Ok(StatusCode::NO_CONTENT)
+}
+
+/// Publishes `user`'s draft: others see it from now on, mentioned people, watchers and webhooks
+/// are told, and a "Published" version is made. False when it isn't their draft (any more).
+async fn publish_draft(state: &AppState, id: Uuid, user: &crate::auth::User) -> ApiResult<bool> {
+    let published =
+        sqlx::query("UPDATE pages SET draft = false, publish_at = NULL, updated_at = now(), updated_by = $2 WHERE id = $1 AND draft AND created_by = $2")
+            .bind(id)
+            .bind(user.id)
+            .execute(&state.db)
+            .await?;
+    if published.rows_affected() == 0 {
+        return Ok(false);
     }
     // the content as it is now, from the live session if one is open
     if let Some(room) = state.rooms.get(id) {
-        crate::collab::persist_with(&state, &room, false).await.map_err(ApiError::Internal)?;
+        crate::collab::persist_with(state, &room, false).await.map_err(ApiError::Internal)?;
     }
-    if let Err(e) = create_version(&state, id, Some(user.id), Some("Published".into())).await {
+    if let Err(e) = create_version(state, id, Some(user.id), Some("Published".into())).await {
         tracing::warn!(page = %id, "version on publish failed: {e:#}");
     }
     let content: Value = sqlx::query_scalar("SELECT content FROM pages WHERE id = $1").bind(id).fetch_one(&state.db).await?;
     let doc = Node::from_json(&content).unwrap_or_else(|_| Node::empty_doc());
     state.search.enqueue(id);
-    announce_new_page(&state, id, &doc, user.id).await;
-    audit::log(&state, user.workspace_id, Some(user.id), "page.publish", Some("page"), Some(id), json!({})).await;
+    announce_new_page(state, id, &doc, user.id).await;
+    audit::log(state, user.workspace_id, Some(user.id), "page.publish", Some("page"), Some(id), json!({})).await;
+    Ok(true)
+}
+
+#[derive(Deserialize)]
+pub struct Schedule {
+    at: chrono::DateTime<chrono::Utc>,
+}
+
+/// `PUT /pages/{id}/publish-schedule` — the draft publishes itself at `at` (its creator only).
+pub async fn schedule_publish(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(req): Json<Schedule>,
+) -> ApiResult<Json<Value>> {
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    require_page(&state, &p, id, Need::Edit).await?;
+    let now = chrono::Utc::now();
+    if req.at <= now + chrono::Duration::seconds(30) {
+        return Err(ApiError::bad("pick a time in the future, or publish now"));
+    }
+    if req.at > now + chrono::Duration::days(366) {
+        return Err(ApiError::bad("schedules go at most a year ahead"));
+    }
+    let set = sqlx::query("UPDATE pages SET publish_at = $3 WHERE id = $1 AND draft AND created_by = $2 AND deleted_at IS NULL")
+        .bind(id)
+        .bind(user.id)
+        .bind(req.at)
+        .execute(&state.db)
+        .await?;
+    if set.rows_affected() == 0 {
+        return Err(ApiError::bad("only your own unpublished drafts can be scheduled"));
+    }
+    audit::log(&state, user.workspace_id, Some(user.id), "page.schedule_publish", Some("page"), Some(id), json!({"at": req.at})).await;
+    Ok(Json(json!({ "publishAt": req.at })))
+}
+
+/// `DELETE /pages/{id}/publish-schedule` — the draft stays a draft.
+pub async fn unschedule_publish(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+    sqlx::query("UPDATE pages SET publish_at = NULL WHERE id = $1 AND draft AND created_by = $2").bind(id).bind(user.id).execute(&state.db).await?;
     Ok(StatusCode::NO_CONTENT)
+}
+
+/// Publishes drafts whose time has come, on behalf of their creators (if they can still edit
+/// them). Each due draft is claimed by one replica. Returns how many were published.
+pub async fn publish_scheduled(state: &AppState) -> anyhow::Result<usize> {
+    let due: Vec<(Uuid, Uuid)> = sqlx::query_as(
+        "UPDATE pages SET publish_at = NULL WHERE id IN (
+            SELECT id FROM pages WHERE draft AND publish_at <= now() AND deleted_at IS NULL ORDER BY publish_at LIMIT 50 FOR UPDATE SKIP LOCKED)
+         RETURNING id, created_by",
+    )
+    .fetch_all(&state.db)
+    .await?;
+    let mut published = 0;
+    for (id, creator) in due {
+        let user: Option<crate::auth::User> =
+            sqlx::query_as(sqlx::AssertSqlSafe(format!("SELECT {} FROM users WHERE id = $1 AND status = 'active'", crate::auth::USER_COLUMNS)))
+                .bind(creator)
+                .fetch_optional(&state.db)
+                .await?;
+        let Some(user) = user else {
+            tracing::warn!(page = %id, "scheduled publishing skipped: the author's account isn't active");
+            continue;
+        };
+        let p = Principal::load(state, Some(user.clone())).await.map_err(|e| anyhow::anyhow!("{e}"))?;
+        if require_page(state, &p, id, Need::Edit).await.is_err() {
+            tracing::warn!(page = %id, "scheduled publishing skipped: the author can't edit the page any more");
+            continue;
+        }
+        match publish_draft(state, id, &user).await {
+            Ok(true) => published += 1,
+            Ok(false) => {}
+            Err(e) => tracing::warn!(page = %id, "scheduled publishing failed: {e}"),
+        }
+    }
+    Ok(published)
 }
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -283,13 +368,15 @@ pub struct DraftRow {
     space_key: String,
     space_name: String,
     updated_at: chrono::DateTime<chrono::Utc>,
+    /// when it publishes itself
+    publish_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
 /// `GET /me/drafts` — my unpublished drafts, last edited first.
 pub async fn my_drafts(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Vec<DraftRow>>> {
     Ok(Json(
         sqlx::query_as::<_, DraftRow>(
-            "SELECT p.id, p.title, s.key AS space_key, s.name AS space_name, p.updated_at FROM pages p JOIN spaces s ON s.id = p.space_id
+            "SELECT p.id, p.title, s.key AS space_key, s.name AS space_name, p.updated_at, p.publish_at FROM pages p JOIN spaces s ON s.id = p.space_id
               WHERE p.draft AND p.created_by = $1 AND p.deleted_at IS NULL ORDER BY p.updated_at DESC LIMIT 100",
         )
         .bind(user.id)
@@ -318,6 +405,9 @@ pub struct PageRow {
     /// an unpublished draft (only its creator sees it)
     #[sqlx(default)]
     pub draft: bool,
+    /// when the draft publishes itself
+    #[sqlx(default)]
+    pub publish_at: Option<chrono::DateTime<chrono::Utc>>,
     pub created_by: Option<Uuid>,
     pub created_by_name: Option<String>,
     /// responsible person: the owner if set, else the creator
@@ -332,7 +422,7 @@ pub struct PageRow {
     pub deleted_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-const PAGE_SELECT: &str = "SELECT p.id, p.space_id, s.key AS space_key, s.name AS space_name, p.parent_id, p.kind, p.title, p.icon, p.cover, p.content, p.version, p.status, p.page_status, p.full_width, p.draft,
+const PAGE_SELECT: &str = "SELECT p.id, p.space_id, s.key AS space_key, s.name AS space_name, p.parent_id, p.kind, p.title, p.icon, p.cover, p.content, p.version, p.status, p.page_status, p.full_width, p.draft, p.publish_at,
     p.created_by, cu.name AS created_by_name, COALESCE(p.owner_id, p.created_by) AS owner_id, COALESCE(ou.name, cu.name) AS owner_name,
     p.created_at, p.updated_by, uu.name AS updated_by_name, p.updated_at, p.deleted_at
     FROM pages p JOIN spaces s ON s.id = p.space_id LEFT JOIN users cu ON cu.id = p.created_by LEFT JOIN users uu ON uu.id = p.updated_by
