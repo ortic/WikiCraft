@@ -1,8 +1,10 @@
 // One journey through a fresh WikiCraft: setup, spaces, editing, collaboration, comments,
-// search, sharing, export and two-factor sign-in. Tests run in order and build on each other.
+// search, sharing, export, two-factor sign-in and accessibility. Tests run in order and build
+// on each other.
 
 import { createHmac } from 'node:crypto'
-import { expect, test, type Browser, type BrowserContext } from '@playwright/test'
+import AxeBuilder from '@axe-core/playwright'
+import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test'
 
 const OWNER = { name: 'Olivia Owner', email: 'olivia@e2e.test', password: 'correct horse battery' }
 const MEMBER = { name: 'Max Member', email: 'max@e2e.test', password: 'password-123' }
@@ -267,4 +269,34 @@ test('template instructions, decisions and the decision log', async ({ browser }
   await page.keyboard.press('Enter')
   await expect(page.locator('.macro-table')).toContainText('Launch in Europe first', { timeout: 15_000 })
   await ctx.close()
+})
+
+test('main screens have no serious accessibility violations (axe, WCAG 2.2 AA)', async ({ browser }) => {
+  const problems: string[] = []
+  const audit = async (p: Page, name: string) => {
+    await p.waitForLoadState('networkidle').catch(() => {})
+    const { violations } = await new AxeBuilder({ page: p })
+      .withTags(['wcag2a', 'wcag2aa', 'wcag21a', 'wcag21aa', 'wcag22aa'])
+      .analyze()
+    for (const v of violations.filter((v) => v.impact === 'critical' || v.impact === 'serious')) {
+      const nodes = v.nodes.map((n) => `    ${n.target.join(' ')}\n      ${(n.failureSummary ?? '').replace(/\n/g, '\n      ')}`)
+      problems.push(`${name}: [${v.impact}] ${v.id}: ${v.help}\n  ${v.helpUrl}\n${nodes.join('\n')}`)
+    }
+  }
+  const ctx = await browser.newContext({ storageState: ownerState })
+  const page = await ctx.newPage()
+  for (const url of ['/', pageUrl, '/spaces', '/search?q=mobile', '/settings', '/admin']) {
+    await page.goto(url)
+    if (url === pageUrl) await expect(page.locator('.ProseMirror')).toContainText('iOS app', { timeout: 20_000 })
+    else await expect(page.locator('.sidebar')).toBeVisible()
+    await audit(page, url)
+  }
+  await ctx.close()
+  const anon = await browser.newContext()
+  const login = await anon.newPage()
+  await login.goto('/login')
+  await expect(login.getByRole('button', { name: 'Log in' })).toBeVisible()
+  await audit(login, '/login')
+  await anon.close()
+  expect(problems.length, `accessibility violations:\n\n${problems.join('\n\n')}\n`).toBe(0)
 })
