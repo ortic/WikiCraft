@@ -8,7 +8,7 @@ import { EMOTICONS, Emoticon } from '../icons'
 import { forwardRef, useEffect, useImperativeHandle, useState, type ReactNode } from 'react'
 import {
   Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Quote, Code2, Minus, Table, Info, AlertTriangle, CheckCircle2, XCircle, ChevronRight,
-  UserRound, Hash, ListTree, CalendarDays, Tag, Sigma, Image as ImageIcon, Link2, Columns2, Paperclip, StickyNote, FileText, FilePlus2, PenTool, Workflow,
+  UserRound, Hash, ListTree, CalendarDays, Tag, Sigma, Image as ImageIcon, Link2, Columns2, Paperclip, StickyNote, FileText, FilePlus2, PenTool, Workflow, Columns3, PanelLeft, PanelRight,
   MessageSquareDashed, Milestone,
 } from 'lucide-react'
 import { api } from '../api'
@@ -145,6 +145,9 @@ export function slashItems(onImage: (editor: Editor) => void, onAttachment: (edi
     { group: 'Panels', title: 'Error panel', icon: ic(XCircle), keywords: 'callout danger', command: (e, r) => e.chain().focus().deleteRange(r).wrapIn('callout', { type: 'error' }).run() },
     { group: 'Panels', title: 'Expand', description: 'Collapsible section', icon: ic(ChevronRight), keywords: 'details toggle collapse', command: (e, r) => e.chain().focus().deleteRange(r).setDetails().run() },
     { group: 'Panels', title: 'Two columns', icon: ic(Columns2), keywords: 'layout section', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'columns', content: [{ type: 'column', content: [{ type: 'paragraph' }] }, { type: 'column', content: [{ type: 'paragraph' }] }] }).run() },
+    { group: 'Panels', title: 'Three columns', icon: ic(Columns3), keywords: 'layout section 3', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'columns', attrs: { layout: 'three_equal' }, content: [{ type: 'column', content: [{ type: 'paragraph' }] }, { type: 'column', content: [{ type: 'paragraph' }] }, { type: 'column', content: [{ type: 'paragraph' }] }] }).run() },
+    { group: 'Panels', title: 'Sidebar on the left', icon: ic(PanelLeft), keywords: 'layout section columns narrow', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'columns', attrs: { layout: 'two_left_sidebar' }, content: [{ type: 'column', content: [{ type: 'paragraph' }] }, { type: 'column', content: [{ type: 'paragraph' }] }] }).run() },
+    { group: 'Panels', title: 'Sidebar on the right', icon: ic(PanelRight), keywords: 'layout section columns narrow', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'columns', attrs: { layout: 'two_right_sidebar' }, content: [{ type: 'column', content: [{ type: 'paragraph' }] }, { type: 'column', content: [{ type: 'paragraph' }] }] }).run() },
     { group: 'Media', title: 'Image', description: 'Upload an image', icon: ic(ImageIcon), keywords: 'picture photo', command: (e, r) => { e.chain().focus().deleteRange(r).run(); onImage(e) } },
     {
       group: 'Media',

@@ -355,6 +355,37 @@ test('a draw.io diagram is edited in the draw.io frame and saved with a preview'
   await ctx.close()
 })
 
+test('text colour from the selection menu and a three-column layout', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState })
+  const page = await ctx.newPage()
+  await page.goto('/')
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/api/pages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-wikicraft': '1' }, body: JSON.stringify({ spaceKey: 'PRODUCT', title: 'Colours', markdown: 'Ship the release today' }) })
+    return (await r.json()).id as string
+  })
+  await page.goto(`/pages/${id}`)
+  const editor = page.locator('.ProseMirror[contenteditable="true"]')
+  await expect(editor).toContainText('Ship the release today', { timeout: 20_000 })
+  await editor.getByText('Ship the release today').click()
+  await page.keyboard.press('Home')
+  await page.keyboard.press('Shift+End')
+  await expect.poll(() => page.evaluate(() => String(window.getSelection()))).toBe('Ship the release today')
+  await page.getByRole('button', { name: 'Text colour, highlight and alignment' }).click()
+  await page.getByRole('button', { name: 'Text colour Red' }).click()
+  await expect(editor.locator('span[style*="color"]')).toHaveText('Ship the release today')
+  await page.keyboard.press('End')
+  // the editor has taken in the collapsed selection once the selection menu is gone
+  await expect(page.locator('.bubble')).toBeHidden()
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('/three')
+  await page.keyboard.press('Enter')
+  await expect(page.locator('.ProseMirror .columns[data-layout="three_equal"] > .column')).toHaveCount(3)
+  await expect
+    .poll(async () => page.evaluate(async (pid) => JSON.stringify((await (await fetch(`/api/pages/${pid}`)).json()).content), id), { timeout: 15_000 })
+    .toMatch(/#d14343[\s\S]*three_equal|three_equal[\s\S]*#d14343/)
+  await ctx.close()
+})
+
 test('main screens have no serious accessibility violations (axe, WCAG 2.2 AA)', async ({ browser }) => {
   const problems: string[] = []
   const audit = async (p: Page, name: string) => {

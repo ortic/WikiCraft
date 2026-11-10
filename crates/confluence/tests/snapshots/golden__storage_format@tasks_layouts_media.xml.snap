@@ -327,7 +327,7 @@ Some commented text in a sentence.
 </div>
 </li>
 </ul>
-<div class="columns">
+<div class="columns" data-layout="two_equal">
 <div class="column">
 <p>Left column</p>
 </div>

@@ -264,7 +264,16 @@ impl Renderer<'_> {
                 let name = n.attr_str("name").unwrap_or("");
                 let _ = write!(self.out, "<a id=\"{}\"></a>", escape(&slugify(name)));
             }
-            nodes::COLUMNS => self.wrap("<div class=\"columns\">", n, "</div>"),
+            nodes::COLUMNS => {
+                // only the layout names we know (the attribute ends up in the page)
+                match n
+                    .attr_str("layout")
+                    .filter(|l| matches!(*l, "two_equal" | "two_left_sidebar" | "two_right_sidebar" | "three_equal" | "three_with_sidebars"))
+                {
+                    Some(l) => self.wrap(&format!("<div class=\"columns\" data-layout=\"{l}\">"), n, "</div>"),
+                    None => self.wrap("<div class=\"columns\">", n, "</div>"),
+                }
+            }
             nodes::COLUMN => self.wrap("<div class=\"column\">", n, "</div>"),
             nodes::DECISION_LIST => self.wrap("<ul class=\"decision-list\">", n, "</ul>"),
             nodes::DECISION_ITEM => self.wrap("<li class=\"decision-item\">", n, "</li>"),
@@ -306,6 +315,9 @@ impl Renderer<'_> {
         }
         if let Some(t) = n.attr_str("title") {
             let _ = write!(extra, " title=\"{}\"", escape(t));
+        }
+        if n.attr_bool("border").unwrap_or(false) {
+            extra.push_str(" class=\"bordered\"");
         }
         let img = format!("<img src=\"{}\" alt=\"{}\"{extra} loading=\"lazy\">", escape(src), escape(alt));
         let align = n.attr_str("align").filter(|a| matches!(*a, "left" | "center" | "right" | "wrap-left" | "wrap-right"));

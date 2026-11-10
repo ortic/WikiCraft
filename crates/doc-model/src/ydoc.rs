@@ -420,3 +420,55 @@ mod repro {
         assert_eq!(serde_json::to_string_pretty(&back).unwrap(), serde_json::to_string_pretty(&pm).unwrap());
     }
 }
+
+#[cfg(test)]
+mod colour_roundtrip {
+    use crate::{Mark, Node, marks};
+
+    #[test]
+    fn coloured_text_survives_yjs() {
+        let doc = Node::doc(vec![Node::paragraph(vec![
+            Node::text_marked("red", vec![Mark::new(marks::TEXT_STYLE).attr("color", "#d14343")]),
+            Node::text(" plain "),
+            Node::text_marked("marked", vec![Mark::new(marks::HIGHLIGHT).attr("color", "rgba(250, 204, 21, 0.35)")]),
+        ])]);
+        let back = super::update_to_pm(&super::pm_to_update(&doc)).unwrap();
+        assert_eq!(back, doc);
+    }
+}
+
+#[cfg(test)]
+mod format_in_place {
+    use std::collections::HashMap;
+    use yrs::types::xml::{XmlFragment, XmlOut};
+    use yrs::{Any, Text, Transact};
+
+    use crate::Node;
+
+    /// What y-prosemirror does when someone colours existing text: format() on the XmlText.
+    #[test]
+    fn colouring_existing_text_keeps_it() {
+        let doc = Node::doc(vec![Node::paragraph(vec![Node::text("Ship the release today")])]);
+        let ydoc = super::new_doc();
+        let frag = ydoc.get_or_insert_xml_fragment(super::FIELD);
+        {
+            let mut txn = ydoc.transact_mut();
+            super::write_children(&frag, &mut txn, &doc.content);
+        }
+        {
+            let mut txn = ydoc.transact_mut();
+            let Some(XmlOut::Element(p)) = frag.get(&txn, 0) else { panic!("paragraph") };
+            let Some(XmlOut::Text(t)) = p.get(&txn, 0) else { panic!("text") };
+            let mut style = HashMap::new();
+            style.insert("color".to_string(), Any::String("#d14343".into()));
+            style.insert("fontFamily".to_string(), Any::Null);
+            let mut attrs = HashMap::new();
+            attrs.insert(std::sync::Arc::from("textStyle"), Any::from(style));
+            t.format(&mut txn, 0, 22, attrs);
+        }
+        let back = super::doc_to_pm(&ydoc);
+        eprintln!("{}", back.to_json());
+        assert_eq!(back.content[0].content.len(), 1, "{}", back.to_json());
+        assert_eq!(back.content[0].content[0].text.as_deref(), Some("Ship the release today"));
+    }
+}

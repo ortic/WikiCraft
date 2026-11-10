@@ -537,7 +537,15 @@ export const Columns = Node.create({
   group: 'block',
   content: 'column+',
   addAttributes() {
-    return { layout: { default: null } }
+    // Confluence's section types: two_equal, two_left_sidebar, two_right_sidebar, three_equal,
+    // three_with_sidebars (null: equal columns)
+    return {
+      layout: {
+        default: null,
+        parseHTML: (el: HTMLElement) => el.getAttribute('data-layout'),
+        renderHTML: (attrs: Record<string, unknown>) => (attrs.layout ? { 'data-layout': attrs.layout } : {}),
+      },
+    }
   },
   parseHTML() {
     return [{ tag: 'div[data-type="columns"]' }]

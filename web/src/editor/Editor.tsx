@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useEditor, EditorContent, ReactNodeViewRenderer, type Editor as TEditor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
+import TextStyleMenu from './TextStyleMenu'
 import DragHandle from '@tiptap/extension-drag-handle-react'
 import StarterKit from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
@@ -117,6 +118,8 @@ const ImageExt = Image.extend({
       width: { default: null, renderHTML: (a: Record<string, unknown>) => (a.width ? { width: a.width } : {}) },
       align: { default: null },
       caption: { default: null },
+      // a thin frame around screenshots on white backgrounds
+      border: { default: null, renderHTML: (a: Record<string, unknown>) => (a.border ? { 'data-border': 'true' } : {}) },
     }
   },
   addNodeView() {
@@ -437,6 +440,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
                 <button className={`icon-btn ${editor.isActive('strike') ? 'active' : ''}`} title="Strikethrough" onClick={() => editor.chain().focus().toggleStrike().run()}><Strikethrough size={15} /></button>
                 <button className={`icon-btn ${editor.isActive('code') ? 'active' : ''}`} title="Inline code" onClick={() => editor.chain().focus().toggleCode().run()}><Code size={15} /></button>
                 <button className={`icon-btn ${editor.isActive('highlight') ? 'active' : ''}`} title="Highlight" onClick={() => editor.chain().focus().toggleHighlight().run()}><Highlighter size={15} /></button>
+                <TextStyleMenu editor={editor} />
                 <span className="sep" />
                 <button className={`icon-btn ${editor.isActive('heading', { level: 2 }) ? 'active' : ''}`} title="Heading" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}><Heading2 size={15} /></button>
                 <button className={`icon-btn ${editor.isActive('bulletList') ? 'active' : ''}`} title="Bullet list" onClick={() => editor.chain().focus().toggleBulletList().run()}><List size={15} /></button>

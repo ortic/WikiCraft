@@ -259,12 +259,12 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Links (URL, page link with search picker, anchor link, attachment link, email) `C D X O`
 - [x] **P0** @mentions of users (with notification) and pages `C D O` — `@` suggests people (mention + notification) and, from two letters on, pages (inserts a page link); `[[` links pages, headings and attachments
 - [~] **P0** Emoji (picker, `:shortcode:` autocomplete, custom emoji P2) `C D O` (`:name` autocomplete for our SVG emoticon set; no emoji by design)
-- [~] **P1** Text color & highlight color (limited, theme-aware palette) `C D` (highlight toggle only; no color picker)
+- [x] **P1** Text color & highlight color (limited, theme-aware palette) `C D` — text colour, highlight colour (theme-friendly palette) and alignment in the selection menu; colours survive in shared pages and exports
 - [x] **P1** Date / time inline node (localized rendering, timezone aware) `C`
 - [x] **P1** Status lozenges (colored labels inline) `C`
 - [x] **P1** Inline smart links (unfurl title/icon via oEmbed/OpenGraph) `C D` — link cards from OpenGraph / <title> (server-side fetch with SSRF guards, 1-day cache); no site icons yet
 - [x] **P1** Hard line break, horizontal rule `C D`
-- [~] **P1** Text alignment, indentation `C D` (alignment via shortcuts only; no indent)
+- [~] **P1** Text alignment, indentation `C D` — alignment in the selection menu and by shortcut; no indentation yet
 - [x] **P1** Inline math (KaTeX) `D O`
 - [ ] **P2** Glossary terms / definitions (hover to see the definition; "AI definitions") `C`
 - [ ] **P2** Footnotes `O`
@@ -279,8 +279,8 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Tables (see §4.4.4) `C D X O B`
 - [x] **P0** Images (see §4.4.5) `C D X O B`
 - [x] **P1** Expand / collapse (toggle) blocks `C D O`
-- [~] **P1** Layouts / columns (2–3 columns, sidebars) `C D` (two-column insert only)
-- [~] **P1** Decisions block (decision list) `C` (imported only; no insert UI)
+- [x] **P1** Layouts / columns (2–3 columns, sidebars) `C D` — two or three columns and left / right sidebar layouts; Confluence section types render as such; columns stack on phones
+- [x] **P1** Decisions block (decision list) `C` — `/decision` and `/decision log`; imported decision lists
 - [x] **P1** Block math (KaTeX / LaTeX) `D O X`
 - [~] **P1** Mermaid, PlantUML (server-side render, sandboxed) `D X` (Mermaid client-side only; no PlantUML render)
 - [x] **P1** Draw.io diagrams (embedded editor, stored as attachment + SVG preview) `D X C(app)` — `/draw.io diagram`: draw.io in embed mode in a full-screen frame (diagrams.net by default, or a self-hosted draw.io set in Admin; empty turns editing off), JSON postMessage protocol with origin checks, sandboxed frame; XML kept in the page, PNG preview attachment for readers / shared pages / exports; cell labels searchable; Confluence draw.io macros import as editable diagrams (their diagram file + preview)
@@ -298,7 +298,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 
 #### 4.4.4 Tables
 - [x] **P0** Insert / delete rows & columns, header row / column, resize columns `C D X O`
-- [~] **P1** Merge / split cells, cell background color, cell alignment `C D` (no cell alignment)
+- [x] **P1** Merge / split cells, cell background color, cell alignment `C D` — merge / split and cell colours in the table menu; text alignment in cells from the selection menu
 - [ ] **P1** Numbered rows, sort by column (view-time), sticky header `C` — partial: the table toolbar sorts rows by the current column (A–Z / Z–A, numbers and percentages numerically, header rows stay)
 - [x] **P1** Table width modes (fixed / wide / full) `C` — toolbar toggle Normal / Wide / Full width; Confluence `data-layout` imports keep it
 - [x] **P1** Paste from spreadsheets preserving cells `C D` — HTML tables from Excel / Google Sheets / LibreOffice, and plain tab-separated rows (first row becomes the header)
@@ -308,7 +308,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 #### 4.4.5 Images & media
 - [x] **P0** Upload, paste, drag & drop, URL images `C D X O B`
 - [x] **P0** Resize, align (left/center/right/wrap), caption, alt text `C D`
-- [~] **P1** Lightbox / zoom, image border `C D` (lightbox; no borders)
+- [x] **P1** Lightbox / zoom, image border `C D` — lightbox; border toggle in the image toolbar (also in exports)
 - [x] **P1** Image annotation (arrows, boxes, text) `C`
 - [ ] **P1** Responsive thumbnails & WebP/AVIF renditions generated server-side `C`
 - [ ] **P2** Gallery block `C X`

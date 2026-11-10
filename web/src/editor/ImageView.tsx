@@ -1,7 +1,7 @@
 import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { NodeViewWrapper, type ReactNodeViewProps } from '@tiptap/react'
-import { AlignCenter, AlignLeft, AlignRight, Captions, Download, ExternalLink, Maximize2, PenTool, Trash2, Type, WrapText, X, ZoomIn } from 'lucide-react'
+import { AlignCenter, AlignLeft, AlignRight, Captions, Download, ExternalLink, Maximize2, PenTool, Trash2, Type, WrapText, X, ZoomIn, Square } from 'lucide-react'
 import { api, type Attachment } from '../api'
 
 const DrawingEditor = lazy(() => import('./DrawingEditor'))
@@ -51,7 +51,7 @@ export function Lightbox({ src, alt, caption, onClose }: { src: string; alt: str
 
 /** Image with drag-to-resize, alignment, caption and alt text. */
 export function ImageView({ node, updateAttributes, deleteNode, selected, editor, getPos }: ReactNodeViewProps) {
-  const { src, alt, width, align, caption } = node.attrs as { src: string; alt: string | null; width: number | null; align: string | null; caption: string | null }
+  const { src, alt, width, align, caption, border } = node.attrs as { src: string; alt: string | null; width: number | null; align: string | null; caption: string | null; border: boolean | null }
   const img = useRef<HTMLImageElement>(null)
   const [dragWidth, setDragWidth] = useState<number | null>(null)
   const [captionOpen, setCaptionOpen] = useState(false)
@@ -112,7 +112,7 @@ export function ImageView({ node, updateAttributes, deleteNode, selected, editor
   )
 
   return (
-    <NodeViewWrapper as="span" className={`image-block align-${align || 'none'}${selected ? ' is-selected' : ''}`}>
+    <NodeViewWrapper as="span" className={`image-block align-${align || 'none'}${border ? ' bordered' : ''}${selected ? ' is-selected' : ''}`}>
       <span className="image-frame" style={{ width: shown ? `${shown}px` : undefined }}>
         <img
           ref={img}
@@ -147,6 +147,7 @@ export function ImageView({ node, updateAttributes, deleteNode, selected, editor
               {btn('Float right, text wraps around', align === 'wrap-right', () => update({ align: 'wrap-right' }), <WrapText size={15} style={{ transform: 'scaleX(-1)' }} />)}
               <span className="sep" />
               {btn('Caption', !!caption || captionOpen, () => setCaptionOpen(true), <Captions size={15} />)}
+              {btn(border ? 'Remove border' : 'Border', !!border, () => update({ border: border ? null : true }), <Square size={15} />)}
               {btn(alt ? `Alt text: ${alt}` : 'Add alt text', !!alt, editAlt, <Type size={15} />)}
               {btn('Original size', false, () => update({ width: null }), <Maximize2 size={15} />)}
               {btn('View larger (double-click)', false, () => setZoom(true), <ZoomIn size={15} />)}
