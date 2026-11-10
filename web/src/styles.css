@@ -607,3 +607,4 @@ a.menu-item { color: inherit; text-decoration: none; }
 .callout-type[data-callout="warning"] svg { color: var(--c-warning); }
 .callout-type[data-callout="error"] svg { color: var(--c-error); }
 .callout-type.active { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+.notify-kinds { display: grid; grid-template-columns: repeat(auto-fill, minmax(230px, 1fr)); gap: 6px 16px; }

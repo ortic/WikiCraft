@@ -374,12 +374,19 @@ pub async fn put_signup_settings(State(state): State<AppState>, CurrentUser(admi
 #[serde(rename_all = "camelCase")]
 pub struct Preferences {
     email_notifications: Option<String>,
+    /// notification kinds to drop entirely
+    muted: Option<Vec<String>>,
 }
+
+/// The notification kinds people can mute.
+pub const NOTIFICATION_KINDS: &[&str] =
+    &["comment", "reply", "mention", "page_mention", "page_updated", "like", "share", "verification_request", "access_request"];
 
 /// `GET /api/me/preferences`
 pub async fn get_preferences(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Value>> {
-    let pref: String = sqlx::query_scalar("SELECT email_notifications FROM users WHERE id = $1").bind(user.id).fetch_one(&state.db).await?;
-    Ok(Json(json!({ "emailNotifications": pref, "mailEnabled": state.mailer.enabled() })))
+    let (pref, muted): (String, Vec<String>) =
+        sqlx::query_as("SELECT email_notifications, muted_notifications FROM users WHERE id = $1").bind(user.id).fetch_one(&state.db).await?;
+    Ok(Json(json!({ "emailNotifications": pref, "muted": muted, "kinds": NOTIFICATION_KINDS, "mailEnabled": state.mailer.enabled() })))
 }
 
 /// `PUT /api/me/preferences`
@@ -389,6 +396,15 @@ pub async fn put_preferences(State(state): State<AppState>, CurrentUser(user): C
             return Err(ApiError::bad("emailNotifications must be all, important or none"));
         }
         sqlx::query("UPDATE users SET email_notifications = $2 WHERE id = $1").bind(user.id).bind(p).execute(&state.db).await?;
+    }
+    if let Some(m) = &req.muted {
+        if let Some(bad) = m.iter().find(|k| !NOTIFICATION_KINDS.contains(&k.as_str())) {
+            return Err(ApiError::bad(format!("unknown notification kind {bad}")));
+        }
+        let mut m = m.clone();
+        m.sort();
+        m.dedup();
+        sqlx::query("UPDATE users SET muted_notifications = $2 WHERE id = $1").bind(user.id).bind(&m).execute(&state.db).await?;
     }
     get_preferences(State(state), CurrentUser(user)).await
 }

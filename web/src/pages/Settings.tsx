@@ -134,7 +134,18 @@ export default function Settings() {
 function EmailPreferences() {
   const qc = useQueryClient()
   const toast = useToast()
-  const prefs = useQuery({ queryKey: ['preferences'], queryFn: () => api.get<{ emailNotifications: 'all' | 'important' | 'none'; mailEnabled: boolean }>('/me/preferences') })
+  const KIND_LABELS: Record<string, string> = {
+    comment: 'Comments on pages I watch',
+    reply: 'Replies to my comments',
+    mention: 'Mentions in comments',
+    page_mention: 'Mentions on pages',
+    page_updated: 'Updates to pages I watch',
+    like: 'Likes',
+    share: 'Pages shared with me',
+    verification_request: 'Requests to review a page',
+    access_request: 'Requests for access to my pages',
+  }
+  const prefs = useQuery({ queryKey: ['preferences'], queryFn: () => api.get<{ emailNotifications: 'all' | 'important' | 'none'; mailEnabled: boolean; muted: string[]; kinds: string[] }>('/me/preferences') })
   const p = prefs.data
   if (!p) return null
   const set = async (v: string) => {
@@ -158,6 +169,25 @@ function EmailPreferences() {
         <option value="all">Everything, including updates to pages I watch</option>
         <option value="none">Don't e-mail me</option>
       </select>
+      <h4 style={{ margin: '18px 0 6px' }}>Notify me about</h4>
+      <p className="muted small" style={{ marginTop: 0 }}>Turned-off events don't appear in WikiCraft and aren't e-mailed.</p>
+      <div className="notify-kinds">
+        {p.kinds.map((k) => (
+          <label key={k} className="row small">
+            <input
+              type="checkbox"
+              checked={!p.muted.includes(k)}
+              onChange={async (e) => {
+                const muted = e.target.checked ? p.muted.filter((m) => m !== k) : [...p.muted, k]
+                await api.put('/me/preferences', { muted })
+                qc.invalidateQueries({ queryKey: ['preferences'] })
+                qc.invalidateQueries({ queryKey: ['notifications'] })
+              }}
+            />
+            {KIND_LABELS[k] ?? k}
+          </label>
+        ))}
+      </div>
     </div>
   )
 }

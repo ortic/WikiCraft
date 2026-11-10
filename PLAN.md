@@ -501,7 +501,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** In-app notification center (mentions, comments, replies, shares, task assignments) `C D O`
 - [~] **P1** Email notifications with batching / digest (immediate, hourly, daily) `C DC X O` (2-minute digest; no hourly/daily choice)
 - [~] **P1** Watch page / page subtree / space / blog; auto-watch on create/edit `C X` (pages only; auto-watch on create)
-- [ ] **P1** Notification preferences per channel and event type `C`
+- [x] **P1** Notification preferences per channel and event type `C`
 - [~] **P1** Slack / Microsoft Teams / Mattermost notifications (per user and per space channel) `C O` (per workspace/space channel via webhook formats; not per user)
 - [ ] **P2** Web push notifications (PWA) `C`
 - [ ] **P2** Read confirmations / acknowledgement campaigns ("please confirm you read the policy") `D(EE, planned) C(apps)`

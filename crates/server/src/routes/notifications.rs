@@ -32,7 +32,9 @@ pub async fn list(State(state): State<AppState>, CurrentUser(user): CurrentUser)
     let rows = sqlx::query_as::<_, NotificationRow>(
         "SELECT n.id, n.kind, n.page_id, p.title AS page_title, a.name AS actor_name, n.data, n.created_at, n.read_at
          FROM notifications n LEFT JOIN pages p ON p.id = n.page_id LEFT JOIN users a ON a.id = n.actor_id
-         WHERE n.user_id = $1 AND (p.id IS NULL OR p.deleted_at IS NULL) ORDER BY n.created_at DESC LIMIT 50",
+         WHERE n.user_id = $1 AND (p.id IS NULL OR p.deleted_at IS NULL)
+           AND NOT (n.kind = ANY (COALESCE((SELECT muted_notifications FROM users WHERE id = $1), '{}')))
+         ORDER BY n.created_at DESC LIMIT 50",
     )
     .bind(user.id)
     .fetch_all(&state.db)

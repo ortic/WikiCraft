@@ -1,6 +1,6 @@
 mod common;
 
-use serde_json::json;
+use serde_json::{Value, json};
 
 use common::spawn;
 
@@ -218,4 +218,30 @@ async fn versioned_api_path() {
     assert_eq!(me["user"]["email"], "owner@acme.test");
     let spec = reqwest::get(format!("{}/api/v1/openapi.yaml", app.base)).await.unwrap().text().await.unwrap();
     assert!(spec.contains("url: /api/v1"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn muted_notification_kinds() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, _) = app.user(&owner, "mute@acme.test", "member").await;
+    app.post(&owner, "/spaces", json!({"key": "MUTE", "name": "Mute"})).await;
+    let (_, pg) = app.post(&member, "/pages", json!({"spaceKey": "MUTE", "title": "Watched"})).await;
+    let pg = pg["id"].as_str().unwrap().to_string();
+    app.put(&member, &format!("/pages/{pg}/like"), json!({})).await;
+    let (_, prefs) = app.get(&member, "/me/preferences").await;
+    assert!(prefs["kinds"].as_array().unwrap().iter().any(|k| k == "comment"));
+    assert_eq!(app.put(&member, "/me/preferences", json!({"muted": ["bogus"]})).await.0, 400);
+    let (st, prefs) = app.put(&member, "/me/preferences", json!({"muted": ["comment", "like"]})).await;
+    assert_eq!(st, 200);
+    assert_eq!(prefs["muted"], json!(["comment", "like"]));
+    // the creator watches their page: comments would notify them
+    app.post(&owner, &format!("/pages/{pg}/comments"), json!({"text": "Looks good"})).await;
+    app.put(&owner, &format!("/pages/{pg}/like"), json!({})).await;
+    let kinds = |v: &Value| v["items"].as_array().unwrap().iter().map(|i| i["kind"].as_str().unwrap().to_string()).collect::<Vec<_>>();
+    let (_, n) = app.get(&member, "/notifications").await;
+    assert!(!kinds(&n).contains(&"comment".to_string()) && !kinds(&n).contains(&"like".to_string()), "{n}");
+    app.put(&member, "/me/preferences", json!({"muted": []})).await;
+    let (_, n) = app.get(&member, "/notifications").await;
+    assert!(kinds(&n).contains(&"comment".to_string()), "unmuting shows them again: {n}");
 }

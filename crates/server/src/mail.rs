@@ -188,6 +188,7 @@ pub async fn digests(state: &AppState) -> anyhow::Result<usize> {
          SELECT c.user_id, c.kind, c.page_id, c.data, c.read_at, a.name AS actor_name, p.title AS page_title,
                 u.email, u.name AS user_name, u.status, u.email_notifications AS preference
          FROM claimed c JOIN users u ON u.id = c.user_id LEFT JOIN users a ON a.id = c.actor_id LEFT JOIN pages p ON p.id = c.page_id AND p.deleted_at IS NULL
+         WHERE c.kind <> ALL (u.muted_notifications)
          ORDER BY c.user_id, c.created_at",
     )
     .bind(DIGEST_DELAY_SECS as f64)
