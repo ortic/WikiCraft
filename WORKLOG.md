@@ -138,6 +138,12 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   handover (owner becomes space admin, notified; Admin → Spaces flags owners whose account is gone). Whole-space
   copy (settings, templates, people, visible published pages; links/attachments/page-link properties point at the
   copies; page copy now shares `copy_tree`). Template for pages below a page (nearest ancestor wins, then the space).
+- Space sidebar shortcuts; request access answered from the notification (Grant: view entries on the page and the
+  restricted pages above it, space viewer if needed); changed blocks since the last visit tinted in the page (block-id
+  diff; pitfall: decorations must be recomputed, not mapped, because the Yjs sync replaces the document); task report
+  filters (assignees incl. me and imported Confluence user keys, due range); page exports audited; Admin → System;
+  ClamAV scanning (clamd INSTREAM; uploads, imports, restores; fail-closed unless WIKICRAFT_CLAMAV_FAIL_OPEN; tested
+  with a stand-in clamd only); Word import split by heading; numbered table rows.
 
 ## Security review 4 (independent review agent, 2026-11-10 ~03:40 UTC: link previews, banner, switches, decision log, branding) — status
 No critical or high findings. All five fixed in `9f0b9a9`:
