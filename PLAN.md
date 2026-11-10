@@ -325,8 +325,8 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** `anchor` → anchor node
 - [x] **P0** `view-file`, `viewpdf`, `viewdoc`, `viewppt`, `viewxls` → file preview block
 - [x] **P0** `status` → status lozenge
-- [~] **P1** `children` (child pages list: depth, sort, reverse, style, first N) → dynamic children block (sort/style params ignored)
-- [~] **P1** `pagetree` / `pagetreesearch` → dynamic tree block (rendered as child list; no search)
+- [x] **P1** `children` (child pages list: depth, sort, reverse, style, first N) → dynamic children block — depth, sort (title / creation / modification), reverse, first N, heading styles
+- [x] **P1** `pagetree` / `pagetreesearch` → dynamic tree block — whole tree; pagetreesearch gets a search box over the tree's titles
 - [~] **P1** `attachments` (list + upload) → attachments block (live list; no upload in the block)
 - [~] **P1** `include` (include page) → transclusion block (plain-text excerpt preview)
 - [~] **P1** `excerpt` / `excerpt-include` → synced block / named excerpt (excerpt inlined; include shows page start)
@@ -334,10 +334,10 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** `contentbylabel` (incl. CQL parameter) → label query block
 - [x] **P1** `recently-updated` → recent changes block
 - [x] **P1** `widget` / `iframe` / `multimedia` → embed block (with allowlist)
-- [ ] **P1** `livesearch` → search box block
+- [x] **P1** `livesearch` → search box block — search box block (space / label scoped), also `/search box`
 - [~] **P1** `tasks-report-macro` → task report block (by space, assignee, label, status, due) (no assignee filter)
 - [x] **P1** `decisionreport` → decisions report block — "Decision log" block (live, permission-filtered, Word export evaluates it); `/decision` and `/decision log` slash commands
-- [ ] **P1** `create-from-template` → "create from template" button block
+- [x] **P1** `create-from-template` → "create from template" button block — button block creating a page below the current one; Confluence blueprints map to built-in templates, others open the Create dialog; also `/create-page button`
 - [x] **P1** `content-report-table` / blueprint index pages → query table block
 - [~] **P1** `jira` / `jiraissues` / Jira chart → issue tracker embed (Jira, GitHub, GitLab, Linear) (issue key kept as text; no live embed)
 - [~] **P1** `unmigrated-wiki-markup` → convert wiki markup; keep the original as a fallback (converted; original not kept)

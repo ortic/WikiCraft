@@ -100,6 +100,12 @@ code, pre { font-family: var(--mono); }
 .swatch { width: 26px; height: 26px; border-radius: 6px; border: 1px solid var(--border); background: var(--bg); display: inline-flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-soft); font: inherit; padding: 0; }
 .swatch:hover { border-color: var(--border-strong); }
 .swatch.on { outline: 2px solid var(--accent); outline-offset: 1px; }
+/* live macros: search box, create-page button; child page list options */
+.macro-search { display: flex; align-items: center; gap: 8px; max-width: 520px; }
+.macro-search .input { flex: 1; }
+.macro-create { padding: 2px 0; }
+.child-search { margin: 4px 0 8px; max-width: 320px; }
+.child-heading > :is(h2, h3, h4, h5, h6) { margin: .6em 0 .2em; }
 /* a line of information in a menu */
 .menu-note { padding: 4px 12px 6px 34px; }
 .minor-toggle { border: 1px solid var(--border); background: transparent; cursor: pointer; font-family: inherit; min-height: 24px; }

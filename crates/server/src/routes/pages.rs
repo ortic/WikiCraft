@@ -1064,6 +1064,7 @@ pub struct ChildRow {
     kind: String,
     icon: Option<String>,
     parent_id: Option<Uuid>,
+    created_at: chrono::DateTime<chrono::Utc>,
     updated_at: chrono::DateTime<chrono::Utc>,
     excerpt: String,
 }
@@ -1090,7 +1091,7 @@ pub async fn children(
         "WITH RECURSIVE sub AS (
             SELECT id, 1 AS depth FROM pages WHERE parent_id = $1 AND deleted_at IS NULL
             UNION ALL SELECT p.id, sub.depth + 1 FROM pages p JOIN sub ON p.parent_id = sub.id WHERE p.deleted_at IS NULL AND sub.depth < $2
-         ) SELECT p.id, p.title, p.kind, p.icon, p.parent_id, p.updated_at, left(p.text_content, 200) AS excerpt FROM pages p JOIN sub ON sub.id = p.id ORDER BY sub.depth, p.position, lower(p.title)",
+         ) SELECT p.id, p.title, p.kind, p.icon, p.parent_id, p.created_at, p.updated_at, left(p.text_content, 200) AS excerpt FROM pages p JOIN sub ON sub.id = p.id ORDER BY sub.depth, p.position, lower(p.title)",
     )
     .bind(id)
     .bind(depth)

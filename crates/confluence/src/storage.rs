@@ -1143,6 +1143,34 @@ impl Conv<'_> {
                 let diagram = param("diagramName").or_else(|| param("name")).unwrap_or_default();
                 self.diagram_preview(&name, el, &diagram)
             }
+            // a search box (spaceKey / labels kept for the search page)
+            "livesearch" => {
+                self.stats.macro_seen(&name, Support::Native);
+                vec![placeholder_macro(&name, el, vec![])]
+            }
+            // a button that creates a page from a template, below this page; Confluence's own
+            // blueprints map to our built-in templates
+            "create-from-template" => {
+                self.stats.macro_seen(&name, Support::Native);
+                let mut n = placeholder_macro(&name, el, vec![]);
+                let key = param("blueprintModuleCompleteKey").or_else(|| param("templateName")).unwrap_or_default().to_ascii_lowercase();
+                let builtin = [
+                    ("meeting-notes", "builtin:meeting-notes"),
+                    ("decision", "builtin:decision"),
+                    ("retrospective", "builtin:retrospective"),
+                    ("how-to", "builtin:how-to"),
+                    ("troubleshooting", "builtin:runbook"),
+                    ("requirements", "builtin:requirements"),
+                    ("project-poster", "builtin:project-plan"),
+                ]
+                .into_iter()
+                .find(|(needle, _)| key.contains(needle))
+                .map(|(_, id)| id);
+                if let (Some(id), Some(Value::Object(params))) = (builtin, n.attrs.get_mut("params")) {
+                    params.insert("templateId".into(), Value::String(id.into()));
+                }
+                vec![n]
+            }
             // queries rendered live by the editor from the preserved parameters
             "contentbylabel" | "recently-updated" | "detailssummary" | "content-report-table" | "tasks-report-macro" | "attachments" => {
                 self.stats.macro_seen(&name, Support::Native);

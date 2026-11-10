@@ -1,0 +1,92 @@
+---
+source: crates/confluence/tests/golden.rs
+expression: "report(&doc, &stats)"
+input_file: crates/confluence/tests/golden/live_macros.xml
+---
+## stats
+{
+  "bodies": 1,
+  "macros": {
+    "children": [
+      1,
+      "native"
+    ],
+    "create-from-template": [
+      2,
+      "native"
+    ],
+    "livesearch": [
+      1,
+      "native"
+    ]
+  }
+}
+
+## prosemirror
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "macro",
+      "attrs": {
+        "name": "livesearch",
+        "params": {
+          "placeholder": "Find a runbook",
+          "spaceKey": "DOC"
+        }
+      }
+    },
+    {
+      "type": "macro",
+      "attrs": {
+        "name": "create-from-template",
+        "params": {
+          "blueprintModuleCompleteKey": "com.atlassian.confluence.plugins.confluence-business-blueprints:meeting-notes-item",
+          "buttonLabel": "New meeting notes",
+          "templateId": "builtin:meeting-notes"
+        }
+      }
+    },
+    {
+      "type": "macro",
+      "attrs": {
+        "name": "create-from-template",
+        "params": {
+          "buttonLabel": "New report",
+          "templateName": "98765"
+        }
+      }
+    },
+    {
+      "type": "childPages",
+      "attrs": {
+        "limit": 5,
+        "reverse": true,
+        "sort": "creation",
+        "style": "h3"
+      }
+    }
+  ]
+}
+
+## markdown
+<!-- macro: livesearch -->
+
+<!-- macro: create-from-template -->
+
+<!-- macro: create-from-template -->
+
+<!-- child pages -->
+
+## html
+<div class="macro" data-macro="livesearch">
+<div class="macro-label">Macro: livesearch</div>
+</div>
+<div class="macro" data-macro="create-from-template">
+<div class="macro-label">Macro: create-from-template</div>
+</div>
+<div class="macro" data-macro="create-from-template">
+<div class="macro-label">Macro: create-from-template</div>
+</div>
+<div class="child-pages" data-type="childPages">
+</div>

@@ -416,20 +416,53 @@ interface ChildRow {
   title: string
   parentId: string | null
   excerpt: string
+  createdAt?: string
+  updatedAt?: string
+}
+
+/** Orders siblings the way Confluence's children macro does: tree order (default), title,
+ * creation or modification date; `reverse` turns it around. */
+function sortChildren(rows: ChildRow[], sort: string | null, reverse: boolean): ChildRow[] {
+  const by = (sort ?? '').toLowerCase()
+  const key = (r: ChildRow) => (by === 'creation' || by === 'created' ? r.createdAt ?? '' : by === 'modified' ? r.updatedAt ?? '' : '')
+  let out = [...rows]
+  if (by === 'title') out.sort((a, b) => a.title.localeCompare(b.title, undefined, { numeric: true, sensitivity: 'base' }))
+  else if (key(rows[0] ?? ({} as ChildRow))) out.sort((a, b) => key(a).localeCompare(key(b)))
+  if (reverse) out = out.reverse()
+  return out
 }
 
 function ChildPagesView({ extension, node }: ReactNodeViewProps) {
   const pageId = extension.options.pageId as string
   const depth = (node.attrs.depth as number | null) ?? 1
+  const sort = (node.attrs.sort as string | null) ?? null
+  const reverse = !!node.attrs.reverse
+  const limit = (node.attrs.limit as number | null) ?? null
+  // Confluence's style "h2"…"h6": the first level as headings
+  const heading = /^h[2-6]$/i.test((node.attrs.style as string | null) ?? '') ? ((node.attrs.style as string).toLowerCase() as 'h2' | 'h3' | 'h4' | 'h5' | 'h6') : null
+  const [filter, setFilter] = useState('')
   const q = useQuery({ queryKey: ['children', pageId, depth], queryFn: () => api.get<ChildRow[]>(`/pages/${pageId}/children?depth=${depth}`), enabled: !!pageId })
-  let rows = q.data ?? []
-  if (node.attrs.reverse) rows = [...rows].reverse()
-  if (node.attrs.limit) rows = rows.slice(0, node.attrs.limit as number)
+  const rows = q.data ?? []
   const byParent = new Map<string, ChildRow[]>()
   for (const r of rows) byParent.set(r.parentId ?? '', [...(byParent.get(r.parentId ?? '') ?? []), r])
+  const needle = filter.trim().toLowerCase()
+  // with a search: the matching pages, flat
+  const matches = needle ? rows.filter((r) => r.title.toLowerCase().includes(needle)) : []
   const render = (parent: string, level: number): React.ReactNode => {
-    const kids = byParent.get(parent)
-    if (!kids?.length || level > 50) return null
+    let kids = sortChildren(byParent.get(parent) ?? [], sort, reverse)
+    if (level === 0 && limit) kids = kids.slice(0, limit)
+    if (!kids.length || level > 50) return null
+    if (level === 0 && heading) {
+      const H = heading
+      return kids.map((k) => (
+        <div key={k.id} className="child-heading">
+          <H>
+            <Link to={`/pages/${k.id}`}>{k.title}</Link>
+          </H>
+          {render(k.id, level + 1)}
+        </div>
+      ))
+    }
     return (
       <ul>
         {kids.map((k) => (
@@ -446,7 +479,28 @@ function ChildPagesView({ extension, node }: ReactNodeViewProps) {
       <div className="block-label">
         <ListTree size={13} /> Child pages
       </div>
-      {q.isLoading ? <div className="spinner" /> : rows.length === 0 ? <div className="faint small">No child pages yet.</div> : render(pageId, 0)}
+      {node.attrs.search && (
+        <input className="input input-sm child-search" placeholder="Search these pages" aria-label="Search these pages" value={filter} onChange={(e) => setFilter(e.target.value)} />
+      )}
+      {q.isLoading ? (
+        <div className="spinner" />
+      ) : rows.length === 0 ? (
+        <div className="faint small">No child pages yet.</div>
+      ) : needle ? (
+        matches.length ? (
+          <ul>
+            {matches.slice(0, 50).map((k) => (
+              <li key={k.id}>
+                <Link to={`/pages/${k.id}`}>{k.title}</Link>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <div className="faint small">No page matches.</div>
+        )
+      ) : (
+        render(pageId, 0)
+      )}
     </NodeViewWrapper>
   )
 }

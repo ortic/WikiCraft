@@ -2,9 +2,12 @@
 // recently updated, page properties report, task report, attachments and page tree. Other
 // macros keep the placeholder view.
 
-import { useQuery } from '@tanstack/react-query'
-import { Link } from 'react-router-dom'
-import { CheckSquare, Clock, Download, FileText, ListTree, Milestone, Paperclip, Puzzle, Table2, Tag } from 'lucide-react'
+import { useState } from 'react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { Link, useNavigate } from 'react-router-dom'
+import { CheckSquare, Clock, Download, FilePlus2, FileText, ListTree, Milestone, Paperclip, Puzzle, Search, Table2, Tag } from 'lucide-react'
+import TemplatePicker from '../components/TemplatePicker'
+import { useToast } from '../ui'
 import { api, formatBytes, formatDate, type Attachment, type Page } from '../api'
 
 type Params = Record<string, string>
@@ -20,7 +23,7 @@ interface ReportPage {
   labels: string[]
 }
 
-export const LIVE_MACROS = new Set(['contentbylabel', 'recently-updated', 'detailssummary', 'content-report-table', 'tasks-report-macro', 'decisionreport', 'attachments', 'pagetree'])
+export const LIVE_MACROS = new Set(['contentbylabel', 'recently-updated', 'detailssummary', 'content-report-table', 'tasks-report-macro', 'decisionreport', 'attachments', 'pagetree', 'livesearch', 'create-from-template'])
 
 const csv = (s: string | undefined) => (s ?? '').split(',').map((x) => x.trim().replace(/^["']|["']$/g, '')).filter(Boolean)
 
@@ -326,6 +329,59 @@ function PageTree({ params, page }: { params: Params; page: Page | undefined }) 
   )
 }
 
+/** Confluence's livesearch: a search box, limited to a space / label if the macro says so. */
+function LiveSearch({ params, page }: { params: Params; page?: Page }) {
+  const nav = useNavigate()
+  const [q, setQ] = useState('')
+  const space = params.spaceKey === '@self' ? page?.spaceKey : params.spaceKey
+  const go = (e: React.FormEvent) => {
+    e.preventDefault()
+    const sp = new URLSearchParams({ q: q.trim() })
+    if (space) sp.set('space', space)
+    if (params.labels) sp.set('label', params.labels.split(',')[0].trim())
+    nav(`/search?${sp}`)
+  }
+  return (
+    <form className="macro-search" onSubmit={go} role="search">
+      <Search size={15} />
+      <input className="input" placeholder={params.placeholder || (space ? `Search ${space}` : 'Search the wiki')} aria-label="Search" value={q} onChange={(e) => setQ(e.target.value)} />
+      <button type="submit" className="btn btn-sm">Search</button>
+    </form>
+  )
+}
+
+/** A button that creates a page below this one: from the template it names, or with the
+ * Create dialog. */
+function CreateFromTemplate({ params, page }: { params: Params; page?: Page }) {
+  const nav = useNavigate()
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [picking, setPicking] = useState(false)
+  const [busy, setBusy] = useState(false)
+  if (!page) return null
+  const create = async () => {
+    if (!params.templateId) return setPicking(true)
+    setBusy(true)
+    try {
+      const r = await api.post<{ id: string }>('/pages', { spaceKey: page.spaceKey, parentId: page.id, templateId: params.templateId, title: params.title || undefined, draft: true })
+      qc.invalidateQueries({ queryKey: ['tree', page.spaceKey] })
+      nav(`/pages/${r.id}?new=1`)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not create the page')
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="macro-create">
+      <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={create}>
+        <FilePlus2 size={14} /> {params.buttonLabel || 'Create a page'}
+      </button>
+      {picking && <TemplatePicker spaceKey={page.spaceKey} parentId={page.id} onClose={() => setPicking(false)} />}
+    </div>
+  )
+}
+
 /** Live view for a supported macro; `null` for macros without one. */
 export function LiveMacro({ name, params, pageId }: { name: string; params: Params; pageId: string }) {
   const page = useQuery({ queryKey: ['page', pageId], queryFn: () => api.get<Page>(`/pages/${pageId}`), enabled: !!pageId, staleTime: 60_000 })
@@ -345,6 +401,10 @@ export function LiveMacro({ name, params, pageId }: { name: string; params: Para
       return <AttachmentsList params={params} pageId={pageId} />
     case 'pagetree':
       return <PageTree params={params} page={page.data} />
+    case 'livesearch':
+      return <LiveSearch params={params} page={page.data} />
+    case 'create-from-template':
+      return <CreateFromTemplate params={params} page={page.data} />
     default:
       return (
         <div className="block-label">

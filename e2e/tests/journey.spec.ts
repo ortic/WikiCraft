@@ -386,6 +386,34 @@ test('text colour from the selection menu and a three-column layout', async ({ b
   await ctx.close()
 })
 
+test('a search box and a create-page button inside a page', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState })
+  const page = await ctx.newPage()
+  await page.goto('/')
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/api/pages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-wikicraft': '1' }, body: JSON.stringify({ spaceKey: 'PRODUCT', title: 'Team hub', blank: true }) })
+    return (await r.json()).id as string
+  })
+  await page.goto(`/pages/${id}`)
+  const editor = page.locator('.ProseMirror[contenteditable="true"]')
+  await expect(editor).toBeVisible({ timeout: 20_000 })
+  await editor.click()
+  await page.keyboard.type('/create-page')
+  await page.keyboard.press('Enter')
+  await page.keyboard.type('/search')
+  await page.keyboard.press('Enter')
+  // the button offers the templates, for a page below this one
+  await page.locator('.macro-create button').click()
+  await expect(page.locator('.modal')).toContainText('Create a page')
+  await page.keyboard.press('Escape')
+  // the search box searches this space
+  const box = page.locator('.macro-search input')
+  await box.fill('roadmap')
+  await box.press('Enter')
+  await expect(page).toHaveURL(/\/search\?q=roadmap&space=PRODUCT/)
+  await ctx.close()
+})
+
 test('main screens have no serious accessibility violations (axe, WCAG 2.2 AA)', async ({ browser }) => {
   const problems: string[] = []
   const audit = async (p: Page, name: string) => {

@@ -1,0 +1,4 @@
+<ac:structured-macro ac:name="livesearch"><ac:parameter ac:name="spaceKey">DOC</ac:parameter><ac:parameter ac:name="placeholder">Find a runbook</ac:parameter></ac:structured-macro>
+<ac:structured-macro ac:name="create-from-template"><ac:parameter ac:name="blueprintModuleCompleteKey">com.atlassian.confluence.plugins.confluence-business-blueprints:meeting-notes-item</ac:parameter><ac:parameter ac:name="buttonLabel">New meeting notes</ac:parameter></ac:structured-macro>
+<ac:structured-macro ac:name="create-from-template"><ac:parameter ac:name="templateName">98765</ac:parameter><ac:parameter ac:name="buttonLabel">New report</ac:parameter></ac:structured-macro>
+<ac:structured-macro ac:name="children"><ac:parameter ac:name="sort">creation</ac:parameter><ac:parameter ac:name="reverse">true</ac:parameter><ac:parameter ac:name="style">h3</ac:parameter><ac:parameter ac:name="first">5</ac:parameter></ac:structured-macro>
