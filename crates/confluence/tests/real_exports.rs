@@ -1,11 +1,12 @@
 //! Runs the importer over real Confluence exports (downloaded by
 //! `research/confluence-import/fetch_fixtures.sh`; skipped when absent).
 //!
-//! For every current page, blog post, comment and historical version: convert storage → PM,
+//! For every current page, blog post, draft, page in the trash, comment and historical version: convert storage → PM,
 //! validate the tree, and round-trip it through Yjs exactly like the collaborative editor will.
 
 use std::path::{Path, PathBuf};
 
+use wikicraft_confluence::model::ContentStatus;
 use wikicraft_confluence::{PlanOptions, Planner, Stats};
 use wikicraft_doc_model::{Node, nodes, ydoc};
 
@@ -66,14 +67,17 @@ fn run(path: &Path, label: &str) -> Option<Outcome> {
     let planner = Planner::new(&export, PlanOptions::default());
     let plan = planner.plan();
     let mut stats = Stats::default();
+    // pages in the trash link to whatever existed back then: kept out of the resolution rates
+    let mut trash_stats = Stats::default();
     let mut converted = 0;
     let mut errors = Vec::new();
     let mut yjs_failures = 0;
     for space in &plan.spaces {
         for p in space.pages.iter().chain(&space.blog_posts) {
             let ids = std::iter::once(&p.source_id).chain(p.history.iter().map(|h| &h.source_id)).chain(p.comments.iter().map(|c| &c.source_id));
+            let st = if p.status == ContentStatus::Deleted { &mut trash_stats } else { &mut stats };
             for id in ids {
-                let doc = planner.convert(id, &mut stats);
+                let doc = planner.convert(id, st);
                 converted += 1;
                 validate(&doc, &format!("{}#{id}", p.title), &mut errors);
                 // Yjs round-trip (what the collaborative editor will load)

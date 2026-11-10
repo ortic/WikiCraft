@@ -120,7 +120,7 @@ npx playwright test      # starts the server on :8799 with a fresh database (scr
 wikicraft serve                                    # web server (default)
 wikicraft migrate                                  # apply migrations
 wikicraft analyze-confluence export.zip            # dry run: JSON report, nothing written
-wikicraft import-confluence export.zip --as-user admin@example.com [--space-key KEY] [--skip-history]
+wikicraft import-confluence export.zip --as-user admin@example.com [--space-key KEY] [--skip-history] [--skip-drafts] [--skip-trash]
 wikicraft reindex                                  # rebuild the search index
 ```
 

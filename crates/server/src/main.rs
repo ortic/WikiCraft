@@ -31,6 +31,12 @@ enum Command {
         space_key: Option<String>,
         #[arg(long)]
         skip_history: bool,
+        /// Leave out never-published drafts (by default they become their authors' private drafts).
+        #[arg(long)]
+        skip_drafts: bool,
+        /// Leave out pages in the Confluence trash (by default they go to the space trash).
+        #[arg(long)]
+        skip_trash: bool,
     },
     /// Rebuild the search index.
     Reindex,
@@ -84,7 +90,7 @@ async fn main() -> anyhow::Result<()> {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             println!("indexed {n} pages");
         }
-        Command::ImportConfluence { path, as_user, space_key, skip_history } => {
+        Command::ImportConfluence { path, as_user, space_key, skip_history, skip_drafts, skip_trash } => {
             let state = AppState::new(cli.config).await?;
             let user = sqlx::query_as::<_, wikicraft::auth::User>(sqlx::AssertSqlSafe(format!(
                 "SELECT {} FROM users WHERE lower(email) = lower($1) AND role IN ('owner','admin')",
@@ -100,7 +106,7 @@ async fn main() -> anyhow::Result<()> {
                 anyhow::bail!("please pass the export .zip (directories are supported by analyze-confluence only)");
             }
             std::fs::copy(&path, &tmp)?;
-            let opts = wikicraft::importer::ImportOptions { space_key, skip_history, ..Default::default() };
+            let opts = wikicraft::importer::ImportOptions { space_key, skip_history, skip_drafts, skip_trash, ..Default::default() };
             let job = wikicraft::app::new_id();
             sqlx::query("INSERT INTO jobs (id, workspace_id, kind, created_by) VALUES ($1, $2, 'import.confluence', $3)")
                 .bind(job)

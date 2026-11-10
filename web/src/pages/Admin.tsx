@@ -735,6 +735,8 @@ function ImportAdmin() {
   const [busy, setBusy] = useState<'analyze' | 'import' | null>(null)
   const [spaceKey, setSpaceKey] = useState('')
   const [skipHistory, setSkipHistory] = useState(false)
+  const [skipDrafts, setSkipDrafts] = useState(false)
+  const [skipTrash, setSkipTrash] = useState(false)
   const [jobId, setJobId] = useState<string | null>(null)
   const jobs = useQuery({ queryKey: ['jobs'], queryFn: () => api.get<Job[]>('/jobs'), refetchInterval: 5000 })
   const job = useQuery({ queryKey: ['job', jobId], queryFn: () => api.get<Job>(`/jobs/${jobId}`), enabled: !!jobId, refetchInterval: (q) => (q.state.data && ['succeeded', 'failed'].includes(q.state.data.status) ? false : 1000) })
@@ -763,7 +765,7 @@ function ImportAdmin() {
     setBusy('import')
     try {
       const form = new FormData()
-      form.append('options', JSON.stringify({ spaceKey: spaceKey || undefined, skipHistory }))
+      form.append('options', JSON.stringify({ spaceKey: spaceKey || undefined, skipHistory, skipDrafts, skipTrash }))
       form.append('file', selected)
       const r = await api.upload<{ jobId: string }>('/imports/confluence', form)
       setJobId(r.jobId)
@@ -795,6 +797,8 @@ function ImportAdmin() {
           <div className="row" style={{ marginTop: 14, flexWrap: 'wrap' }}>
             <input className="input" style={{ width: 200 }} placeholder="Space key (optional)" value={spaceKey} onChange={(e) => setSpaceKey(e.target.value.toUpperCase())} />
             <label className="row small"><input type="checkbox" checked={skipHistory} onChange={(e) => setSkipHistory(e.target.checked)} /> Skip page history</label>
+            <label className="row small" title="Unpublished pages otherwise become private drafts that only their author sees"><input type="checkbox" checked={skipDrafts} onChange={(e) => setSkipDrafts(e.target.checked)} /> Skip unpublished drafts</label>
+            <label className="row small" title="Pages in the Confluence trash otherwise go to the space trash, where admins can restore them"><input type="checkbox" checked={skipTrash} onChange={(e) => setSkipTrash(e.target.checked)} /> Skip trash</label>
             <span className="spacer" />
             <button className="btn btn-primary" disabled={!!busy} onClick={start}>{busy === 'import' ? <Spinner /> : <Upload size={15} />} Start import</button>
           </div>

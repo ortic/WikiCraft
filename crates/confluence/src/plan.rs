@@ -14,7 +14,10 @@ use crate::storage::{self, Resolver, Stats};
 #[derive(Debug, Clone, Serialize)]
 pub struct PlanOptions {
     pub include_history: bool,
+    /// Never-published pages (status `draft`, no `prevver`): imported as private drafts of their
+    /// creator. Drafts of published pages (unpublished edits) are never imported.
     pub include_drafts: bool,
+    /// Pages in the space trash (status `deleted`): imported into the trash.
     pub include_deleted: bool,
     pub include_comments: bool,
     pub include_attachments: bool,
@@ -22,7 +25,7 @@ pub struct PlanOptions {
 
 impl Default for PlanOptions {
     fn default() -> Self {
-        Self { include_history: true, include_drafts: false, include_deleted: false, include_comments: true, include_attachments: true }
+        Self { include_history: true, include_drafts: true, include_deleted: true, include_comments: true, include_attachments: true }
     }
 }
 
@@ -182,7 +185,11 @@ impl<'e> Planner<'e> {
         let mut history: HashMap<String, Vec<&Content>> = HashMap::new();
         for c in export.contents.values() {
             if let Some(orig) = &c.original_version_id {
-                history.entry(orig.clone()).or_default().push(c);
+                // a draft that points at a published page holds unpublished edits (Cloud keeps
+                // one for every page edited in the new editor), not an old version
+                if c.status != ContentStatus::Draft {
+                    history.entry(orig.clone()).or_default().push(c);
+                }
                 continue;
             }
             match c.kind {
@@ -200,7 +207,7 @@ impl<'e> Planner<'e> {
                         })
                         .or_insert_with(|| c.id.clone());
                 }
-                ContentKind::Attachment if c.status != ContentStatus::Deleted => {
+                ContentKind::Attachment if c.status != ContentStatus::Deleted || Self::in_trashed_page(export, c, &opts) => {
                     if let Some(container) = &c.container_id {
                         attachments_by_container.entry(container.clone()).or_default().insert(c.title.clone(), c.id.clone());
                     }
@@ -266,6 +273,14 @@ impl<'e> Planner<'e> {
         }
     }
 
+    /// Attachments and comments of a page in the trash are marked deleted along with it: they
+    /// go to the trash with the page (and come back when it's restored).
+    fn in_trashed_page(export: &Export, c: &Content, opts: &PlanOptions) -> bool {
+        opts.include_deleted
+            && c.status == ContentStatus::Deleted
+            && c.container_id.as_ref().and_then(|id| export.contents.get(id)).is_some_and(|p| p.status == ContentStatus::Deleted)
+    }
+
     fn include(&self, c: &Content) -> bool {
         match c.status {
             ContentStatus::Current | ContentStatus::Archived => true,
@@ -287,6 +302,10 @@ impl<'e> Planner<'e> {
         for w in &ex.read_warnings {
             report.warn(w.clone());
         }
+        let pending_edits = ex.contents.values().filter(|c| c.is_historical() && c.status == ContentStatus::Draft && c.kind != ContentKind::Attachment).count();
+        if pending_edits > 0 {
+            report.count("skipped_drafts_of_published_pages", pending_edits as u64);
+        }
 
         // labels / restrictions / comments / attachments by owner
         let mut labels: HashMap<&str, Vec<String>> = HashMap::new();
@@ -303,7 +322,7 @@ impl<'e> Planner<'e> {
             }
             match c.kind {
                 ContentKind::Comment if self.opts.include_comments => {
-                    if c.status == ContentStatus::Deleted {
+                    if c.status == ContentStatus::Deleted && !Self::in_trashed_page(ex, c, &self.opts) {
                         report.count("skipped_deleted_comments", 1);
                         continue;
                     }
@@ -312,7 +331,7 @@ impl<'e> Planner<'e> {
                     }
                 }
                 ContentKind::Attachment if self.opts.include_attachments => {
-                    if c.status == ContentStatus::Deleted {
+                    if c.status == ContentStatus::Deleted && !Self::in_trashed_page(ex, c, &self.opts) {
                         report.count("skipped_deleted_attachments", 1);
                         continue;
                     }
@@ -340,6 +359,18 @@ impl<'e> Planner<'e> {
                         report.count(&format!("skipped_{:?}_{:?}", c.kind, c.status).to_ascii_lowercase(), 1);
                         continue;
                     }
+                    // a draft becomes its creator's private draft: without a creator nobody
+                    // could ever see it, without a body there's nothing to keep
+                    if c.status == ContentStatus::Draft {
+                        if c.creator.as_deref().is_none_or(str::is_empty) {
+                            report.count("skipped_drafts_without_author", 1);
+                            continue;
+                        }
+                        if !ex.bodies.contains_key(&c.id) {
+                            report.count("skipped_drafts_without_body", 1);
+                            continue;
+                        }
+                    }
                     if c.kind == ContentKind::BlogPost {
                         blogs.push(c);
                     } else {
@@ -349,15 +380,32 @@ impl<'e> Planner<'e> {
             }
             // order: parents before children, siblings by (position, title)
             let ids: HashSet<&str> = tree_nodes.iter().map(|c| c.id.as_str()).collect();
+            let by_id: HashMap<&str, &Content> = tree_nodes.iter().map(|c| (c.id.as_str(), *c)).collect();
+            // A page that isn't in the trash never sits below one: like Confluence (which moves
+            // children up when a page is deleted), it goes to the nearest ancestor outside the trash.
+            let parent_of = |c: &Content| -> Option<String> {
+                let mut parent = c.parent_id.as_deref().filter(|p| ids.contains(p));
+                if c.status != ContentStatus::Deleted {
+                    let mut hops = 0;
+                    while let Some(pc) = parent.and_then(|p| by_id.get(p))
+                        && pc.status == ContentStatus::Deleted
+                        && hops < 200
+                    {
+                        parent = pc.parent_id.as_deref().filter(|p| ids.contains(p));
+                        hops += 1;
+                    }
+                }
+                parent.map(String::from)
+            };
+            let parents: HashMap<&str, Option<String>> = tree_nodes.iter().map(|c| (c.id.as_str(), parent_of(c))).collect();
             let mut by_parent: BTreeMap<Option<&str>, Vec<&Content>> = BTreeMap::new();
             let mut orphans = 0;
             for c in &tree_nodes {
-                let parent = c.parent_id.as_deref().filter(|p| ids.contains(p));
-                if c.parent_id.is_some() && parent.is_none() {
+                if c.parent_id.as_deref().is_some_and(|p| !ids.contains(p)) {
                     orphans += 1;
                     report.warn(format!("{}: page '{}' has a missing parent (attached to space root)", s.key, c.title));
                 }
-                by_parent.entry(parent).or_default().push(c);
+                by_parent.entry(parents[c.id.as_str()].as_deref()).or_default().push(c);
             }
             if orphans > 0 {
                 report.count("orphan_pages", orphans);
@@ -464,7 +512,7 @@ impl<'e> Planner<'e> {
                 }
                 PagePlan {
                     source_id: c.id.clone(),
-                    parent_source_id: c.parent_id.clone().filter(|p| ids.contains(p.as_str())),
+                    parent_source_id: parents.get(c.id.as_str()).cloned().flatten(),
                     kind,
                     title: if c.title.trim().is_empty() { "Untitled".into() } else { c.title.clone() },
                     position: c.position,
@@ -487,9 +535,12 @@ impl<'e> Planner<'e> {
             let pages: Vec<PagePlan> = ordered.iter().map(|c| make(c, &mut report)).collect();
             let mut blog_posts: Vec<PagePlan> = blogs.iter().map(|c| make(c, &mut report)).collect();
             blog_posts.sort_by(|a, b| a.created_at.cmp(&b.created_at));
-            report.count("pages", pages.iter().filter(|p| p.kind == NodeKind::Page).count() as u64);
-            report.count("folders", pages.iter().filter(|p| p.kind == NodeKind::Folder).count() as u64);
-            report.count("blog_posts", blog_posts.len() as u64);
+            let live = |p: &&PagePlan| matches!(p.status, ContentStatus::Current | ContentStatus::Archived);
+            report.count("pages", pages.iter().filter(live).filter(|p| p.kind == NodeKind::Page).count() as u64);
+            report.count("folders", pages.iter().filter(live).filter(|p| p.kind == NodeKind::Folder).count() as u64);
+            report.count("blog_posts", blog_posts.iter().filter(live).count() as u64);
+            report.count("drafts", pages.iter().chain(&blog_posts).filter(|p| p.status == ContentStatus::Draft).count() as u64);
+            report.count("trashed_pages", pages.iter().chain(&blog_posts).filter(|p| p.status == ContentStatus::Deleted).count() as u64);
             let att_count: usize = pages.iter().chain(&blog_posts).map(|p| p.attachments.len()).sum();
             report.count("attachments", att_count as u64);
             let com_count: usize = pages.iter().chain(&blog_posts).map(|p| p.comments.len()).sum();
@@ -645,5 +696,104 @@ impl Resolver for Ctx<'_, '_> {
     }
     fn user_name(&self, key: &str) -> Option<String> {
         self.p.users.get(key).cloned()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn content(id: &str, status: ContentStatus, parent: Option<&str>, original: Option<&str>) -> Content {
+        Content {
+            id: id.into(),
+            kind: ContentKind::Page,
+            title: format!("Page {id}"),
+            status,
+            version: 1,
+            original_version_id: original.map(String::from),
+            parent_id: parent.map(String::from),
+            position: None,
+            space_id: Some("S".into()),
+            container_id: None,
+            parent_comment_id: None,
+            creator: Some("alice".into()),
+            created: None,
+            last_modifier: None,
+            modified: None,
+            version_comment: None,
+            plugin_key: None,
+            property_ids: vec![],
+        }
+    }
+
+    fn export(contents: Vec<Content>) -> Export {
+        let mut ex = Export::default();
+        ex.spaces.push(Space {
+            id: "S".into(),
+            key: "KEY".into(),
+            name: "Space".into(),
+            description_id: None,
+            home_page_id: None,
+            creator: None,
+            created: None,
+            space_type: None,
+            status: None,
+        });
+        for c in contents {
+            ex.bodies.insert(c.id.clone(), Body { content_id: c.id.clone(), kind: BodyKind::Storage, body: format!("<p>{}</p>", c.title) });
+            ex.contents.insert(c.id.clone(), c);
+        }
+        ex
+    }
+
+    #[test]
+    fn content_statuses_map_to_drafts_trash_and_history() {
+        let mut ex = export(vec![
+            content("1", ContentStatus::Current, None, None),
+            // an old version and Cloud's shared draft of page 1 (unpublished edits)
+            content("2", ContentStatus::Current, None, Some("1")),
+            content("3", ContentStatus::Draft, None, Some("1")),
+            // a page in the trash with a live child and a trashed child
+            content("4", ContentStatus::Deleted, Some("1"), None),
+            content("5", ContentStatus::Current, Some("4"), None),
+            content("6", ContentStatus::Deleted, Some("4"), None),
+            // never-published drafts: kept, unless there's no author or no body
+            content("7", ContentStatus::Draft, Some("1"), None),
+            content("8", ContentStatus::Draft, None, None),
+            content("9", ContentStatus::Draft, None, None),
+            content("10", ContentStatus::Archived, None, None),
+        ]);
+        ex.contents.get_mut("8").unwrap().creator = None;
+        ex.bodies.remove("9");
+        let plan = Planner::new(&ex, PlanOptions::default()).plan();
+        let pages = &plan.spaces[0].pages;
+        let get = |id: &str| pages.iter().find(|p| p.source_id == id);
+
+        // the shared draft is not an old version
+        let history: Vec<&str> = get("1").unwrap().history.iter().map(|v| v.source_id.as_str()).collect();
+        assert_eq!(history, ["2"]);
+        assert_eq!(plan.report.counts["skipped_drafts_of_published_pages"], 1);
+
+        // trash keeps its own structure; live pages move up out of it
+        assert_eq!(get("4").unwrap().status, ContentStatus::Deleted);
+        assert_eq!(get("5").unwrap().parent_source_id.as_deref(), Some("1"));
+        assert_eq!(get("6").unwrap().parent_source_id.as_deref(), Some("4"));
+
+        assert_eq!(get("7").unwrap().status, ContentStatus::Draft);
+        assert_eq!(get("7").unwrap().parent_source_id.as_deref(), Some("1"));
+        assert!(get("8").is_none() && get("9").is_none());
+        assert_eq!(plan.report.counts["skipped_drafts_without_author"], 1);
+        assert_eq!(plan.report.counts["skipped_drafts_without_body"], 1);
+
+        assert_eq!(plan.report.counts["pages"], 3, "1, 5 and the archived 10");
+        assert_eq!(plan.report.counts["drafts"], 1);
+        assert_eq!(plan.report.counts["trashed_pages"], 2);
+
+        // both can be switched off
+        let opts = PlanOptions { include_drafts: false, include_deleted: false, ..Default::default() };
+        let plan = Planner::new(&ex, opts).plan();
+        let ids: Vec<&str> = plan.spaces[0].pages.iter().map(|p| p.source_id.as_str()).collect();
+        assert_eq!(ids, ["1", "10", "5"], "root pages sort by title");
+        assert_eq!(plan.spaces[0].pages[2].parent_source_id, None, "its parent isn't imported");
     }
 }

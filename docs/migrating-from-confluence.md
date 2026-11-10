@@ -16,8 +16,8 @@ It works the same for Confluence Server, Data Center and Cloud exports.
 | Blog posts | Blog | |
 | Page history | Versions | with the original authors and dates; skip with `--skip-history` |
 | Current, archived pages | Pages, archive | archived pages land in Space settings → Archived |
-| Drafts | not imported | unless you ask for them (`include_drafts`): they then become normal pages |
-| Deleted pages (trash) | not imported | |
+| Unpublished pages (drafts) | Private drafts | only their author sees them, under *Home → Drafts*, until they publish them; skip with `--skip-drafts`. Unpublished edits to published pages are not imported (Confluence Cloud keeps one for every page edited in the new editor; the dry run counts them) |
+| Deleted pages (trash) | Trash | with their attachments and comments, so admins can restore them; the trash retention period starts at the import; skip with `--skip-trash`. Pages that were below a deleted page move up to its parent, as in Confluence |
 | Attachments (all versions) | Attachments | identical files are stored once |
 | Page and inline comments, threads, resolved state | Comments | inline comments stay anchored to their text |
 | Labels | Labels | |
@@ -95,7 +95,7 @@ macros and pages with warnings. Nothing is written to the database.
 - **On the server:**
 
   ```bash
-  wikicraft import-confluence export.zip --as-user admin@example.com [--space-key ENG] [--skip-history]
+  wikicraft import-confluence export.zip --as-user admin@example.com [--space-key ENG] [--skip-history] [--skip-drafts] [--skip-trash]
   ```
 
   `--as-user` is the WikiCraft admin the import runs as. The command prints the report when done.

@@ -9,6 +9,7 @@ use bytes::Bytes;
 use serde::Deserialize;
 use serde_json::{Value, json};
 use uuid::Uuid;
+use wikicraft_confluence::model::ContentStatus;
 use wikicraft_confluence::plan::{CommentPlan, NodeKind, PagePlan};
 use wikicraft_confluence::{Export, PlanOptions, Planner, Source, Stats};
 use wikicraft_doc_model::{Mark, Node, marks, nodes, text, ydoc};
@@ -23,7 +24,10 @@ pub struct ImportOptions {
     pub skip_history: bool,
     pub skip_comments: bool,
     pub skip_attachments: bool,
-    pub include_drafts: bool,
+    /// Leave out never-published pages (otherwise they become private drafts of their author).
+    pub skip_drafts: bool,
+    /// Leave out pages in the Confluence trash (otherwise they go to the space trash).
+    pub skip_trash: bool,
 }
 
 pub async fn set_progress(state: &AppState, job: Uuid, progress: Value) {
@@ -308,8 +312,8 @@ async fn import(state: &AppState, job: Uuid, ws: Uuid, actor: Uuid, path: &Path,
     let export: Arc<Export> = Arc::new(tokio::task::spawn_blocking(move || wikicraft_confluence::open(&p)).await??);
     let plan_opts = PlanOptions {
         include_history: !opts.skip_history,
-        include_drafts: opts.include_drafts,
-        include_deleted: false,
+        include_drafts: !opts.skip_drafts,
+        include_deleted: !opts.skip_trash,
         include_comments: !opts.skip_comments,
         include_attachments: !opts.skip_attachments,
     };
@@ -601,7 +605,15 @@ async fn import(state: &AppState, job: Uuid, ws: Uuid, actor: Uuid, path: &Path,
                 tx = state.db.begin().await?;
                 in_tx = 0;
             }
-            count(if pg.kind == NodeKind::BlogPost { "blogPosts" } else { "pages" }, 1);
+            count(
+                match pg.status {
+                    ContentStatus::Draft => "drafts",
+                    ContentStatus::Deleted => "trashedPages",
+                    _ if pg.kind == NodeKind::BlogPost => "blogPosts",
+                    _ => "pages",
+                },
+                1,
+            );
             count("versions", pg.history.len() as i64 + 1);
             count("comments", pg.comments.len() as i64);
             done += 1;
@@ -610,7 +622,15 @@ async fn import(state: &AppState, job: Uuid, ws: Uuid, actor: Uuid, path: &Path,
             }
         }
         tx.commit().await?;
-        let home = s.home_page_source_id.as_ref().and_then(|h| page_ids.get(h)).copied().or_else(|| s.pages.first().map(|p| page_ids[&p.source_id]));
+        // the home page must be a page everyone can see: not a draft and not in the trash
+        let live = |p: &&PagePlan| matches!(p.status, ContentStatus::Current | ContentStatus::Archived);
+        let home = s
+            .home_page_source_id
+            .as_ref()
+            .filter(|h| s.pages.iter().filter(live).any(|p| &p.source_id == *h))
+            .and_then(|h| page_ids.get(h))
+            .copied()
+            .or_else(|| s.pages.iter().find(|p| live(p) && p.parent_source_id.is_none()).map(|p| page_ids[&p.source_id]));
         sqlx::query("UPDATE spaces SET home_page_id = $2 WHERE id = $1").bind(space.id).bind(home).execute(&state.db).await?;
         for pg in s.pages.iter().chain(&s.blog_posts) {
             state.search.enqueue(page_ids[&pg.source_id]);
@@ -686,12 +706,15 @@ async fn import_page(
     let updated_at = parse_date(pg.updated_at.as_deref()).or(created_at);
     let created_by = user_of(&pg.created_by);
     let updated_by = user_of(&pg.updated_by).or(created_by);
-    let status = if pg.status == wikicraft_confluence::model::ContentStatus::Archived { "archived" } else { "current" };
+    let status = if pg.status == ContentStatus::Archived { "archived" } else { "current" };
     sqlx::query(
-        // archived Confluence pages land in the archive (Space settings → Archived), not in the tree
-        "INSERT INTO pages (id, workspace_id, space_id, parent_id, kind, title, position, content, text_content, ydoc, version, status, page_status, created_by, created_at, updated_by, updated_at, source_ref, archived_at)
+        // archived Confluence pages land in the archive (Space settings → Archived), not in the
+        // tree; drafts become their author's private drafts; trashed pages go to the trash, each
+        // with its own time (restoring one doesn't bring back others) that starts the retention
+        // period now, so admins get the full period to look through them
+        "INSERT INTO pages (id, workspace_id, space_id, parent_id, kind, title, position, content, text_content, ydoc, version, status, page_status, created_by, created_at, updated_by, updated_at, source_ref, archived_at, draft, deleted_at, deleted_by)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, COALESCE($15, now()), $16, COALESCE($17, now()), $18,
-                 CASE WHEN $12 = 'archived' THEN COALESCE($17, now()) END)",
+                 CASE WHEN $12 = 'archived' THEN COALESCE($17, now()) END, $19, CASE WHEN $20 THEN clock_timestamp() END, CASE WHEN $20 THEN $21::uuid END)",
     )
     .bind(id)
     .bind(ws)
@@ -711,6 +734,9 @@ async fn import_page(
     .bind(updated_by)
     .bind(updated_at)
     .bind(format!("confluence:{}", pg.source_id))
+    .bind(pg.status == ContentStatus::Draft)
+    .bind(pg.status == ContentStatus::Deleted)
+    .bind(actor)
     .execute(&mut *tx)
     .await?;
     let mut last_version = 0;

@@ -98,6 +98,10 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   (REST mutating requests refused, MCP write tools refuse; read-like POSTs such as Markdown conversion allowed).
   Template previews in the Create dialog; found and fixed: templates of a space you can't see were listed and could
   be used to create pages (their content leaked).
+- 2026-11-10 (after the second PC restart): committed the work the restart interrupted (drafts, read-only tokens,
+  required 2FA, who viewed, auto-watch on edit; verified first). Confluence content statuses: drafts → private drafts,
+  trash → trash (with attachments and comments), and a bug found on the real exports: Cloud's shared draft of every
+  published page (48 in the ModelOp XML) was imported as an extra old version carrying the current content.
 - Note: running the whole test suite saturates this WSL machine (load ~100); a parallel demo server then hits DB
   pool timeouts, and the mail test's 4-second wait can flake. Both pass when the machine is idle.
 
