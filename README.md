@@ -14,7 +14,7 @@ end-of-life (2029-03-28).
 - **Comments**: page and inline comments, threads, resolve/reopen, mention notifications
 - **Permissions**: workspace roles, space roles (viewer/commenter/editor/admin) for users and groups, page view/edit restrictions (view restrictions are inherited, like Confluence), anonymous access, guests
 - **Search**: full-text (tantivy or Postgres) with snippets, permission-aware, filters (type, label, contributor, date), comments indexed, saved searches, browser search (OpenSearch)
-- **Confluence import**: classic XML exports *and* the new Cloud CSV exports, with history, attachments, comments (incl. inline), labels, restrictions, authors, macro mapping, link rewriting and a dry-run report
+- **Confluence import**: classic XML exports *and* the new Cloud CSV exports, with history, attachments, comments (incl. inline), labels, restrictions, authors, macro mapping, link rewriting and a dry-run report; imported authors without an account can later be merged into the right person
 - **Markdown / Obsidian / Notion / HTML import**: zip of Markdown or HTML files (including Confluence's HTML space export) with images, attachments and links between pages
 - **Word**: import .docx (headings, lists, tables, images, footnotes) and export pages or whole page trees to .docx
 - **Export & backup**: single pages as Word/Markdown/HTML/PDF; whole spaces as a browsable static HTML site, a Markdown folder tree (re-importable) or a full backup that restores into a new space
@@ -26,6 +26,9 @@ end-of-life (2029-03-28).
 - **Administration**: workspace name and logo, announcement banner, feature switches (public links, exports, Ask the wiki, personal spaces), audit log, usage overview
 - **Migration-friendly URLs**: old Confluence links (`/display/KEY/Title`, `viewpage.action?pageId=`, Cloud `/wiki/spaces/…/pages/ID`, `/x/` tiny links) redirect to the imported pages
 - **API**: REST + personal API tokens; audit log
+
+Documentation: [user guide](docs/user-guide.md) · [admin guide](docs/admin-guide.md) ·
+[leaving Confluence Data Center](docs/migrating-from-confluence.md)
 
 ## Quick start (Docker)
 

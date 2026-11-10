@@ -7,7 +7,7 @@ const GROUPS: [string, [string, string][]][] = [
   ['General', [[`${mod} K`, 'Search pages'], [`${mod} F`, 'Find in page'], [`${mod} H`, 'Find and replace (editing)'], [`${mod} /`, 'Keyboard shortcuts'], ['Esc', 'Close dialogs and menus']]],
   ['Formatting', [[`${mod} B`, 'Bold'], [`${mod} I`, 'Italic'], [`${mod} U`, 'Underline'], [`${mod} Shift X`, 'Strikethrough'], [`${mod} E`, 'Inline code'], [`${mod} Shift H`, 'Highlight']]],
   ['Blocks', [['/', 'Insert anything (slash menu)'], ['# ', 'Heading (## and ### for smaller)'], ['- or * ', 'Bullet list'], ['1. ', 'Numbered list'], ['[] ', 'Task list'], ['> ', 'Quote'], ['```', 'Code block'], ['---', 'Divider']]],
-  ['Linking', [['[[', 'Link to a page (or create one)'], ['@', 'Mention someone'], [':tick', 'Insert an emoticon'], [`${mod} Z / ${mod} Shift Z`, 'Undo / redo']]],
+  ['Linking', [['[[', 'Link to a page (or create one)'], ['@', 'Mention someone or link a page'], [':tick', 'Insert an emoticon'], [`${mod} Z / ${mod} Shift Z`, 'Undo / redo']]],
   ['Tables', [['Tab / Shift Tab', 'Next / previous cell'], ['Toolbar above the table', 'Rows, columns, headers, merge, colour']]],
 ]
 

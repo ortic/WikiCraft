@@ -1,0 +1,91 @@
+# WikiCraft user guide
+
+A quick tour for everyone who reads and writes in WikiCraft. Press **`Ctrl /`** (`Cmd /` on a
+Mac) in the app for the keyboard shortcuts.
+
+## Finding your way
+
+- **Home** shows the pages you visited recently, your starred pages, open tasks assigned to you
+  and the activity in the spaces you follow.
+- **Spaces** hold the pages of a team or project, as a tree in the sidebar. Drag pages in the
+  tree to reorder or nest them.
+- **Search** (`Ctrl K` / `Cmd K` jumps straight to a page) finds pages, blog posts and comments;
+  filter by space, type, label, contributor and date, and save searches you repeat.
+- **My tasks** lists every task assigned to you, across spaces.
+
+## Writing
+
+Click into a page you may edit and start typing: there's no edit mode and no "save" button.
+Everyone on the page edits together and sees each other's cursors; click a person's avatar to
+jump to where they are.
+
+- Type **`/`** for anything you can insert: headings, lists, task lists, tables, callouts (info,
+  note, success, warning, error), expand blocks, code, Mermaid diagrams, drawings, images,
+  files, embeds and link previews, table of contents, child pages, columns, status, dates, math,
+  decisions and a decision log, task reports.
+- Markdown shortcuts work as you type: `#`, `##`, `-`, `1.`, `[]`, `>`, ```` ``` ````, `---`.
+- **`@`** mentions a person (they are notified) or, from two letters on, links a page.
+- **`[[`** links a page (or creates it), `[[#` a heading on this page; attachments too.
+- **`:`** followed by a word inserts an emoticon (`:tick`, `:warning`, …).
+- Select text for the formatting bar: bold, italic, code, highlight, links, or a comment.
+- Paste Markdown, a table from a spreadsheet or an image: it becomes formatted content.
+- The handle left of a block moves the block; the link icon next to it copies a **link to that
+  block**. Opening such a link scrolls to the block and highlights it.
+- `Ctrl F` / `Ctrl H` find and replace within the page.
+
+Tables have a toolbar for rows, columns, header rows, merged cells, cell colours, sorting and the
+width (normal, wide, full). Images can be resized, aligned, captioned, annotated and opened full
+size.
+
+## Templates
+
+*Create* offers blank pages and templates (meeting notes, decision record, how-to,
+retrospective, runbook, product requirements …), plus your space's own templates. Grey
+instructional text in a template disappears when you start typing there.
+
+## History
+
+Every editing session ends in a version. The clock icon shows all versions with what changed
+(per block) and lets you restore an older one; restoring creates a new version, nothing is lost.
+After you've been away, a banner offers *what changed since your last visit*.
+
+## Comments and tasks
+
+- Select text and choose the comment icon for an **inline comment**, or comment on the whole
+  page at the bottom. Reply, @mention, like, resolve and reopen.
+- In a task list, `@`-mention someone to assign the task and add a date for the due date.
+
+## Watching and notifications
+
+You automatically watch pages you create and pages you are mentioned on. Watch other pages or
+whole spaces from the page menu, and mute a page you no longer care about. The bell lists mentions, replies and
+changes; e-mail digests summarize what you missed.
+
+## Sharing
+
+- **Share → Copy link**: a permanent link that survives renames and moves.
+- **Public link** (if your admins allow it): readable without an account, optionally with the
+  pages below it and an expiry date. Revoke it any time.
+- **Restrictions** (lock icon): limit who can see or edit a page. View restrictions also apply
+  to the pages below.
+- **Inspect permissions** explains who can see a page and why.
+
+## Exporting
+
+Page menu → *Export*: Word (.docx), Markdown, HTML or print / PDF. Space admins can export a whole
+space as a browsable HTML site, a Markdown folder tree or a full backup.
+
+## Keeping pages healthy
+
+- **Owner**: who to ask about a page.
+- **Verify** a page to mark it as accurate (optionally until a date); readers see when it was last
+  verified, and you can ask someone to review it.
+- **Archive** pages that are done but worth keeping; they leave the page tree but stay readable
+  (Space settings → Archived).
+- **Labels** group pages across spaces; click a label for all its pages.
+
+## Your profile
+
+Profile menu → *Profile, API tokens & AI*: name, password, two-factor authentication (an
+authenticator app), active sessions, e-mail notifications and API tokens (for scripts and AI
+assistants that work with the wiki on your behalf).

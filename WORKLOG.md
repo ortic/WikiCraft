@@ -81,7 +81,11 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   first test of each binary drops those older than two hours. Stable block ids (P0): `blockId` on every block,
   assigned by the editor (Tiptap UniqueID) and by the server (create, import, restore, and old pages when first
   opened, without counting as an edit), kept for unchanged blocks when content is replaced via the API; copy link to
-  a block, `#block-<id>` deep links, anchors in shared pages and exports.
+  a block, `#block-<id>` deep links, anchors in shared pages and exports. Single binary (web app embedded in
+  release builds, immutable caching of hashed assets) and HSTS on https. `@` suggests pages. Table of contents
+  options (levels, include/exclude, numbering, one line) shared by editor, shared pages, HTML and Word export.
+  Merge an imported placeholder user into a real account (generic over all foreign keys, mentions rewritten in
+  JSON and Yjs, live rooms updated via a new "system change" that is saved without counting as an edit).
 - Note: running the whole test suite saturates this WSL machine (load ~100); a parallel demo server then hits DB
   pool timeouts, and the mail test's 4-second wait can flake. Both pass when the machine is idle.
 
