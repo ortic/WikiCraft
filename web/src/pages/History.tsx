@@ -5,18 +5,28 @@ import { ArrowLeft, RotateCcw } from 'lucide-react'
 import { api, formatDate, type Page, type PmNode, type Version } from '../api'
 import { Avatar, Spinner, useToast } from '../ui'
 
+/** One line per text block (paragraph, heading, list item, cell, code block), in document order. */
 function plain(n: PmNode): string[] {
   const out: string[] = []
-  const walk = (x: PmNode, buf: string[]) => {
+  const inline = (x: PmNode, buf: string[]) => {
     if (x.text) buf.push(x.text)
     if (x.type === 'mention') buf.push(`@${x.attrs?.label ?? ''}`)
-    x.content?.forEach((c) => walk(c, buf))
+    if (x.type === 'hardBreak') buf.push(' ')
+    x.content?.forEach((c) => inline(c, buf))
   }
-  for (const b of n.content ?? []) {
-    const buf: string[] = []
-    walk(b, buf)
-    out.push(buf.join(''))
+  const isTextBlock = (x: PmNode) => !!x.content?.length && x.content.every((c) => c.type === 'text' || c.type === 'hardBreak' || c.type === 'mention' || c.type === 'image' || c.type === 'emoticon' || c.type === 'status' || c.type === 'date')
+  const block = (x: PmNode, prefix: string) => {
+    if (x.type === 'codeBlock' || isTextBlock(x)) {
+      const buf: string[] = []
+      inline(x, buf)
+      const text = buf.join('')
+      if (text.trim()) out.push(prefix + text)
+      return
+    }
+    const p = x.type === 'listItem' ? '• ' : x.type === 'taskItem' ? (x.attrs?.checked ? '[x] ' : '[ ] ') : ''
+    x.content?.forEach((c, i) => block(c, i === 0 ? prefix + p : ''))
   }
+  for (const b of n.content ?? []) block(b, '')
   return out
 }
 
