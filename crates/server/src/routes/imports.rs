@@ -339,7 +339,9 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
     } else {
         files.push((filename.to_string(), Bytes::from(tokio::fs::read(path).await.map_err(|e| ApiError::Internal(e.into()))?)));
     }
-    // Word documents are converted up front; their images become files next to them
+    // Word documents are converted up front; their images become files next to them. With
+    // `splitHeadings` (1–3) each heading of that level or above starts a page of its own.
+    let split_level: i64 = fields.get("splitHeadings").and_then(|v| v.trim().parse().ok()).filter(|l| (1..=3).contains(l)).unwrap_or(0);
     let is_docx = |n: &str| n.to_lowercase().ends_with(".docx");
     let mut word: HashMap<String, (Option<String>, Node)> = HashMap::new();
     let docx_files: Vec<(String, Bytes)> = files.iter().filter(|(n, _)| is_docx(n)).cloned().collect();
@@ -359,6 +361,20 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
                 return Err(ApiError::bad(format!("the Word files hold more than {} MB of images; import them in smaller batches", MAX_EXTRACTED >> 20)));
             }
             files.push((format!("{name}.media/{img}"), Bytes::from(bytes)));
+        }
+        if split_level > 0 {
+            // one page per heading: the sections become pages in a folder named like the
+            // document, which the document's own page then holds
+            let (intro, sections) = split_sections(converted.doc.content, 1, split_level);
+            if !sections.is_empty() {
+                let stem = name.strip_suffix(".docx").or_else(|| name.strip_suffix(".DOCX")).unwrap_or(&name).to_string();
+                add_sections(&mut files, &mut word, &stem, sections);
+                let intro = if intro.is_empty() { vec![Node::paragraph(vec![])] } else { intro };
+                word.insert(name, (converted.title, Node::doc(intro)));
+                continue;
+            }
+            word.insert(name, (converted.title, Node::doc(sections_fallback(intro))));
+            continue;
         }
         word.insert(name, (converted.title, converted.doc));
     }
@@ -978,6 +994,70 @@ fn is_property_lines(text: &str, keys: &[String]) -> bool {
         rest = next.map(|i| &rest[i + 1..]).unwrap_or("");
     }
     found > 0
+}
+
+/// A Word section: its heading text, content and the sections below it.
+struct Section {
+    title: String,
+    content: Vec<Node>,
+    children: Vec<Section>,
+}
+
+/// Splits blocks at headings of `level` (recursing to `max`): the blocks before the first one,
+/// and the sections.
+fn split_sections(blocks: Vec<Node>, level: i64, max: i64) -> (Vec<Node>, Vec<Section>) {
+    let is_cut = |n: &Node| n.kind == nodes::HEADING && n.attr_i64("level") == Some(level);
+    if level > max || !blocks.iter().any(is_cut) {
+        // no heading of this level: try the next one down for this part
+        if level < max && blocks.iter().any(|n| n.kind == nodes::HEADING && n.attr_i64("level").is_some_and(|l| l > level && l <= max)) {
+            return split_sections(blocks, level + 1, max);
+        }
+        return (blocks, vec![]);
+    }
+    let mut intro = Vec::new();
+    let mut sections: Vec<(String, Vec<Node>)> = Vec::new();
+    for b in blocks {
+        if is_cut(&b) {
+            let title = wikicraft_doc_model::text::plain_text(&b).split_whitespace().collect::<Vec<_>>().join(" ");
+            sections.push((if title.is_empty() { "Untitled".into() } else { title.chars().take(255).collect() }, vec![]));
+        } else if let Some((_, c)) = sections.last_mut() {
+            c.push(b);
+        } else {
+            intro.push(b);
+        }
+    }
+    let out = sections
+        .into_iter()
+        .map(|(title, content)| {
+            let (content, children) = if level < max { split_sections(content, level + 1, max) } else { (content, vec![]) };
+            Section { title, content, children }
+        })
+        .collect();
+    (intro, out)
+}
+
+fn sections_fallback(intro: Vec<Node>) -> Vec<Node> {
+    if intro.is_empty() { vec![Node::paragraph(vec![])] } else { intro }
+}
+
+/// Adds sections as Word "files" in a folder `dir`: `dir/01 Title.docx` (+ `dir/01 Title/` for
+/// their own sections), numbered so they keep the document's order.
+fn add_sections(files: &mut Vec<(String, Bytes)>, word: &mut HashMap<String, (Option<String>, Node)>, dir: &str, sections: Vec<Section>) {
+    for (i, s) in sections.into_iter().enumerate().take(500) {
+        let safe: String = s
+            .title
+            .chars()
+            .map(|c| if matches!(c, '/' | '\\' | ':' | '*' | '?' | '"' | '<' | '>' | '|') || c.is_control() { ' ' } else { c })
+            .take(80)
+            .collect();
+        let stem = format!("{dir}/{:03} {}", i + 1, safe.trim());
+        let name = format!("{stem}.docx");
+        files.push((name.clone(), Bytes::new()));
+        word.insert(name, (Some(s.title), Node::doc(sections_fallback(s.content))));
+        if !s.children.is_empty() {
+            add_sections(files, word, &stem, s.children);
+        }
+    }
 }
 
 fn normalize_path(p: &str) -> String {

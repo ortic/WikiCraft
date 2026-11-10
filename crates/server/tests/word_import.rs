@@ -184,3 +184,69 @@ async fn word_export_round_trips() {
     assert_eq!(indented["attrs"]["textAlign"], "right");
     assert!(find(&back, "heading").iter().any(|h| text(h) == "Indented heading" && h["attrs"]["indent"] == 1), "{back}");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn word_documents_split_into_a_page_per_heading() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    for k in ["SRC", "ONE", "TWO"] {
+        app.post(&owner, "/spaces", json!({"key": k, "name": k})).await;
+    }
+    let (_, pg) = app.post(&owner, "/pages", json!({"spaceKey": "SRC", "title": "Handbook"})).await;
+    let pg = pg["id"].as_str().unwrap().to_string();
+    let md = "Read this first.\n\n# Install\n\nGet the package.\n\n## Linux\n\nUse apt.\n\n## Windows\n\nUse the installer.\n\n# Upgrade\n\nBack up, then install.\n";
+    let (st, _) = app.put(&owner, &format!("/pages/{pg}/content"), json!({"markdown": md})).await;
+    assert_eq!(st, 200);
+    let bytes = owner.get(app.url(&format!("/pages/{pg}/export?format=docx"))).send().await.unwrap().bytes().await.unwrap().to_vec();
+    let split = |space: &'static str, level: &'static str| {
+        let form = reqwest::multipart::Form::new()
+            .text("spaceKey", space)
+            .text("splitHeadings", level)
+            .part("file", reqwest::multipart::Part::bytes(bytes.clone()).file_name("Handbook.docx"));
+        owner.post(app.url("/imports/markdown")).multipart(form).send()
+    };
+    let tree = |space: &'static str| {
+        let app = &app;
+        let owner = &owner;
+        async move {
+            let (_, t) = app.get(owner, &format!("/spaces/{space}/tree")).await;
+            let nodes = t["nodes"].as_array().unwrap().clone();
+            let title_of = |id: &Value| nodes.iter().find(|n| n["id"] == *id).map(|n| n["title"].as_str().unwrap().to_string());
+            // (title, parent title) in tree order, without the space's home page
+            nodes
+                .iter()
+                .filter(|n| n["title"] != space)
+                .map(|n| (n["title"].as_str().unwrap().to_string(), title_of(&n["parentId"]).unwrap_or_default()))
+                .collect::<Vec<_>>()
+        }
+    };
+
+    // heading 1: a page per chapter below the document's page, which keeps the intro
+    assert_eq!(split("ONE", "1").await.unwrap().status(), 201);
+    let mut t = tree("ONE").await;
+    t.sort();
+    assert_eq!(t, vec![("Handbook".into(), "".into()), ("Install".into(), "Handbook".into()), ("Upgrade".into(), "Handbook".into())]);
+    let (_, intro) = page(&app, &owner, "ONE", "Handbook").await;
+    assert!(text(&intro).contains("Read this first.") && !text(&intro).contains("Get the package"), "{intro}");
+    let (_, install) = page(&app, &owner, "ONE", "Install").await;
+    let s = text(&install);
+    assert!(s.contains("Get the package.") && s.contains("Use apt.") && !s.contains("Back up"), "{install}");
+    assert!(find(&install, "heading").iter().all(|h| text(h) != "Install"), "the heading became the title");
+
+    // heading 2 too: sections below their chapter
+    assert_eq!(split("TWO", "2").await.unwrap().status(), 201);
+    let mut t = tree("TWO").await;
+    t.sort();
+    assert_eq!(
+        t,
+        vec![
+            ("Handbook".into(), "".into()),
+            ("Install".into(), "Handbook".into()),
+            ("Linux".into(), "Install".into()),
+            ("Upgrade".into(), "Handbook".into()),
+            ("Windows".into(), "Install".into()),
+        ]
+    );
+    let (_, linux) = page(&app, &owner, "TWO", "Linux").await;
+    assert_eq!(text(&linux).trim(), "Use apt.");
+}

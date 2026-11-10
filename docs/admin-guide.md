@@ -67,7 +67,8 @@ else is configured afterwards:
 - *Administration → Overview → System*: the version, database, background jobs, search index
   (pages indexed of all pages), e-mail, file storage, sign-in providers and cluster mode.
 - *Administration → Users / Groups*: people and groups.
-- *Administration → Import*: Confluence, Word, Markdown, HTML, Notion and Obsidian imports, space
+- *Administration → Import*: Confluence, Word, Markdown, HTML, Notion and Obsidian imports (a Word
+  document can become one page, or a page per heading 1, or per heading 1 and 2), space
   backups, and the recent jobs (imports, restores, exports). **Cancel** stops a queued job at once
   and a running one at its next step (a cancelled restore removes the half-restored space).
   **Retry** runs a failed or cancelled job again; its upload is kept 7 days for that. A retried

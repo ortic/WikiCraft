@@ -1175,6 +1175,7 @@ function MarkdownImport() {
   const [space, setSpace] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<{ pages: number; attachments: number; skippedFiles?: string[]; space: string } | null>(null)
+  const [split, setSplit] = useState('')
   const start = async () => {
     if (!selected || !space) return
     setBusy(true)
@@ -1182,6 +1183,7 @@ function MarkdownImport() {
     try {
       const form = new FormData()
       form.append('spaceKey', space)
+      if (split) form.append('splitHeadings', split)
       form.append('file', selected)
       const r = await api.upload<{ pages: number; attachments: number; skippedFiles?: string[] }>('/imports/markdown', form)
       setResult({ ...r, space })
@@ -1211,6 +1213,16 @@ function MarkdownImport() {
         </select>
         <button className="btn btn-primary" disabled={!selected || !space || busy} onClick={start}>{busy ? <Spinner /> : <Upload size={15} />} Import</button>
       </div>
+      {selected && /\.(docx|zip)$/i.test(selected.name) && (
+        <label className="row small" style={{ gap: 8, marginTop: 8 }}>
+          Word documents:
+          <select className="select" style={{ width: 'auto' }} value={split} onChange={(e) => setSplit(e.target.value)}>
+            <option value="">one page each</option>
+            <option value="1">a page per heading 1</option>
+            <option value="2">a page per heading 1 and 2</option>
+          </select>
+        </label>
+      )}
       {result && (
         <p style={{ marginBottom: 0 }}>
           <CheckCircle2 size={15} color="var(--success)" style={{ verticalAlign: -2 }} /> Imported {result.pages} pages and {result.attachments} attachments into{' '}
