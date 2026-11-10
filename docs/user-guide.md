@@ -112,7 +112,8 @@ history.
 
 - **Share → Copy link**: a permanent link that survives renames and moves.
 - **Public link** (if your admins allow it): readable without an account, optionally with the
-  pages below it and an expiry date. Revoke it any time.
+  pages below it, an expiry date and a password (send it separately; a browser that entered it
+  can read for 12 hours). Revoke it any time.
 - **Restrictions** (lock icon): limit who can see or edit a page. View restrictions also apply
   to the pages below.
 - **Inspect permissions** explains who can see a page and why.

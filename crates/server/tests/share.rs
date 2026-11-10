@@ -120,3 +120,51 @@ async fn public_links_share_pages_without_leaking_restricted_content() {
     assert_eq!(app.delete(&owner, &format!("/share-links/{id}")).await, 204);
     assert_eq!(get(format!("/public/{token}")).await.0, 404);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn password_protected_links() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    app.post(&owner, "/spaces", json!({"key": "PW", "name": "Partners"})).await;
+    let (_, page) = app.post(&owner, "/pages", json!({"spaceKey": "PW", "title": "Price list", "markdown": "Partner prices"})).await;
+    let page = page["id"].as_str().unwrap().to_string();
+    let (st, _) = app.post(&owner, &format!("/pages/{page}/share-links"), json!({"password": "short"})).await;
+    assert_eq!(st, 400, "at least 6 characters");
+    let (st, link) = app.post(&owner, &format!("/pages/{page}/share-links"), json!({"password": "open sesame"})).await;
+    assert_eq!(st, 201, "{link}");
+    let token = link["token"].as_str().unwrap().to_string();
+    let (_, links) = app.get(&owner, &format!("/pages/{page}/share-links")).await;
+    assert_eq!(links["links"][0]["hasPassword"], true);
+
+    // a browser of its own (cookies), not signed in
+    let visitor = reqwest::Client::builder().cookie_store(true).build().unwrap();
+    let url = |p: &str| format!("{}/api/public/{token}{p}", app.base);
+    assert_eq!(visitor.get(url("")).send().await.unwrap().status(), 401, "asks for the password");
+    let unlock = |pw: &'static str| {
+        let (visitor, url) = (visitor.clone(), url("/unlock"));
+        async move { visitor.post(url).json(&json!({ "password": pw })).send().await.unwrap() }
+    };
+    assert_eq!(unlock("guess").await.status(), 403);
+    let ok = unlock("open sesame").await;
+    assert_eq!(ok.status(), 204);
+    let cookie = ok.headers()["set-cookie"].to_str().unwrap().to_string();
+    assert!(cookie.contains("HttpOnly") && cookie.contains(&format!("Path=/api/public/{token}")), "{cookie}");
+    let r = visitor.get(url("")).send().await.unwrap();
+    assert_eq!(r.status(), 200);
+    assert!(r.json::<Value>().await.unwrap()["html"].as_str().unwrap().contains("Partner prices"));
+    // another browser still has to unlock it
+    assert_eq!(reqwest::get(url("")).await.unwrap().status(), 401);
+
+    // wrong guesses are throttled per link
+    let other = reqwest::Client::new();
+    for _ in 0..10 {
+        other.post(url("/unlock")).json(&json!({"password": "nope nope"})).send().await.unwrap();
+    }
+    let r = other.post(url("/unlock")).json(&json!({"password": "open sesame"})).send().await.unwrap();
+    assert_eq!(r.status(), 400, "too many wrong passwords");
+
+    // a revoked link opens for nobody, unlocked or not
+    let id = links["links"][0]["id"].as_str().unwrap();
+    app.delete(&owner, &format!("/share-links/{id}")).await;
+    assert_eq!(visitor.get(url("")).send().await.unwrap().status(), 404);
+}

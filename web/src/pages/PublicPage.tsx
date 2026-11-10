@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { api, formatDate } from '../api'
+import { api, ApiError, formatDate } from '../api'
 import { Logo, Spinner } from '../ui'
 
 interface PublicPage {
@@ -25,10 +25,43 @@ export default function PublicPageView() {
     retry: false,
   })
   const [navOpen, setNavOpen] = useState(false)
+  const [password, setPassword] = useState('')
+  const [unlockError, setUnlockError] = useState<string | null>(null)
+  const [unlocking, setUnlocking] = useState(false)
   useEffect(() => {
     if (q.data) document.title = `${q.data.title} · ${q.data.spaceName}`
   }, [q.data])
   if (q.isLoading) return <div className="public-shell"><Spinner /></div>
+  if (q.error instanceof ApiError && q.error.status === 401) {
+    const unlock = async (e: React.FormEvent) => {
+      e.preventDefault()
+      setUnlocking(true)
+      setUnlockError(null)
+      try {
+        await api.post(`/public/${token}/unlock`, { password })
+        await q.refetch()
+      } catch (err) {
+        setUnlockError(err instanceof Error ? err.message : 'That didn\'t work')
+      } finally {
+        setUnlocking(false)
+      }
+    }
+    return (
+      <div className="auth">
+        <form className="auth-card" onSubmit={unlock}>
+          <Logo />
+          <h1>This page is protected</h1>
+          <p className="muted">Enter the password you got with the link.</p>
+          <div className="field">
+            <label htmlFor="share-password">Password</label>
+            <input id="share-password" className="input" type="password" autoFocus autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </div>
+          {unlockError && <p className="error-text" role="alert">{unlockError}</p>}
+          <button className="btn btn-primary" type="submit" disabled={unlocking || !password}>{unlocking ? <Spinner /> : null} Open</button>
+        </form>
+      </div>
+    )
+  }
   if (q.error || !q.data)
     return (
       <div className="auth">

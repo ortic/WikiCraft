@@ -181,9 +181,10 @@ op("/pages/{id}/export", "get", "Import & export", "Export one page (Markdown, H
 op("/pages/{id}/collab", "get", "Pages", "Live collaboration WebSocket (y-websocket protocol)", public=True)
 op("/pages/{id}/tasks/{idx}/toggle", "post", "Tasks", "Check / uncheck a task item")
 op("/pages/{id}/share-links", "get", "Sharing", "Public links of a page", res=resp(obj({"enabled": boolean, "links": arr(S("ShareLink"))})))
-op("/pages/{id}/share-links", "post", "Sharing", "Create a public link", req=body(obj({"includeChildren": boolean, "expiresInDays": num})), res=resp(obj({"id": uuid, "token": txt, "url": txt}), "201", "Created"))
+op("/pages/{id}/share-links", "post", "Sharing", "Create a public link", req=body(obj({"includeChildren": boolean, "expiresInDays": num, "password": {"type": "string", "description": "visitors must enter it (6 to 200 characters)"}})), res=resp(obj({"id": uuid, "token": txt, "url": txt}), "201", "Created"))
 op("/share-links/{id}", "delete", "Sharing", "Turn off a public link", res=NO)
 op("/public/{token}", "get", "Sharing", "A publicly shared page (rendered HTML + shared tree)", public=True)
+op("/public/{token}/unlock", "post", "Sharing", "Enter the password of a protected public link: this browser may open it for 12 hours (a cookie); 10 wrong passwords per 15 minutes", req=body(obj({"password": txt}, ["password"])), res=NO, public=True)
 op("/public/{token}/pages/{id}", "get", "Sharing", "A sub-page of a public share", public=True)
 op("/public/{token}/attachments/{id}", "get", "Sharing", "A file of a publicly shared page", public=True)
 # comments, attachments

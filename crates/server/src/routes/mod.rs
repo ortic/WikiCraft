@@ -185,6 +185,7 @@ pub fn router(state: AppState) -> Router {
         .route("/admin/webhooks/{id}/test", post(webhooks::test))
         .route("/admin/webhooks/{id}/deliveries", get(webhooks::deliveries))
         .route("/public/{token}", get(share::view))
+        .route("/public/{token}/unlock", post(share::unlock))
         .route("/public/{token}/pages/{id}", get(share::view_page))
         .route("/public/{token}/attachments/{id}", get(share::attachment))
         .route("/reports/pages", get(reports::pages_report))

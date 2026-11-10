@@ -13,6 +13,7 @@ interface ShareLink {
   expiresAt: string | null
   views: number
   lastViewedAt: string | null
+  hasPassword?: boolean
 }
 
 /** Copy the page link for colleagues, or create a public read-only link for anyone. */
@@ -22,6 +23,7 @@ export default function ShareDialog({ pageId, title, restricted, onClose }: { pa
   const links = useQuery({ queryKey: ['share-links', pageId], queryFn: () => api.get<{ enabled: boolean; links: ShareLink[] }>(`/pages/${pageId}/share-links`) })
   const [children, setChildren] = useState(true)
   const [expiry, setExpiry] = useState('')
+  const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)
   const url = (token: string) => `${location.origin}/s/${token}`
   const copy = async (text: string) => {
@@ -35,8 +37,10 @@ export default function ShareDialog({ pageId, title, restricted, onClose }: { pa
   const create = async () => {
     setBusy(true)
     try {
-      const r = await api.post<{ token: string }>(`/pages/${pageId}/share-links`, { includeChildren: children, expiresInDays: expiry ? Number(expiry) : undefined })
+      const r = await api.post<{ token: string }>(`/pages/${pageId}/share-links`, { includeChildren: children, expiresInDays: expiry ? Number(expiry) : undefined, password: password || undefined })
       await qc.invalidateQueries({ queryKey: ['share-links', pageId] })
+      // the password goes to the visitors separately; the field doesn't keep it
+      setPassword('')
       copy(url(r.token))
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Could not create the link')
@@ -74,7 +78,7 @@ export default function ShareDialog({ pageId, title, restricted, onClose }: { pa
               <button className="btn" onClick={() => copy(url(l.token))}><Copy size={14} /></button>
               <button className="btn btn-ghost" title="Turn off this link" onClick={() => revoke(l.id)}><Trash2 size={14} /></button>
               <div className="faint small" style={{ gridColumn: '1 / -1' }}>
-                {l.includeChildren ? 'Page and sub-pages' : 'This page only'} · {l.expiresAt ? `expires ${formatDate(l.expiresAt)}` : 'no expiry'} · {l.views} views
+                {l.includeChildren ? 'Page and sub-pages' : 'This page only'} · {l.expiresAt ? `expires ${formatDate(l.expiresAt)}` : 'no expiry'}{l.hasPassword ? ' · password' : ''} · {l.views} views
                 {l.createdByName ? ` · created by ${l.createdByName}` : ''}
               </div>
             </div>
@@ -88,6 +92,16 @@ export default function ShareDialog({ pageId, title, restricted, onClose }: { pa
               <option value="30">Expires in 30 days</option>
               <option value="90">Expires in 90 days</option>
             </select>
+            <input
+              className="input"
+              style={{ width: 200 }}
+              type="password"
+              autoComplete="new-password"
+              placeholder="Password (optional)"
+              aria-label="Password for the link (optional)"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+            />
             <span className="spacer" />
             <button className="btn btn-primary" disabled={busy} onClick={create}>{busy ? <Spinner /> : <Globe size={14} />} Create public link</button>
           </div>

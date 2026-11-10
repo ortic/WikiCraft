@@ -68,6 +68,8 @@ pub struct LinkRow {
     expires_at: Option<chrono::DateTime<chrono::Utc>>,
     views: i64,
     last_viewed_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// visitors need a password
+    has_password: bool,
 }
 
 /// `GET /api/pages/{id}/share-links` (editors of the page)
@@ -75,7 +77,8 @@ pub async fn list(State(state): State<AppState>, CurrentUser(user): CurrentUser,
     let p = Principal::load(&state, Some(user.clone())).await?;
     require_page(&state, &p, page, Need::Edit).await?;
     let links = sqlx::query_as::<_, LinkRow>(
-        "SELECT l.id, l.token, l.include_children, u.name AS created_by_name, l.created_at, l.expires_at, l.views, l.last_viewed_at
+        "SELECT l.id, l.token, l.include_children, u.name AS created_by_name, l.created_at, l.expires_at, l.views, l.last_viewed_at,
+                l.password_hash IS NOT NULL AS has_password
          FROM share_links l LEFT JOIN users u ON u.id = l.created_by
          WHERE l.page_id = $1 AND l.revoked_at IS NULL AND (l.expires_at IS NULL OR l.expires_at > now()) ORDER BY l.created_at DESC",
     )
@@ -92,6 +95,8 @@ pub struct CreateLink {
     include_children: bool,
     /// days until the link stops working (none = no expiry)
     expires_in_days: Option<i64>,
+    /// visitors have to enter it first (6 to 200 characters)
+    password: Option<String>,
 }
 
 /// `POST /api/pages/{id}/share-links`
@@ -115,12 +120,17 @@ pub async fn create(
     if crate::authz::in_draft(&state, page).await {
         return Err(ApiError::bad("publish the draft before sharing it publicly"));
     }
+    let password_hash = match req.password.as_deref().filter(|p| !p.is_empty()) {
+        Some(p) if !(6..=200).contains(&p.chars().count()) => return Err(ApiError::bad("the password needs 6 to 200 characters")),
+        Some(p) => Some(crate::auth::hash_password(p.to_string()).await.map_err(ApiError::Internal)?),
+        None => None,
+    };
     let id = new_id();
     let token = random_token();
     let days = req.expires_in_days.filter(|d| *d > 0).map(|d| d.min(3650));
     sqlx::query(
-        "INSERT INTO share_links (id, token, workspace_id, page_id, include_children, created_by, expires_at)
-         VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $7::bigint IS NULL THEN NULL ELSE now() + make_interval(days => $7::int) END)",
+        "INSERT INTO share_links (id, token, workspace_id, page_id, include_children, created_by, expires_at, password_hash)
+         VALUES ($1, $2, $3, $4, $5, $6, CASE WHEN $7::bigint IS NULL THEN NULL ELSE now() + make_interval(days => $7::int) END, $8)",
     )
     .bind(id)
     .bind(&token)
@@ -129,6 +139,7 @@ pub async fn create(
     .bind(req.include_children)
     .bind(user.id)
     .bind(days)
+    .bind(&password_hash)
     .execute(&state.db)
     .await?;
     audit::log(
@@ -138,7 +149,7 @@ pub async fn create(
         "page.shared_publicly",
         Some("page"),
         Some(page),
-        json!({"includeChildren": req.include_children, "expiresInDays": days}),
+        json!({"includeChildren": req.include_children, "expiresInDays": days, "password": password_hash.is_some()}),
     )
     .await;
     Ok((StatusCode::CREATED, Json(json!({ "id": id, "token": token, "url": format!("{}/s/{token}", state.config.base_url.trim_end_matches('/')) }))))
@@ -307,17 +318,34 @@ struct Shared {
     pages: HashSet<Uuid>,
 }
 
+/// The cookie that holds a browser's unlock of a password-protected link.
+fn unlock_cookie(link_id: Uuid) -> String {
+    format!("wc_share_{}", link_id.simple())
+}
+
 /// Resolves a token to the set of pages it opens. Unknown, revoked and expired tokens — and
-/// all tokens while public links are off — look the same: not found.
-async fn resolve(state: &AppState, token: &str) -> ApiResult<Shared> {
-    let row: Option<(Uuid, Uuid, Uuid, bool)> = sqlx::query_as(
-        "SELECT l.id, l.workspace_id, l.page_id, l.include_children FROM share_links l JOIN pages p ON p.id = l.page_id JOIN spaces s ON s.id = p.space_id
+/// all tokens while public links are off — look the same: not found. A link with a password
+/// answers 401 until this browser unlocked it.
+async fn resolve(state: &AppState, token: &str, headers: &axum::http::HeaderMap) -> ApiResult<Shared> {
+    let row: Option<(Uuid, Uuid, Uuid, bool, bool)> = sqlx::query_as(
+        "SELECT l.id, l.workspace_id, l.page_id, l.include_children, l.password_hash IS NOT NULL FROM share_links l JOIN pages p ON p.id = l.page_id JOIN spaces s ON s.id = p.space_id
          WHERE l.token = $1 AND l.revoked_at IS NULL AND (l.expires_at IS NULL OR l.expires_at > now()) AND p.deleted_at IS NULL AND s.archived_at IS NULL",
     )
     .bind(token)
     .fetch_optional(&state.db)
     .await?;
-    let (link_id, ws, root, children) = row.ok_or(ApiError::NotFound("page"))?;
+    let (link_id, ws, root, children, has_password) = row.ok_or(ApiError::NotFound("page"))?;
+    if has_password {
+        let grant = crate::auth::cookie_value(headers, &unlock_cookie(link_id)).unwrap_or("");
+        let unlocked: bool = sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM share_unlocks WHERE token_hash = $1 AND link_id = $2 AND expires_at > now())")
+            .bind(crate::auth::token_hash(grant))
+            .bind(link_id)
+            .fetch_one(&state.db)
+            .await?;
+        if !unlocked {
+            return Err(ApiError::Unauthorized);
+        }
+    }
     // switched off, restricted or moved into a draft after the link was made: fail closed
     if !links_enabled(state, ws).await? || restricted(state, root).await? || crate::authz::in_draft(state, root).await {
         return Err(ApiError::NotFound("page"));
@@ -413,21 +441,57 @@ async fn render_page(state: &AppState, token: &str, s: &Shared, page: Uuid) -> A
 }
 
 /// `GET /api/public/{token}` — the shared page.
-pub async fn view(State(state): State<AppState>, Path(token): Path<String>) -> ApiResult<Json<Value>> {
-    let s = resolve(&state, &token).await?;
+pub async fn view(State(state): State<AppState>, headers: axum::http::HeaderMap, Path(token): Path<String>) -> ApiResult<Json<Value>> {
+    let s = resolve(&state, &token, &headers).await?;
     let root = s.root;
     render_page(&state, &token, &s, root).await
 }
 
 /// `GET /api/public/{token}/pages/{id}` — a sub-page of a shared tree.
-pub async fn view_page(State(state): State<AppState>, Path((token, page)): Path<(String, Uuid)>) -> ApiResult<Json<Value>> {
-    let s = resolve(&state, &token).await?;
+pub async fn view_page(State(state): State<AppState>, headers: axum::http::HeaderMap, Path((token, page)): Path<(String, Uuid)>) -> ApiResult<Json<Value>> {
+    let s = resolve(&state, &token, &headers).await?;
     render_page(&state, &token, &s, page).await
 }
 
+#[derive(Deserialize)]
+pub struct Unlock {
+    password: String,
+}
+
+/// `POST /api/public/{token}/unlock` — the password of a protected link: this browser may open
+/// it for 12 hours (an HttpOnly cookie for this link's paths). Wrong guesses are throttled per
+/// link (10 per 15 minutes).
+pub async fn unlock(State(state): State<AppState>, Path(token): Path<String>, Json(req): Json<Unlock>) -> ApiResult<Response> {
+    let row: Option<(Uuid, Option<String>)> =
+        sqlx::query_as("SELECT id, password_hash FROM share_links WHERE token = $1 AND revoked_at IS NULL AND (expires_at IS NULL OR expires_at > now())")
+            .bind(&token)
+            .fetch_optional(&state.db)
+            .await?;
+    let (link_id, Some(hash)) = row.ok_or(ApiError::NotFound("page"))? else { return Err(ApiError::bad("this link has no password")) };
+    let throttle = format!("share:{link_id}");
+    if !crate::auth::login_allowed(&state, &throttle).await {
+        return Err(ApiError::BadRequest("too many wrong passwords, try again in 15 minutes".into()));
+    }
+    if !crate::auth::verify_password(req.password, hash).await {
+        crate::auth::record_login_failure(&state, &throttle).await;
+        return Err(ApiError::Denied("wrong password".into()));
+    }
+    crate::auth::clear_login_failures(&state, &throttle).await;
+    let grant = random_token();
+    sqlx::query("INSERT INTO share_unlocks (token_hash, link_id, expires_at) VALUES ($1, $2, now() + interval '12 hours')")
+        .bind(crate::auth::token_hash(&grant))
+        .bind(link_id)
+        .execute(&state.db)
+        .await?;
+    let _ = sqlx::query("DELETE FROM share_unlocks WHERE expires_at < now()").execute(&state.db).await;
+    let secure = if state.config.base_url.starts_with("https://") { "; Secure" } else { "" };
+    let cookie = format!("{}={grant}; Path=/api/public/{token}; HttpOnly; SameSite=Lax; Max-Age=43200{secure}", unlock_cookie(link_id));
+    Ok(axum::response::IntoResponse::into_response((StatusCode::NO_CONTENT, [(axum::http::header::SET_COOKIE, cookie)])))
+}
+
 /// `GET /api/public/{token}/attachments/{id}` — files of shared pages only.
-pub async fn attachment(State(state): State<AppState>, Path((token, id)): Path<(String, Uuid)>) -> ApiResult<Response> {
-    let s = resolve(&state, &token).await?;
+pub async fn attachment(State(state): State<AppState>, headers: axum::http::HeaderMap, Path((token, id)): Path<(String, Uuid)>) -> ApiResult<Response> {
+    let s = resolve(&state, &token, &headers).await?;
     let row: Option<(Uuid, String, String, Option<String>, i64)> =
         sqlx::query_as("SELECT page_id, filename, media_type, blob_key, size FROM attachments WHERE id = $1 AND deleted_at IS NULL")
             .bind(id)

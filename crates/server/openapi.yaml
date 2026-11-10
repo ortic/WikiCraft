@@ -3412,6 +3412,9 @@ paths:
               properties:
                 includeChildren: *id003
                 expiresInDays: *id005
+                password:
+                  type: string
+                  description: visitors must enter it (6 to 200 characters)
       responses:
         '201':
           description: Created
@@ -3462,6 +3465,40 @@ paths:
       responses:
         '200':
           description: OK
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - {}
+      - session: []
+      - token: []
+  /public/{token}/unlock:
+    post:
+      tags:
+      - Sharing
+      summary: 'Enter the password of a protected public link: this browser may open it for 12 hours (a cookie); 10 wrong
+        passwords per 15 minutes'
+      operationId: post_public_token_unlock
+      parameters:
+      - name: token
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password: *id001
+              required:
+              - password
+      responses:
+        '204': *id007
         4XX:
           description: Error
           content:
