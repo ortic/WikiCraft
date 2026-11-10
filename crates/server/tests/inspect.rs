@@ -116,3 +116,74 @@ async fn request_access_notifies_page_admins_only() {
         assert!(!n["items"].as_array().unwrap().iter().any(|i| i["kind"] == "access_request"), "{n}");
     }
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn granting_a_request_opens_the_page_and_the_restricted_pages_above() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (alice, alice_id) = app.user(&owner, "alice@acme.test", "member").await;
+    let (bob, bob_id) = app.user(&owner, "bob@acme.test", "member").await;
+    let (carol, carol_id) = app.user(&owner, "carol@acme.test", "member").await;
+    let (_, sp) = app.post(&owner, "/spaces", json!({"key": "HR", "name": "HR", "defaultRole": "none"})).await;
+    let home = sp["homePageId"].as_str().unwrap().to_string();
+    // alice edits the space (so she administers its pages) but isn't a space admin
+    app.put(&owner, "/spaces/HR/permissions", json!({"grants": [{"subjectType": "user", "subjectId": alice_id, "role": "editor"}]})).await;
+    let (_, me) = app.get(&owner, "/me").await;
+    let owner_id = me["user"]["id"].as_str().unwrap().to_string();
+    // Pay (restricted to owner and alice) > Bands (restricted too) > Q1 (open below)
+    let (_, pay) = app.post(&owner, "/pages", json!({"spaceKey": "HR", "parentId": home, "title": "Pay"})).await;
+    let pay = pay["id"].as_str().unwrap().to_string();
+    let (_, bands) = app.post(&owner, "/pages", json!({"spaceKey": "HR", "parentId": pay, "title": "Bands"})).await;
+    let bands = bands["id"].as_str().unwrap().to_string();
+    let only = |ids: &[&str]| json!({"restrictions": ids.iter().map(|i| json!({"kind": "view", "subjectType": "user", "subjectId": i})).collect::<Vec<_>>()});
+    app.put(&owner, &format!("/pages/{pay}/restrictions"), only(&[&owner_id, &alice_id])).await;
+    app.put(&owner, &format!("/pages/{bands}/restrictions"), only(&[&owner_id, &alice_id])).await;
+    let (_, q1) = app.post(&owner, "/pages", json!({"spaceKey": "HR", "parentId": bands, "title": "Q1 review"})).await;
+    let q1 = q1["id"].as_str().unwrap().to_string();
+
+    // bob has no access to the space: alice (no space admin) can't add him; the owner can
+    app.post(&bob, &format!("/pages/{q1}/access-request"), json!({"message": "please"})).await;
+    let (_, n) = app.get(&owner, "/notifications").await;
+    assert!(
+        n["items"].as_array().unwrap().iter().any(|i| i["kind"] == "access_request" && i["data"]["requesterId"] == bob_id.as_str()),
+        "space admins are asked: {n}"
+    );
+    let (st, body) = app.post(&alice, &format!("/pages/{q1}/access-grant"), json!({"userId": bob_id})).await;
+    assert_eq!(st, 403, "{body}");
+    assert!(body.to_string().contains("space admin"), "{body}");
+    assert_eq!(app.post(&carol, &format!("/pages/{q1}/access-grant"), json!({"userId": bob_id})).await.0, 404, "carol can't see it at all");
+    let (st, r) = app.post(&owner, &format!("/pages/{q1}/access-grant"), json!({"userId": bob_id})).await;
+    assert_eq!(st, 200, "{r}");
+    assert_eq!(r, json!({"granted": true, "spaceAccess": true, "pagesAbove": 2}));
+    let (st, page) = app.get(&bob, &format!("/pages/{q1}")).await;
+    assert_eq!(st, 200);
+    assert_eq!(page["access"]["edit"], false, "read access only");
+    let (_, n) = app.get(&bob, "/notifications").await;
+    assert!(n["items"].as_array().unwrap().iter().any(|i| i["kind"] == "access_granted" && i["pageTitle"] == "Q1 review"), "{n}");
+    // the request is closed for everyone who got it
+    let (_, n) = app.get(&owner, "/notifications").await;
+    assert!(n["items"].as_array().unwrap().iter().filter(|i| i["kind"] == "access_request").all(|i| !i["readAt"].is_null()), "{n}");
+
+    // carol is in the space: alice can open the restricted pages for her
+    app.put(
+        &owner,
+        "/spaces/HR/permissions",
+        json!({"grants": [{"subjectType": "user", "subjectId": alice_id, "role": "editor"}, {"subjectType": "user", "subjectId": carol_id, "role": "viewer"}, {"subjectType": "user", "subjectId": bob_id, "role": "viewer"}]}),
+    )
+    .await;
+    assert_eq!(app.get(&carol, &format!("/pages/{bands}")).await.0, 404);
+    let (st, r) = app.post(&alice, &format!("/pages/{bands}/access-grant"), json!({"userId": carol_id})).await;
+    assert_eq!(st, 200, "{r}");
+    assert_eq!(r["spaceAccess"], false);
+    assert_eq!(app.get(&carol, &format!("/pages/{bands}")).await.0, 200);
+    // granting again changes nothing; dismissing closes a request without granting
+    assert_eq!(app.post(&alice, &format!("/pages/{bands}/access-grant"), json!({"userId": carol_id})).await.1["hadAccess"], true);
+    let (_, secret) = app.post(&owner, "/pages", json!({"spaceKey": "HR", "parentId": home, "title": "Secret"})).await;
+    let secret = secret["id"].as_str().unwrap().to_string();
+    app.put(&owner, &format!("/pages/{secret}/restrictions"), only(&[&owner_id])).await;
+    app.post(&carol, &format!("/pages/{secret}/access-request"), json!({})).await;
+    assert_eq!(app.post(&owner, &format!("/pages/{secret}/access-dismiss"), json!({"userId": carol_id})).await.0, 204);
+    let (_, n) = app.get(&owner, "/notifications").await;
+    assert!(n["items"].as_array().unwrap().iter().filter(|i| i["kind"] == "access_request").all(|i| !i["readAt"].is_null()));
+    assert_eq!(app.get(&carol, &format!("/pages/{secret}")).await.0, 404);
+}

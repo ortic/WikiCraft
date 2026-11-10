@@ -154,6 +154,10 @@ public spaces work as is, for others give the feed reader a read-only API token 
 - **Restrictions** (lock icon): limit who can see or edit a page. View restrictions also apply
   to the pages below.
 - **Inspect permissions** explains who can see a page and why.
+- **Request access**: a page you can't open offers to ask its space admins. They get a
+  notification with **Grant access** (you can then read it; restricted pages above it open for you
+  too, and you're added to the space as a viewer if you couldn't see it) or **Dismiss**. You're
+  notified when it's granted.
 
 ## Exporting
 

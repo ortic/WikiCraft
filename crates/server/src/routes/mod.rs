@@ -168,6 +168,8 @@ pub fn router(state: AppState) -> Router {
         .route("/pages/{id}/verification", get(verification::get).put(verification::verify).delete(verification::unverify))
         .route("/pages/{id}/verification/request", post(verification::request_review))
         .route("/pages/{id}/access-request", post(access_request::request))
+        .route("/pages/{id}/access-grant", post(access_request::grant))
+        .route("/pages/{id}/access-dismiss", post(access_request::dismiss))
         .route("/pages/{id}/owner", put(pages::set_owner))
         .route("/pages/{id}/archive", post(archive::archive))
         .route("/pages/{id}/unarchive", post(archive::unarchive))

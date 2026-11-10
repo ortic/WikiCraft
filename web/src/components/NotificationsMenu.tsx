@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Bell, MessageSquare, AtSign, FilePen, ThumbsUp } from 'lucide-react'
 import { api, formatDate } from '../api'
+import { useToast } from '../ui'
 
 interface Notification {
   id: string
@@ -10,7 +11,7 @@ interface Notification {
   pageId: string | null
   pageTitle: string | null
   actorName: string | null
-  data: { excerpt?: string; version?: number; commentId?: string; text?: string; due?: string; spaceKey?: string; spaceName?: string }
+  data: { excerpt?: string; version?: number; commentId?: string; text?: string; due?: string; spaceKey?: string; spaceName?: string; requesterId?: string }
   createdAt: string
   readAt: string | null
 }
@@ -28,6 +29,8 @@ function describe(n: Notification): string {
       return `${who} liked ${n.pageTitle}`
     case 'access_request':
       return `${who} asked for access to ${n.pageTitle}`
+    case 'access_granted':
+      return `${who} gave you access to ${n.pageTitle}`
     case 'verification_request':
       return `${who} asked you to review and verify ${n.pageTitle}`
     case 'page_created':
@@ -52,6 +55,25 @@ export default function NotificationsMenu() {
   const markAll = async () => {
     await api.post('/notifications/read', {})
     qc.invalidateQueries({ queryKey: ['notifications'] })
+  }
+  const toast = useToast()
+  /** Answers an access request: read access to the page (and what it needs above), or no. */
+  const decide = async (n: Notification, what: 'grant' | 'dismiss') => {
+    try {
+      const r = await api.post<{ granted?: boolean; hadAccess?: boolean; spaceAccess?: boolean; pagesAbove?: number } | undefined>(
+        `/pages/${n.pageId}/access-${what}`,
+        { userId: n.data.requesterId },
+      )
+      if (what === 'dismiss') toast('Request dismissed')
+      else if (r?.hadAccess) toast(`${n.actorName ?? 'They'} can already open it`)
+      else {
+        const extra = [r?.spaceAccess ? 'can now view the space' : '', r?.pagesAbove ? `also sees ${r.pagesAbove} restricted ${r.pagesAbove === 1 ? 'page' : 'pages'} above it` : ''].filter(Boolean).join(' and ')
+        toast(`${n.actorName ?? 'They'} can read ${n.pageTitle} now${extra ? ` (and ${extra})` : ''}`)
+      }
+      qc.invalidateQueries({ queryKey: ['notifications'] })
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'That did not work')
+    }
   }
   const openItem = async (n: Notification) => {
     setOpen(false)
@@ -91,6 +113,12 @@ export default function NotificationsMenu() {
                 <div style={{ fontWeight: n.readAt ? 400 : 600 }}>{describe(n)}</div>
                 {n.data.excerpt && <div className="mi-desc" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.data.excerpt}</div>}
                 <div className="mi-desc">{formatDate(n.createdAt)}</div>
+                {n.kind === 'access_request' && !n.readAt && n.pageId && n.data.requesterId && (
+                  <div className="row" style={{ gap: 6, marginTop: 6 }} onClick={(e) => e.stopPropagation()}>
+                    <button className="btn btn-primary btn-sm" onClick={() => decide(n, 'grant')}>Grant access</button>
+                    <button className="btn btn-sm" onClick={() => decide(n, 'dismiss')}>Dismiss</button>
+                  </div>
+                )}
               </div>
             </div>
           ))}

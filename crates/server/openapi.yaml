@@ -3483,6 +3483,71 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /pages/{id}/access-grant:
+    post:
+      tags:
+      - Pages
+      summary: 'Grant a request for access (people who may change the page''s restrictions): the person becomes a space viewer
+        if needed (space admins only) and gets view entries on the page and the restricted pages above it; they''re notified'
+      operationId: post_pages_id_access_grant
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId: *id002
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  granted: *id003
+                  hadAccess: *id003
+                  spaceAccess: *id003
+                  pagesAbove: *id005
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /pages/{id}/access-dismiss:
+    post:
+      tags:
+      - Pages
+      summary: Close a request for access without granting it
+      operationId: post_pages_id_access_dismiss
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                userId: *id002
+      responses:
+        '204': *id007
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /pages/{id}/verification/request:
     post:
       tags:

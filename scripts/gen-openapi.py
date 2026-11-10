@@ -181,6 +181,8 @@ op("/spaces/{key}/owner", "put", "Spaces", "Hand the space over (space admins): 
 op("/spaces/{key}/watch", "put", "Spaces", "Watch the space (new and updated pages)", res=NO)
 op("/spaces/{key}/watch", "delete", "Spaces", "Stop watching the space", res=NO)
 op("/pages/{id}/access-request", "post", "Pages", "Ask the page's admins for access (always 204; reveals nothing about the page)", req=body(obj({"message": txt})), res=resp(None, "204", "Sent"))
+op("/pages/{id}/access-grant", "post", "Pages", "Grant a request for access (people who may change the page's restrictions): the person becomes a space viewer if needed (space admins only) and gets view entries on the page and the restricted pages above it; they're notified", req=body(obj({"userId": uuid})), res=resp(obj({"granted": boolean, "hadAccess": boolean, "spaceAccess": boolean, "pagesAbove": num})))
+op("/pages/{id}/access-dismiss", "post", "Pages", "Close a request for access without granting it", req=body(obj({"userId": uuid})), res=NO)
 op("/pages/{id}/verification/request", "post", "Pages", "Ask someone who may edit the page to review and verify it", req=body(obj({"userId": uuid, "note": txt})), res=resp(None, "204", "Requested"))
 op("/comments/{id}/like", "put", "Comments", "Like a comment", res=NO)
 op("/comments/{id}/like", "delete", "Comments", "Remove your like", res=NO)

@@ -459,7 +459,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** Anonymous / public access per space (read-only) `C X B O`
 - [x] **P1** Public share links for a single page (with optional expiry, password, subtree inclusion, disable globally) `C D O` — passwords: Argon2 hash, unlock grants a 12-hour HttpOnly cookie scoped to the link, wrong guesses throttled per link, revoking ends unlocks
 - [x] **P1** Guest users limited to specific spaces `C`
-- [~] **P1** Request access flow (request → owner approves) `C` (request notifies page admins; they grant via restrictions/permissions)
+- [x] **P1** Request access flow (request → owner approves) `C` — the request notifies the space admins (workspace admins if none); Grant access in the notification gives read access (view entries on the page and the restricted pages above it; space viewer if needed, space admins only), notifies the requester and closes the request for everyone; Dismiss closes it
 - [x] **P1** "Inspect permissions": why can user X see/edit page Y? `C`
 - [ ] **P1** Effective permission cache with invalidation (fast tree rendering for 100k pages)
 - [ ] **P2** Custom space roles / permission schemes `C`
