@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Upload, FileSearch, CheckCircle2, XCircle, UserPlus, Users, Activity, Database, RefreshCw, Mail, Send, Globe } from 'lucide-react'
+import { Upload, FileSearch, CheckCircle2, XCircle, UserPlus, Users, Activity, Database, RefreshCw, Mail, Send, Globe, Megaphone } from 'lucide-react'
 import { api, formatBytes, formatDate, type Job } from '../api'
 import { Avatar, Modal, Spinner, useMe, useToast } from '../ui'
 import AdminWebhooks from './AdminWebhooks'
@@ -79,7 +79,50 @@ function Overview() {
         </Link>
       </div>
       <WorkspaceSettings />
+      <AnnouncementSettings />
       <MailStatus />
+    </div>
+  )
+}
+
+type Announcement = { text: string; level: 'info' | 'warning' | 'success'; id: string }
+
+/** Admin → Overview: the banner everyone sees at the top of the wiki. */
+function AnnouncementSettings() {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const current = useQuery({ queryKey: ['announcement'], queryFn: () => api.get<Announcement | null>('/announcement') })
+  const [text, setText] = useState<string | null>(null)
+  const [level, setLevel] = useState<Announcement['level'] | null>(null)
+  if (current.isLoading) return null
+  const value = text ?? current.data?.text ?? ''
+  const lvl = level ?? current.data?.level ?? 'info'
+  const save = async (t: string) => {
+    try {
+      await api.put('/admin/announcement', { text: t, level: lvl })
+      qc.invalidateQueries({ queryKey: ['announcement'] })
+      setText(null)
+      setLevel(null)
+      toast(t.trim() ? 'Announcement published' : 'Announcement removed')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not save')
+    }
+  }
+  return (
+    <div className="card" style={{ marginTop: 24, maxWidth: 720 }}>
+      <h3 style={{ marginTop: 0 }} className="row"><Megaphone size={17} /> Announcement</h3>
+      <p className="muted small" style={{ marginTop: 0 }}>A banner at the top of every page, for maintenance windows, migrations or news. Links are clickable. People can dismiss it until it changes.</p>
+      <textarea className="input" rows={2} maxLength={500} value={value} placeholder="WikiCraft will be read-only on Saturday 08:00–10:00 for the database upgrade." onChange={(e) => setText(e.target.value)} style={{ width: '100%', resize: 'vertical' }} />
+      <div className="row" style={{ marginTop: 8 }}>
+        <select className="select" style={{ width: 140 }} value={lvl} onChange={(e) => setLevel(e.target.value as Announcement['level'])} aria-label="Style">
+          <option value="info">Information</option>
+          <option value="warning">Warning</option>
+          <option value="success">Good news</option>
+        </select>
+        <span className="spacer" />
+        {current.data && <button className="btn" onClick={() => save('')}>Remove</button>}
+        <button className="btn btn-primary" onClick={() => save(value)} disabled={!value.trim()}>Publish</button>
+      </div>
     </div>
   )
 }

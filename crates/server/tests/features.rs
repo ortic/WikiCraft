@@ -378,3 +378,30 @@ async fn link_previews() {
     let (_, r) = strict.get(&o, &format!("/unfurl?url={base}/post")).await;
     assert!(r["title"].is_null() && r["error"].as_str().unwrap().contains("private"), "{r}");
 }
+
+#[tokio::test]
+async fn announcement_banner() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, _) = app.user(&owner, "ann@acme.test", "member").await;
+    assert_eq!(app.get(&member, "/announcement").await.1, Value::Null);
+
+    let (st, a) = app.put(&owner, "/admin/announcement", json!({"text": "  Read-only on Saturday,\n see https://status.acme.test ", "level": "warning"})).await;
+    assert_eq!(st, 200, "{a}");
+    assert_eq!(a["text"], "Read-only on Saturday, see https://status.acme.test");
+    let (_, seen) = app.get(&member, "/announcement").await;
+    assert_eq!(seen, a, "everyone sees it");
+
+    assert_eq!(app.put(&member, "/admin/announcement", json!({"text": "hi"})).await.0, 403, "admins only");
+    assert_eq!(app.put(&owner, "/admin/announcement", json!({"text": "x", "level": "party"})).await.0, 400);
+    assert_eq!(app.put(&owner, "/admin/announcement", json!({"text": "y".repeat(501)})).await.0, 400);
+    assert_ne!(app.get(&common::client(), "/announcement").await.0, 200, "signed-in only");
+
+    // a new text gets a new id (dismissals reset), an empty one removes it
+    tokio::time::sleep(std::time::Duration::from_millis(5)).await;
+    let (_, b) = app.put(&owner, "/admin/announcement", json!({"text": "Back to normal"})).await;
+    assert_eq!(b["level"], "info");
+    assert_ne!(b["id"], a["id"]);
+    assert_eq!(app.put(&owner, "/admin/announcement", json!({"text": ""})).await.1, Value::Null);
+    assert_eq!(app.get(&member, "/announcement").await.1, Value::Null);
+}

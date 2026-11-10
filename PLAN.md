@@ -616,7 +616,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Email (SMTP) settings with a test send `D X B`
 - [~] **P0** Storage settings (local / S3) and usage `D` (env config only; usage in admin stats)
 - [ ] **P1** Branding: logo, colors, login page, custom CSS (scoped), custom HTML header/footer (admin opt-in) `C X B`
-- [ ] **P1** Global announcement banner `C`
+- [x] **P1** Global announcement banner `C` — Admin → Overview; info / warning / good-news styles, clickable links, dismissed per person until it changes
 - [ ] **P1** Feature toggles (disable public links, disable exports, disable AI, disable personal spaces) `D`
 - [~] **P1** Global templates & default space permissions `C` (global templates via API only)
 - [~] **P1** Attachment limits (max size, allowed/blocked types), quota per space/workspace `C X` (max upload size via env only)

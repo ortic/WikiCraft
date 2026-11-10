@@ -1,6 +1,7 @@
 pub mod access_request;
 pub mod account;
 pub mod admin;
+pub mod announcement;
 pub mod ai;
 pub mod archive;
 pub mod attachments;
@@ -62,6 +63,8 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/accept-invite", post(account::accept_invite))
         .route("/auth/signup", get(account::signup_info).post(account::signup))
         .route("/admin/signup", get(account::get_signup_settings).put(account::put_signup_settings))
+        .route("/announcement", get(announcement::get))
+        .route("/admin/announcement", put(announcement::put))
         .route("/me/preferences", get(account::get_preferences).put(account::put_preferences))
         .route("/me/space", get(spaces::my_space).post(spaces::create_my_space))
         .route("/users/invite", post(account::invite))

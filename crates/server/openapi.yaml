@@ -707,6 +707,66 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /announcement:
+    get:
+      tags:
+      - Admin
+      summary: The workspace announcement banner (null when there is none)
+      operationId: get_announcement
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: &id008
+                type: object
+                properties:
+                  text: *id001
+                  level:
+                    enum:
+                    - info
+                    - warning
+                    - success
+                  id: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /admin/announcement:
+    put:
+      tags:
+      - Admin
+      summary: Set the announcement banner (empty text removes it)
+      operationId: put_admin_announcement
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                text: *id001
+                level:
+                  enum:
+                  - info
+                  - warning
+                  - success
+              required:
+              - text
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: *id008
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /auth/sso/{id}/login:
     get:
       tags:
@@ -2298,7 +2358,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id008
+              schema: &id009
                 type: object
                 properties:
                   status:
@@ -2349,7 +2409,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id008
+              schema: *id009
         4XX:
           description: Error
           content:

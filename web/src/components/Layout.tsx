@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Search, Home as HomeIcon, LayoutGrid, Star, Settings, Plus, LogOut, Moon, Shield, Menu, Trash2, UserCog, Newspaper, ListChecks, Download } from 'lucide-react'
+import { Search, Home as HomeIcon, LayoutGrid, Star, Settings, Plus, LogOut, Moon, Shield, Menu, Trash2, UserCog, Newspaper, ListChecks, Download, Info, TriangleAlert, CircleCheck, X } from 'lucide-react'
 import ShortcutsDialog from './ShortcutsDialog'
 import { api, type Page, type Space } from '../api'
 import { Avatar, Logo, SpaceIcon, useMe } from '../ui'
@@ -213,12 +213,59 @@ export default function Layout() {
       </aside>
 
       <main className="main">
+        <AnnouncementBanner />
         <Outlet />
           <ShortcutsDialog />
       </main>
       {search && <SearchPalette onClose={() => setSearch(false)} />}
       {createSpace && <CreateSpaceDialog onClose={() => setCreateSpace(false)} />}
       {createPage && current && <TemplatePicker spaceKey={current.key} onClose={() => setCreatePage(false)} />}
+    </div>
+  )
+}
+
+const DISMISSED = 'wikicraft-announcement-dismissed'
+
+/** The workspace announcement (Admin → Overview); dismissed until it changes. */
+function AnnouncementBanner() {
+  const q = useQuery({
+    queryKey: ['announcement'],
+    queryFn: () => api.get<{ text: string; level: 'info' | 'warning' | 'success'; id: string } | null>('/announcement'),
+    staleTime: 5 * 60_000,
+  })
+  const [dismissed, setDismissed] = useState(() => {
+    try {
+      return localStorage.getItem(DISMISSED)
+    } catch {
+      return null
+    }
+  })
+  const a = q.data
+  if (!a || a.id === dismissed) return null
+  const Icon = a.level === 'warning' ? TriangleAlert : a.level === 'success' ? CircleCheck : Info
+  return (
+    <div className={`announcement announcement-${a.level}`} role="status">
+      <Icon size={16} className="announcement-icon" />
+      <span className="announcement-text">
+        {a.text.split(/(https?:\/\/[^\s]+)/).map((part, i) =>
+          i % 2 ? <a key={i} href={part} target="_blank" rel="noreferrer noopener">{part}</a> : part,
+        )}
+      </span>
+      <button
+        className="icon-btn"
+        title="Dismiss"
+        aria-label="Dismiss announcement"
+        onClick={() => {
+          try {
+            localStorage.setItem(DISMISSED, a.id)
+          } catch {
+            /* private mode: hide for this visit only */
+          }
+          setDismissed(a.id)
+        }}
+      >
+        <X size={15} />
+      </button>
     </div>
   )
 }
