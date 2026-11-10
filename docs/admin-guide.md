@@ -193,7 +193,7 @@ take a database backup first. Live editors reconnect on their own.
 wikicraft serve                                     # web server (default)
 wikicraft migrate                                   # apply migrations and exit
 wikicraft analyze-confluence export.zip             # Confluence dry run (JSON report)
-wikicraft import-confluence export.zip --as-user admin@example.com [--space-key KEY] [--skip-history] [--skip-drafts] [--skip-trash]
+wikicraft import-confluence export.zip --as-user admin@example.com [--space-key KEY] [--skip-history] [--skip-drafts] [--skip-trash] [--update [--overwrite-local-changes]]
 wikicraft reindex                                   # rebuild the search index
 wikicraft healthcheck                               # exit code reflects /api/health
 ```

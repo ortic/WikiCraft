@@ -104,7 +104,23 @@ pub async fn analyze_confluence(State(state): State<AppState>, CurrentUser(user)
     let p = path.clone();
     let res = tokio::task::spawn_blocking(move || importer::analyze(&p)).await.map_err(|e| ApiError::Internal(e.into()))?;
     let _ = tokio::fs::remove_file(&path).await;
-    res.map(Json).map_err(|e| ApiError::bad(format!("could not read export: {e:#}")))
+    let mut report = res.map_err(|e| ApiError::bad(format!("could not read export: {e:#}")))?;
+    // spaces imported before: an update import can bring them up to date instead of duplicating them
+    if let Some(spaces) = report["spaces"].as_array_mut() {
+        for s in spaces {
+            let source_id = s["sourceId"].as_str().unwrap_or_default().to_string();
+            let earlier: Option<(Uuid, String, String)> = sqlx::query_as(
+                "SELECT s.id, s.key, s.name FROM import_mappings m JOIN spaces s ON s.id = m.target_id
+                  WHERE m.workspace_id = $1 AND m.source = 'confluence' AND m.source_type = 'space' AND m.source_id = $2",
+            )
+            .bind(user.workspace_id)
+            .bind(&source_id)
+            .fetch_optional(&state.db)
+            .await?;
+            s["earlierImport"] = earlier.map(|(id, key, name)| json!({"spaceId": id, "key": key, "name": name})).unwrap_or(Value::Null);
+        }
+    }
+    Ok(Json(report))
 }
 
 pub async fn list_jobs(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Vec<JobRow>>> {

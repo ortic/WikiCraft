@@ -155,6 +155,14 @@ async fn imports_classic_xml_export() {
     // importing again yields a second space with a suffixed key, links stay inside each import
     let result2 = import(&app, &c, std::fs::read(&zip).unwrap(), json!({"skipHistory": true, "skipAttachments": true})).await;
     assert_eq!(result2["spaces"][0]["key"], "DV212");
+
+    // an update import of the unchanged export continues the latest import and changes no page
+    let result3 = import(&app, &c, std::fs::read(&zip).unwrap(), json!({"update": true, "skipAttachments": true})).await;
+    eprintln!("{}", serde_json::to_string_pretty(&result3["created"]).unwrap());
+    assert_eq!(result3["spaces"][0]["key"], "DV212");
+    assert!(result3["created"]["pages"].is_null() && result3["created"]["pagesUpdated"].is_null(), "{}", result3["created"]);
+    assert!(result3["created"]["conflicts"].is_null() && result3["created"]["pagesMoved"].is_null(), "{}", result3["created"]);
+    assert_eq!(result3["created"]["pagesUnchanged"], 48, "45 pages and 3 in the trash");
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -195,6 +203,11 @@ async fn imports_cloud_csv_export() {
 /// A minimal classic XML export (`entities.xml`) built from `(class, id, properties)`; a
 /// property value starting with `@Class:` is a reference to another object.
 fn entities_zip(objects: &[(&str, &str, &[(&str, &str)])]) -> Vec<u8> {
+    entities_zip_with(objects, &[])
+}
+
+/// [`entities_zip`] plus files (attachment binaries: `attachments/<page>/<attachment>/<version>`).
+fn entities_zip_with(objects: &[(&str, &str, &[(&str, &str)])], files: &[(&str, &[u8])]) -> Vec<u8> {
     let mut xml = String::from("<?xml version=\"1.0\" encoding=\"UTF-8\"?>\n<hibernate-generic>\n");
     for (class, id, props) in objects {
         let id_name = if *class == "ConfluenceUserImpl" { "key" } else { "id" };
@@ -218,6 +231,10 @@ fn entities_zip(objects: &[(&str, &str, &[(&str, &str)])]) -> Vec<u8> {
         let mut z = zip::ZipWriter::new(&mut buf);
         z.start_file("entities.xml", zip::write::SimpleFileOptions::default()).unwrap();
         z.write_all(xml.as_bytes()).unwrap();
+        for (name, bytes) in files {
+            z.start_file(*name, zip::write::SimpleFileOptions::default()).unwrap();
+            z.write_all(bytes).unwrap();
+        }
         z.finish().unwrap();
     }
     buf.into_inner()
@@ -383,4 +400,143 @@ async fn watches_and_favourites_from_confluence() {
         .await
         .unwrap();
     assert_eq!(starred, 1);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn update_import_brings_changes_across() {
+    let app = common::spawn().await;
+    let c = app.setup().await;
+    type Props = Vec<(&'static str, &'static str)>;
+    let page = |title: &'static str, parent: Option<&'static str>, version: &'static str| -> Props {
+        let mut v: Props =
+            vec![("title", title), ("contentStatus", "current"), ("space", "@Space:1"), ("creator", "@ConfluenceUserImpl:u-owner"), ("version", version)];
+        if let Some(p) = parent {
+            v.push(("parent", p));
+        }
+        v
+    };
+    let with = |mut v: Props, extra: &[(&'static str, &'static str)]| {
+        v.extend_from_slice(extra);
+        v
+    };
+    let body = |content: &'static str, html: &'static str| -> Props { vec![("content", content), ("body", html), ("bodyType", "2")] };
+    let space: Props = vec![("key", "SYNC"), ("name", "Synced"), ("homePage", "@Page:10")];
+    let user: Props = vec![("name", "owner"), ("email", "owner@acme.test")];
+    let comment = |page: &'static str| -> Props { vec![("containerContent", page), ("contentStatus", "current"), ("creator", "@ConfluenceUserImpl:u-owner")] };
+    let attachment = |version: &'static str| -> Props {
+        vec![("title", "notes.txt"), ("containerContent", "@Page:11"), ("contentStatus", "current"), ("version", version), ("space", "@Space:1")]
+    };
+
+    // the first import
+    let first = entities_zip_with(
+        &[
+            ("Space", "1", &space),
+            ("ConfluenceUserImpl", "u-owner", &user),
+            ("Page", "10", &page("Home", None, "1")),
+            ("Page", "11", &page("Guide", Some("@Page:10"), "1")),
+            ("Page", "12", &page("Notes", Some("@Page:10"), "1")),
+            ("Page", "13", &page("Mover", Some("@Page:11"), "1")),
+            ("Page", "15", &page("Old", Some("@Page:10"), "1")),
+            ("Comment", "20", &comment("@Page:11")),
+            ("Attachment", "30", &attachment("1")),
+            ("BodyContent", "100", &body("@Page:10", "<p>Welcome</p>")),
+            ("BodyContent", "101", &body("@Page:11", "<p>Guide one</p>")),
+            ("BodyContent", "102", &body("@Page:12", "<p>Notes one</p>")),
+            ("BodyContent", "103", &body("@Page:13", "<p>Mover</p>")),
+            ("BodyContent", "105", &body("@Page:15", "<p>Old</p>")),
+            ("BodyContent", "120", &body("@Comment:20", "<p>first comment</p>")),
+        ],
+        &[("attachments/11/30/1", b"version one")],
+    );
+    let r1 = import(&app, &c, first, json!({})).await;
+    assert_eq!(r1["created"]["pages"], 5);
+    let id_of = |title: &'static str| {
+        let db = app.state.db.clone();
+        async move { sqlx::query_scalar::<_, uuid::Uuid>("SELECT id FROM pages WHERE title = $1").bind(title).fetch_one(&db).await.unwrap().to_string() }
+    };
+    let (home, guide, notes, mover, old) = (id_of("Home").await, id_of("Guide").await, id_of("Notes").await, id_of("Mover").await, id_of("Old").await);
+    // meanwhile, someone edits Notes here
+    app.put(&c, &format!("/pages/{notes}/content"), json!({"markdown": "Notes edited here"})).await;
+
+    // Confluence moved on: Guide and Notes edited, Mover moved, Fresh added, Old deleted, a new
+    // comment, a new version of the attachment
+    let second = entities_zip_with(
+        &[
+            ("Space", "1", &space),
+            ("ConfluenceUserImpl", "u-owner", &user),
+            ("Page", "10", &page("Home", None, "1")),
+            ("Page", "11", &page("Guide", Some("@Page:10"), "2")),
+            ("Page", "111", &with(page("Guide", Some("@Page:10"), "1"), &[("originalVersion", "@Page:11")])),
+            ("Page", "12", &page("Notes", Some("@Page:10"), "2")),
+            ("Page", "112", &with(page("Notes", Some("@Page:10"), "1"), &[("originalVersion", "@Page:12")])),
+            ("Page", "13", &page("Mover", Some("@Page:10"), "1")),
+            ("Page", "14", &page("Fresh", Some("@Page:11"), "1")),
+            ("Page", "15", &with(page("Old", Some("@Page:10"), "1"), &[("contentStatus", "deleted")])),
+            ("Comment", "20", &comment("@Page:11")),
+            ("Comment", "21", &comment("@Page:11")),
+            ("Attachment", "30", &attachment("2")),
+            ("Attachment", "31", &with(attachment("1"), &[("originalVersion", "@Attachment:30")])),
+            ("BodyContent", "100", &body("@Page:10", "<p>Welcome</p>")),
+            ("BodyContent", "101", &body("@Page:11", "<p>Guide two, see <ac:link><ri:page ri:content-title=\"Fresh\" /></ac:link></p>")),
+            ("BodyContent", "111", &body("@Page:111", "<p>Guide one</p>")),
+            ("BodyContent", "102", &body("@Page:12", "<p>Notes two</p>")),
+            ("BodyContent", "112", &body("@Page:112", "<p>Notes one</p>")),
+            ("BodyContent", "103", &body("@Page:13", "<p>Mover</p>")),
+            ("BodyContent", "104", &body("@Page:14", "<p>Fresh page</p>")),
+            ("BodyContent", "105", &body("@Page:15", "<p>Old</p>")),
+            ("BodyContent", "120", &body("@Comment:20", "<p>first comment</p>")),
+            ("BodyContent", "121", &body("@Comment:21", "<p>second comment</p>")),
+        ],
+        &[("attachments/11/30/1", b"version one"), ("attachments/11/30/2", b"version two")],
+    );
+    let r2 = import(&app, &c, second.clone(), json!({"update": true})).await;
+    eprintln!("{}", serde_json::to_string_pretty(&r2["created"]).unwrap());
+    let created = &r2["created"];
+    assert_eq!(r2["spaces"][0]["key"], "SYNC", "the same space, not SYNC2");
+    assert_eq!(r2["spaces"][0]["updated"], true);
+    assert_eq!(created["pagesUpdated"], 1, "Guide");
+    assert_eq!(created["conflicts"], 1, "Notes");
+    assert_eq!(created["pages"], 1, "Fresh");
+    assert_eq!(created["pagesTrashedInConfluence"], 1);
+    assert_eq!(created["pagesMoved"], 1);
+    assert_eq!(created["commentsAdded"], 1);
+    assert_eq!(created["attachmentVersionsAdded"], 1);
+    assert_eq!(r2["conflicts"][0]["title"], "Notes");
+
+    let fresh = id_of("Fresh").await;
+    let (_, g) = app.get(&c, &format!("/pages/{guide}")).await;
+    assert!(g["content"].to_string().contains("Guide two"));
+    assert!(g["content"].to_string().contains(&format!("/pages/{fresh}")), "links to the new page resolve");
+    let (_, versions) = app.get(&c, &format!("/pages/{guide}/versions")).await;
+    assert_eq!(versions.as_array().unwrap().len(), 2, "{versions}");
+    let (_, n) = app.get(&c, &format!("/pages/{notes}")).await;
+    assert!(n["content"].to_string().contains("Notes edited here"), "a conflict keeps the local edit");
+    let (_, m) = app.get(&c, &format!("/pages/{mover}")).await;
+    assert_eq!(m["parentId"], home.as_str());
+    let (_, f) = app.get(&c, &format!("/pages/{fresh}")).await;
+    assert_eq!(f["parentId"], guide.as_str());
+    let (_, trash) = app.get(&c, "/spaces/SYNC/trash").await;
+    assert_eq!(trash[0]["id"], old.as_str());
+    let (_, comments) = app.get(&c, &format!("/pages/{guide}/comments")).await;
+    assert_eq!(comments.as_array().unwrap().len(), 2);
+    let (_, atts) = app.get(&c, &format!("/pages/{guide}/attachments")).await;
+    let att = atts.as_array().unwrap().iter().find(|a| a["filename"] == "notes.txt").unwrap();
+    assert_eq!(att["version"], 2);
+    let (_, att_versions) = app.get(&c, &format!("/attachments/{}/versions", att["id"].as_str().unwrap())).await;
+    assert_eq!(att_versions.as_array().unwrap().len(), 2);
+
+    // the same export again: nothing left to do
+    let r3 = import(&app, &c, second.clone(), json!({"update": true})).await;
+    assert!(r3["created"]["pagesUpdated"].is_null() && r3["created"]["pages"].is_null(), "{}", r3["created"]);
+    assert_eq!(r3["created"]["conflicts"], 1, "Notes still differs on both sides");
+
+    // asked to, Confluence's content wins; the local edit stays in the history
+    let r4 = import(&app, &c, second, json!({"update": true, "overwriteLocalChanges": true})).await;
+    assert_eq!(r4["created"]["pagesUpdated"], 1);
+    let (_, n) = app.get(&c, &format!("/pages/{notes}")).await;
+    assert!(n["content"].to_string().contains("Notes two"));
+    let (_, versions) = app.get(&c, &format!("/pages/{notes}/versions")).await;
+    let messages: Vec<&str> = versions.as_array().unwrap().iter().filter_map(|v| v["message"].as_str()).collect();
+    assert!(messages.contains(&"Updated from Confluence"), "{versions}");
+    assert!(versions.as_array().unwrap().len() >= 3, "imported, local edit, from Confluence: {versions}");
 }

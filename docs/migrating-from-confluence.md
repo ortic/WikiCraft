@@ -97,13 +97,33 @@ macros and pages with warnings. Nothing is written to the database.
 - **On the server:**
 
   ```bash
-  wikicraft import-confluence export.zip --as-user admin@example.com [--space-key ENG] [--skip-history] [--skip-drafts] [--skip-trash]
+  wikicraft import-confluence export.zip --as-user admin@example.com [--space-key ENG] [--skip-history] [--skip-drafts] [--skip-trash] [--update [--overwrite-local-changes]]
   ```
 
   `--as-user` is the WikiCraft admin the import runs as. The command prints the report when done.
 
 You can import several spaces one after another. Links between them are resolved as each space
 arrives.
+
+### Trial run first, changes later
+
+Teams usually import once to try WikiCraft while Confluence stays in use, then bring the changes
+across at the switch-over. Export the space again and import it with **Update an earlier import**
+(the dry run ticks it when it recognises the space; `--update` on the command line). Instead of a
+second space, the import then:
+
+- adds pages created in Confluence since, under the right parent;
+- brings pages changed in Confluence up to date: their new Confluence versions are added to the
+  history, links to blocks that didn't change keep working;
+- leaves pages that were **also changed in WikiCraft** as they are and lists them, unless you
+  choose *take Confluence's version* (`--overwrite-local-changes`; the WikiCraft edits stay in the
+  history). Pages open in an editor at that moment are listed too;
+- moves pages that were moved in Confluence, and moves pages deleted there to the trash;
+- adds new comments, attachments and attachment versions, watches and favourites.
+
+Space settings, permissions and the home page stay as your admins left them. Pages missing from
+the new export (deleted for good in Confluence, or not part of a partial export) are counted in
+the report, not deleted. Running the same update twice changes nothing.
 
 ## 5. People: imported authors
 
@@ -141,14 +161,14 @@ then use.
       page (*Inspect permissions* shows why someone can or can't see a page).
 - [ ] Point the old Confluence host name at WikiCraft (or add a redirect from it), so the
       legacy URL redirects take over.
+- [ ] Export the spaces once more and run an update import, so the last changes made in
+      Confluence come across.
 - [ ] Make Confluence read-only for a transition period, then archive the export zips.
 
 ## Limits today
 
 - No live migration over the Confluence REST API yet; you work from exports.
-- Re-importing the same export creates pages again instead of updating them.
 - Jira issue macros become plain issue keys.
 - Third-party macros (marketplace apps) are kept as macro blocks, not rendered.
-- Personal favourites and watches are not imported.
 
 See `PLAN.md` §4.18 and §6 for what is planned and the data behind these numbers.

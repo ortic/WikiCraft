@@ -37,6 +37,12 @@ enum Command {
         /// Leave out pages in the Confluence trash (by default they go to the space trash).
         #[arg(long)]
         skip_trash: bool,
+        /// Bring an earlier import of the same spaces up to date instead of creating new spaces.
+        #[arg(long)]
+        update: bool,
+        /// With --update: pages changed both here and in Confluence take Confluence's version.
+        #[arg(long)]
+        overwrite_local_changes: bool,
     },
     /// Rebuild the search index.
     Reindex,
@@ -90,7 +96,7 @@ async fn main() -> anyhow::Result<()> {
             tokio::time::sleep(std::time::Duration::from_secs(1)).await;
             println!("indexed {n} pages");
         }
-        Command::ImportConfluence { path, as_user, space_key, skip_history, skip_drafts, skip_trash } => {
+        Command::ImportConfluence { path, as_user, space_key, skip_history, skip_drafts, skip_trash, update, overwrite_local_changes } => {
             let state = AppState::new(cli.config).await?;
             let user = sqlx::query_as::<_, wikicraft::auth::User>(sqlx::AssertSqlSafe(format!(
                 "SELECT {} FROM users WHERE lower(email) = lower($1) AND role IN ('owner','admin')",
@@ -106,7 +112,8 @@ async fn main() -> anyhow::Result<()> {
                 anyhow::bail!("please pass the export .zip (directories are supported by analyze-confluence only)");
             }
             std::fs::copy(&path, &tmp)?;
-            let opts = wikicraft::importer::ImportOptions { space_key, skip_history, skip_drafts, skip_trash, ..Default::default() };
+            let opts =
+                wikicraft::importer::ImportOptions { space_key, skip_history, skip_drafts, skip_trash, update, overwrite_local_changes, ..Default::default() };
             let job = wikicraft::app::new_id();
             sqlx::query("INSERT INTO jobs (id, workspace_id, kind, created_by) VALUES ($1, $2, 'import.confluence', $3)")
                 .bind(job)

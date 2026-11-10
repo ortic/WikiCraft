@@ -678,6 +678,17 @@ function ReportView({ result }: { result: any }) {
           ))}
         </div>
       )}
+      {result?.conflicts?.length > 0 && (
+        <div className="card" style={{ marginBottom: 12 }}>
+          <b>Left as they are ({result.conflicts.length})</b>
+          <p className="muted small" style={{ marginTop: 4 }}>These pages changed in Confluence too. Compare them, then copy over what's needed, or run the update again with “take Confluence's version”.</p>
+          <ul className="small" style={{ margin: 0 }}>
+            {result.conflicts.map((c: any) => (
+              <li key={c.id}><Link to={`/pages/${c.id}`}>{c.title}</Link> <span className="faint">({c.reason})</span></li>
+            ))}
+          </ul>
+        </div>
+      )}
       <div className="grid-cards">
         {Object.entries({ ...counts, ...created }).filter(([, v]) => typeof v === 'number').map(([k, v]) => (
           <div key={k} className="stat"><div className="v">{String(v)}</div><div className="k">{humanize(k)}</div></div>
@@ -737,6 +748,9 @@ function ImportAdmin() {
   const [skipHistory, setSkipHistory] = useState(false)
   const [skipDrafts, setSkipDrafts] = useState(false)
   const [skipTrash, setSkipTrash] = useState(false)
+  // bring an earlier import of the same spaces up to date instead of creating new spaces
+  const [update, setUpdate] = useState(false)
+  const [overwrite, setOverwrite] = useState(false)
   const [jobId, setJobId] = useState<string | null>(null)
   const jobs = useQuery({ queryKey: ['jobs'], queryFn: () => api.get<Job[]>('/jobs'), refetchInterval: 5000 })
   const job = useQuery({ queryKey: ['job', jobId], queryFn: () => api.get<Job>(`/jobs/${jobId}`), enabled: !!jobId, refetchInterval: (q) => (q.state.data && ['succeeded', 'failed'].includes(q.state.data.status) ? false : 1000) })
@@ -753,7 +767,9 @@ function ImportAdmin() {
     try {
       const form = new FormData()
       form.append('file', selected)
-      setAnalysis(await api.upload('/imports/confluence/analyze', form))
+      const a = await api.upload<any>('/imports/confluence/analyze', form)
+      setAnalysis(a)
+      setUpdate(!!a?.spaces?.some((s: any) => s.earlierImport))
     } catch (e) {
       toast(e instanceof Error ? e.message : 'Analysis failed')
     } finally {
@@ -765,7 +781,7 @@ function ImportAdmin() {
     setBusy('import')
     try {
       const form = new FormData()
-      form.append('options', JSON.stringify({ spaceKey: spaceKey || undefined, skipHistory, skipDrafts, skipTrash }))
+      form.append('options', JSON.stringify({ spaceKey: update ? undefined : spaceKey || undefined, skipHistory, skipDrafts, skipTrash, update, overwriteLocalChanges: update && overwrite }))
       form.append('file', selected)
       const r = await api.upload<{ jobId: string }>('/imports/confluence', form)
       setJobId(r.jobId)
@@ -800,7 +816,24 @@ function ImportAdmin() {
             <label className="row small" title="Unpublished pages otherwise become private drafts that only their author sees"><input type="checkbox" checked={skipDrafts} onChange={(e) => setSkipDrafts(e.target.checked)} /> Skip unpublished drafts</label>
             <label className="row small" title="Pages in the Confluence trash otherwise go to the space trash, where admins can restore them"><input type="checkbox" checked={skipTrash} onChange={(e) => setSkipTrash(e.target.checked)} /> Skip trash</label>
             <span className="spacer" />
-            <button className="btn btn-primary" disabled={!!busy} onClick={start}>{busy === 'import' ? <Spinner /> : <Upload size={15} />} Start import</button>
+            <button className="btn btn-primary" disabled={!!busy} onClick={start}>{busy === 'import' ? <Spinner /> : <Upload size={15} />} {update ? 'Update import' : 'Start import'}</button>
+          </div>
+        )}
+        {selected && (
+          <div className="update-import">
+            <label className="row small">
+              <input type="checkbox" checked={update} onChange={(e) => setUpdate(e.target.checked)} />
+              Update an earlier import of these spaces with what changed in Confluence since
+              {analysis?.spaces?.filter((s: any) => s.earlierImport).map((s: any) => (
+                <span key={s.key} className="badge">{s.key} → {s.earlierImport.key}</span>
+              ))}
+            </label>
+            {update && (
+              <label className="row small">
+                <input type="checkbox" checked={overwrite} onChange={(e) => setOverwrite(e.target.checked)} />
+                Pages changed both here and in Confluence take Confluence's version (otherwise they're left as they are and listed)
+              </label>
+            )}
           </div>
         )}
       </div>
