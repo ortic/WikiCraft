@@ -113,6 +113,9 @@ pub async fn visible_hits(state: &AppState, p: &Principal, query: &str, space: O
         }
         None => false,
     });
+    // archived pages (and what's under them) stay readable but leave search
+    let archived = crate::authz::archived_among(state, &hits.iter().map(|h| h.page_id).collect::<Vec<_>>()).await?;
+    hits.retain(|h| !archived.contains(&h.page_id));
     let pairs: Vec<(Uuid, Uuid)> = hits.iter().map(|h| (h.page_id, h.space_id)).collect();
     let visible = filter_visible(state, p, &spaces, &pairs).await?;
     let by_id: HashMap<Uuid, &SpaceRow> = spaces.iter().map(|(s, _)| (s.id, s)).collect();

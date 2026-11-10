@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate, FileText, BadgeCheck, UserCheck } from 'lucide-react'
+import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate, FileText, BadgeCheck, UserCheck, Archive, RotateCcw } from 'lucide-react'
 import { NoAccess, RequestReviewDialog, VerificationBadge, VerifyDialog } from '../components/Verification'
 import { ApiError, api, formatDate, type Page, type Space } from '../api'
 import { PageDecor } from '../components/PageDecor'
@@ -108,6 +108,24 @@ export default function PageView() {
     toast('Moved to trash')
     nav(p.parentId ? `/pages/${p.parentId}` : `/spaces/${p.spaceKey}`)
   }
+  const archive = async () => {
+    if (!confirm('Archive this page and everything under it? It becomes read-only and leaves the page tree and search.')) return
+    try {
+      await api.post(`/pages/${p.id}/archive`)
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not archive')
+      return
+    }
+    qc.invalidateQueries({ queryKey: ['page', p.id] })
+    qc.invalidateQueries({ queryKey: ['tree'] })
+    toast('Archived')
+  }
+  const unarchive = async () => {
+    await api.post(`/pages/${p.id}/unarchive`)
+    qc.invalidateQueries({ queryKey: ['page', p.id] })
+    qc.invalidateQueries({ queryKey: ['tree'] })
+    toast('Restored from the archive')
+  }
   const copy = async () => {
     setMenu(false)
     const r = await api.post<{ id: string }>(`/pages/${p.id}/copy`, { includeChildren: false })
@@ -178,7 +196,7 @@ export default function PageView() {
               <MoreHorizontal size={16} />
             </button>
             {menu && (
-              <div className="dropdown menu" onMouseLeave={() => setMenu(false)}>
+              <div className="dropdown menu page-menu" onMouseLeave={() => setMenu(false)}>
                 {p.access.admin && (
                   <div className="menu-item" onClick={() => { setMenu(false); setRestrictions(true) }}>
                     <Lock size={15} /> Restrictions
@@ -194,26 +212,7 @@ export default function PageView() {
                     {p.watching ? <EyeOff size={15} /> : <Eye size={15} />} {p.watching ? 'Stop watching' : 'Watch page'}
                   </div>
                 )}
-                <div className="menu-item" onClick={() => { setMenu(false); setTimeout(() => window.print(), 50) }}>
-                  <Printer size={15} /> Print / save as PDF
-                </div>
-                {canEdit && (
-                  <div className="menu-item" onClick={saveAsTemplate}>
-                    <LayoutTemplate size={15} /> Save as template
-                  </div>
-                )}
-                <a className="menu-item" href={`/api/pages/${p.id}/export?format=docx`} style={{ color: 'inherit', textDecoration: 'none' }}>
-                  <FileText size={15} /> Export as Word
-                </a>
-                <a className="menu-item" href={`/api/pages/${p.id}/export?format=docx&tree=true`} style={{ color: 'inherit', textDecoration: 'none' }} title="This page and all its child pages in one document">
-                  <FileText size={15} /> Export with child pages (Word)
-                </a>
-                <a className="menu-item" href={`/api/pages/${p.id}/export?format=md`} style={{ color: 'inherit', textDecoration: 'none' }}>
-                  <Download size={15} /> Export as Markdown
-                </a>
-                <a className="menu-item" href={`/api/pages/${p.id}/export?format=html`} style={{ color: 'inherit', textDecoration: 'none' }}>
-                  <Download size={15} /> Export as HTML
-                </a>
+                {(canEdit || user) && <div className="menu-sep" />}
                 {canEdit && (
                   <div className="menu-item" onClick={() => { setMenu(false); setVerifyOpen(true) }}>
                     <BadgeCheck size={15} /> Verify page…
@@ -224,9 +223,37 @@ export default function PageView() {
                     <UserCheck size={15} /> Request review…
                   </div>
                 )}
+                {canEdit && (
+                  <div className="menu-item" onClick={saveAsTemplate}>
+                    <LayoutTemplate size={15} /> Save as template
+                  </div>
+                )}
                 {user && (
                   <div className="menu-item" onClick={copy}>
                     <Copy size={15} /> Copy page
+                  </div>
+                )}
+                <div className="menu-sep" />
+                <div className="menu-label">Export</div>
+                <div className="menu-item" onClick={() => { setMenu(false); setTimeout(() => window.print(), 50) }}>
+                  <Printer size={15} /> Print or PDF
+                </div>
+                <a className="menu-item" href={`/api/pages/${p.id}/export?format=docx`}>
+                  <FileText size={15} /> Word
+                </a>
+                <a className="menu-item" href={`/api/pages/${p.id}/export?format=docx&tree=true`} title="This page and all its child pages in one document">
+                  <FileText size={15} /> Word, with child pages
+                </a>
+                <a className="menu-item" href={`/api/pages/${p.id}/export?format=md`}>
+                  <Download size={15} /> Markdown
+                </a>
+                <a className="menu-item" href={`/api/pages/${p.id}/export?format=html`}>
+                  <Download size={15} /> HTML
+                </a>
+                {(p.access.admin || (canEdit && space.data?.homePageId !== p.id)) && <div className="menu-sep" />}
+                {canEdit && space.data?.homePageId !== p.id && (
+                  <div className="menu-item" onClick={() => { setMenu(false); archive() }}>
+                    <Archive size={15} /> Archive page
                   </div>
                 )}
                 {p.access.admin && (
@@ -283,6 +310,18 @@ export default function PageView() {
             {p.pageStatus && <span className="badge">{p.pageStatus}</span>}
             {!canEdit && <span className="badge">Read only</span>}
           </div>
+          {p.access.archivedPage && (
+            <div className="archived-banner">
+              <Archive size={15} />
+              <span>
+                {p.access.archivedPage === p.id ? 'This page is archived.' : 'This page is in an archived section.'} It's read-only and hidden from the page tree and search.
+              </span>
+              {p.access.admin && p.access.archivedPage === p.id && (
+                <button className="btn btn-sm" onClick={unarchive}><RotateCcw size={13} /> Restore</button>
+              )}
+              {p.access.archivedPage !== p.id && <Link to={`/pages/${p.access.archivedPage}`}>Go to the archived page</Link>}
+            </div>
+          )}
           {changed?.id === p.id && (
             <div className="changed-banner">
               <HistoryIcon size={15} />

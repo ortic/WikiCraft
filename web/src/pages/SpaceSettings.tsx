@@ -1,8 +1,8 @@
 import { useEffect, useState } from 'react'
-import { useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useCanonicalSpaceKey } from '../useCanonicalKey'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Trash2, RotateCcw, Users, X } from 'lucide-react'
+import { Archive, Trash2, RotateCcw, Users, X } from 'lucide-react'
 import { api, formatDate, type Space } from '../api'
 import { SymbolPicker } from '../icons'
 import ExportPanel from '../components/ExportPanel'
@@ -38,11 +38,13 @@ export default function SpaceSettings() {
             <button className={`tab ${tab === 'permissions' ? 'active' : ''}`} onClick={() => setParams({ tab: 'permissions' })}>Permissions</button>
           </>
         )}
+        <button className={`tab ${tab === 'archived' ? 'active' : ''}`} onClick={() => setParams({ tab: 'archived' })}>Archived</button>
         <button className={`tab ${tab === 'trash' ? 'active' : ''}`} onClick={() => setParams({ tab: 'trash' })}>Trash</button>
         <button className={`tab ${tab === 'export' ? 'active' : ''}`} onClick={() => setParams({ tab: 'export' })}>Export</button>
       </div>
       {tab === 'details' && s.role === 'admin' && <Details space={s} />}
       {tab === 'permissions' && s.role === 'admin' && <Permissions space={s} />}
+      {tab === 'archived' && <ArchivedList space={s} />}
       {tab === 'trash' && <TrashList space={s} />}
       {tab === 'export' && <ExportPanel space={s} />}
     </div>
@@ -181,6 +183,47 @@ function Permissions({ space }: { space: Space }) {
       </table>
       {error && <p className="error-text">{error}</p>}
       <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={save}>Save permissions</button>
+    </div>
+  )
+}
+
+function ArchivedList({ space }: { space: Space }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const list = useQuery({
+    queryKey: ['archived', space.key],
+    queryFn: () => api.get<{ id: string; title: string; archivedAt: string; archivedBy: string | null; descendants: number; canRestore: boolean }[]>(`/spaces/${space.key}/archived`),
+  })
+  return (
+    <div>
+      <p className="muted" style={{ marginTop: 0 }}>Archived pages are read-only and hidden from the page tree and search. Their links keep working.</p>
+      {list.data?.length === 0 && <div className="empty"><Archive size={28} /><br />No archived pages.</div>}
+      <table className="list">
+        <tbody>
+          {list.data?.map((t) => (
+            <tr key={t.id}>
+              <td><Link to={`/pages/${t.id}`}><b>{t.title}</b></Link>{t.descendants > 0 && <span className="faint small"> and {t.descendants} page{t.descendants === 1 ? '' : 's'} under it</span>}</td>
+              <td className="faint small">Archived {formatDate(t.archivedAt)} by {t.archivedBy ?? 'someone'}</td>
+              <td style={{ width: 120 }}>
+                {t.canRestore && (
+                  <button
+                    className="btn btn-sm"
+                    onClick={async () => {
+                      await api.post(`/pages/${t.id}/unarchive`)
+                      qc.invalidateQueries({ queryKey: ['archived', space.key] })
+                      qc.invalidateQueries({ queryKey: ['tree'] })
+                      qc.invalidateQueries({ queryKey: ['page', t.id] })
+                      toast('Restored from the archive')
+                    }}
+                  >
+                    <RotateCcw size={13} /> Restore
+                  </button>
+                )}
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   )
 }

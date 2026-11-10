@@ -2218,6 +2218,79 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /pages/{id}/archive:
+    post:
+      tags:
+      - Pages
+      summary: Archive a page and everything under it (read-only, hidden from tree and search)
+      operationId: post_pages_id_archive
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '204':
+          description: Archived
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /pages/{id}/unarchive:
+    post:
+      tags:
+      - Pages
+      summary: Restore an archived page
+      operationId: post_pages_id_unarchive
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '204':
+          description: Restored
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /spaces/{key}/archived:
+    get:
+      tags:
+      - Spaces
+      summary: Archived pages of a space
+      operationId: get_spaces_key_archived
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: *id002
+                    title: *id001
+                    archivedAt: *id001
+                    archivedBy: *id001
+                    descendants: *id005
+                    canRestore: *id003
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /pages/{id}/access-request:
     post:
       tags:

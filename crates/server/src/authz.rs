@@ -159,6 +159,8 @@ pub struct PageAccess {
     /// Effective space role.
     #[serde(skip)]
     pub space_role: Option<Role>,
+    /// The archived page this one is (or is under): read-only until restored.
+    pub archived_page: Option<Uuid>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -167,6 +169,7 @@ struct ChainRow {
     depth: i32,
     space_id: Uuid,
     deleted: bool,
+    archived: bool,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -181,10 +184,10 @@ struct RestrictionRow {
 pub async fn page_access(state: &AppState, p: &Principal, page_id: Uuid) -> ApiResult<(PageAccess, Uuid)> {
     let chain = sqlx::query_as::<_, ChainRow>(
         "WITH RECURSIVE chain AS (
-            SELECT id, parent_id, space_id, deleted_at IS NOT NULL AS deleted, 0 AS depth FROM pages WHERE id = $1
+            SELECT id, parent_id, space_id, deleted_at IS NOT NULL AS deleted, archived_at IS NOT NULL AS archived, 0 AS depth FROM pages WHERE id = $1
             UNION ALL
-            SELECT p.id, p.parent_id, p.space_id, p.deleted_at IS NOT NULL, c.depth + 1 FROM pages p JOIN chain c ON p.id = c.parent_id WHERE c.depth < 200
-         ) SELECT id, depth, space_id, deleted FROM chain",
+            SELECT p.id, p.parent_id, p.space_id, p.deleted_at IS NOT NULL, p.archived_at IS NOT NULL, c.depth + 1 FROM pages p JOIN chain c ON p.id = c.parent_id WHERE c.depth < 200
+         ) SELECT id, depth, space_id, deleted, archived FROM chain",
     )
     .bind(page_id)
     .fetch_all(&state.db)
@@ -229,10 +232,14 @@ pub async fn page_access(state: &AppState, p: &Principal, page_id: Uuid) -> ApiR
         view_ok = true;
         edit_ok = true;
     }
+    // archived (itself or an ancestor): read-only, but whoever could edit may restore it
+    let archived = chain.iter().filter(|c| c.archived).min_by_key(|c| c.depth).map(|c| c.id);
+    let could_edit = view_ok && edit_ok && role >= Role::Editor && p.user.is_some();
     access.view = view_ok;
-    access.comment = view_ok && role >= Role::Commenter && p.user.is_some();
-    access.edit = view_ok && edit_ok && role >= Role::Editor && p.user.is_some();
-    access.admin = view_ok && (role == Role::Admin || (access.edit && p.user.is_some()));
+    access.comment = view_ok && role >= Role::Commenter && p.user.is_some() && archived.is_none();
+    access.edit = could_edit && archived.is_none();
+    access.admin = view_ok && (role == Role::Admin || could_edit);
+    access.archived_page = archived;
     Ok((access, space_id))
 }
 
@@ -305,4 +312,22 @@ pub async fn visible_page_ids(state: &AppState, p: &Principal, space_id: Uuid, r
         v
     }
     Ok(pages.iter().filter(|(id, _)| visible(*id, &parent, &denied_here, &mut memo, 0)).map(|(id, _)| *id).collect())
+}
+
+/// The pages among `ids` that are archived or under an archived page.
+pub async fn archived_among(state: &AppState, ids: &[Uuid]) -> ApiResult<std::collections::HashSet<Uuid>> {
+    if ids.is_empty() {
+        return Ok(Default::default());
+    }
+    let rows: Vec<Uuid> = sqlx::query_scalar(
+        "WITH RECURSIVE up AS (
+            SELECT id AS start, parent_id, archived_at, 0 AS depth FROM pages WHERE id = ANY($1)
+            UNION ALL
+            SELECT up.start, p.parent_id, p.archived_at, up.depth + 1 FROM pages p JOIN up ON p.id = up.parent_id WHERE up.depth < 200
+         ) SELECT DISTINCT start FROM up WHERE archived_at IS NOT NULL",
+    )
+    .bind(ids)
+    .fetch_all(&state.db)
+    .await?;
+    Ok(rows.into_iter().collect())
 }

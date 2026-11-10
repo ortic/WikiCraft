@@ -2,6 +2,7 @@ pub mod access_request;
 pub mod account;
 pub mod admin;
 pub mod ai;
+pub mod archive;
 pub mod attachments;
 pub mod auth;
 pub mod comments;
@@ -123,6 +124,9 @@ pub fn router(state: AppState) -> Router {
         .route("/pages/{id}/verification", get(verification::get).put(verification::verify).delete(verification::unverify))
         .route("/pages/{id}/verification/request", post(verification::request_review))
         .route("/pages/{id}/access-request", post(access_request::request))
+        .route("/pages/{id}/archive", post(archive::archive))
+        .route("/pages/{id}/unarchive", post(archive::unarchive))
+        .route("/spaces/{key}/archived", get(archive::list))
         .route("/reports/verification", get(verification::report))
         .route("/ai/status", get(ai::status))
         .route("/ai/ask", post(ai::ask))

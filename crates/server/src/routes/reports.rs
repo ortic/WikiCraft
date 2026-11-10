@@ -113,7 +113,8 @@ async fn pages(state: &AppState, p: &Principal, q: &ReportQuery, require_labels:
     .await?;
     let pairs: Vec<(Uuid, Uuid)> = rows.iter().map(|r| (r.id, r.space_id)).collect();
     let visible = filter_visible(state, p, &visible_sp, &pairs).await?;
-    Ok(rows.into_iter().filter(|r| visible.contains(&r.id)).take(max as usize).collect())
+    let archived = crate::authz::archived_among(state, &rows.iter().map(|r| r.id).collect::<Vec<_>>()).await?;
+    Ok(rows.into_iter().filter(|r| visible.contains(&r.id) && !archived.contains(&r.id)).take(max as usize).collect())
 }
 
 /// `GET /api/reports/pages?labels=&spaces=&operator=&sort=&max=` (contentbylabel, recently-updated)

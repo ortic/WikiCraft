@@ -3,6 +3,7 @@ use axum::extract::{Path, State};
 use axum::http::StatusCode;
 use serde::{Deserialize, Serialize};
 use serde_json::json;
+use std::collections::{HashMap, HashSet};
 use uuid::Uuid;
 
 use crate::app::{AppState, new_id};
@@ -338,7 +339,7 @@ pub async fn archive(State(state): State<AppState>, CurrentUser(user): CurrentUs
     Ok(StatusCode::NO_CONTENT)
 }
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(Serialize, sqlx::FromRow, Clone)]
 #[serde(rename_all = "camelCase")]
 pub struct TreeNode {
     pub id: Uuid,
@@ -348,6 +349,9 @@ pub struct TreeNode {
     pub icon: Option<String>,
     pub position: f64,
     pub restricted: bool,
+    #[serde(skip)]
+    #[sqlx(default)]
+    pub archived: bool,
 }
 
 /// Flat list of all pages in a space the caller can see (client builds the tree).
@@ -356,7 +360,7 @@ pub async fn tree(State(state): State<AppState>, MaybeUser(user): MaybeUser, Pat
     let (space, role) = load_space(&state, &p, &key).await?;
     let rows = sqlx::query_as::<_, TreeNode>(
         "SELECT p.id, p.parent_id, p.title, p.kind, p.icon, p.position,
-                EXISTS (SELECT 1 FROM page_restrictions r WHERE r.page_id = p.id) AS restricted
+                EXISTS (SELECT 1 FROM page_restrictions r WHERE r.page_id = p.id) AS restricted, p.archived_at IS NOT NULL AS archived
          FROM pages p WHERE p.space_id = $1 AND p.deleted_at IS NULL AND p.kind <> 'blog' ORDER BY p.position, lower(p.title)",
     )
     .bind(space.id)
@@ -364,7 +368,22 @@ pub async fn tree(State(state): State<AppState>, MaybeUser(user): MaybeUser, Pat
     .await?;
     let pairs: Vec<(Uuid, Option<Uuid>)> = rows.iter().map(|r| (r.id, r.parent_id)).collect();
     let visible = visible_page_ids(&state, &p, space.id, role, &pairs).await?;
-    let nodes: Vec<TreeNode> = rows.into_iter().filter(|r| visible.contains(&r.id)).collect();
+    // archived pages and everything under them leave the tree (Space settings → Archived)
+    let parent: HashMap<Uuid, Option<Uuid>> = rows.iter().map(|r| (r.id, r.parent_id)).collect();
+    let archived_roots: HashSet<Uuid> = rows.iter().filter(|r| r.archived).map(|r| r.id).collect();
+    let under_archive = |mut id: Uuid| {
+        for _ in 0..200 {
+            if archived_roots.contains(&id) {
+                return true;
+            }
+            match parent.get(&id).copied().flatten() {
+                Some(p) => id = p,
+                None => return false,
+            }
+        }
+        false
+    };
+    let nodes: Vec<TreeNode> = rows.iter().filter(|r| visible.contains(&r.id) && !under_archive(r.id)).cloned().collect();
     Ok(Json(json!({ "spaceId": space.id, "homePageId": space.home_page_id, "nodes": nodes })))
 }
 

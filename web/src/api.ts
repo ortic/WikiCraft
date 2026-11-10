@@ -87,6 +87,8 @@ export interface PageAccess {
   comment: boolean
   edit: boolean
   admin: boolean
+  /** the archived page this one is (or is under) */
+  archivedPage?: string | null
 }
 
 export interface PmNode {

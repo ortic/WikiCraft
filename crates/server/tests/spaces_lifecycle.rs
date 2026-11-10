@@ -79,3 +79,53 @@ async fn renaming_a_space_key_keeps_old_links() {
     let (st, s) = app.get(&member, "/spaces/platform").await;
     assert_eq!((st, s["key"].as_str()), (200, Some("OPS")));
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn archived_pages_are_read_only_and_hidden() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, _) = app.user(&owner, "ed@acme.test", "member").await;
+    let (_, sp) = app.post(&owner, "/spaces", json!({"key": "ARC", "name": "Archive test"})).await;
+    let home = sp["homePageId"].as_str().unwrap().to_string();
+    let (_, a) = app.post(&owner, "/pages", json!({"spaceKey": "ARC", "parentId": home, "title": "Old project", "markdown": "legacy pumpernickel"})).await;
+    let a = a["id"].as_str().unwrap().to_string();
+    let (_, a1) = app.post(&owner, "/pages", json!({"spaceKey": "ARC", "parentId": a, "title": "Old notes", "markdown": "more pumpernickel"})).await;
+    let a1 = a1["id"].as_str().unwrap().to_string();
+    app.eventually(|| async {
+        let (_, r) = app.get(&member, "/search?q=pumpernickel").await;
+        (r.as_array().unwrap().len() == 2).then_some(())
+    })
+    .await;
+
+    assert_eq!(app.post(&member, &format!("/pages/{home}/archive"), json!({})).await.0, 400, "home page");
+    let (st, _) = app.post(&member, &format!("/pages/{a}/archive"), json!({})).await;
+    assert_eq!(st, 204);
+    assert_eq!(app.post(&member, &format!("/pages/{a}/archive"), json!({})).await.0, 409);
+
+    // gone from the tree and search, still readable by link, but read-only
+    let (_, tree) = app.get(&member, "/spaces/ARC/tree").await;
+    let titles: Vec<&str> = tree["nodes"].as_array().unwrap().iter().map(|n| n["title"].as_str().unwrap()).collect();
+    assert!(!titles.contains(&"Old project") && !titles.contains(&"Old notes"), "{titles:?}");
+    let (_, r) = app.get(&member, "/search?q=pumpernickel").await;
+    assert_eq!(r.as_array().unwrap().len(), 0);
+    let (st, p) = app.get(&member, &format!("/pages/{a1}")).await;
+    assert_eq!(st, 200);
+    assert_eq!(p["access"]["edit"], false);
+    assert_eq!(p["access"]["archivedPage"], a.as_str());
+    assert_eq!(app.put(&member, &format!("/pages/{a1}/content"), json!({"markdown": "edit"})).await.0, 403);
+    assert_eq!(app.post(&member, &format!("/pages/{a1}/comments"), json!({"text": "hi"})).await.0, 403);
+    assert_eq!(app.post(&member, &format!("/pages/{a1}/unarchive"), json!({})).await.0, 400, "restore the archived ancestor instead");
+
+    // the space lists it; restoring brings everything back
+    let (_, list) = app.get(&member, "/spaces/ARC/archived").await;
+    assert_eq!(list.as_array().unwrap().len(), 1);
+    assert_eq!(list[0]["title"], "Old project");
+    assert_eq!(list[0]["descendants"], 1);
+    assert_eq!(list[0]["canRestore"], true);
+    assert_eq!(app.post(&member, &format!("/pages/{a}/unarchive"), json!({})).await.0, 204);
+    let (_, p) = app.get(&member, &format!("/pages/{a1}")).await;
+    assert_eq!(p["access"]["edit"], true);
+    assert!(p["access"]["archivedPage"].is_null());
+    let (_, tree) = app.get(&member, "/spaces/ARC/tree").await;
+    assert_eq!(tree["nodes"].as_array().unwrap().len(), 3);
+}
