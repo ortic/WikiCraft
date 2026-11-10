@@ -563,3 +563,8 @@ kbd { font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; padding: 1px 6p
 .menu-label { padding: 6px 10px 2px; font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase; color: var(--text-faint); }
 a.menu-item { color: inherit; text-decoration: none; }
 .page-menu { max-height: min(76vh, 620px); }
+.space-templates { display: grid; grid-template-columns: repeat(auto-fill, minmax(170px, 1fr)); gap: 8px; }
+.space-template { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; padding: 10px 12px; text-align: left; border: 1px solid var(--border); border-radius: 10px; background: var(--bg); color: var(--text); cursor: pointer; font: inherit; }
+.space-template:hover { border-color: var(--border-strong); }
+.space-template.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: var(--accent-soft); }
+.space-template svg { color: var(--accent-text); }

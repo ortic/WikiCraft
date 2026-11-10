@@ -18,6 +18,7 @@ pub mod reports;
 pub mod search;
 pub mod security;
 pub mod share;
+pub mod space_templates;
 pub mod spaces;
 pub mod tasks;
 pub mod templates;
@@ -119,6 +120,7 @@ pub fn router(state: AppState) -> Router {
         .route("/recent", get(search::recent))
         .route("/favorites", get(search::favorites))
         .route("/popular", get(search::popular))
+        .route("/space-templates", get(space_templates::list))
         .route("/labels/{name}", get(search::by_label))
         .route("/pages/{id}/access/{who}", get(inspect::explain))
         .route("/pages/{id}/like", put(likes::like_page).delete(likes::unlike_page))

@@ -2984,6 +2984,35 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /space-templates:
+    get:
+      tags:
+      - Spaces
+      summary: Space templates (pass `template` when creating a space)
+      operationId: get_space_templates
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: *id001
+                    name: *id001
+                    icon: *id001
+                    description: *id001
+                    pages:
+                      type: array
+                      items: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /labels/{name}:
     get:
       tags:

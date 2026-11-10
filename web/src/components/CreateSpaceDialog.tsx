@@ -1,8 +1,18 @@
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { FilePlus2 } from 'lucide-react'
 import { api, type Space } from '../api'
 import { Modal } from '../ui'
+import { LineIcon } from '../icons'
+
+interface SpaceTemplate {
+  id: string
+  name: string
+  icon: string
+  description: string
+  pages: string[]
+}
 
 export default function CreateSpaceDialog({ onClose }: { onClose: () => void }) {
   const [name, setName] = useState('')
@@ -10,6 +20,8 @@ export default function CreateSpaceDialog({ onClose }: { onClose: () => void }) 
   const [keyTouched, setKeyTouched] = useState(false)
   const [description, setDescription] = useState('')
   const [access, setAccess] = useState('editor')
+  const [template, setTemplate] = useState('')
+  const templates = useQuery({ queryKey: ['space-templates'], queryFn: () => api.get<SpaceTemplate[]>('/space-templates'), staleTime: Infinity })
   const [error, setError] = useState<string | null>(null)
   const [busy, setBusy] = useState(false)
   const qc = useQueryClient()
@@ -19,7 +31,7 @@ export default function CreateSpaceDialog({ onClose }: { onClose: () => void }) 
     setBusy(true)
     setError(null)
     try {
-      const s = await api.post<Space>('/spaces', { name, key: derived, description, defaultRole: access })
+      const s = await api.post<Space>('/spaces', { name, key: derived, description, defaultRole: access, template: template || undefined })
       await qc.invalidateQueries({ queryKey: ['spaces'] })
       onClose()
       nav(`/spaces/${s.key}`)
@@ -32,6 +44,7 @@ export default function CreateSpaceDialog({ onClose }: { onClose: () => void }) 
   return (
     <Modal
       title="Create a space"
+      width={620}
       onClose={onClose}
       footer={
         <>
@@ -44,6 +57,23 @@ export default function CreateSpaceDialog({ onClose }: { onClose: () => void }) 
         </>
       }
     >
+      <div className="field">
+        <label>Start with</label>
+        <div className="space-templates">
+          <button type="button" className={`space-template ${template === '' ? 'selected' : ''}`} onClick={() => setTemplate('')}>
+            <FilePlus2 size={18} />
+            <b>Blank space</b>
+            <span className="faint small">Just a home page.</span>
+          </button>
+          {templates.data?.map((t) => (
+            <button type="button" key={t.id} className={`space-template ${template === t.id ? 'selected' : ''}`} onClick={() => setTemplate(t.id)} title={t.pages.join(', ')}>
+              <LineIcon group="symbols" name={t.icon} size={18} />
+              <b>{t.name}</b>
+              <span className="faint small">{t.description}</span>
+            </button>
+          ))}
+        </div>
+      </div>
       <div className="field">
         <label>Name</label>
         <input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Engineering" />

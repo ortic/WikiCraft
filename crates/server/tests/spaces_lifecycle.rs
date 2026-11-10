@@ -2,7 +2,7 @@
 
 mod common;
 
-use serde_json::json;
+use serde_json::{Value, json};
 
 #[tokio::test(flavor = "multi_thread")]
 async fn archive_is_read_only_and_delete_needs_archive_and_confirmation() {
@@ -128,4 +128,34 @@ async fn archived_pages_are_read_only_and_hidden() {
     assert!(p["access"]["archivedPage"].is_null());
     let (_, tree) = app.get(&member, "/spaces/ARC/tree").await;
     assert_eq!(tree["nodes"].as_array().unwrap().len(), 3);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn spaces_from_templates() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (_, list) = app.get(&owner, "/space-templates").await;
+    let ids: Vec<&str> = list.as_array().unwrap().iter().map(|t| t["id"].as_str().unwrap()).collect();
+    assert_eq!(ids, vec!["team", "project", "knowledge", "engineering"]);
+    assert_eq!(app.post(&owner, "/spaces", json!({"key": "X", "name": "X", "template": "nope"})).await.0, 400);
+
+    let (st, sp) = app.post(&owner, "/spaces", json!({"key": "APOLLO", "name": "Apollo", "template": "project"})).await;
+    assert_eq!(st, 201, "{sp}");
+    let (_, tree) = app.get(&owner, "/spaces/APOLLO/tree").await;
+    let nodes = tree["nodes"].as_array().unwrap();
+    let title_of = |id: &Value| nodes.iter().find(|n| n["id"] == *id).map(|n| n["title"].as_str().unwrap().to_string());
+    let titles: Vec<&str> = nodes.iter().map(|n| n["title"].as_str().unwrap()).collect();
+    for t in ["Apollo", "Project plan", "Requirements", "Decisions", "Decision: scope of the first release", "Status reports", "Status report", "Retrospective"]
+    {
+        assert!(titles.contains(&t), "{t} missing: {titles:?}");
+    }
+    let decision = nodes.iter().find(|n| n["title"] == "Decision: scope of the first release").unwrap();
+    assert_eq!(title_of(&decision["parentId"]).as_deref(), Some("Decisions"));
+    // the home page lists its children and keeps the template's content
+    let (_, home) = app.get(&owner, &format!("/pages/{}", sp["homePageId"].as_str().unwrap())).await;
+    let content = home["content"].to_string();
+    assert!(content.contains("childPages") && content.contains("Owner"), "{content}");
+    let plan = nodes.iter().find(|n| n["title"] == "Project plan").unwrap();
+    let (_, plan) = app.get(&owner, &format!("/pages/{}", plan["id"].as_str().unwrap())).await;
+    assert!(plan["content"].to_string().contains("Milestones") || plan["content"]["content"].as_array().unwrap().len() > 2, "{plan}");
 }

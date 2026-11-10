@@ -115,6 +115,8 @@ pub async fn list(State(state): State<AppState>, MaybeUser(user): MaybeUser) -> 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct CreateSpace {
+    /// a space template (`GET /api/space-templates`) to prefill the space with
+    pub template: Option<String>,
     pub key: String,
     pub name: String,
     pub description: Option<String>,
@@ -154,10 +156,15 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
     if let Some(n) = former {
         return Err(ApiError::Conflict(format!("the key {key} was used by the space “{n}” and still links there")));
     }
+    if let Some(t) = req.template.as_deref().filter(|t| !t.is_empty())
+        && !crate::routes::space_templates::exists(t)
+    {
+        return Err(ApiError::bad(format!("unknown space template {t}")));
+    }
     let default_role = req.default_role.unwrap_or_else(|| "editor".into());
     validate_role(&default_role)?;
-    let space =
-        create_space(&state, user.workspace_id, Some(user.id), &key, name, req.description.as_deref(), req.icon.as_deref(), &default_role, None).await?;
+    let icon = req.icon.clone().or_else(|| req.template.as_deref().and_then(crate::routes::space_templates::icon));
+    let space = create_space(&state, user.workspace_id, Some(user.id), &key, name, req.description.as_deref(), icon.as_deref(), &default_role, None).await?;
     // creator becomes space admin
     sqlx::query("INSERT INTO space_permissions (space_id, subject_type, subject_id, role) VALUES ($1, 'user', $2, 'admin') ON CONFLICT DO NOTHING")
         .bind(space.id)
@@ -184,6 +191,9 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
     .await?;
     sqlx::query("UPDATE spaces SET home_page_id = $1 WHERE id = $2").bind(home).bind(space.id).execute(&state.db).await?;
     state.search.enqueue(home);
+    if let Some(t) = req.template.as_deref().filter(|t| !t.is_empty()) {
+        crate::routes::space_templates::apply(&state, t, user.workspace_id, space.id, home, user.id).await?;
+    }
     audit::log(&state, user.workspace_id, Some(user.id), "space.create", Some("space"), Some(space.id), json!({"key": key})).await;
     let space = sqlx::query_as::<_, SpaceRow>(sqlx::AssertSqlSafe(format!("SELECT {SPACE_COLUMNS} FROM spaces WHERE id = $1")))
         .bind(space.id)
