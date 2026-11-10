@@ -1,7 +1,7 @@
 //! Access to export files, whether the export is a `.zip` or an extracted directory.
 
 use std::fs::File;
-use std::io::{self, BufReader, Read};
+use std::io::{self, BufRead, BufReader, Read};
 use std::path::{Path, PathBuf};
 
 use flate2::read::GzDecoder;
@@ -58,7 +58,7 @@ impl Source {
         self.names().iter().any(|n| n == name)
     }
 
-    /// Opens an entry for streaming reads; `.gz` entries are transparently decompressed.
+    /// Opens an entry for streaming reads; gzip-compressed `.gz` entries are transparently decompressed.
     pub fn open_entry(&self, name: &str) -> io::Result<Box<dyn Read + Send>> {
         let raw: Box<dyn Read + Send> = match self {
             Source::Dir { root, .. } => {
@@ -77,7 +77,13 @@ impl Source {
                 Box::new(ZipEntryReader::new(zip, idx)?)
             }
         };
-        if name.ends_with(".gz") { Ok(Box::new(BufReader::new(GzDecoder::new(raw)))) } else { Ok(raw) }
+        if !name.ends_with(".gz") {
+            return Ok(raw);
+        }
+        // some tools store these tables uncompressed under the same name: trust the gzip magic
+        // bytes, not the name
+        let mut r = BufReader::new(raw);
+        if r.fill_buf()?.starts_with(&[0x1f, 0x8b]) { Ok(Box::new(BufReader::new(GzDecoder::new(r)))) } else { Ok(Box::new(r)) }
     }
 
     pub fn read_to_string(&self, name: &str) -> io::Result<String> {

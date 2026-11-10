@@ -46,7 +46,8 @@ pub fn open(path: &Path) -> Result<Export, Error> {
 pub fn read(source: &Source) -> Result<Export, Error> {
     let names = source.names();
     let mut export = Export::default();
-    if let Some(desc) = names.iter().find(|n| n.rsplit('/').next() == Some("exportDescriptor.properties")) {
+    let descriptor = |n: &&String| n.rsplit('/').next().is_some_and(|b| b == "exportDescriptor.properties" || b == "exportDescriptor.properties.gz");
+    if let Some(desc) = names.iter().find(descriptor) {
         export.descriptor = source::parse_properties(&source.read_to_string(desc)?);
     }
     let is_csv = export.descriptor.get("exportFormat").is_some_and(|f| f.eq_ignore_ascii_case("csv"))

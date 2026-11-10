@@ -1,0 +1,7 @@
+Pages: [DOC:Other Page#Setup], [a post|/2024/01/31/Other Page], [the space|DOC:], [Nowhere], [C++ tips].
+
+Attachments: [^diagram.png], [the spec|Other Page^spec.pdf], [DOC:Other Page^diagram.png].
+
+!diagram.png!
+
+!missing.png|thumbnail!

@@ -1,9 +1,10 @@
 //! Reader for Confluence Cloud CSV space exports (`exportFormat=csv`).
 //!
 //! Verified against a real export (Oct 2026): `spaces.csv.gz`, `content.csv.gz`,
-//! `bodycontent.csv.gz`, `export-users.csv`. The other tables are read when present using the
-//! Confluence database column names (**unverified** until we have a complete CSV export; see
-//! PLAN.md §6.4).
+//! `bodycontent.csv.gz`, `export-users.csv`; and against the two complete exports of the XWiki
+//! test corpus (`tests/xwiki_corpus.rs`): `label`, `content_label`, `notifications`,
+//! `usercontent_relation`, `spacepermissions`, `content_perm_set` / `content_perm`,
+//! `contentproperties`, `user_mapping` use the Confluence database column names read here.
 
 use std::collections::HashMap;
 use std::io::Read;
@@ -119,11 +120,8 @@ pub fn read(source: &Source, export: &mut Export) -> Result<(), crate::Error> {
                     export.properties.entry(owner.clone()).or_default().insert(name.clone(), value);
                     return;
                 }
-                export.add_body(Body {
-                    content_id: cid,
-                    kind: BodyKind::from_code(&get(&r, "bodytypeid").unwrap_or_default()),
-                    body: r.get("body").cloned().unwrap_or_default(),
-                });
+                let body = r.get("body").cloned().unwrap_or_default();
+                export.add_body(Body { content_id: cid, kind: BodyKind::guess(get(&r, "bodytypeid").as_deref(), &body), body });
             }
         })?;
     } else {

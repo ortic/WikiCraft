@@ -34,7 +34,11 @@ jobs:
       - run: cargo clippy --workspace --all-targets -- -D warnings
       - name: Real Confluence exports (optional fixtures)
         run: ./research/confluence-import/fetch_fixtures.sh || echo "fixtures unavailable, import tests will skip"
+      - name: XWiki's Confluence importer test corpus (LGPL, edge cases)
+        run: ./research/confluence-import/fetch_xwiki_corpus.sh
       - run: cargo test --workspace
+        env:
+          WIKICRAFT_REQUIRE_XWIKI_CORPUS: "1"
 
   frontend:
     runs-on: ubuntu-latest

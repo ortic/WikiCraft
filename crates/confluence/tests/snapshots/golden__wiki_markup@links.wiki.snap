@@ -1,0 +1,219 @@
+---
+source: crates/confluence/tests/golden.rs
+expression: "report(&doc, &stats)"
+input_file: crates/confluence/tests/golden/links.wiki
+---
+## stats
+{
+  "attachment_refs": 5,
+  "attachment_refs_resolved": 2,
+  "bodies": 1,
+  "missing_attachment_samples": [
+    "spec.pdf",
+    "diagram.png",
+    "missing.png"
+  ],
+  "missing_link_samples": [
+    "DOC/Nowhere",
+    "DOC/C++ tips"
+  ],
+  "page_links": 5,
+  "page_links_missing": 2,
+  "page_links_resolved": 3,
+  "wiki_markup_bodies": 1
+}
+
+## prosemirror
+{
+  "type": "doc",
+  "content": [
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Pages: "
+        },
+        {
+          "type": "text",
+          "text": "Other Page",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "wcimport:page/200#setup"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", "
+        },
+        {
+          "type": "text",
+          "text": "a post",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "wcimport:page/200"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", "
+        },
+        {
+          "type": "text",
+          "text": "the space",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "wcimport:space/DOC"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", "
+        },
+        {
+          "type": "text",
+          "text": "Nowhere",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "wcimport:missing/DOC/Nowhere"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", "
+        },
+        {
+          "type": "text",
+          "text": "C++ tips",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "wcimport:missing/DOC/C%2B%2B+tips"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": "."
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "text",
+          "text": "Attachments: "
+        },
+        {
+          "type": "text",
+          "text": "diagram.png",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "wcimport:attachment/300"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", "
+        },
+        {
+          "type": "text",
+          "text": "the spec",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "wcimport:missing-attachment/spec.pdf"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": ", "
+        },
+        {
+          "type": "text",
+          "text": "diagram.png",
+          "marks": [
+            {
+              "type": "link",
+              "attrs": {
+                "href": "wcimport:missing-attachment/diagram.png"
+              }
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": "."
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "image",
+          "attrs": {
+            "src": "wcimport:attachment/300"
+          }
+        }
+      ]
+    },
+    {
+      "type": "paragraph",
+      "content": [
+        {
+          "type": "image",
+          "attrs": {
+            "src": "wcimport:missing-attachment/missing.png",
+            "title": "missing.png"
+          }
+        }
+      ]
+    }
+  ]
+}
+
+## markdown
+Pages: [Other Page](wcimport:page/200#setup), [a post](wcimport:page/200), [the space](wcimport:space/DOC), [Nowhere](wcimport:missing/DOC/Nowhere), [C++ tips](wcimport:missing/DOC/C%2B%2B+tips).
+
+Attachments: [diagram.png](wcimport:attachment/300), [the spec](wcimport:missing-attachment/spec.pdf), [diagram.png](wcimport:missing-attachment/diagram.png).
+
+![](wcimport:attachment/300)
+
+![](wcimport:missing-attachment/missing.png "missing.png")
+
+## html
+<p>Pages: Other Page, a post, the space, Nowhere, C++ tips.</p>
+<p>Attachments: diagram.png, the spec, diagram.png.</p>
+<p>
+<img src="" alt="" loading="lazy">
+</p>
+<p>
+<img src="" alt="" title="missing.png" loading="lazy">
+</p>

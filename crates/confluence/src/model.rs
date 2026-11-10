@@ -111,6 +111,16 @@ impl BodyKind {
             _ => Self::Raw,
         }
     }
+
+    /// For bodies without a type (seen in old exports): markup that starts with a tag is
+    /// storage format, anything else is wiki markup (Confluence before 4.0).
+    pub fn guess(code: Option<&str>, body: &str) -> Self {
+        match code.map(str::trim).filter(|c| !c.is_empty()) {
+            Some(c) => Self::from_code(c),
+            None if body.trim_start().starts_with('<') => Self::Storage,
+            None => Self::WikiMarkup,
+        }
+    }
 }
 
 #[derive(Debug, Clone, Serialize)]

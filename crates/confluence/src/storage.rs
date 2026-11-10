@@ -140,10 +140,135 @@ fn convert_children(root: &Element, r: &dyn Resolver, stats: &mut Stats) -> Node
 }
 
 /// Converts a legacy wiki-markup body.
-pub fn convert_wiki(body: &str, stats: &mut Stats) -> Node {
+pub fn convert_wiki(body: &str, r: &dyn Resolver, stats: &mut Stats) -> Node {
     stats.bodies += 1;
     stats.wiki_markup_bodies += 1;
-    crate::wiki::wiki_to_pm(body)
+    let mut doc = crate::wiki::wiki_to_pm(body);
+    resolve_wiki_refs(&mut doc, r, stats);
+    doc
+}
+
+/// The wiki-markup parser has no export at hand: it leaves its link targets
+/// (`wcimport:wikilink/<space>/<rest>`) and image sources (`wcimport:missing-attachment/<raw>`)
+/// as written. This resolves them like storage-format references, with the same placeholders
+/// and statistics.
+fn resolve_wiki_refs(doc: &mut Node, r: &dyn Resolver, stats: &mut Stats) {
+    doc.walk_mut(&mut |n| {
+        let mut label = None;
+        for m in n.marks.iter_mut().filter(|m| m.kind == marks::LINK) {
+            let Some(rest) = m.attr_str("href").and_then(|h| h.strip_prefix("wcimport:wikilink/")).map(String::from) else { continue };
+            let (space, title) = rest.split_once('/').unwrap_or(("", rest.as_str()));
+            let target = if space.is_empty() { title.to_string() } else { format!("{space}:{title}") };
+            let href = wiki_target(&target, r, stats);
+            m.attrs.insert("href".into(), serde_json::Value::String(href));
+            // a link without alias shows its target: like Confluence, show the title / file name
+            if n.text.as_deref().is_some_and(|t| t.trim() == target.trim()) {
+                label = Some(wiki_label(&target, r));
+            }
+        }
+        if let Some(l) = label.filter(|l| !l.is_empty()) {
+            n.text = Some(l);
+        }
+        if n.kind == nodes::IMAGE
+            && let Some(raw) = n.attr_str("src").and_then(|s| s.strip_prefix("wcimport:missing-attachment/")).map(String::from)
+        {
+            let (src, filename) = wiki_attachment(&raw, r, stats);
+            // the importer replaces a missing image with a marker that names it
+            if src.starts_with("wcimport:missing-attachment/") && !n.attrs.contains_key("alt") {
+                n.attrs.insert("title".into(), serde_json::Value::String(filename));
+            }
+            n.attrs.insert("src".into(), serde_json::Value::String(src));
+        }
+    });
+}
+
+/// `[SPACE:Title#anchor]`, `[Title]`, `[SPACE:]` (space home), `[/2024/01/31/Blog title]`,
+/// `[Title^file.pdf]`, `[^file.pdf]` → a placeholder href.
+fn wiki_target(target: &str, r: &dyn Resolver, stats: &mut Stats) -> String {
+    if target.contains('^') {
+        return wiki_attachment(target, r, stats).0;
+    }
+    let (target, anchor) = match target.split_once('#') {
+        Some((t, a)) => (t, Some(a)),
+        None => (target, None),
+    };
+    let (space, title) = split_space(target, r);
+    stats.page_links += 1;
+    if title.is_empty() {
+        stats.page_links_resolved += 1;
+        return format!("wcimport:space/{}", enc(&space));
+    }
+    // blog posts: /YYYY/MM/DD/Title
+    let title = blog_title(&title).unwrap_or(title);
+    let found = r.page(&space, &title).or_else(|| (target.contains(':')).then(|| r.page(r.space_key(), target.trim())).flatten());
+    match found {
+        Some(id) => {
+            stats.page_links_resolved += 1;
+            placeholder_page(&id, anchor)
+        }
+        None => {
+            stats.page_links_missing += 1;
+            if stats.missing_link_samples.len() < 50 {
+                stats.missing_link_samples.push(format!("{space}/{title}"));
+            }
+            format!("wcimport:missing/{}/{}", enc(&space), enc(&title))
+        }
+    }
+}
+
+/// `file.png`, `Title^file.png`, `SPACE:Title^file.png` → (placeholder, filename).
+fn wiki_attachment(raw: &str, r: &dyn Resolver, stats: &mut Stats) -> (String, String) {
+    stats.attachment_refs += 1;
+    let (page, filename) = raw.rsplit_once('^').unwrap_or(("", raw));
+    let filename = filename.trim().to_string();
+    let container = if page.trim().is_empty() {
+        Some(r.content_id().to_string())
+    } else {
+        let (space, title) = split_space(page, r);
+        r.page(&space, &blog_title(&title).unwrap_or(title))
+    };
+    match container.and_then(|c| r.attachment(&c, &filename)) {
+        Some(id) => {
+            stats.attachment_refs_resolved += 1;
+            (format!("wcimport:attachment/{id}"), filename)
+        }
+        None => {
+            if stats.missing_attachment_samples.len() < 50 {
+                stats.missing_attachment_samples.push(filename.clone());
+            }
+            (format!("wcimport:missing-attachment/{}", enc(&filename)), filename)
+        }
+    }
+}
+
+/// What Confluence shows for a link without alias: the file name, the page or post title, or
+/// the space key.
+fn wiki_label(target: &str, r: &dyn Resolver) -> String {
+    if let Some((_, file)) = target.rsplit_once('^') {
+        return file.trim().to_string();
+    }
+    let target = target.split_once('#').map_or(target, |(t, _)| t);
+    let (space, title) = split_space(target, r);
+    if title.is_empty() {
+        return space;
+    }
+    blog_title(&title).unwrap_or(title)
+}
+
+/// `SPACE:Title` → (SPACE, Title); anything else is a title in the current space. A colon in a
+/// title ("Meeting: 2024") is not a space key: keys have no spaces.
+fn split_space(target: &str, r: &dyn Resolver) -> (String, String) {
+    match target.split_once(':') {
+        Some((s, t)) if !s.is_empty() && !s.contains(char::is_whitespace) => (s.to_string(), t.trim().to_string()),
+        _ => (r.space_key().to_string(), target.trim().to_string()),
+    }
+}
+
+/// The title of a blog post link `/2024/01/31/Title`.
+fn blog_title(path: &str) -> Option<String> {
+    let mut parts = path.strip_prefix('/')?.splitn(4, '/');
+    let (y, m, d, title) = (parts.next()?, parts.next()?, parts.next()?, parts.next()?);
+    [y, m, d].iter().all(|p| p.chars().all(|c| c.is_ascii_digit())).then(|| title.to_string())
 }
 
 pub fn placeholder_page(id: &str, anchor: Option<&str>) -> String {
@@ -908,7 +1033,8 @@ impl Conv<'_> {
             }
             "unmigrated-wiki-markup" | "unmigrated-inline-wiki-markup" => {
                 self.stats.macro_seen(&name, Support::Partial);
-                let doc = crate::wiki::wiki_to_pm(&plain.unwrap_or_default());
+                let mut doc = crate::wiki::wiki_to_pm(&plain.unwrap_or_default());
+                resolve_wiki_refs(&mut doc, self.r, self.stats);
                 doc.content
             }
             "mathblock" | "mathjax-block" | "latex" | "latex-formatting" | "math" | "eazy-math" => {

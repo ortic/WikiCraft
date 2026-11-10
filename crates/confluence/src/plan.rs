@@ -183,6 +183,8 @@ pub struct Planner<'e> {
     /// current id → historical ids (sorted by version)
     history: HashMap<String, Vec<&'e Content>>,
     users: HashMap<String, String>,
+    /// old versions dropped as exact duplicates of another
+    duplicate_versions: u64,
 }
 
 impl<'e> Planner<'e> {
@@ -223,8 +225,15 @@ impl<'e> Planner<'e> {
                 _ => {}
             }
         }
+        // Exports can carry buggy history: the same version number twice. Order by version, then
+        // date (then id), and drop exact duplicates (same number, date and body).
+        let body_of = |c: &Content| export.bodies.get(&c.id).map(|b| b.body.as_str());
+        let mut duplicate_versions = 0u64;
         for v in history.values_mut() {
-            v.sort_by_key(|c| c.version);
+            v.sort_by(|a, b| a.version.cmp(&b.version).then_with(|| a.modified.cmp(&b.modified)).then_with(|| a.id.cmp(&b.id)));
+            let before = v.len();
+            v.dedup_by(|b, a| a.kind != ContentKind::Attachment && a.version == b.version && a.modified == b.modified && body_of(a) == body_of(b));
+            duplicate_versions += (before - v.len()) as u64;
         }
         // Former titles (from version history) also resolve to the page, unless a current page
         // has that title. Old versions — and stale cross-space links — use titles from before renames.
@@ -249,7 +258,7 @@ impl<'e> Planner<'e> {
                 users.entry(a.clone()).or_insert_with(|| name.clone());
             }
         }
-        Self { export, opts, space_key_by_id, titles, attachments_by_container, history, users }
+        Self { export, opts, space_key_by_id, titles, attachments_by_container, history, users, duplicate_versions }
     }
 
     pub fn space_key_of(&self, c: &Content) -> &str {
@@ -276,7 +285,7 @@ impl<'e> Planner<'e> {
         let r = Ctx { p: self, space_key: space_key.to_string(), content_id: container };
         match body.kind {
             BodyKind::Storage => storage::convert(&body.body, &r, stats),
-            BodyKind::WikiMarkup => storage::convert_wiki(&body.body, stats),
+            BodyKind::WikiMarkup => storage::convert_wiki(&body.body, &r, stats),
             BodyKind::Raw => Node::empty_doc(),
         }
     }
@@ -309,6 +318,9 @@ impl<'e> Planner<'e> {
         };
         for w in &ex.read_warnings {
             report.warn(w.clone());
+        }
+        if self.duplicate_versions > 0 {
+            report.count("duplicate_versions_dropped", self.duplicate_versions);
         }
         let pending_edits = ex.contents.values().filter(|c| c.is_historical() && c.status == ContentStatus::Draft && c.kind != ContentKind::Attachment).count();
         if pending_edits > 0 {

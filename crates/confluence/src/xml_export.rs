@@ -224,11 +224,8 @@ fn dispatch(o: RawObject, export: &mut Export, pending: &mut Pending) {
         }),
         "BodyContent" => {
             if let Some(cid) = o.get("content") {
-                export.add_body(Body {
-                    content_id: cid,
-                    kind: BodyKind::from_code(&o.get("bodyType").unwrap_or_default()),
-                    body: o.props.get("body").cloned().unwrap_or_default(),
-                });
+                let body = o.props.get("body").cloned().unwrap_or_default();
+                export.add_body(Body { content_id: cid, kind: BodyKind::guess(o.get("bodyType").as_deref(), &body), body });
             }
         }
         "ConfluenceUserImpl" => {
@@ -336,16 +333,37 @@ fn resolve_pending(p: Pending, export: &mut Export) {
 
 /// Indexes attachment binaries laid out as `attachments/<containerId>/<attachmentId>/<version>`
 /// (also accepts `attachments/<attachmentId>/<version>`).
+/// Newer Cloud backups store one file per attachment version as `attachments/<FILESTORE_ID>`.
 pub fn index_attachments(names: &[String], export: &mut Export) {
+    let mut by_filestore_id: HashMap<&str, &String> = HashMap::new();
     for n in names {
         let Some(rest) = n.strip_prefix("attachments/") else { continue };
         let parts: Vec<&str> = rest.split('/').collect();
         let (att, ver) = match parts.as_slice() {
             [_container, att, ver] => (*att, *ver),
             [att, ver] => (*att, *ver),
+            [file] if !file.is_empty() => {
+                by_filestore_id.insert(file, n);
+                continue;
+            }
             _ => continue,
         };
         let Ok(ver) = ver.parse::<i64>() else { continue };
         export.attachment_files.entry(att.to_string()).or_default().insert(ver, n.clone());
+    }
+    if by_filestore_id.is_empty() {
+        return;
+    }
+    let found: Vec<(String, i64, String)> = export
+        .contents
+        .values()
+        .filter(|c| c.kind == ContentKind::Attachment)
+        .filter_map(|c| {
+            let id = export.properties.get(&c.id)?.get("FILESTORE_ID")?;
+            by_filestore_id.get(id.as_str()).map(|path| (c.id.clone(), c.version, (*path).clone()))
+        })
+        .collect();
+    for (id, version, path) in found {
+        export.attachment_files.entry(id).or_default().entry(version).or_insert(path);
     }
 }

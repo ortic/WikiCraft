@@ -69,7 +69,7 @@ fn wiki_markup() {
     insta::glob!("golden/*.wiki", |path| {
         let body = std::fs::read_to_string(path).unwrap();
         let mut stats = Stats::default();
-        let doc = convert_wiki(&body, &mut stats);
+        let doc = convert_wiki(&body, &Export, &mut stats);
         insta::assert_snapshot!(report(&doc, &stats));
     });
 }

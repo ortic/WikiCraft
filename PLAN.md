@@ -743,6 +743,9 @@ ARCHIVEPAGE, EXPORTSPACE, EXPORTPAGE), `Label`/`Labelling`, `OutgoingLink`, `Not
 **link/user/attachment resolution, history, inline-comment anchoring, and macro mapping**, not parsing.
 We **cannot yet claim** full Cloud-CSV support: the public mirror only contains 4 of the export's files (no
 attachments, labels, permissions or inline-task file, though the descriptor says `inlineTasksFileIncluded=true`).
+*Update 2026-11-10:* the XWiki corpus has two complete Cloud CSV exports (`csv-RJTest`, `csv-site-backup`): the
+label, watch, favourite, permission and restriction tables have the column names our reader assumed, and attachment
+files can also be stored as `attachments/<FILESTORE_ID>` (now handled).
 
 ### 6.3 Importer requirements derived from the run
 - [x] **P0** Auto-detect format from `exportDescriptor.properties` (`exportType`, `exportFormat=csv`, `source=cloud|server`, `buildNumber`) and support **both** XML (`entities.xml`) and Cloud CSV (`*.csv.gz`) — detection uses `exportFormat` plus the file names; `source` / `buildNumber` go into the report
@@ -776,13 +779,20 @@ attachments, labels, permissions or inline-task file, though the descriptor says
       feature, inline comment, task, restriction, label, blog, whiteboard, database, folder, live doc and attachment type.
       Export it as XML (if offered), CSV and HTML. We own this content, so it can be committed as a test fixture
       (and it verifies the complete CSV file set)
-- [ ] **P0** Use the **XWiki Confluence importer test corpus** (`xwiki-contrib/confluence`, LGPL-2.1, ~80 targeted cases:
+- [x] **P0** Use the **XWiki Confluence importer test corpus** (`xwiki-contrib/confluence`, LGPL-2.1, ~80 targeted cases:
       `brokenlink`, `buggyhistory*`, `cdatazerowidthspace`, `fixcdata`, `missingparents`, `orphans`, `inlinecomments`,
       `multilingual`, `pageswithdots`, `permissions`, `attachmenthistory`, `homepagerewrite`, `confluence8.5.6`, …)
-      as edge-case regression tests. Check LGPL compatibility before vendoring; downloading in CI is fine.
+      as edge-case regression tests. Check LGPL compatibility before vendoring; downloading in CI is fine. —
+      downloaded at a pinned commit (`fetch_xwiki_corpus.sh`, required in CI), not vendored; `tests/xwiki_corpus.rs`
+      converts all 86 exports (strict parse, structure, Yjs round trip; `confluence80tags` has one genuinely broken
+      body) plus targeted checks. Found and fixed: tables stored uncompressed under `.csv.gz` names, Cloud backups
+      that store attachment files by `FILESTORE_ID`, bodies without a `bodyType` (wiki markup) imported empty,
+      wiki-markup links / images never resolved (`[^file]`, `[Page^file]`, `[SPACE:]`, blog paths; every `!image!`
+      was "missing"), duplicate history versions
 - [ ] **P1** A Confluence DC 8.x/9.x export (DC trial license) to cover Server-only macros and `username`-based refs
-- [ ] **P1** Re-run the analyzer on every fixture in CI against the Rust importer and assert: 0 crashes, 100% body
-      parse, resolution rates ≥ the analyzer's, every unknown macro reported
+- [~] **P1** Re-run the analyzer on every fixture in CI against the Rust importer and assert: 0 crashes, 100% body
+      parse, resolution rates ≥ the analyzer's, every unknown macro reported (XWiki corpus in CI; the real exports
+      when available; unknown macros are reported but not asserted)
 - [ ] **P2** Large-scale fixture (≥ 50k pages, ≥ 10 GB attachments) for memory/time benchmarks
 
 **Prior art to study** (read only, don't copy unlicensed code): XWiki `confluence-xml` module (LGPL-2.1), Docmost's
