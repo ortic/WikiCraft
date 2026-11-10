@@ -645,12 +645,26 @@ impl Renderer<'_> {
                 }
             }
             nodes::TOC => {
-                let entries: Vec<(u8, String, String)> = self.headings.clone();
-                for (lvl, title, id) in entries {
-                    let Some(bm) = self.anchors.get(&id).cloned() else { continue };
-                    let p = Paragraph::new().indent(Some(ctx.indent + 240 * (lvl as i32 - 1)), None, None, None).line_spacing(spacing(0, 40));
-                    let link = Hyperlink::new(bm, HyperlinkType::Anchor).add_run(Run::new().add_text(title).color(LINK_COLOR));
-                    out.push(Block::P(Box::new(p.add_hyperlink(link))));
+                let entries = wikicraft_doc_model::toc::entries(self.input.doc, n);
+                let label = |e: &wikicraft_doc_model::toc::TocEntry| if e.number.is_empty() { e.text.clone() } else { format!("{} {}", e.number, e.text) };
+                if wikicraft_doc_model::toc::is_flat(n) {
+                    // one paragraph, entries separated by a middle dot
+                    let mut p = Self::indented(Paragraph::new(), ctx).line_spacing(spacing(0, 80));
+                    for (i, e) in entries.iter().enumerate() {
+                        let Some(bm) = self.anchors.get(&e.id).cloned() else { continue };
+                        if i > 0 {
+                            p = p.add_run(Run::new().add_text(" · ").color(MUTED));
+                        }
+                        p = p.add_hyperlink(Hyperlink::new(bm, HyperlinkType::Anchor).add_run(Run::new().add_text(label(e)).color(LINK_COLOR)));
+                    }
+                    out.push(Block::P(Box::new(p)));
+                } else {
+                    for e in &entries {
+                        let Some(bm) = self.anchors.get(&e.id).cloned() else { continue };
+                        let p = Paragraph::new().indent(Some(ctx.indent + 240 * i32::from(e.depth)), None, None, None).line_spacing(spacing(0, 40));
+                        let link = Hyperlink::new(bm, HyperlinkType::Anchor).add_run(Run::new().add_text(label(e)).color(LINK_COLOR));
+                        out.push(Block::P(Box::new(p.add_hyperlink(link))));
+                    }
                 }
             }
             nodes::CHILD_PAGES => {

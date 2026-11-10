@@ -6,11 +6,12 @@ import { Mark, Node, mergeAttributes } from '@tiptap/core'
 import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { FileText, Paperclip, ListTree, Hash, Puzzle, Link2, Download } from 'lucide-react'
+import { FileText, Paperclip, ListTree, Hash, Puzzle, Link2, Download, Settings2 } from 'lucide-react'
 import { api, type Page, type PmNode } from '../api'
 import { Emoticon as EmoticonIcon, LineIcon, SYMBOL_COLORS, SymbolPicker, parseSymbol } from '../icons'
 import { LIVE_MACROS, LiveMacro } from './MacroView'
 import { useEditable } from './useEditable'
+import { tocEntries, type TocAttrs, type TocEntry } from './toc'
 
 const CALLOUT_TYPES = ['info', 'note', 'success', 'warning', 'error']
 
@@ -317,31 +318,67 @@ export function slugify(s: string): string {
   return out || 'section'
 }
 
-function TocView({ editor, node }: ReactNodeViewProps) {
-  const min = (node.attrs.minLevel as number) || 1
-  const max = (node.attrs.maxLevel as number) || 6
-  const items: { level: number; text: string; pos: number }[] = []
-  editor.state.doc.descendants((n, pos) => {
-    if (n.type.name === 'heading') {
-      const level = n.attrs.level as number
-      if (level >= min && level <= max) items.push({ level, text: n.textContent, pos })
-    }
-  })
+function TocView({ editor, node, updateAttributes }: ReactNodeViewProps) {
+  const editable = useEditable(editor)
+  const [settings, setSettings] = useState(false)
+  const attrs = node.attrs as TocAttrs
+  const items = tocEntries(editor.state.doc, attrs)
   const jump = (pos: number) => {
     const dom = editor.view.nodeDOM(pos) as HTMLElement | null
     dom?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
+  const label = (i: TocEntry) => `${i.number ? `${i.number} ` : ''}${i.text || 'Untitled heading'}`
+  const flat = attrs.style === 'flat'
+  const levels = [1, 2, 3, 4, 5, 6]
   return (
-    <NodeViewWrapper className="block-card toc-list" contentEditable={false}>
+    <NodeViewWrapper className={`block-card toc-list${flat ? ' toc-flat' : ''}`} contentEditable={false}>
       <div className="block-label">
         <Hash size={13} /> Table of contents
+        {editable && (
+          <button type="button" className="icon-btn toc-settings-btn" title="Table of contents settings" aria-label="Table of contents settings" aria-expanded={settings} onClick={() => setSettings((v) => !v)}>
+            <Settings2 size={13} />
+          </button>
+        )}
       </div>
+      {editable && settings && (
+        <div className="toc-settings">
+          <label>
+            Levels
+            <select className="select" value={attrs.minLevel ?? 1} onChange={(e) => updateAttributes({ minLevel: Number(e.target.value) === 1 ? null : Number(e.target.value) })} aria-label="Highest heading level">
+              {levels.map((l) => <option key={l} value={l}>H{l}</option>)}
+            </select>
+            to
+            <select className="select" value={attrs.maxLevel ?? 6} onChange={(e) => updateAttributes({ maxLevel: Number(e.target.value) === 6 ? null : Number(e.target.value) })} aria-label="Lowest heading level">
+              {levels.map((l) => <option key={l} value={l}>H{l}</option>)}
+            </select>
+          </label>
+          <label>
+            <input type="checkbox" checked={!!attrs.numbered} onChange={(e) => updateAttributes({ numbered: e.target.checked || null })} /> Numbered
+          </label>
+          <label>
+            <input type="checkbox" checked={flat} onChange={(e) => updateAttributes({ style: e.target.checked ? 'flat' : null })} /> On one line
+          </label>
+          <label className="toc-exclude">
+            Leave out headings matching
+            <input className="input" defaultValue={attrs.exclude ?? ''} placeholder="e.g. ^Appendix" onBlur={(e) => updateAttributes({ exclude: e.target.value.trim() || null })} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
+          </label>
+        </div>
+      )}
       {items.length === 0 ? (
         <div className="faint small">Add headings to populate the table of contents.</div>
+      ) : flat ? (
+        <div className="toc-flat-line">
+          {items.map((i, idx) => (
+            <span key={idx}>
+              {idx > 0 && <span className="faint"> · </span>}
+              <a onClick={() => jump(i.pos)}>{label(i)}</a>
+            </span>
+          ))}
+        </div>
       ) : (
         items.map((i, idx) => (
-          <div key={idx} className={`toc-l${i.level}`}>
-            <a onClick={() => jump(i.pos)}>{i.text || 'Untitled heading'}</a>
+          <div key={idx} className={`toc-l${i.depth + 1}`}>
+            <a onClick={() => jump(i.pos)}>{label(i)}</a>
           </div>
         ))
       )}
@@ -354,7 +391,14 @@ export const Toc = Node.create({
   group: 'block',
   atom: true,
   addAttributes() {
-    return { minLevel: { default: null }, maxLevel: { default: null } }
+    return {
+      minLevel: { default: null },
+      maxLevel: { default: null },
+      include: { default: null },
+      exclude: { default: null },
+      numbered: { default: null },
+      style: { default: null },
+    }
   },
   parseHTML() {
     return [{ tag: 'nav[data-type="toc"]' }]

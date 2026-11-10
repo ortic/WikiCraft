@@ -233,11 +233,22 @@ impl Renderer<'_> {
                 let _ = write!(self.out, "<p class=\"embed\"><a href=\"{0}\" rel=\"noopener noreferrer\">{0}</a></p>", escape(url));
             }
             nodes::TOC => {
-                self.out.push_str("<nav class=\"toc\"><ul>");
-                for (lvl, text, id) in headings(self.doc) {
-                    let _ = write!(self.out, "<li class=\"toc-l{lvl}\"><a href=\"#{}\">{}</a></li>", escape(&id), escape(&text));
+                let entries = crate::toc::entries(self.doc, n);
+                let label = |e: &crate::toc::TocEntry| if e.number.is_empty() { escape(&e.text) } else { format!("{} {}", e.number, escape(&e.text)) };
+                if crate::toc::is_flat(n) {
+                    self.out.push_str("<nav class=\"toc toc-flat\"><p>");
+                    for (i, e) in entries.iter().enumerate() {
+                        let sep = if i > 0 { " · " } else { "" };
+                        let _ = write!(self.out, "{sep}<a href=\"#{}\">{}</a>", escape(&e.id), label(e));
+                    }
+                    self.out.push_str("</p></nav>");
+                } else {
+                    self.out.push_str("<nav class=\"toc\"><ul>");
+                    for e in &entries {
+                        let _ = write!(self.out, "<li class=\"toc-l{}\"><a href=\"#{}\">{}</a></li>", e.depth + 1, escape(&e.id), label(e));
+                    }
+                    self.out.push_str("</ul></nav>");
                 }
-                self.out.push_str("</ul></nav>");
             }
             nodes::CHILD_PAGES => self.out.push_str("<div class=\"child-pages\" data-type=\"childPages\"></div>"),
             nodes::INCLUDE => {
@@ -429,5 +440,26 @@ mod tests {
         let html = render(&doc, &HtmlOptions { heading_ids: true });
         assert!(html.contains("<a href=\"#intro\">Intro</a>"));
         assert!(html.contains("<h2 id=\"intro\">"));
+    }
+
+    #[test]
+    fn toc_options() {
+        let doc = Node::doc(vec![
+            Node::new(nodes::TOC).attr("minLevel", 2).attr("numbered", true).attr("exclude", "Appendix"),
+            Node::new(nodes::TOC).attr("style", "flat").attr("maxLevel", 2),
+            Node::heading(1, vec![Node::text("Title")]),
+            Node::heading(2, vec![Node::text("Goals & scope")]),
+            Node::heading(3, vec![Node::text("Must have")]),
+            Node::heading(2, vec![Node::text("Appendix")]),
+        ]);
+        let html = render(&doc, &HtmlOptions { heading_ids: true });
+        assert!(
+            html.starts_with("<nav class=\"toc\"><ul><li class=\"toc-l1\"><a href=\"#goals-scope\">1 Goals &amp; scope</a></li><li class=\"toc-l2\"><a href=\"#must-have\">1.1 Must have</a></li></ul></nav>"),
+            "{html}"
+        );
+        assert!(
+            html.contains("<nav class=\"toc toc-flat\"><p><a href=\"#title\">Title</a> · <a href=\"#goals-scope\">Goals &amp; scope</a> · <a href=\"#appendix\">Appendix</a></p></nav>"),
+            "{html}"
+        );
     }
 }

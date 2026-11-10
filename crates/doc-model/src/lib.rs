@@ -7,6 +7,7 @@ pub mod icons;
 pub mod markdown;
 pub mod node;
 pub mod text;
+pub mod toc;
 pub mod ydoc;
 
 pub use node::{Mark, Node, marks, nodes};

@@ -776,6 +776,17 @@ impl Conv<'_> {
                 if let Some(v) = param("maxLevel").and_then(|v| v.parse::<i64>().ok()) {
                     n = n.attr("maxLevel", v);
                 }
+                for key in ["include", "exclude"] {
+                    if let Some(p) = param(key).filter(|p| !p.trim().is_empty()) {
+                        n = n.attr(key, p);
+                    }
+                }
+                if param("type").as_deref() == Some("flat") {
+                    n = n.attr("style", "flat");
+                }
+                if param("outline").as_deref() == Some("true") {
+                    n = n.attr("numbered", true);
+                }
                 let mut v = vec![n];
                 if name == "toc-zone"
                     && let Some(r) = rich
@@ -1048,7 +1059,7 @@ mod tests {
     fn macros_map_to_native_nodes() {
         let body = r#"<ac:structured-macro ac:name="info"><ac:parameter ac:name="title">Heads up</ac:parameter><ac:rich-text-body><p>body</p></ac:rich-text-body></ac:structured-macro>
 <ac:structured-macro ac:name="code"><ac:parameter ac:name="language">java</ac:parameter><ac:plain-text-body><![CDATA[class A {}]]></ac:plain-text-body></ac:structured-macro>
-<p><ac:structured-macro ac:name="toc"/></p>
+<p><ac:structured-macro ac:name="toc"><ac:parameter ac:name="type">flat</ac:parameter><ac:parameter ac:name="outline">true</ac:parameter><ac:parameter ac:name="exclude">^Appendix.*</ac:parameter><ac:parameter ac:name="maxLevel">3</ac:parameter></ac:structured-macro></p>
 <ac:structured-macro ac:name="expand"><ac:parameter ac:name="title">More</ac:parameter><ac:rich-text-body><p>hidden</p></ac:rich-text-body></ac:structured-macro>
 <p>State: <ac:structured-macro ac:name="status"><ac:parameter ac:name="colour">Green</ac:parameter><ac:parameter ac:name="title">DONE</ac:parameter></ac:structured-macro></p>
 <ac:structured-macro ac:name="mystery-app"><ac:parameter ac:name="x">1</ac:parameter><ac:rich-text-body><p>kept</p></ac:rich-text-body></ac:structured-macro>"#;
@@ -1057,6 +1068,11 @@ mod tests {
         assert_eq!(kinds, vec!["callout", "codeBlock", "toc", "details", "paragraph", "macro"]);
         assert_eq!(doc.content[0].attr_str("type"), Some("info"));
         assert_eq!(doc.content[1].attr_str("language"), Some("java"));
+        let toc = &doc.content[2];
+        assert_eq!(
+            (toc.attr_str("style"), toc.attr_bool("numbered"), toc.attr_str("exclude"), toc.attr_i64("maxLevel")),
+            (Some("flat"), Some(true), Some("^Appendix.*"), Some(3))
+        );
         assert_eq!(doc.content[4].content[1].kind, "status");
         assert_eq!(doc.content[5].attr_str("name"), Some("mystery-app"));
         assert_eq!(json(&doc.content[5]).contains("kept"), true);

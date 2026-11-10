@@ -257,7 +257,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 #### 4.4.2 Text & inline
 - [x] **P0** Headings H1–H6, paragraph, bold, italic, underline, strikethrough, inline code, sub/superscript `C D X O`
 - [x] **P0** Links (URL, page link with search picker, anchor link, attachment link, email) `C D X O`
-- [~] **P0** @mentions of users (with notification) and pages `C D O` (users only; no page mentions)
+- [x] **P0** @mentions of users (with notification) and pages `C D O` — `@` suggests people (mention + notification) and, from two letters on, pages (inserts a page link); `[[` links pages, headings and attachments
 - [~] **P0** Emoji (picker, `:shortcode:` autocomplete, custom emoji P2) `C D O` (`:name` autocomplete for our SVG emoticon set; no emoji by design)
 - [~] **P1** Text color & highlight color (limited, theme-aware palette) `C D` (highlight toggle only; no color picker)
 - [x] **P1** Date / time inline node (localized rendering, timezone aware) `C`
@@ -321,7 +321,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** `info` / `note` / `tip` / `warning` / `panel` → callout
 - [x] **P0** `code` / `noformat` → code block
 - [x] **P0** `expand` → toggle block
-- [~] **P0** `toc` → table-of-contents block (min/max level, style, exclude regex, printable) (min/max level only)
+- [x] **P0** `toc` → table-of-contents block (min/max level, style, exclude regex, printable) — min/max level, include/exclude patterns, outline numbering, nested or one-line style; same rules in the editor, shared pages, HTML and Word exports (`doc-model/src/toc.rs`); settings on the block; Confluence `type=flat`, `outline`, `include`, `exclude` imported
 - [x] **P0** `anchor` → anchor node
 - [x] **P0** `view-file`, `viewpdf`, `viewdoc`, `viewppt`, `viewxls` → file preview block
 - [x] **P0** `status` → status lozenge
@@ -632,7 +632,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P0** Strict HTML sanitization (`ammonia`) for all rendered/imported content; CSP with nonces; no inline user JS (escaping renderer + app-wide CSP; no nonces needed: no inline scripts)
 - [~] **P0** Upload safety: content sniffing, `Content-Disposition: attachment` for risky types, serve user files from a separate origin/subdomain, SVG sanitization (no separate user-content origin)
 - [x] **P0** Rate limiting and brute-force protection on auth; account lockout policies
-- [~] **P0** Secure secrets handling (env/files, never in DB in plaintext); TLS everywhere; HSTS (no HSTS; TLS at proxy)
+- [~] **P0** Secure secrets handling (env/files, never in DB in plaintext); TLS everywhere; HSTS (HSTS sent when the base URL is https; TLS at the proxy; secrets via env or `_FILE`)
 - [ ] **P1** Antivirus scanning hook (ClamAV) for uploads `X`
 - [~] **P1** Iframe/embed allowlist; SSRF protection for link unfurling (block private IP ranges, DNS rebinding) (embed allowlist; unfurling not built)
 - [~] **P1** Import hardening: zip-slip, zip bombs, XML entity expansion disabled, per-file and total size limits, timeouts (Confluence zip entry caps incomplete)
@@ -645,7 +645,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P3** FedRAMP / BSI C5 / air-gapped hardened profile `D`
 
 ### 4.27 Deployment & operations
-- [~] **P0** Single static binary (musl) + embedded frontend + embedded migrations (frontend not embedded; glibc build)
+- [~] **P0** Single static binary (musl) + embedded frontend + embedded migrations (frontend and migrations embedded: release builds carry `web/dist`, served when no `WIKICRAFT_STATIC_DIR` build exists, hashed assets cached as immutable; glibc build, not musl)
 - [x] **P0** Docker image (distroless, non-root), `docker-compose.yml` (app + Postgres + optional MinIO) `D X B O`
 - [x] **P0** Zero-downtime-friendly migrations (expand/contract), automatic on start (opt-out)
 - [x] **P0** Health/readiness endpoints, structured JSON logs

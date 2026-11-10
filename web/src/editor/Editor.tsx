@@ -8,6 +8,7 @@ import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCaret from '@tiptap/extension-collaboration-caret'
 import { TableKit, TableCell, TableHeader, Table, TableView } from '@tiptap/extension-table'
 import { CellSelection } from '@tiptap/pm/tables'
+import { NodeSelection } from '@tiptap/pm/state'
 import { TaskList, TaskItem } from '@tiptap/extension-list'
 import Image from '@tiptap/extension-image'
 import { Placeholder, CharacterCount } from '@tiptap/extensions'
@@ -419,7 +420,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
         </div>
       )}
       {editor && (
-        <BubbleMenu editor={editor} shouldShow={({ editor, state }) => !state.selection.empty && !findKey.getState(state)?.query && (editor.isEditable || !!onRequestComment) && !editor.isActive('image') && !(state.selection instanceof CellSelection)}>
+        <BubbleMenu editor={editor} shouldShow={({ editor, state }) => !state.selection.empty && !findKey.getState(state)?.query && (editor.isEditable || !!onRequestComment) && !editor.isActive('image') && !(state.selection instanceof CellSelection) && !(state.selection instanceof NodeSelection && state.selection.node.isBlock && state.selection.node.isAtom)}>
           <div className="bubble">
             {editor.isEditable && (
               <>
