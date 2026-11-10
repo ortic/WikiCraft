@@ -151,6 +151,58 @@ pub struct CreatePage {
     variables: std::collections::HashMap<String, String>,
 }
 
+/// The template a new page below `parent` starts from: the nearest page above with a template
+/// for its children, else the space's default. With the page that set it (None: the space).
+pub async fn default_template(
+    state: &AppState,
+    space: &crate::routes::spaces::SpaceRow,
+    parent: Option<Uuid>,
+) -> ApiResult<Option<(String, Option<(Uuid, String)>)>> {
+    if let Some(parent) = parent {
+        let found: Option<(String, Uuid, String)> = sqlx::query_as(
+            "WITH RECURSIVE up AS (
+                SELECT id, parent_id, child_template, title, 0 AS depth FROM pages WHERE id = $1
+                UNION ALL SELECT p.id, p.parent_id, p.child_template, p.title, up.depth + 1 FROM pages p JOIN up ON p.id = up.parent_id WHERE up.depth < 200)
+             SELECT child_template, id, title FROM up WHERE child_template IS NOT NULL ORDER BY depth LIMIT 1",
+        )
+        .bind(parent)
+        .fetch_optional(&state.db)
+        .await?;
+        if let Some((t, id, title)) = found {
+            return Ok(Some((t, Some((id, title)))));
+        }
+    }
+    Ok(space.default_template.clone().map(|t| (t, None)))
+}
+
+#[derive(Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DefaultTemplateQuery {
+    parent_id: Option<Uuid>,
+}
+
+/// `GET /api/spaces/{key}/default-template?parentId=`: what a new page there starts from.
+pub async fn get_default_template(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(key): Path<String>,
+    Query(q): Query<DefaultTemplateQuery>,
+) -> ApiResult<Json<Value>> {
+    let p = Principal::load(&state, Some(user)).await?;
+    let (space, _) = load_space(&state, &p, &key).await?;
+    if let Some(parent) = q.parent_id {
+        let (_, s) = require_page(&state, &p, parent, Need::View).await?;
+        if s != space.id {
+            return Err(ApiError::bad("parent page belongs to another space"));
+        }
+    }
+    Ok(Json(match default_template(&state, &space, q.parent_id).await? {
+        Some((t, Some((id, title)))) => json!({ "templateId": t, "from": {"pageId": id, "title": title} }),
+        Some((t, None)) => json!({ "templateId": t, "from": "space" }),
+        None => json!({ "templateId": null, "from": null }),
+    }))
+}
+
 pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUser, Json(req): Json<CreatePage>) -> ApiResult<(StatusCode, Json<Value>)> {
     let p = Principal::load(&state, Some(user.clone())).await?;
     let (space, role) = load_space(&state, &p, &req.space_key).await?;
@@ -190,8 +242,13 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
         Some(bp) => blueprint_index(&state, &p, &space, &user, bp).await?,
         None => req.parent_id,
     };
-    // pages start from the space's default template unless asked for something else
-    let template = req.template_id.clone().or_else(|| if req.blank || kind != "page" { None } else { space.default_template.clone() });
+    // pages start from the template set above them (or the space's default) unless asked for
+    // something else
+    let template = match (&req.template_id, req.blank || kind != "page") {
+        (Some(t), _) => Some(t.clone()),
+        (None, true) => None,
+        (None, false) => default_template(&state, &space, parent_id).await?.map(|(t, _)| t),
+    };
     let content = match (req.content, req.markdown, &template) {
         (Some(c), _, _) => {
             let mut n = Node::from_json(&c)?;
@@ -463,6 +520,9 @@ pub struct PageRow {
     pub version: i32,
     pub status: String,
     pub page_status: Option<String>,
+    /// the template new pages below start from
+    #[sqlx(default)]
+    pub child_template: Option<String>,
     pub full_width: bool,
     /// an unpublished draft (only its creator sees it)
     #[sqlx(default)]
@@ -484,7 +544,7 @@ pub struct PageRow {
     pub deleted_at: Option<chrono::DateTime<chrono::Utc>>,
 }
 
-const PAGE_SELECT: &str = "SELECT p.id, p.space_id, s.key AS space_key, s.name AS space_name, p.parent_id, p.kind, p.title, p.icon, p.cover, p.content, p.version, p.status, p.page_status, p.full_width, p.draft, p.publish_at,
+const PAGE_SELECT: &str = "SELECT p.id, p.space_id, s.key AS space_key, s.name AS space_name, p.parent_id, p.kind, p.title, p.icon, p.cover, p.content, p.version, p.status, p.page_status, p.child_template, p.full_width, p.draft, p.publish_at,
     p.created_by, cu.name AS created_by_name, COALESCE(p.owner_id, p.created_by) AS owner_id, COALESCE(ou.name, cu.name) AS owner_name,
     p.created_at, p.updated_by, uu.name AS updated_by_name, p.updated_at, p.deleted_at
     FROM pages p JOIN spaces s ON s.id = p.space_id LEFT JOIN users cu ON cu.id = p.created_by LEFT JOIN users uu ON uu.id = p.updated_by
@@ -642,6 +702,8 @@ pub struct UpdatePage {
     cover: Option<String>,
     full_width: Option<bool>,
     page_status: Option<String>,
+    /// the template new pages below this one start from ("" = the space's default)
+    child_template: Option<String>,
 }
 
 pub async fn update(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>, Json(req): Json<UpdatePage>) -> ApiResult<StatusCode> {
@@ -662,6 +724,13 @@ pub async fn update(State(state): State<AppState>, CurrentUser(user): CurrentUse
         && !valid_cover(c)
     {
         return Err(ApiError::bad("cover must be a gradient preset, an attachment or an https image URL"));
+    }
+    if let Some(t) = &req.child_template {
+        if !t.is_empty() {
+            // must resolve (built-in or a template of this workspace)
+            crate::routes::templates::resolve(&state, user.workspace_id, t).await.map_err(|_| ApiError::bad("unknown template"))?;
+        }
+        sqlx::query("UPDATE pages SET child_template = $2 WHERE id = $1").bind(id).bind(Some(t.as_str()).filter(|t| !t.is_empty())).execute(&state.db).await?;
     }
     sqlx::query(
         "UPDATE pages SET title = COALESCE($2, title), icon = CASE WHEN $3::text IS NULL THEN icon WHEN $3 = '' THEN NULL ELSE $3 END,
@@ -1052,6 +1121,11 @@ pub async fn copy_tree(state: &AppState, opts: &TreeCopy<'_>, roots: Vec<(Uuid, 
         )
         .await?;
         sqlx::query("INSERT INTO labels (page_id, name) SELECT $2, name FROM labels WHERE page_id = $1").bind(src).bind(new).execute(&state.db).await?;
+        sqlx::query("UPDATE pages SET child_template = (SELECT child_template FROM pages WHERE id = $1) WHERE id = $2")
+            .bind(src)
+            .bind(new)
+            .execute(&state.db)
+            .await?;
         sqlx::query(
             "INSERT INTO page_properties (page_id, position, key, kind, value, text_value) SELECT $2, position, key, kind, value, text_value FROM page_properties WHERE page_id = $1",
         )

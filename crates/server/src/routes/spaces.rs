@@ -292,6 +292,7 @@ pub async fn copy(
     // the space's own templates (and which one new pages start from)
     let templates: Vec<Uuid> = sqlx::query_scalar("SELECT id FROM templates WHERE space_id = $1").bind(src.id).fetch_all(&state.db).await?;
     let mut default_template = src.default_template.clone();
+    let mut template_ids: Vec<(String, String)> = Vec::new();
     for t in templates {
         let copy = new_id();
         sqlx::query(
@@ -307,6 +308,7 @@ pub async fn copy(
         if default_template.as_deref() == Some(t.to_string().as_str()) {
             default_template = Some(copy.to_string());
         }
+        template_ids.push((t.to_string(), copy.to_string()));
     }
     sqlx::query("UPDATE spaces SET default_template = $2 WHERE id = $1").bind(space.id).bind(&default_template).execute(&state.db).await?;
 
@@ -335,6 +337,16 @@ pub async fn copy(
         limit: 10_000,
     };
     let copied = crate::routes::pages::copy_tree(&state, &opts, roots).await?;
+    // templates for new pages below a page follow the copied space templates
+    let (olds, news): (Vec<String>, Vec<String>) = template_ids.into_iter().unzip();
+    sqlx::query(
+        "UPDATE pages p SET child_template = m.new FROM unnest($2::text[], $3::text[]) AS m(old, new) WHERE p.space_id = $1 AND p.child_template = m.old",
+    )
+    .bind(space.id)
+    .bind(&olds)
+    .bind(&news)
+    .execute(&state.db)
+    .await?;
     let home = src.home_page_id.and_then(|h| copied.iter().find(|(s, _)| *s == h).map(|(_, n)| *n));
     sqlx::query("UPDATE spaces SET home_page_id = $2 WHERE id = $1").bind(space.id).bind(home).execute(&state.db).await?;
     audit::log(

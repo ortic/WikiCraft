@@ -328,6 +328,46 @@ async fn space_default_template() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn template_for_pages_below_a_page() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (viewer, _) = app.user(&owner, "vi@acme.test", "member").await;
+    app.post(&owner, "/spaces", json!({"key": "ENG", "name": "Engineering", "defaultRole": "viewer"})).await;
+    app.patch(&owner, "/spaces/ENG", json!({"defaultTemplate": "builtin:how-to"})).await;
+    let (_, inc) = app.post(&owner, "/pages", json!({"spaceKey": "ENG", "title": "Incidents", "blank": true})).await;
+    let inc = inc["id"].as_str().unwrap().to_string();
+    let (_, y) = app.post(&owner, "/pages", json!({"spaceKey": "ENG", "title": "2026", "parentId": inc, "blank": true})).await;
+    let year = y["id"].as_str().unwrap().to_string();
+
+    // only editors set it, to a template that exists
+    assert_ne!(app.patch(&viewer, &format!("/pages/{inc}"), json!({"childTemplate": "builtin:postmortem"})).await.0, 204);
+    assert_eq!(app.patch(&owner, &format!("/pages/{inc}"), json!({"childTemplate": "builtin:nope"})).await.0, 400);
+    assert_eq!(app.patch(&owner, &format!("/pages/{inc}"), json!({"childTemplate": "builtin:postmortem"})).await.0, 204);
+    assert_eq!(app.get(&owner, &format!("/pages/{inc}")).await.1["childTemplate"], "builtin:postmortem");
+
+    // the nearest page above decides, then the space
+    let (_, d) = app.get(&owner, &format!("/spaces/ENG/default-template?parentId={year}")).await;
+    assert_eq!(d["templateId"], "builtin:postmortem");
+    assert_eq!(d["from"]["title"], "Incidents");
+    let (_, d) = app.get(&owner, "/spaces/ENG/default-template").await;
+    assert_eq!(d, json!({"templateId": "builtin:how-to", "from": "space"}));
+    let text = |v: &Value| v["content"].to_string();
+    let (_, pg) = app.post(&owner, "/pages", json!({"spaceKey": "ENG", "title": "Outage", "parentId": year})).await;
+    let (_, p) = app.get(&owner, &format!("/pages/{}", pg["id"].as_str().unwrap())).await;
+    let heading = "Root cause".to_string();
+    assert!(text(&p).contains(&heading), "starts from the postmortem template: {p}");
+    let (_, pg) = app.post(&owner, "/pages", json!({"spaceKey": "ENG", "title": "Blank one", "parentId": year, "blank": true})).await;
+    let (_, p) = app.get(&owner, &format!("/pages/{}", pg["id"].as_str().unwrap())).await;
+    assert!(!text(&p).contains(&heading), "blank stays blank");
+    // copies keep it; clearing falls back to the space
+    let (_, c) = app.post(&owner, &format!("/pages/{inc}/copy"), json!({})).await;
+    assert_eq!(app.get(&owner, &format!("/pages/{}", c["id"].as_str().unwrap())).await.1["childTemplate"], "builtin:postmortem");
+    app.patch(&owner, &format!("/pages/{inc}"), json!({"childTemplate": ""})).await;
+    let (_, d) = app.get(&owner, &format!("/spaces/ENG/default-template?parentId={year}")).await;
+    assert_eq!(d["templateId"], "builtin:how-to");
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn page_ownership() {
     let app = common::spawn().await;
     let owner = app.setup().await;

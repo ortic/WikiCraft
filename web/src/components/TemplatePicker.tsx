@@ -42,8 +42,16 @@ export default function TemplatePicker({ spaceKey, parentId, onClose }: { spaceK
     }
   }
   const templates = useQuery({ queryKey: ['templates', spaceKey], queryFn: () => api.get<Template[]>(`/templates?spaceKey=${encodeURIComponent(spaceKey)}`) })
-  const space = useQuery({ queryKey: ['space', spaceKey], queryFn: () => api.get<{ defaultTemplate?: string | null }>(`/spaces/${spaceKey}`) })
-  const def = space.data?.defaultTemplate ?? null
+  // what a new page here starts from: a template set on a page above, or the space's default
+  const fallback = useQuery({
+    queryKey: ['default-template', spaceKey, parentId ?? null],
+    queryFn: () =>
+      api.get<{ templateId: string | null; from: 'space' | { pageId: string; title: string } | null }>(
+        `/spaces/${spaceKey}/default-template${parentId ? `?parentId=${parentId}` : ''}`,
+      ),
+  })
+  const def = fallback.data?.templateId ?? null
+  const defLabel = fallback.data?.from && fallback.data.from !== 'space' ? `default below “${fallback.data.from.title}”` : 'space default'
   const ordered = [...(templates.data ?? [])].sort((a, b) => Number(b.id === def) - Number(a.id === def))
   // a template with variables asks for their values first
   const [filling, setFilling] = useState<Template | null>(null)
@@ -175,7 +183,7 @@ export default function TemplatePicker({ spaceKey, parentId, onClose }: { spaceK
       <div className="grid-cards">
         {card('blank', <FilePlus2 size={22} />, 'Blank page', 'Start from scratch', () => create())}
         {card('link', <Link2 size={22} />, 'Link to a website', 'A page-tree item that opens an external page', () => void createLink())}
-        {ordered.map((t) => card(t.id, <SymbolTile value={parseSymbol(t.icon) ? t.icon : 'document:slate'} size={30} />, t.name, !parentId && t.filedUnder ? `${t.description ?? ''} · goes under “${t.filedUnder}”` : t.description, () => choose(t), t.id === def ? 'space default' : t.builtin ? undefined : t.spaceKey ? 'space' : 'workspace', () => setPreview(t)))}
+        {ordered.map((t) => card(t.id, <SymbolTile value={parseSymbol(t.icon) ? t.icon : 'document:slate'} size={30} />, t.name, !parentId && t.filedUnder ? `${t.description ?? ''} · goes under “${t.filedUnder}”` : t.description, () => choose(t), t.id === def ? defLabel : t.builtin ? undefined : t.spaceKey ? 'space' : 'workspace', () => setPreview(t)))}
       </div>
     </Modal>
   )

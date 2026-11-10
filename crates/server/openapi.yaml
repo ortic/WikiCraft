@@ -166,6 +166,11 @@ components:
           type: array
           items:
             $ref: '#/components/schemas/PageProperty'
+        childTemplate:
+          type:
+          - string
+          - 'null'
+          description: the template new pages below start from
         restricted: *id003
         createdAt: &id004
           type: string
@@ -2207,7 +2212,8 @@ paths:
     patch:
       tags:
       - Pages
-      summary: Rename; set icon (symbol), cover (gradient:<preset> | attachment | https URL), status, full width
+      summary: Rename; set icon (symbol), cover (gradient:<preset> | attachment | https URL), status, full width, and the
+        template new pages below start from (childTemplate; "" = the space's default)
       operationId: patch_pages_id
       parameters:
       - name: id
@@ -2226,6 +2232,7 @@ paths:
                 cover: *id001
                 pageStatus: *id001
                 fullWidth: *id003
+                childTemplate: *id001
       responses:
         '204': *id007
         4XX:
@@ -3286,6 +3293,43 @@ paths:
         schema: *id001
       responses:
         '204': *id007
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /spaces/{key}/default-template:
+    get:
+      tags:
+      - Spaces
+      summary: 'The template a new page starts from (below parentId: the nearest page above with a template for its children,
+        else the space''s default)'
+      operationId: get_spaces_key_default_template
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema: *id001
+      - name: parentId
+        in: query
+        required: false
+        description: a page in the space
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  templateId:
+                    type:
+                    - string
+                    - 'null'
+                  from:
+                    description: '"space", {pageId, title} or null'
         4XX:
           description: Error
           content:

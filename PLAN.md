@@ -396,7 +396,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
       requirements, project plan, runbook, incident postmortem, onboarding, architecture/arc42, ADR, OKRs) `C` (12 built-ins so far)
 - [x] **P1** Template variables / placeholders (prompt for values on create) `C X` — `{{Name}}` in a template's title or text: the Create dialog asks for the values (`variables` on `POST /pages`, listed per template); answers keep the text's formatting, unanswered ones become instructional hints (dropped from titles), code is never scanned; built-ins ask for their title; `{date}` as before
 - [~] **P1** Blueprints: template + index page + labels + naming rule (e.g. meeting notes auto-dated under a parent) `C` — 8 built-ins file their pages under an index page (top level, made on first use, child list newest first) with labels, unless created below a page; titles come from the template ({date}, {{variables}}); not configurable for custom templates yet
-- [~] **P1** Default template per space / per parent (child pages inherit a template) `C X` (per space)
+- [x] **P1** Default template per space / per parent (child pages inherit a template) `C X` — per space (Space settings) and per page (page menu → Template for pages below…): new pages start from the nearest page above with one, else the space's; the create dialog puts it first, labelled; copies keep it (space copies remap copied space templates)
 - [ ] **P2** Space templates (full page structure) `C X`
 - [ ] **P2** Template sharing / import/export as files
 - [ ] **P2** AI-generated templates from a prompt `C`

@@ -81,6 +81,11 @@ requirements made from *Create* go under an index page of their kind (for exampl
 made the first time, listing them newest first) and get a matching label; create them below a page
 to put them there instead.
 
+A space can have a template new pages start from (*Space settings → Details*), and so can a page
+for the pages below it (page menu → *Template for pages below…*, e.g. *Incident postmortem* on an
+*Incidents* page); the nearest one above wins. *Create* lists it first, and you can still pick
+another one or a blank page.
+
 Templates can ask questions: write `{{Customer}}` (any name in double braces) in the page you save
 as a template, and *Create* asks for the customer before making the page, then puts the answer
 everywhere `{{Customer}}` appears, with its formatting. What you leave empty stays as a grey hint

@@ -37,6 +37,7 @@ export default function PageView() {
   const [menu, setMenu] = useState(false)
   const [statusOpen, setStatusOpen] = useState(false)
   const [addingProp, setAddingProp] = useState(false)
+  const [childTplOpen, setChildTplOpen] = useState(false)
   const [copyOpen, setCopyOpen] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
   const [restrictions, setRestrictions] = useState(false)
@@ -300,6 +301,11 @@ export default function PageView() {
                     <LayoutTemplate size={15} /> Save as template
                   </div>
                 )}
+                {canEdit && p.kind !== 'blog' && (
+                  <div className="menu-item" onClick={() => { setMenu(false); setChildTplOpen(true) }}>
+                    <LayoutTemplate size={15} /> Template for pages below…
+                  </div>
+                )}
                 {user && (
                   <div className="menu-item" onClick={copy}>
                     <Copy size={15} /> Copy page
@@ -526,6 +532,7 @@ export default function PageView() {
       {reviewOpen && <RequestReviewDialog pageId={p.id} onClose={() => setReviewOpen(false)} />}
       {ownerOpen && <OwnerDialog pageId={p.id} current={(p as Page & { ownerName?: string }).ownerName ?? null} onClose={() => setOwnerOpen(false)} />}
       {copyOpen && <CopyPageDialog page={p} onClose={() => setCopyOpen(false)} />}
+      {childTplOpen && <ChildTemplateDialog page={p} onClose={() => setChildTplOpen(false)} />}
       {moveOpen && <MovePageDialog page={p} onClose={() => setMoveOpen(false)} />}
       {share && <ShareDialog pageId={p.id} title={p.title} restricted={!!p.restricted} onClose={() => setShare(false)} />}
     </div>
@@ -533,6 +540,49 @@ export default function PageView() {
 }
 
 /** Copy a page, optionally with the pages below it (restricted ones you can't see stay behind). */
+/** Which template new pages below this one start from (for them and the pages below them). */
+function ChildTemplateDialog({ page, onClose }: { page: Page; onClose: () => void }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const templates = useQuery({ queryKey: ['templates', page.spaceKey], queryFn: () => api.get<{ id: string; name: string }[]>(`/templates?spaceKey=${encodeURIComponent(page.spaceKey)}`) })
+  const [value, setValue] = useState(page.childTemplate ?? '')
+  const save = async () => {
+    try {
+      await api.patch(`/pages/${page.id}`, { childTemplate: value })
+      qc.invalidateQueries({ queryKey: ['page', page.id] })
+      qc.invalidateQueries({ queryKey: ['default-template'] })
+      toast(value ? 'New pages below start from that template' : 'New pages below start like the rest of the space')
+      onClose()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not save')
+    }
+  }
+  return (
+    <Modal
+      title="Template for pages below"
+      onClose={onClose}
+      width={460}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <button className="btn btn-primary" onClick={save}>Save</button>
+        </>
+      }
+    >
+      <p className="muted" style={{ marginTop: 0 }}>
+        New pages created below “{page.title}” (and below those) start from this template. People can still pick another one or a blank page.
+      </p>
+      <label className="field">
+        <span className="sr-only">Template</span>
+        <select className="select" aria-label="Template" value={value} onChange={(e) => setValue(e.target.value)}>
+          <option value="">Same as the rest of the space</option>
+          {templates.data?.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
+        </select>
+      </label>
+    </Modal>
+  )
+}
+
 function CopyPageDialog({ page, onClose }: { page: Page; onClose: () => void }) {
   const qc = useQueryClient()
   const nav = useNavigate()
