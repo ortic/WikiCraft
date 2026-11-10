@@ -44,6 +44,27 @@ export function looksLikeMarkdown(text: string): boolean {
   return text.includes('\n') ? blocks || inline : inline
 }
 
+/** Tab-separated rows (cells copied from a spreadsheet or a terminal) → the rows' cells, or null. */
+export function tsvRows(text: string): string[][] | null {
+  const lines = text.replace(/\r\n?/g, '\n').replace(/\n+$/, '').split('\n')
+  if (lines.length < 2 || lines.length > 500) return null
+  const rows = lines.map((l) => l.split('\t'))
+  const cols = rows[0].length
+  if (cols < 2 || cols > 40 || rows.some((r) => r.length !== cols)) return null
+  return rows
+}
+
+function tsvTable(rows: string[][]) {
+  const cell = (type: string, text: string) => ({
+    type,
+    content: [{ type: 'paragraph', content: text.trim() ? [{ type: 'text', text: text.trim() }] : [] }],
+  })
+  return {
+    type: 'table',
+    content: rows.map((r, i) => ({ type: 'tableRow', content: r.map((c) => cell(i === 0 ? 'tableHeader' : 'tableCell', c)) })),
+  }
+}
+
 /** HTML with real structure (Word, Google Docs, web pages); editors like VS Code only send styled divs. */
 function hasRichHtml(html: string): boolean {
   return /<(h[1-6]|ul|ol|li|table|p|strong|b|em|i|a|pre|blockquote|img)\b/i.test(html)
@@ -195,6 +216,13 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
           const ed = editorRef.current
           const text = event.clipboardData?.getData('text/plain') ?? ''
           const html = event.clipboardData?.getData('text/html') ?? ''
+          // cells from a spreadsheet without HTML on the clipboard: a table (first row as header)
+          const rows = ed && !hasRichHtml(html) && !ed.isActive('codeBlock') && !ed.isActive('table') ? tsvRows(text) : null
+          if (ed && rows) {
+            event.preventDefault()
+            ed.chain().focus().insertContent(tsvTable(rows) as never).run()
+            return true
+          }
           if (ed && looksLikeMarkdown(text) && !hasRichHtml(html) && !ed.isActive('codeBlock')) {
             event.preventDefault()
             api

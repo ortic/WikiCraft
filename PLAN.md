@@ -301,7 +301,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P1** Merge / split cells, cell background color, cell alignment `C D` (no cell alignment)
 - [ ] **P1** Numbered rows, sort by column (view-time), sticky header `C`
 - [ ] **P1** Table width modes (fixed / wide / full) `C`
-- [ ] **P1** Paste from spreadsheets preserving cells `C D`
+- [x] **P1** Paste from spreadsheets preserving cells `C D` — HTML tables from Excel / Google Sheets / LibreOffice, and plain tab-separated rows (first row becomes the header)
 - [ ] **P2** Table → chart conversion `C`
 - [ ] **P2** Large table performance (1,000+ rows) `C`
 
