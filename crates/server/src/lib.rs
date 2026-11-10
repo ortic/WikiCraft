@@ -23,4 +23,5 @@ pub mod mfa;
 pub mod routes;
 pub mod search;
 pub mod sso;
+pub mod web_assets;
 pub mod webhooks;

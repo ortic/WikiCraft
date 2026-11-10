@@ -130,7 +130,7 @@ async fn main() -> anyhow::Result<()> {
             wikicraft::webhooks::spawn_worker(&state);
             let app = wikicraft::routes::router(state.clone());
             let listener = tokio::net::TcpListener::bind(bind).await?;
-            tracing::info!("WikiCraft listening on http://{bind}");
+            tracing::info!("WikiCraft listening on http://{bind}; web app: {}", wikicraft::web_assets::source(&state.config.static_dir));
             axum::serve(listener, app).with_graceful_shutdown(shutdown(state)).await?;
         }
     }

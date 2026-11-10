@@ -79,6 +79,10 @@ cd web && npm install && npm run build && cd ..
 # backend (serves web/dist, applies migrations automatically)
 cargo run -p wikicraft -- serve          # http://127.0.0.1:8787
 
+# a single binary: release builds embed web/dist as it is at build time
+(cd web && npm run build) && cargo build --release -p wikicraft
+./target/release/wikicraft serve         # no web/ directory needed next to it
+
 # frontend dev server with hot reload (proxies /api to the backend)
 cd web && npm run dev                     # http://127.0.0.1:5199
 ```
@@ -127,7 +131,7 @@ All settings are flags or environment variables:
 | `WIKICRAFT_BIND` | `127.0.0.1:8787` | listen address |
 | `WIKICRAFT_BASE_URL` | `http://127.0.0.1:8787` | public URL |
 | `WIKICRAFT_DATA_DIR` | `./data` | search index, uploads, local attachment storage |
-| `WIKICRAFT_STATIC_DIR` | `./web/dist` | built frontend |
+| `WIKICRAFT_STATIC_DIR` | `./web/dist` | built frontend; when it holds no build, the copy embedded in the binary is served |
 | `WIKICRAFT_S3_BUCKET` / `WIKICRAFT_S3_ENDPOINT` | — | store attachments and uploads in S3/MinIO/R2/Ceph |
 | `WIKICRAFT_S3_REGION` / `WIKICRAFT_S3_ACCESS_KEY_ID` / `WIKICRAFT_S3_SECRET_ACCESS_KEY` | `AWS_*` env | S3 credentials |
 | `WIKICRAFT_SEARCH` | `tantivy` | `tantivy` (embedded) or `postgres` (shared, for several replicas) |
@@ -135,7 +139,7 @@ All settings are flags or environment variables:
 | `WIKICRAFT_LOG_FORMAT` | `text` | `json` for structured logs |
 | `WIKICRAFT_METRICS_TOKEN` | — | bearer token for `/api/metrics` |
 | `WIKICRAFT_MAX_UPLOAD_MB` | `2048` | max upload (attachments, imports) |
-| `WIKICRAFT_SECURE_COOKIES` | `false` | set `true` behind HTTPS |
+| `WIKICRAFT_SECURE_COOKIES` | `false` | set `true` behind HTTPS (an `https://` base URL also turns on HSTS) |
 | `WIKICRAFT_SESSION_DAYS` | `30` | session lifetime |
 | `WIKICRAFT_SESSION_IDLE_MINUTES` | `0` (off) | sign out sessions inactive this long |
 | `WIKICRAFT_AUTH_PROVIDERS` / `_FILE` | — | sign-in providers (JSON list), see below |

@@ -273,3 +273,40 @@ async fn markdown_zip_import() {
     assert!(content.contains("/api/attachments/"), "image uploaded: {content}");
     assert!(content.contains("/pages/"), "wikilink resolved: {content}");
 }
+
+/// Without a web build in `WIKICRAFT_STATIC_DIR` the app is served from the copy in the binary
+/// (debug builds read `web/dist` from disk), with long caching for hashed assets only; HTTPS
+/// deployments send HSTS.
+#[tokio::test(flavor = "multi_thread")]
+async fn web_app_and_security_headers() {
+    let app = common::spawn_with(|c| c.base_url = "https://wiki.acme.test".into()).await;
+    let base = app.base.clone();
+    let http = reqwest::Client::new();
+    let r = http.get(format!("{base}/api/health")).send().await.unwrap();
+    assert_eq!(r.headers()["strict-transport-security"], "max-age=31536000");
+    assert_eq!(r.headers()["x-content-type-options"], "nosniff");
+
+    let index = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../web/dist/index.html");
+    let r = http.get(format!("{base}/pages/some-client-route")).send().await.unwrap();
+    if !index.is_file() {
+        // CI's backend job doesn't build the frontend
+        assert_eq!(r.status(), 404);
+        assert!(r.text().await.unwrap().contains("isn't built"));
+        return;
+    }
+    assert_eq!(r.status(), 200);
+    assert_eq!(r.headers()["cache-control"], "no-cache");
+    assert!(r.headers()["content-type"].to_str().unwrap().starts_with("text/html"));
+    let etag = r.headers()["etag"].to_str().unwrap().to_string();
+    let html = r.text().await.unwrap();
+    assert!(html.contains("<div id=\"root\">"), "{html}");
+    let again = http.get(format!("{base}/")).header("if-none-match", &etag).send().await.unwrap();
+    assert_eq!(again.status(), 304);
+    // the hashed bundle is cached for good; a stale asset name is a 404, not the app
+    let script = html.split("src=\"").nth(1).and_then(|s| s.split('"').next()).expect("script tag");
+    let r = http.get(format!("{base}{script}")).send().await.unwrap();
+    assert_eq!(r.status(), 200);
+    assert_eq!(r.headers()["cache-control"], "public, max-age=31536000, immutable");
+    assert!(r.headers()["content-type"].to_str().unwrap().contains("javascript"));
+    assert_eq!(http.get(format!("{base}/assets/gone-123.js")).send().await.unwrap().status(), 404);
+}

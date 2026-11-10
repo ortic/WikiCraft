@@ -33,7 +33,6 @@ pub mod webhooks;
 use axum::Router;
 use axum::extract::DefaultBodyLimit;
 use axum::routing::{delete, get, post, put};
-use tower_http::services::{ServeDir, ServeFile};
 
 use crate::app::AppState;
 
@@ -194,9 +193,15 @@ pub fn router(state: AppState) -> Router {
         // JSON bodies (pages can be big, but not gigabytes); uploads override this per route
         .layer(DefaultBodyLimit::max(16 * 1024 * 1024));
 
-    let static_dir = state.config.static_dir.clone();
-    let index = static_dir.join("index.html");
-    let spa = ServeDir::new(&static_dir).fallback(ServeFile::new(index));
+    let spa = crate::web_assets::service(&state.config.static_dir);
+    // HTTPS deployments: browsers stay on HTTPS (one year; no includeSubDomains, other hosts of
+    // the domain are none of our business)
+    let hsts = state.config.base_url.starts_with("https://").then(|| {
+        tower_http::set_header::SetResponseHeaderLayer::if_not_present(
+            axum::http::header::STRICT_TRANSPORT_SECURITY,
+            axum::http::HeaderValue::from_static("max-age=31536000"),
+        )
+    });
 
     // old Confluence URLs → imported pages
     let legacy = Router::new()
@@ -213,7 +218,7 @@ pub fn router(state: AppState) -> Router {
         .route("/x/{tiny}", get(legacy::tiny))
         .route("/wiki/x/{tiny}", get(legacy::tiny));
 
-    Router::new()
+    let app = Router::new()
         // /api/v1 is the stable, versioned path for integrations; /api is what the web app uses
         .nest("/api/v1", saml_routes(api.clone()))
         .nest("/api", saml_routes(api))
@@ -245,8 +250,12 @@ pub fn router(state: AppState) -> Router {
         .layer(tower_http::set_header::SetResponseHeaderLayer::if_not_present(
             axum::http::header::CONTENT_SECURITY_POLICY,
             axum::http::HeaderValue::from_static(CSP),
-        ))
-        .with_state(state)
+        ));
+    match hsts {
+        Some(h) => app.layer(h),
+        None => app,
+    }
+    .with_state(state)
 }
 
 /// SAML endpoints (assertion consumer service + SP metadata) when built with `--features saml`.
