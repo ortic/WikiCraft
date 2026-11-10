@@ -68,6 +68,14 @@ pub struct SearchQuery {
     pub q: String,
     pub space: Option<String>,
     pub limit: Option<usize>,
+    /// `page` | `blog`
+    pub kind: Option<String>,
+    /// a label the page must have
+    pub label: Option<String>,
+    /// a user id: pages they created or last updated
+    pub contributor: Option<Uuid>,
+    /// modified within the last N days
+    pub days: Option<i64>,
 }
 
 #[derive(Serialize)]
@@ -83,7 +91,32 @@ pub struct SearchResult {
 
 pub async fn search(State(state): State<AppState>, MaybeUser(user): MaybeUser, Query(q): Query<SearchQuery>) -> ApiResult<Json<Vec<SearchResult>>> {
     let p = Principal::load(&state, user).await?;
-    Ok(Json(visible_hits(&state, &p, &q.q, q.space.as_deref(), q.limit.unwrap_or(20)).await?))
+    let limit = q.limit.unwrap_or(20).clamp(1, 100);
+    let filtered = q.kind.is_some() || q.label.is_some() || q.contributor.is_some() || q.days.is_some();
+    if !filtered {
+        return Ok(Json(visible_hits(&state, &p, &q.q, q.space.as_deref(), limit).await?));
+    }
+    // filters narrow the ranked hits: look further down the ranking first
+    let hits = visible_hits(&state, &p, &q.q, q.space.as_deref(), 100).await?;
+    let ids: Vec<Uuid> = hits.iter().map(|h| h.page_id).collect();
+    let label = q.label.as_deref().and_then(crate::routes::pages::normalize_label);
+    let keep: std::collections::HashSet<Uuid> = sqlx::query_scalar(
+        "SELECT p.id FROM pages p WHERE p.id = ANY($1)
+           AND ($2::text IS NULL OR p.kind = $2)
+           AND ($3::text IS NULL OR EXISTS (SELECT 1 FROM labels l WHERE l.page_id = p.id AND l.name = $3))
+           AND ($4::uuid IS NULL OR p.created_by = $4 OR p.updated_by = $4 OR EXISTS (SELECT 1 FROM page_versions v WHERE v.page_id = p.id AND v.created_by = $4))
+           AND ($5::int IS NULL OR p.updated_at >= now() - make_interval(days => $5))",
+    )
+    .bind(&ids)
+    .bind(q.kind.as_deref().filter(|k| matches!(*k, "page" | "blog")))
+    .bind(label)
+    .bind(q.contributor)
+    .bind(q.days.map(|d| d.clamp(1, 3650) as i32))
+    .fetch_all(&state.db)
+    .await?
+    .into_iter()
+    .collect();
+    Ok(Json(hits.into_iter().filter(|h| keep.contains(&h.page_id)).take(limit).collect()))
 }
 
 /// Full-text hits for `query` among the pages `p` may see (optionally in one space).

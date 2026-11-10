@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { CheckCircle2, RotateCcw, Trash2, X, MessageSquare, ThumbsUp } from 'lucide-react'
+import { CheckCircle2, RotateCcw, Trash2, X, MessageSquare, ThumbsUp, Pencil } from 'lucide-react'
 import { api, formatDate, type Comment, type Page, type PmNode } from '../api'
 import { Avatar, useMe } from '../ui'
 
@@ -46,8 +46,43 @@ function RenderDoc({ node }: { node: PmNode }) {
   return <>{node.content?.map(block)}</>
 }
 
-function Composer({ placeholder, onSubmit, autoFocus, onCancel }: { placeholder: string; onSubmit: (text: string) => Promise<void>; autoFocus?: boolean; onCancel?: () => void }) {
-  const [text, setText] = useState('')
+/** A comment back to the Markdown the composer writes (for editing). */
+function toMarkdown(doc: PmNode): string {
+  const inline = (n: PmNode): string => {
+    if (n.type === 'mention') return `@[${n.attrs?.label ?? ''}](user:${n.attrs?.id ?? ''})`
+    if (n.type === 'hardBreak') return '\n'
+    if (n.type !== 'text') return (n.content ?? []).map(inline).join('')
+    let t = n.text ?? ''
+    for (const m of n.marks ?? []) {
+      if (m.type === 'bold') t = `**${t}**`
+      else if (m.type === 'italic') t = `*${t}*`
+      else if (m.type === 'code') t = `\`${t}\``
+      else if (m.type === 'strike') t = `~~${t}~~`
+      else if (m.type === 'link' && typeof m.attrs?.href === 'string') t = m.attrs.href.startsWith('/__mention/') ? t : `[${t}](${m.attrs.href})`
+    }
+    return t
+  }
+  const block = (n: PmNode, indent = ''): string => {
+    switch (n.type) {
+      case 'bulletList':
+        return (n.content ?? []).map((li) => `${indent}- ${(li.content ?? []).map((c) => block(c, indent + '  ')).join('\n').trimStart()}`).join('\n')
+      case 'orderedList':
+        return (n.content ?? []).map((li, i) => `${indent}${i + 1}. ${(li.content ?? []).map((c) => block(c, indent + '   ')).join('\n').trimStart()}`).join('\n')
+      case 'codeBlock':
+        return '```\n' + (n.content ?? []).map(inline).join('') + '\n```'
+      case 'blockquote':
+        return (n.content ?? []).map((c) => '> ' + block(c)).join('\n')
+      case 'heading':
+        return '#'.repeat(Number(n.attrs?.level ?? 2)) + ' ' + (n.content ?? []).map(inline).join('')
+      default:
+        return n.content?.length && n.content.every((c) => c.type === 'text' || c.type === 'mention' || c.type === 'hardBreak') ? n.content.map(inline).join('') : (n.content ?? []).map((c) => block(c, indent)).join('\n\n')
+    }
+  }
+  return (doc.content ?? []).map((b) => block(b)).join('\n\n')
+}
+
+function Composer({ placeholder, onSubmit, autoFocus, onCancel, initial, submitLabel }: { placeholder: string; onSubmit: (text: string) => Promise<void>; autoFocus?: boolean; onCancel?: () => void; initial?: string; submitLabel?: string }) {
+  const [text, setText] = useState(initial ?? '')
   const [busy, setBusy] = useState(false)
   const ref = useRef<HTMLTextAreaElement>(null)
   // "@que" before the caret → suggest people; inserted as @[Name](user:<id>) (a mention)
@@ -127,7 +162,7 @@ function Composer({ placeholder, onSubmit, autoFocus, onCancel }: { placeholder:
           </button>
         )}
         <button className="btn btn-primary btn-sm" disabled={busy || !text.trim()} onClick={submit}>
-          Comment
+          {submitLabel ?? 'Comment'}
         </button>
       </div>
     </div>
@@ -139,6 +174,7 @@ export default function CommentsPanel({ page, focus, pending, onPendingDone, onC
   const me = useMe()
   const [showResolved, setShowResolved] = useState(false)
   const [replyTo, setReplyTo] = useState<string | null>(null)
+  const [editing, setEditing] = useState<string | null>(null)
   const comments = useQuery({ queryKey: ['comments', page.id], queryFn: () => api.get<Comment[]>(`/pages/${page.id}/comments`) })
   const refresh = () => qc.invalidateQueries({ queryKey: ['comments', page.id] })
 
@@ -178,6 +214,11 @@ export default function CommentsPanel({ page, focus, pending, onPendingDone, onC
               {c.resolvedAt ? <RotateCcw size={13} /> : <CheckCircle2 size={14} />}
             </button>
           )}
+          {mine && page.access.comment && (
+            <button className="icon-btn" style={{ width: 24, height: 24 }} title="Edit" onClick={() => setEditing(editing === c.id ? null : c.id)}>
+              <Pencil size={13} />
+            </button>
+          )}
           {(mine || page.access.admin) && (
             <button
               className="icon-btn"
@@ -195,9 +236,25 @@ export default function CommentsPanel({ page, focus, pending, onPendingDone, onC
           )}
         </div>
         {!isReply && c.inline?.text && <div className="c-quote">{c.inline.text}</div>}
-        <div className="c-body">
-          <RenderDoc node={c.content} />
-        </div>
+        {editing === c.id ? (
+          <Composer
+            placeholder="Edit your comment"
+            autoFocus
+            initial={toMarkdown(c.content)}
+            submitLabel="Save"
+            onCancel={() => setEditing(null)}
+            onSubmit={async (text) => {
+              await api.patch(`/comments/${c.id}`, { text })
+              setEditing(null)
+              refresh()
+            }}
+          />
+        ) : (
+          <div className="c-body">
+            <RenderDoc node={c.content} />
+            {c.updatedAt && Date.parse(c.updatedAt) - Date.parse(c.createdAt) > 5000 && <span className="faint small"> (edited)</span>}
+          </div>
+        )}
         <div className="c-foot">
           {me.data?.user ? (
             <button

@@ -170,6 +170,8 @@ pub async fn create(
         .execute(&state.db)
         .await?;
     notify_comment(&state, page_id, user.id, id, &doc).await?;
+    // comments are searchable as part of their page
+    state.search.enqueue(page_id);
     let row = sqlx::query_as::<_, CommentRow>(sqlx::AssertSqlSafe(format!("{SELECT} WHERE c.id = $1"))).bind(id).fetch_one(&state.db).await?;
     crate::webhooks::emit_page(
         &state,
@@ -264,6 +266,7 @@ pub async fn update(
             .bind(text::plain_text(&doc))
             .execute(&state.db)
             .await?;
+        state.search.enqueue(page_id);
     }
     if let Some(r) = req.resolved {
         if author != Some(user.id) && !access.edit {
@@ -291,6 +294,7 @@ pub async fn delete(State(state): State<AppState>, CurrentUser(user): CurrentUse
         return Err(ApiError::Forbidden);
     }
     sqlx::query("UPDATE comments SET deleted_at = now() WHERE id = $1 OR parent_id = $1").bind(id).execute(&state.db).await?;
+    state.search.enqueue(page_id);
     Ok(StatusCode::NO_CONTENT)
 }
 

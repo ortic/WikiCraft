@@ -568,3 +568,6 @@ a.menu-item { color: inherit; text-decoration: none; }
 .space-template:hover { border-color: var(--border-strong); }
 .space-template.selected { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: var(--accent-soft); }
 .space-template svg { color: var(--accent-text); }
+.search-filters { flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.search-filters .select { width: auto; height: 32px; }
+.search-filters .input { width: 150px; height: 32px; }

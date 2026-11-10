@@ -71,6 +71,7 @@ struct IndexRow {
     deleted: bool,
     labels: Option<String>,
     attachments: Option<String>,
+    comments: Option<String>,
 }
 
 impl Tantivy {
@@ -164,7 +165,8 @@ impl SearchIndex {
                         setweight(to_tsvector('simple', p.title), 'A') ||
                         setweight(to_tsvector('simple', coalesce((SELECT string_agg(name, ' ') FROM labels l WHERE l.page_id = p.id), '')), 'B') ||
                         setweight(to_tsvector('simple', left(p.text_content || ' ' || coalesce((SELECT string_agg(filename || ' ' || coalesce(left(text_content, 20000), ''), ' ')
-                            FROM attachments a WHERE a.page_id = p.id AND a.deleted_at IS NULL), ''), 300000)), 'C')
+                            FROM attachments a WHERE a.page_id = p.id AND a.deleted_at IS NULL), '') || ' ' || coalesce((SELECT string_agg(left(c.text_content, 5000), ' ')
+                            FROM comments c WHERE c.page_id = p.id AND c.deleted_at IS NULL), ''), 300000)), 'C')
                      WHERE p.id = ANY($1)",
                 )
                 .bind(&ids)
@@ -180,7 +182,8 @@ impl SearchIndex {
         let rows = sqlx::query_as::<_, IndexRow>(
             "SELECT p.id, p.space_id, p.title, p.text_content, p.deleted_at IS NOT NULL AS deleted,
                     (SELECT string_agg(name, ' ') FROM labels l WHERE l.page_id = p.id) AS labels,
-                    (SELECT string_agg(filename || ' ' || coalesce(left(text_content, 20000), ''), ' ') FROM attachments a WHERE a.page_id = p.id AND a.deleted_at IS NULL) AS attachments
+                    (SELECT string_agg(filename || ' ' || coalesce(left(text_content, 20000), ''), ' ') FROM attachments a WHERE a.page_id = p.id AND a.deleted_at IS NULL) AS attachments,
+                    (SELECT string_agg(left(c.text_content, 5000), ' ') FROM comments c WHERE c.page_id = p.id AND c.deleted_at IS NULL) AS comments
              FROM pages p WHERE p.id = ANY($1)",
         )
         .bind(&ids)
@@ -199,9 +202,10 @@ impl SearchIndex {
                     continue;
                 }
                 let mut body = r.text_content;
-                if let Some(a) = r.attachments {
+                // attachment text and comments are searchable too
+                for extra in [r.attachments, r.comments].into_iter().flatten() {
                     body.push('\n');
-                    body.push_str(&a);
+                    body.push_str(&extra);
                 }
                 w.add_document(doc!(
                     f.id => r.id.to_string(),

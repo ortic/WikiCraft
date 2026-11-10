@@ -166,3 +166,33 @@ async fn popular_pages() {
     assert_eq!(list[0]["viewers"], 2);
     assert_eq!(list[0]["views"], 3);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn search_filters_and_comments() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, member_id) = app.user(&owner, "fil@acme.test", "member").await;
+    app.post(&owner, "/spaces", json!({"key": "FLT", "name": "Filters"})).await;
+    let (_, a) = app.post(&owner, "/pages", json!({"spaceKey": "FLT", "title": "Gateway timeouts", "markdown": "zircon gateway"})).await;
+    let a = a["id"].as_str().unwrap().to_string();
+    let (_, b) = app.post(&member, "/pages", json!({"spaceKey": "FLT", "title": "Gateway announcement", "kind": "blog", "markdown": "zircon release"})).await;
+    let b = b["id"].as_str().unwrap().to_string();
+    app.put(&owner, &format!("/pages/{a}/labels"), json!({"labels": ["incident"]})).await;
+    // comments are searchable as part of their page
+    app.post(&member, &format!("/pages/{a}/comments"), json!({"text": "seen again with obsidianwolf traffic"})).await;
+    let hits = |q: String| {
+        let (app, owner) = (&app, &owner);
+        async move {
+            let (_, r) = app.get(owner, &format!("/search?q={q}")).await;
+            r.as_array().unwrap().iter().map(|h| h["title"].as_str().unwrap().to_string()).collect::<Vec<_>>()
+        }
+    };
+    app.eventually(|| async { (hits("obsidianwolf".into()).await == vec!["Gateway timeouts"]).then_some(()) }).await;
+    app.eventually(|| async { (hits("zircon".into()).await.len() == 2).then_some(()) }).await;
+    assert_eq!(hits("zircon&kind=blog".into()).await, vec!["Gateway announcement"]);
+    assert_eq!(hits("zircon&label=Incident".into()).await, vec!["Gateway timeouts"]);
+    assert_eq!(hits(format!("zircon&contributor={member_id}")).await, vec!["Gateway announcement"]);
+    assert_eq!(hits("zircon&days=7".into()).await.len(), 2);
+    sqlx::query("UPDATE pages SET updated_at = now() - interval '30 days' WHERE id = $1::uuid").bind(&b).execute(&app.state.db).await.unwrap();
+    assert_eq!(hits("zircon&days=7".into()).await, vec!["Gateway timeouts"]);
+}

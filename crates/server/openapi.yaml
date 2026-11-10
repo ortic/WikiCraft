@@ -2908,6 +2908,31 @@ paths:
         required: false
         description: space key
         schema: *id001
+      - name: kind
+        in: query
+        required: false
+        description: page | blog
+        schema: *id001
+      - name: label
+        in: query
+        required: false
+        description: label
+        schema: *id001
+      - name: contributor
+        in: query
+        required: false
+        description: user id (created or edited)
+        schema: *id001
+      - name: days
+        in: query
+        required: false
+        description: modified within N days
+        schema: *id001
+      - name: limit
+        in: query
+        required: false
+        description: max results
+        schema: *id001
       responses:
         '200':
           description: OK

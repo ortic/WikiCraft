@@ -162,7 +162,15 @@ impl WikiMcp {
             Ok(u) => u,
             Err(e) => return api_err(e),
         };
-        let q = crate::routes::search::SearchQuery { q: a.query, space: a.space_key, limit: Some(a.limit.unwrap_or(10).min(50)) };
+        let q = crate::routes::search::SearchQuery {
+            q: a.query,
+            space: a.space_key,
+            limit: Some(a.limit.unwrap_or(10).min(50)),
+            kind: None,
+            label: None,
+            contributor: None,
+            days: None,
+        };
         match crate::routes::search::search(State(self.state.clone()), MaybeUser(Some(user.0)), Query(q)).await {
             Ok(AxJson(hits)) => {
                 let v = serde_json::to_value(hits).unwrap_or_default();

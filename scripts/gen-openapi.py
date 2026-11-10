@@ -165,7 +165,7 @@ op("/pages/{id}/attachments", "post", "Attachments", "Upload files (new versions
 op("/attachments/{id}", "delete", "Attachments", "Delete an attachment", res=NO)
 op("/attachments/{id}/content", "get", "Attachments", "Download (images/PDF inline, everything else as download)", public=True)
 # discovery
-op("/search", "get", "Discovery", "Full-text search over visible pages", res=resp(arr(S("SearchHit"))), query=[q("q", "query"), q("space", "space key")], public=True)
+op("/search", "get", "Discovery", "Full-text search over visible pages", res=resp(arr(S("SearchHit"))), query=[q("q", "query"), q("space", "space key"), q("kind", "page | blog"), q("label", "label"), q("contributor", "user id (created or edited)"), q("days", "modified within N days"), q("limit", "max results")], public=True)
 op("/recent", "get", "Discovery", "Recently viewed and recently updated pages")
 op("/favorites", "get", "Discovery", "Starred pages", res=resp(arr(S("PageListItem"))))
 op("/popular", "get", "Search", "Most viewed pages you can see (last N days, signed-in viewers)", query=[q("days", "1-365, default 30")])
