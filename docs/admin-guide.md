@@ -61,7 +61,10 @@ else is configured afterwards:
   trashed pages are kept, e-mail status and a test message, usage numbers.
 - *Administration → Users / Groups*: people and groups.
 - *Administration → Import*: Confluence, Word, Markdown, HTML, Notion and Obsidian imports, space
-  backups.
+  backups, and the recent jobs (imports, restores, exports). **Cancel** stops a queued job at once
+  and a running one at its next step (a cancelled restore removes the half-restored space).
+  **Retry** runs a failed or cancelled job again; its upload is kept 7 days for that. A retried
+  Confluence import runs as an update import, so it carries on instead of duplicating pages.
 
 ## People and access
 

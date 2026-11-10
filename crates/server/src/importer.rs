@@ -36,8 +36,9 @@ pub struct ImportOptions {
     pub overwrite_local_changes: bool,
 }
 
-pub async fn set_progress(state: &AppState, job: Uuid, progress: Value) {
-    let _ = sqlx::query("UPDATE jobs SET progress = $2 WHERE id = $1").bind(job).bind(progress).execute(&state.db).await;
+/// Records progress; fails once someone asked to cancel the job.
+pub async fn set_progress(state: &AppState, job: Uuid, progress: Value) -> anyhow::Result<()> {
+    crate::jobs::checkpoint(state, job, progress).await
 }
 
 /// Runs an import job to completion and records the outcome on the job row.
@@ -54,11 +55,7 @@ pub async fn run(state: AppState, job: Uuid, workspace: Uuid, actor: Uuid, path:
         }
         Err(e) => {
             tracing::error!(%job, "import failed: {e:#}");
-            let _ = sqlx::query("UPDATE jobs SET status = 'failed', error = $2, finished_at = now() WHERE id = $1")
-                .bind(job)
-                .bind(format!("{e:#}"))
-                .execute(&state.db)
-                .await;
+            crate::jobs::record_failure(&state, job, &e).await;
         }
     }
     let _ = tokio::fs::remove_file(&path).await;
@@ -322,7 +319,7 @@ fn role_for_confluence(perms: &[&str]) -> Option<&'static str> {
 }
 
 async fn import(state: &AppState, job: Uuid, ws: Uuid, actor: Uuid, path: &Path, opts: &ImportOptions) -> anyhow::Result<Value> {
-    set_progress(state, job, json!({"phase": "reading export"})).await;
+    set_progress(state, job, json!({"phase": "reading export"})).await?;
     let p = path.to_path_buf();
     let export: Arc<Export> = Arc::new(tokio::task::spawn_blocking(move || wikicraft_confluence::open(&p)).await??);
     let plan_opts = PlanOptions {
@@ -348,7 +345,7 @@ async fn import(state: &AppState, job: Uuid, ws: Uuid, actor: Uuid, path: &Path,
     };
 
     // ---- users ------------------------------------------------------------------------
-    set_progress(state, job, json!({"phase": "users", "total": plan.users.len()})).await;
+    set_progress(state, job, json!({"phase": "users", "total": plan.users.len()})).await?;
     let mut users: HashMap<String, Uuid> = HashMap::new();
     let mut utx = state.db.begin().await?;
     for u in &plan.users {
@@ -782,7 +779,7 @@ async fn import(state: &AppState, job: Uuid, ws: Uuid, actor: Uuid, path: &Path,
             }
             done += 1;
             if done.is_multiple_of(25) || done == total_pages {
-                set_progress(state, job, json!({"phase": "pages", "done": done, "total": total_pages, "space": key})).await;
+                set_progress(state, job, json!({"phase": "pages", "done": done, "total": total_pages, "space": key})).await?;
             }
         }
         tx.commit().await?;

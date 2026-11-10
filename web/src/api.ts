@@ -226,12 +226,18 @@ export interface PageListItem {
 export interface Job {
   id: string
   kind: string
-  status: 'queued' | 'running' | 'succeeded' | 'failed'
+  status: 'queued' | 'running' | 'succeeded' | 'failed' | 'cancelled'
   progress: { phase?: string; done?: number; total?: number; space?: string }
   result: any
   error: string | null
   createdAt: string
+  startedAt?: string | null
   finishedAt: string | null
+  /** a running job was asked to stop */
+  cancelling?: boolean
+  attempts?: number
+  /** failed or cancelled and can run again */
+  retryable?: boolean
 }
 
 export function formatDate(iso: string | null | undefined): string {

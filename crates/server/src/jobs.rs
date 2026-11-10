@@ -40,6 +40,9 @@ pub fn spawn_worker(state: &AppState) {
             if let Err(e) = expire_exports(&state).await {
                 tracing::warn!("export cleanup failed: {e}");
             }
+            if let Err(e) = expire_failed_uploads(&state).await {
+                tracing::warn!("upload cleanup failed: {e}");
+            }
             // drafts whose publishing time has come, every 20 seconds
             if last_schedule.is_none_or(|t| t.elapsed() > Duration::from_secs(20)) {
                 last_schedule = Some(std::time::Instant::now());
@@ -78,13 +81,63 @@ pub fn spawn_worker(state: &AppState) {
 
 async fn fail_stale(state: &AppState) -> sqlx::Result<()> {
     sqlx::query(
-        "UPDATE jobs SET status = 'failed', error = 'worker stopped while running the job (restart/crash); delete partial results and retry', finished_at = now()
+        "UPDATE jobs SET status = CASE WHEN cancel_requested THEN 'cancelled' ELSE 'failed' END,
+                error = CASE WHEN cancel_requested THEN 'cancelled' ELSE 'the worker stopped while running the job (restart or crash); retry it' END, finished_at = now()
          WHERE status = 'running' AND heartbeat_at < now() - make_interval(secs => $1)",
     )
     .bind(STALE_AFTER_SECS as f64)
     .execute(&state.db)
     .await?;
     Ok(())
+}
+
+/// How long failed and cancelled jobs keep their upload for a retry.
+pub const RETRY_UPLOAD_DAYS: i32 = 7;
+
+/// Deletes the uploads of failed and cancelled jobs that weren't retried in time.
+async fn expire_failed_uploads(state: &AppState) -> anyhow::Result<()> {
+    let old: Vec<(Uuid, String)> = sqlx::query_as(
+        "SELECT id, input->>'upload' FROM jobs WHERE status IN ('failed', 'cancelled') AND input ? 'upload'
+         AND finished_at < now() - make_interval(days => $1) LIMIT 20",
+    )
+    .bind(RETRY_UPLOAD_DAYS)
+    .fetch_all(&state.db)
+    .await?;
+    for (id, key) in old {
+        let _ = state.blobs.delete_key(&key).await;
+        sqlx::query("UPDATE jobs SET input = input - 'upload' WHERE id = $1").bind(id).execute(&state.db).await?;
+    }
+    Ok(())
+}
+
+/// The error a job stops with when it was cancelled.
+#[derive(Debug, thiserror::Error)]
+#[error("cancelled")]
+pub struct Cancelled;
+
+/// Records a running job's progress, and stops it (with [`Cancelled`]) once someone asked to
+/// cancel it. Jobs call this regularly; their error paths clean up after themselves.
+pub async fn checkpoint(state: &AppState, job: Uuid, progress: Value) -> anyhow::Result<()> {
+    let cancel: Option<bool> =
+        sqlx::query_scalar("UPDATE jobs SET progress = $2 WHERE id = $1 RETURNING cancel_requested").bind(job).bind(progress).fetch_optional(&state.db).await?;
+    if cancel == Some(true) {
+        return Err(Cancelled.into());
+    }
+    Ok(())
+}
+
+/// Marks a job failed, or cancelled if that's why it stopped.
+pub async fn record_failure(state: &AppState, job: Uuid, e: &anyhow::Error) {
+    let cancelled = e.is::<Cancelled>();
+    let _ = sqlx::query(
+        "UPDATE jobs SET status = CASE WHEN $3 OR cancel_requested THEN 'cancelled' ELSE 'failed' END,
+                error = CASE WHEN $3 OR cancel_requested THEN 'cancelled' ELSE $2 END, finished_at = now() WHERE id = $1",
+    )
+    .bind(job)
+    .bind(format!("{e:#}"))
+    .bind(cancelled)
+    .execute(&state.db)
+    .await;
 }
 
 /// Deletes export archives after [`crate::export::EXPORT_TTL_HOURS`].
@@ -161,14 +214,15 @@ async fn run(state: &AppState, job: Claimed) {
     .await;
     heartbeat.abort();
     if let Err(e) = result {
-        let _ = sqlx::query("UPDATE jobs SET status = 'failed', error = $2, finished_at = now() WHERE id = $1")
-            .bind(job.id)
-            .bind(format!("{e:#}"))
-            .execute(&state.db)
-            .await;
+        record_failure(state, job.id, &e).await;
     }
-    if let Some(k) = upload_key {
+    // the upload stays for a retry unless the job worked
+    let status: Option<String> = sqlx::query_scalar("SELECT status FROM jobs WHERE id = $1").bind(job.id).fetch_optional(&state.db).await.ok().flatten();
+    if let Some(k) = upload_key
+        && status.as_deref() == Some("succeeded")
+    {
         let _ = state.blobs.delete_key(&k).await;
+        let _ = sqlx::query("UPDATE jobs SET input = input - 'upload' WHERE id = $1").bind(job.id).execute(&state.db).await;
     }
 }
 

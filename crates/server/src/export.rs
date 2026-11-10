@@ -272,7 +272,7 @@ pub async fn run_export(state: &AppState, job_id: Uuid, actor: Uuid, input: &Val
             let compress = !is_compressed(&a.media_type);
             add(&mut zip, &att_files[&a.id], &data, compress)?;
             if i % 50 == 0 {
-                progress(state, job_id, json!({"phase": "attachments", "done": i, "total": attachments.len()})).await;
+                progress(state, job_id, json!({"phase": "attachments", "done": i, "total": attachments.len()})).await?;
             }
         }
         match format {
@@ -290,7 +290,7 @@ pub async fn run_export(state: &AppState, job_id: Uuid, actor: Uuid, input: &Val
                     };
                     add(&mut zip, &file, body.as_bytes(), true)?;
                     if i % 100 == 0 {
-                        progress(state, job_id, json!({"phase": "pages", "done": i, "total": pages.len()})).await;
+                        progress(state, job_id, json!({"phase": "pages", "done": i, "total": pages.len()})).await?;
                     }
                 }
                 if format == Format::Html {
@@ -395,8 +395,9 @@ fn format_name(f: Format) -> &'static str {
     }
 }
 
-async fn progress(state: &AppState, job: Uuid, p: Value) {
-    let _ = sqlx::query("UPDATE jobs SET progress = $2 WHERE id = $1").bind(job).bind(p).execute(&state.db).await;
+/// Records progress; fails once someone asked to cancel the job.
+async fn progress(state: &AppState, job: Uuid, p: Value) -> anyhow::Result<()> {
+    crate::jobs::checkpoint(state, job, p).await
 }
 
 fn is_compressed(mime: &str) -> bool {
@@ -916,7 +917,7 @@ pub async fn run_restore(state: &AppState, job_id: Uuid, actor: Uuid, archive: &
         }
         restore_properties(state, user.workspace_id, page_ids[&pg.id], &pg.properties, &page_ids).await?;
         if i % 100 == 0 {
-            progress(state, job_id, json!({"phase": "pages", "done": i, "total": m.pages.len()})).await;
+            progress(state, job_id, json!({"phase": "pages", "done": i, "total": m.pages.len()})).await?;
         }
     }
     if let Some(home) = m.space.home_page_id.and_then(|h| page_ids.get(&h)) {
@@ -937,7 +938,7 @@ pub async fn run_restore(state: &AppState, job_id: Uuid, actor: Uuid, archive: &
                 .map_err(|e| anyhow::anyhow!("{e}"))?;
         att_ids.insert(a.id, new);
         if i % 50 == 0 {
-            progress(state, job_id, json!({"phase": "attachments", "done": i, "total": m.attachments.len()})).await;
+            progress(state, job_id, json!({"phase": "attachments", "done": i, "total": m.attachments.len()})).await?;
         }
     }
 

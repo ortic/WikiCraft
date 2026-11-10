@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Upload, FileSearch, CheckCircle2, XCircle, UserPlus, Users, Activity, Database, RefreshCw, Mail, Send, Globe, Megaphone, Building2 } from 'lucide-react'
+import { Upload, FileSearch, CheckCircle2, XCircle, UserPlus, Users, Activity, Database, RefreshCw, Mail, Send, Globe, Megaphone, Building2, Ban, RotateCcw } from 'lucide-react'
 import { api, formatBytes, formatDate, type Job } from '../api'
 import { Avatar, Modal, Spinner, useMe, useToast, type Features } from '../ui'
 import AdminWebhooks from './AdminWebhooks'
@@ -787,7 +787,7 @@ function ImportAdmin() {
   const [overwrite, setOverwrite] = useState(false)
   const [jobId, setJobId] = useState<string | null>(null)
   const jobs = useQuery({ queryKey: ['jobs'], queryFn: () => api.get<Job[]>('/jobs'), refetchInterval: 5000 })
-  const job = useQuery({ queryKey: ['job', jobId], queryFn: () => api.get<Job>(`/jobs/${jobId}`), enabled: !!jobId, refetchInterval: (q) => (q.state.data && ['succeeded', 'failed'].includes(q.state.data.status) ? false : 1000) })
+  const job = useQuery({ queryKey: ['job', jobId], queryFn: () => api.get<Job>(`/jobs/${jobId}`), enabled: !!jobId, refetchInterval: (q) => (q.state.data && ['succeeded', 'failed', 'cancelled'].includes(q.state.data.status) ? false : 1000) })
   useEffect(() => {
     if (job.data?.status === 'succeeded') {
       qc.invalidateQueries({ queryKey: ['spaces'] })
@@ -879,12 +879,17 @@ function ImportAdmin() {
       {j && (
         <div className="card" style={{ marginBottom: 18 }}>
           <div className="row">
-            {j.status === 'succeeded' ? <CheckCircle2 color="var(--success)" size={18} /> : j.status === 'failed' ? <XCircle color="var(--danger)" size={18} /> : <Spinner />}
-            <b>{j.kind === 'export.space' ? 'Export' : j.kind === 'import.backup' ? 'Restore' : 'Import'} {j.status}</b>
-            <span className="faint small">{j.progress?.phase}{j.progress?.total ? ` · ${j.progress.done ?? 0}/${j.progress.total}` : ''}</span>
+            {j.status === 'succeeded' ? <CheckCircle2 color="var(--success)" size={18} /> : j.status === 'failed' ? <XCircle color="var(--danger)" size={18} /> : j.status === 'cancelled' ? <Ban size={18} className="faint" /> : <Spinner />}
+            <b>{j.kind === 'export.space' ? 'Export' : j.kind === 'import.backup' ? 'Restore' : 'Import'} {j.cancelling ? 'stopping' : j.status}</b>
+            <span className="faint small">{j.progress?.phase}{j.progress?.total ? ` · ${j.progress.done ?? 0}/${j.progress.total}` : ''}{(j.attempts ?? 1) > 1 ? ` · attempt ${j.attempts}` : ''}</span>
+            <span className="spacer" />
+            <JobActions job={j} />
           </div>
           {j.progress?.total ? <div className="progress" style={{ marginTop: 10 }}><div style={{ width: `${Math.round(((j.progress.done ?? 0) / j.progress.total) * 100)}%` }} /></div> : null}
-          {j.error && <p className="error-text">{j.error}</p>}
+          {j.error && j.status !== 'cancelled' && <p className="error-text">{j.error}</p>}
+          {j.retryable && j.kind === 'import.confluence' && (
+            <p className="faint small" style={{ marginBottom: 0 }}>Retrying continues this import: what it already brought in is updated, not duplicated.</p>
+          )}
           {j.status === 'succeeded' && j.kind === 'import.backup' && (
             <p style={{ marginBottom: 0 }}>
               Restored <Link to={`/spaces/${j.result?.spaceKey}`}>{j.result?.spaceKey}</Link>: {j.result?.pages} pages, {j.result?.attachments} attachments, {j.result?.comments} comments
@@ -910,18 +915,63 @@ function ImportAdmin() {
 
       <h3>Recent jobs</h3>
       <table className="list">
+        <thead>
+          <tr><th>Job</th><th>Status</th><th>Started</th><th><span className="sr-only">Actions</span></th></tr>
+        </thead>
         <tbody>
           {jobs.data?.map((jj) => (
             <tr key={jj.id} style={{ cursor: 'pointer' }} onClick={() => setJobId(jj.id)}>
               <td><Database size={14} /> {jj.kind}</td>
-              <td><span className={`badge ${jj.status === 'succeeded' ? 'badge-accent' : ''}`}>{jj.status}</span></td>
+              <td>
+                <span className={`badge ${jj.status === 'succeeded' ? 'badge-accent' : ''}`}>{jj.cancelling ? 'stopping' : jj.status}</span>
+                {(jj.attempts ?? 1) > 1 && <span className="faint small"> · attempt {jj.attempts}</span>}
+              </td>
               <td className="faint small">{formatDate(jj.createdAt)}</td>
+              <td style={{ textAlign: 'right' }} onClick={(e) => e.stopPropagation()}>
+                <JobActions job={jj} onRetry={() => setJobId(jj.id)} />
+              </td>
             </tr>
           ))}
         </tbody>
       </table>
     </div>
   )
+}
+
+/** Cancel a queued or running job; retry a failed or cancelled one. */
+function JobActions({ job, onRetry }: { job: Job; onRetry?: () => void }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const [busy, setBusy] = useState(false)
+  const act = async (what: 'cancel' | 'retry') => {
+    setBusy(true)
+    try {
+      const r = await api.post<Job>(`/jobs/${job.id}/${what}`)
+      qc.setQueryData(['job', job.id], r)
+      qc.invalidateQueries({ queryKey: ['jobs'] })
+      if (what === 'retry') onRetry?.()
+      toast(what === 'cancel' ? (r.status === 'cancelled' ? 'Job cancelled' : 'The job stops at its next step') : 'Job queued again')
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'That did not work')
+    } finally {
+      setBusy(false)
+    }
+  }
+  if ((job.status === 'queued' || job.status === 'running') && !job.cancelling) {
+    return (
+      <button className="btn btn-sm" disabled={busy} onClick={() => act('cancel')}>
+        <Ban size={13} /> Cancel
+      </button>
+    )
+  }
+  if (job.retryable) {
+    return (
+      <button className="btn btn-sm" disabled={busy} onClick={() => act('retry')}>
+        <RotateCcw size={13} /> Retry
+      </button>
+    )
+  }
+  return null
 }
 
 function Audit() {

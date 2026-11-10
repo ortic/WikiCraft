@@ -277,6 +277,7 @@ components:
           - running
           - succeeded
           - failed
+          - cancelled
         progress: &id006
           type: object
           additionalProperties: true
@@ -286,11 +287,19 @@ components:
           - string
           - 'null'
         createdAt: *id004
+        startedAt:
+          type:
+          - string
+          - 'null'
+          format: date-time
         finishedAt:
           type:
           - string
           - 'null'
           format: date-time
+        cancelling: *id003
+        attempts: *id005
+        retryable: *id003
     ShareLink:
       type: object
       properties:
@@ -5053,6 +5062,55 @@ paths:
         schema: *id001
       responses:
         '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /jobs/{id}/cancel:
+    post:
+      tags:
+      - Import & export
+      summary: 'Cancel a job: a queued one stops at once, a running one at its next progress update (cleaning up like on a
+        failure)'
+      operationId: post_jobs_id_cancel
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Job'
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /jobs/{id}/retry:
+    post:
+      tags:
+      - Import & export
+      summary: Run a failed or cancelled job again (uploads are kept 7 days); a Confluence import continues as an update import
+      operationId: post_jobs_id_retry
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '202':
           description: OK
           content:
             application/json:

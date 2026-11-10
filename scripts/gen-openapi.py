@@ -27,7 +27,7 @@ schemas = {
     "Comment": obj({"id": uuid, "pageId": uuid, "parentId": {"type": ["string", "null"], "format": "uuid"}, "authorId": uuid, "authorName": txt, "content": S("PmNode"), "inline": {"type": ["object", "null"]}, "resolvedAt": {"type": ["string", "null"], "format": "date-time"}, "createdAt": dt, "likeCount": num, "liked": boolean}),
     "Attachment": obj({"id": uuid, "pageId": uuid, "filename": txt, "mediaType": txt, "size": num, "version": num, "createdByName": {"type": ["string", "null"]}, "createdAt": dt}),
     "SearchHit": obj({"pageId": uuid, "title": txt, "snippet": {"type": "string", "description": "HTML with <b> highlights"}, "spaceKey": txt, "spaceName": txt, "score": {"type": "number"}}),
-    "Job": obj({"id": uuid, "kind": txt, "status": {"enum": ["queued", "running", "succeeded", "failed"]}, "progress": anyobj, "result": anyobj, "error": {"type": ["string", "null"]}, "createdAt": dt, "finishedAt": {"type": ["string", "null"], "format": "date-time"}}),
+    "Job": obj({"id": uuid, "kind": txt, "status": {"enum": ["queued", "running", "succeeded", "failed", "cancelled"]}, "progress": anyobj, "result": anyobj, "error": {"type": ["string", "null"]}, "createdAt": dt, "startedAt": {"type": ["string", "null"], "format": "date-time"}, "finishedAt": {"type": ["string", "null"], "format": "date-time"}, "cancelling": boolean, "attempts": num, "retryable": boolean}),
     "ShareLink": obj({"id": uuid, "token": txt, "includeChildren": boolean, "expiresAt": {"type": ["string", "null"], "format": "date-time"}, "views": num}),
     "Webhook": obj({"id": uuid, "name": txt, "url": txt, "events": arr(txt), "format": txt, "spaceKey": {"type": ["string", "null"]}, "active": boolean, "failureCount": num}),
     "WebhookEvent": obj({"event": txt, "timestamp": dt, "webhookId": uuid, "deliveryId": uuid, "data": anyobj}),
@@ -240,6 +240,8 @@ op("/imports/markdown", "post", "Import & export", "Import Word, Markdown, HTML,
 op("/imports/backup", "post", "Import & export", "Restore a space backup as a new space (job)", req=multipart({"spaceKey": txt, "spaceName": txt}), res=resp(obj({"jobId": uuid, "spaceKey": txt}), "202", "Queued"))
 op("/jobs", "get", "Import & export", "Recent jobs (admins)", res=resp(arr(S("Job"))))
 op("/jobs/{id}", "get", "Import & export", "A job", res=resp(S("Job")))
+op("/jobs/{id}/cancel", "post", "Import & export", "Cancel a job: a queued one stops at once, a running one at its next progress update (cleaning up like on a failure)", res=resp(S("Job")))
+op("/jobs/{id}/retry", "post", "Import & export", "Run a failed or cancelled job again (uploads are kept 7 days); a Confluence import continues as an update import", res=resp(S("Job"), "202"))
 op("/jobs/{id}/download", "get", "Import & export", "Download an export archive (requester, 24 h)")
 # admin
 op("/admin/audit", "get", "Admin", "Audit log", query=[q("before", "id cursor", num), q("action", "action prefix")])

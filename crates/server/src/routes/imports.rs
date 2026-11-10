@@ -65,7 +65,19 @@ pub struct JobRow {
     created_at: chrono::DateTime<chrono::Utc>,
     started_at: Option<chrono::DateTime<chrono::Utc>>,
     finished_at: Option<chrono::DateTime<chrono::Utc>>,
+    /// a running job was asked to stop and will at its next progress update
+    cancelling: bool,
+    /// how many times it ran (retries count)
+    attempts: i32,
+    /// failed or cancelled, and what it needs to run again is still there
+    retryable: bool,
 }
+
+const JOB_COLUMNS: &str = "id, kind, status, progress, error, created_at, started_at, finished_at, cancel_requested AND status = 'running' AS cancelling, attempts,
+    status IN ('failed', 'cancelled') AND (kind = 'export.space' OR (kind IN ('import.confluence', 'import.backup') AND COALESCE(input ? 'upload', false))) AS retryable";
+
+/// Jobs that can be retried, and whether they need their upload for it.
+const RETRYABLE: &[(&str, bool)] = &[("import.confluence", true), ("import.backup", true), ("export.space", false)];
 
 /// `POST /api/imports/confluence` (multipart: `file`, optional `options` JSON) → job.
 pub async fn upload_confluence(State(state): State<AppState>, CurrentUser(user): CurrentUser, mut mp: Multipart) -> ApiResult<(StatusCode, Json<Value>)> {
@@ -126,23 +138,97 @@ pub async fn analyze_confluence(State(state): State<AppState>, CurrentUser(user)
 pub async fn list_jobs(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Vec<JobRow>>> {
     require_admin(&user)?;
     Ok(Json(
-        sqlx::query_as::<_, JobRow>("SELECT id, kind, status, progress, NULL::jsonb AS result, error, created_at, started_at, finished_at FROM jobs WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT 100")
-            .bind(user.workspace_id)
-            .fetch_all(&state.db)
-            .await?,
+        sqlx::query_as::<_, JobRow>(sqlx::AssertSqlSafe(format!(
+            "SELECT {JOB_COLUMNS}, NULL::jsonb AS result FROM jobs WHERE workspace_id = $1 ORDER BY created_at DESC LIMIT 100"
+        )))
+        .bind(user.workspace_id)
+        .fetch_all(&state.db)
+        .await?,
     ))
 }
 
+async fn load_job(state: &AppState, user: &User, id: Uuid) -> ApiResult<JobRow> {
+    sqlx::query_as::<_, JobRow>(sqlx::AssertSqlSafe(format!(
+        "SELECT {JOB_COLUMNS}, result FROM jobs WHERE id = $1 AND workspace_id = $2 AND (created_by = $3 OR $4)"
+    )))
+    .bind(id)
+    .bind(user.workspace_id)
+    .bind(user.id)
+    .bind(user.is_admin())
+    .fetch_optional(&state.db)
+    .await?
+    .ok_or(ApiError::NotFound("job"))
+}
+
 pub async fn get_job(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<Json<JobRow>> {
-    let job = sqlx::query_as::<_, JobRow>("SELECT id, kind, status, progress, result, error, created_at, started_at, finished_at FROM jobs WHERE id = $1 AND workspace_id = $2 AND (created_by = $3 OR $4)")
-        .bind(id)
-        .bind(user.workspace_id)
-        .bind(user.id)
-        .bind(user.is_admin())
-        .fetch_optional(&state.db)
-        .await?
-        .ok_or(ApiError::NotFound("job"))?;
-    Ok(Json(job))
+    Ok(Json(load_job(&state, &user, id).await?))
+}
+
+/// `POST /api/jobs/{id}/cancel`: a queued job stops at once, a running one at its next progress
+/// update (cleaning up as on a failure: a restore removes its half-restored space).
+pub async fn cancel_job(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<Json<JobRow>> {
+    let job = load_job(&state, &user, id).await?;
+    if !matches!(job.status.as_str(), "queued" | "running") {
+        return Err(ApiError::Conflict("this job has already finished".into()));
+    }
+    let stopped = sqlx::query(
+        "UPDATE jobs SET status = 'cancelled', error = 'cancelled', finished_at = now(), cancel_requested = true WHERE id = $1 AND status = 'queued'",
+    )
+    .bind(id)
+    .execute(&state.db)
+    .await?
+    .rows_affected();
+    if stopped == 0 {
+        // it started meanwhile (or was running): it stops at its next progress update
+        sqlx::query("UPDATE jobs SET cancel_requested = true WHERE id = $1 AND status = 'running'").bind(id).execute(&state.db).await?;
+    }
+    crate::audit::log(&state, user.workspace_id, Some(user.id), "job.cancelled", Some("job"), Some(id), json!({"kind": job.kind})).await;
+    Ok(Json(load_job(&state, &user, id).await?))
+}
+
+/// `POST /api/jobs/{id}/retry`: runs a failed or cancelled job again. A Confluence import runs
+/// as an update of what the earlier attempt imported, so it carries on instead of duplicating.
+pub async fn retry_job(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<(StatusCode, Json<JobRow>)> {
+    let job = load_job(&state, &user, id).await?;
+    if !matches!(job.status.as_str(), "failed" | "cancelled") {
+        return Err(ApiError::Conflict("only failed or cancelled jobs can be retried".into()));
+    }
+    let Some(&(_, needs_upload)) = RETRYABLE.iter().find(|(k, _)| *k == job.kind) else {
+        return Err(ApiError::bad("this kind of job can't be retried"));
+    };
+    if job.kind.starts_with("import.") {
+        require_admin(&user)?;
+    }
+    let mut input: Value = sqlx::query_scalar("SELECT input FROM jobs WHERE id = $1").bind(id).fetch_one(&state.db).await?;
+    if needs_upload && input.get("upload").and_then(Value::as_str).is_none() {
+        return Err(ApiError::Conflict(format!(
+            "the uploaded file is gone (it is kept {} days after a failure); upload it again",
+            crate::jobs::RETRY_UPLOAD_DAYS
+        )));
+    }
+    if job.kind == "import.confluence"
+        && let Some(o) = input.as_object_mut()
+    {
+        let opts = o.entry("options").or_insert_with(|| json!({}));
+        if let Some(opts) = opts.as_object_mut() {
+            opts.insert("update".into(), Value::Bool(true));
+        }
+    }
+    let n = sqlx::query(
+        "UPDATE jobs SET status = 'queued', error = NULL, result = NULL, progress = '{}', started_at = NULL, finished_at = NULL, heartbeat_at = NULL,
+                cancel_requested = false, attempts = attempts + 1, input = $2
+         WHERE id = $1 AND status IN ('failed', 'cancelled')",
+    )
+    .bind(id)
+    .bind(&input)
+    .execute(&state.db)
+    .await?
+    .rows_affected();
+    if n == 0 {
+        return Err(ApiError::Conflict("the job changed meanwhile".into()));
+    }
+    crate::audit::log(&state, user.workspace_id, Some(user.id), "job.retried", Some("job"), Some(id), json!({"kind": job.kind})).await;
+    Ok((StatusCode::ACCEPTED, Json(load_job(&state, &user, id).await?)))
 }
 
 /// `POST /api/imports/markdown` (multipart: `spaceKey`, optional `parentId`, one `.md` file or a

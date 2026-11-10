@@ -543,7 +543,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P2** MediaWiki XML dump `X`
 - [ ] **P2** XWiki XAR export
 - [ ] **P2** Docmost, Outline (JSON export), BookStack (API), Wiki.js (DB / git), DokuWiki, SharePoint pages, GitHub wiki, Quip `X(MediaWiki,Dokuwiki)`
-- [~] **P1** Import job UI: upload (resumable, multi-GB), dry-run analysis report, mapping (users, spaces, macros), progress, cancel, retry, final report with warnings per page (no resumable upload, mapping, cancel or retry)
+- [~] **P1** Import job UI: upload (resumable, multi-GB), dry-run analysis report, mapping (users, spaces, macros), progress, cancel, retry, final report with warnings per page (cancel and retry in Admin → Import; a retried import continues as an update import; no resumable upload or mapping)
 - [~] **P1** Re-runnable & incremental imports (stable source-id mapping; update instead of duplicate) (Confluence: update imports, see §6.3; Notion / Word / HTML / Markdown imports still create new pages)
 
 ### 4.19 Export, print & publishing
@@ -621,7 +621,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P1** Global templates & default space permissions `C` (global templates via API only)
 - [~] **P1** Attachment limits (max size, allowed/blocked types), quota per space/workspace `C X` (max upload size via env only)
 - [~] **P1** System info / health page (version, DB, queue depth, index status) `X DC` (health endpoint + admin stats only)
-- [~] **P1** Background job dashboard (imports, reindex, exports) with retry/cancel (job list only; no retry/cancel)
+- [x] **P1** Background job dashboard (imports, reindex, exports) with retry/cancel — Admin → Import lists jobs with Cancel (queued: at once; running: at the next progress update, cleaning up like a failure, e.g. a restore removes its half-restored space) and Retry (failed or cancelled; uploads are kept 7 days for it); attempts counted, audited (`job.cancelled`, `job.retried`). Reindex runs inline, not as a job
 - [~] **P2** Audit log viewer with filters + export + SIEM streaming (syslog, webhook, Splunk HEC) `C D(EE) X` (basic viewer; no filter UI, export, SIEM)
 - [ ] **P2** License/edition management (open-core enterprise key)
 - [ ] **P2** Maintenance / read-only mode `DC`
@@ -771,7 +771,7 @@ files can also be stored as `attachments/<FILESTORE_ID>` (now handled).
 - [x] **P1** Labels (global/personal `my:` namespaces), watches (`Notification`), favourites (`User2ContentRelationEntity`), blog posts, space description/home page — global labels; page, blog and space watches (digests, network follows and label watches left out; 124 from the 149 rows of fixture B, the rest are duplicates via old versions); favourites from the `favourite` relation and `my:favourite` labels (on the space description = space favourite); personal labels otherwise skipped; CSV `notifications` / `usercontent_relation` read by DB column names (unverified)
 - [ ] **P1** Custom content: content properties (consume), page status, team calendars, whiteboards and databases (placeholder + report until supported)
 - [x] **P1** **Dry-run mode** that produces exactly this kind of report (counts, unresolved refs, unknown macros, warnings per page) before writing anything — `analyze-confluence` CLI, `POST /imports/confluence/analyze`, Analyze button in Admin → Import
-- [~] **P1** Idempotent, resumable import job with checkpoints and source-id mapping (re-import updates instead of duplicating) — update imports (`update`, `--update`): the earlier import's space continues; new pages / versions / attachment versions / comments are added, pages changed in Confluence get its new versions, pages changed on both sides are reported (or `overwriteLocalChanges`), moves and deletions follow Confluence, running it twice changes nothing (`import_mappings.source_version` / `target_version`); no checkpoints: a failed import isn't resumed
+- [~] **P1** Idempotent, resumable import job with checkpoints and source-id mapping (re-import updates instead of duplicating) — update imports (`update`, `--update`): the earlier import's space continues; new pages / versions / attachment versions / comments are added, pages changed in Confluence get its new versions, pages changed on both sides are reported (or `overwriteLocalChanges`), moves and deletions follow Confluence, running it twice changes nothing (`import_mappings.source_version` / `target_version`); a failed or cancelled import is retried from Admin → Import as an update import, which carries on from what it brought in (pages are committed per space batch, so at most the batch in flight is redone); no finer checkpoints
 - [~] **P1** Security: zip-slip, zip bombs, XML entity expansion off, size/time limits, sanitize any `html` macro content and SVGs (zip paths with `..` / absolute / backslashes ignored, declared sizes never trusted, entry size cap; quick-xml never expands DTD entities; `html` macro → code block, never rendered; no overall time limit)
 
 ### 6.4 Golden fixtures to build next

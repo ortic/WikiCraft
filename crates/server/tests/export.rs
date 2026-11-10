@@ -450,3 +450,108 @@ async fn drawings_in_exports() {
     })
     .await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn jobs_can_be_cancelled_and_retried() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, _) = app.user(&owner, "mia@acme.test", "member").await;
+    app.post(&owner, "/spaces", json!({"key": "DOC", "name": "Docs"})).await;
+    let db = &app.state.db;
+    let (_, me) = app.get(&owner, "/me").await;
+    let owner_id: uuid::Uuid = me["user"]["id"].as_str().unwrap().parse().unwrap();
+    let ws: uuid::Uuid = sqlx::query_scalar("SELECT workspace_id FROM users WHERE id = $1").bind(owner_id).fetch_one(db).await.unwrap();
+
+    // a real export gives us a valid input to reuse
+    let (_, body) = app.post(&owner, "/spaces/DOC/export", json!({"format": "markdown"})).await;
+    let first = body["jobId"].as_str().unwrap().to_string();
+    wait_job(&app, &owner, &first).await;
+    let input: Value = sqlx::query_scalar("SELECT input FROM jobs WHERE id = $1::uuid").bind(&first).fetch_one(db).await.unwrap();
+
+    // a queued job is cancelled at once (input-less rows are never picked up by the worker)
+    let queued = uuid::Uuid::now_v7();
+    sqlx::query("INSERT INTO jobs (id, workspace_id, kind, status, created_by) VALUES ($1, $2, 'export.space', 'queued', $3)")
+        .bind(queued)
+        .bind(ws)
+        .bind(owner_id)
+        .execute(db)
+        .await
+        .unwrap();
+    let (st, _) = app.post(&member, &format!("/jobs/{queued}/cancel"), json!({})).await;
+    assert_eq!(st, 404, "only its creator or an admin");
+    let (st, j) = app.post(&owner, &format!("/jobs/{queued}/cancel"), json!({})).await;
+    assert_eq!(st, 200, "{j}");
+    assert_eq!(j["status"], "cancelled");
+    assert_eq!(j["retryable"], true, "exports need no upload to run again");
+    let (st, _) = app.post(&owner, &format!("/jobs/{queued}/cancel"), json!({})).await;
+    assert_eq!(st, 409, "already finished");
+
+    // retry runs it again
+    sqlx::query("UPDATE jobs SET input = $2 WHERE id = $1").bind(queued).bind(&input).execute(db).await.unwrap();
+    let (st, j) = app.post(&owner, &format!("/jobs/{queued}/retry"), json!({})).await;
+    assert_eq!(st, 202, "{j}");
+    assert_eq!(j["attempts"], 2);
+    let done = wait_job(&app, &owner, &queued.to_string()).await;
+    assert!(done["result"]["filename"].as_str().unwrap().ends_with(".zip"));
+    let (st, _) = app.post(&owner, &format!("/jobs/{queued}/retry"), json!({})).await;
+    assert_eq!(st, 409, "only failed or cancelled jobs");
+
+    // a running job stops at its next progress update
+    let running = uuid::Uuid::now_v7();
+    sqlx::query(
+        "INSERT INTO jobs (id, workspace_id, kind, status, created_by, started_at, heartbeat_at) VALUES ($1, $2, 'export.space', 'running', $3, now(), now())",
+    )
+    .bind(running)
+    .bind(ws)
+    .bind(owner_id)
+    .execute(db)
+    .await
+    .unwrap();
+    let (_, j) = app.post(&owner, &format!("/jobs/{running}/cancel"), json!({})).await;
+    assert_eq!(j["status"], "running");
+    assert_eq!(j["cancelling"], true);
+    let err = wikicraft::jobs::checkpoint(&app.state, running, json!({"phase": "pages"})).await.unwrap_err();
+    assert!(err.is::<wikicraft::jobs::Cancelled>());
+    wikicraft::jobs::record_failure(&app.state, running, &err).await;
+    let (_, j) = app.get(&owner, &format!("/jobs/{running}")).await;
+    assert_eq!(j["status"], "cancelled");
+    assert_eq!(j["cancelling"], false);
+
+    // a failed import keeps its upload for a retry, which continues it as an update import
+    let failed = uuid::Uuid::now_v7();
+    sqlx::query(
+        "INSERT INTO jobs (id, workspace_id, kind, status, created_by, error, finished_at, input)
+         VALUES ($1, $2, 'import.confluence', 'failed', $3, 'disk full', now(), $4)",
+    )
+    .bind(failed)
+    .bind(ws)
+    .bind(owner_id)
+    .bind(json!({"upload": "uploads/missing-file", "options": {"skipHistory": true}}))
+    .execute(db)
+    .await
+    .unwrap();
+    let (_, j) = app.get(&owner, &format!("/jobs/{failed}")).await;
+    assert_eq!(j["retryable"], true);
+    let (st, j) = app.post(&owner, &format!("/jobs/{failed}/retry"), json!({})).await;
+    assert_eq!(st, 202, "{j}");
+    let input: Value = sqlx::query_scalar("SELECT input FROM jobs WHERE id = $1").bind(failed).fetch_one(db).await.unwrap();
+    assert_eq!(input["options"], json!({"skipHistory": true, "update": true}));
+    // (the upload doesn't exist, so this attempt fails again; the upload reference stays)
+    let j = app
+        .eventually(|| async {
+            let (_, j) = app.get(&owner, &format!("/jobs/{failed}")).await;
+            (j["status"] == "failed").then_some(j)
+        })
+        .await;
+    assert_eq!(j["attempts"], 2);
+    assert_eq!(j["retryable"], true);
+    // without its upload it can't run again
+    sqlx::query("UPDATE jobs SET input = input - 'upload' WHERE id = $1").bind(failed).execute(db).await.unwrap();
+    let (st, body) = app.post(&owner, &format!("/jobs/{failed}/retry"), json!({})).await;
+    assert_eq!(st, 409, "{body}");
+
+    // the admin job list shows the state
+    let (_, list) = app.get(&owner, "/jobs").await;
+    let row = list.as_array().unwrap().iter().find(|x| x["id"] == running.to_string()).unwrap().clone();
+    assert_eq!(row["status"], "cancelled");
+}

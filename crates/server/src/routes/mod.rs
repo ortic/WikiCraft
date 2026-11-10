@@ -204,6 +204,8 @@ pub fn router(state: AppState) -> Router {
         .route("/imports/backup", post(exports::restore).layer(DefaultBodyLimit::max(max_upload)))
         .route("/jobs", get(imports::list_jobs))
         .route("/jobs/{id}", get(imports::get_job))
+        .route("/jobs/{id}/cancel", post(imports::cancel_job))
+        .route("/jobs/{id}/retry", post(imports::retry_job))
         .route("/jobs/{id}/download", get(exports::download))
         .route("/spaces/{key}/export", post(exports::start))
         // admin
