@@ -28,7 +28,8 @@ end-of-life (2029-03-28).
 - **API**: REST + personal API tokens; audit log
 
 Documentation: [user guide](docs/user-guide.md) · [admin guide](docs/admin-guide.md) ·
-[leaving Confluence Data Center](docs/migrating-from-confluence.md)
+[leaving Confluence Data Center](docs/migrating-from-confluence.md) ·
+[overview deck](docs/presentation/WikiCraft-overview.pptx) (PowerPoint)
 
 ## Quick start (Docker)
 

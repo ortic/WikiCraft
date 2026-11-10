@@ -5,5 +5,7 @@
   upgrades, monitoring, security checklist.
 - [Leaving Confluence Data Center](migrating-from-confluence.md): exporting from Confluence, the
   dry run, importing, imported authors, what maps to what.
+- [Overview deck](presentation/WikiCraft-overview.pptx) (PowerPoint, 11 slides): what WikiCraft does and
+  how it replaces Confluence, for decision makers and admins.
 - [README](../README.md): features, configuration reference, API, webhooks, MCP.
 - API reference: `/api/openapi.yaml` on any WikiCraft (OpenAPI 3.1).
