@@ -208,6 +208,7 @@ op("/comments/{id}", "patch", "Comments", "Edit, resolve or reopen", req=body(ob
 op("/comments/{id}", "delete", "Comments", "Delete (with replies)", res=NO)
 op("/pages/{id}/attachments", "get", "Attachments", "Attachments of a page", res=resp(arr(S("Attachment"))), public=True)
 op("/pages/{id}/attachments", "post", "Attachments", "Upload files (new versions when the name exists)", req=multipart({}), res=resp(arr(S("Attachment")), "201", "Created"))
+op("/pages/{id}/comment-images", "post", "Comments", "Upload an image for a comment (anyone who may comment): PNG, JPEG, GIF or WebP by content, stored as a page attachment under a name of its own; put ![alt](url) in the comment", req=multipart({}), res=resp(obj({"id": uuid, "filename": txt, "url": txt}), "201", "Created"))
 op("/attachments/{id}", "delete", "Attachments", "Delete an attachment", res=NO)
 op("/attachments/{id}/content", "get", "Attachments", "Download (images/PDF inline, everything else as download)", public=True)
 op("/attachments/{id}/versions", "get", "Attachments", "Every uploaded version of a file, newest first", res=resp(arr(obj({"version": num, "size": num, "mediaType": txt, "createdByName": {"type": ["string", "null"]}, "createdAt": dt}))))

@@ -359,6 +359,8 @@ table.list tr:hover td { background: var(--bg-soft); }
 .comment .c-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
 .comment .c-body { font-size: 14px; }
 .comment .c-body p { margin: 0 0 4px; }
+.comment .c-body .comment-image { display: block; margin: 4px 0 6px; }
+.comment .c-body .comment-image img { max-width: 100%; max-height: 260px; border-radius: 6px; border: 1px solid var(--border); display: block; }
 .comment .c-quote { border-left: 3px solid #eab308; padding-left: 8px; color: var(--text-soft); font-size: 13px; margin-bottom: 6px; }
 .comment .reply { margin: 8px 0 0 18px; padding-top: 8px; border-top: 1px solid var(--border); }
 .comment.resolved { opacity: .65; }

@@ -148,6 +148,7 @@ pub fn router(state: AppState) -> Router {
         .route("/comments/{id}", axum::routing::patch(comments::update).delete(comments::delete))
         // attachments
         .route("/pages/{id}/attachments", get(attachments::list).post(attachments::upload).layer(DefaultBodyLimit::max(max_upload)))
+        .route("/pages/{id}/comment-images", post(attachments::upload_comment_image).layer(DefaultBodyLimit::max(max_upload)))
         .route("/attachments/{id}", delete(attachments::delete))
         .route("/attachments/{id}/content", get(attachments::download))
         .route("/attachments/{id}/versions", get(attachments::versions))

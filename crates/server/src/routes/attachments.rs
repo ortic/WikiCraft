@@ -294,6 +294,45 @@ pub async fn upload(
     Ok((StatusCode::CREATED, Json(rows)))
 }
 
+/// `POST /pages/{id}/comment-images` (multipart `file`): an image for a comment, by anyone who
+/// may comment. PNG, JPEG, GIF or WebP (by content), under the workspace's upload rules; stored as
+/// a page attachment with a name of its own (never a new version of another file).
+pub async fn upload_comment_image(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(page_id): Path<Uuid>,
+    mut mp: Multipart,
+) -> ApiResult<(StatusCode, Json<serde_json::Value>)> {
+    let p = Principal::load(&state, Some(user.clone())).await?;
+    let (_, space) = require_page(&state, &p, page_id, Need::Comment).await?;
+    let field = mp.next_field().await.map_err(|e| ApiError::bad(format!("multipart: {e}")))?.ok_or_else(|| ApiError::bad("no file in request"))?;
+    let data = field.bytes().await.map_err(|e| ApiError::bad(format!("upload failed: {e}")))?;
+    let ext = match data.as_ref() {
+        [0x89, b'P', b'N', b'G', ..] => "png",
+        [0xFF, 0xD8, 0xFF, ..] => "jpg",
+        [b'G', b'I', b'F', b'8', ..] => "gif",
+        d if d.len() > 12 && &d[0..4] == b"RIFF" && &d[8..12] == b"WEBP" => "webp",
+        _ => return Err(ApiError::bad("comments take PNG, JPEG, GIF or WebP images")),
+    };
+    let name = format!("comment-image-{}.{ext}", &new_id().simple().to_string()[..12]);
+    check_upload(&state, user.workspace_id, space, &name, data.len() as u64).await?;
+    if let Some(sig) = crate::antivirus::screen(&state, &data).await? {
+        crate::audit::log(
+            &state,
+            user.workspace_id,
+            Some(user.id),
+            "upload.infected",
+            Some("page"),
+            Some(page_id),
+            serde_json::json!({"file": name, "signature": sig}),
+        )
+        .await;
+        return Err(ApiError::bad(format!("the virus scanner found {sig}; the image was refused")));
+    }
+    let id = store_attachment(&state, user.workspace_id, page_id, Some(user.id), &name, data, None, None).await?;
+    Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": id, "filename": name, "url": format!("/api/attachments/{id}/content") }))))
+}
+
 pub async fn download(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path(id): Path<Uuid>) -> ApiResult<Response> {
     let row: Option<(Uuid, String, String, Option<String>, i64)> =
         sqlx::query_as("SELECT page_id, filename, media_type, blob_key, size FROM attachments WHERE id = $1 AND deleted_at IS NULL")

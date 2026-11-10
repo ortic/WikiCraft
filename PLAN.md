@@ -380,7 +380,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Inline comments anchored to a text range (Yjs relative positions; survive edits) `C D O`
 - [x] **P0** Resolve / reopen inline comments; show resolved comments `C D O`
 - [x] **P0** Edit / delete own comments; admins can moderate `C D X`
-- [~] **P1** Rich comments (formatting, mentions, emoji, images, code) `C D O` (Markdown + @mentions; no images)
+- [x] **P1** Rich comments (formatting, mentions, emoji, images, code) `C D O` (Markdown formatting and code, @mentions, images pasted, dropped or picked in the comment box (anyone who may comment; PNG/JPEG/GIF/WebP by content, upload rules and virus scan apply; stored as page attachments; only this wiki's images are shown); no emoji by design)
 - [~] **P1** Reactions (emoji) on pages and comments `C O` (likes on pages and comments; no emoji by design)
 - [x] **P1** Page likes / "helpful" signal `C X`
 - [x] **P1** Comment sorting and filtering (open / resolved / mine) `C` — Open / Resolved / Mine (threads you started or replied to) / All, with counts; a clicked resolved comment switches the filter

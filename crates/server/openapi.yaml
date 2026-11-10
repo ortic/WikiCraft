@@ -4175,6 +4175,47 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /pages/{id}/comment-images:
+    post:
+      tags:
+      - Comments
+      summary: 'Upload an image for a comment (anyone who may comment): PNG, JPEG, GIF or WebP by content, stored as a page
+        attachment under a name of its own; put ![alt](url) in the comment'
+      operationId: post_pages_id_comment_images
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+              required:
+              - file
+      responses:
+        '201':
+          description: Created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: *id002
+                  filename: *id001
+                  url: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /attachments/{id}:
     delete:
       tags:

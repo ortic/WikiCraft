@@ -136,7 +136,10 @@ fn comment_doc(content: Option<Value>, text: Option<String>) -> ApiResult<Node> 
         _ => return Err(ApiError::bad("content or text required")),
     };
     wikicraft_doc_model::node::sanitize_tree(&mut doc);
-    if text::plain_text(&doc).trim().is_empty() && !doc.content.iter().any(|n| n.kind == "image") {
+    fn has_image(n: &Node) -> bool {
+        n.kind == "image" || n.content.iter().any(has_image)
+    }
+    if text::plain_text(&doc).trim().is_empty() && !has_image(&doc) {
         return Err(ApiError::bad("comment is empty"));
     }
     Ok(doc)

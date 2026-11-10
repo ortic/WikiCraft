@@ -112,7 +112,9 @@ and can make an earlier one current again.
 
 - Select text and choose the comment icon for an **inline comment**, or comment on the whole
   page in the comments panel. Reply, @mention, like, resolve and reopen; filter by open, resolved
-  or your own threads.
+  or your own threads. Comments take Markdown, and images: paste or drop them in the comment
+  box, or use its image button (PNG, JPEG, GIF or WebP; they're stored with the page's
+  attachments).
 - In a task list, `@`-mention someone to assign the task and add a date for the due date. On
   that day (from 8:00 in the time zone of their profile) they get a reminder, in the bell and by
   e-mail like other notifications; mute it under Settings if you don't want it.

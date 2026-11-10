@@ -161,6 +161,15 @@ test('comments and search', async ({ browser }) => {
   await page.locator('.side-panel textarea').first().fill('Can we pull the mobile app into Q2?')
   await page.locator('.side-panel .btn-primary').first().click()
   await expect(page.locator('.side-panel')).toContainText('pull the mobile app into Q2')
+  // an image in a comment: picked with the image button, shown in the thread
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64')
+  await page.locator('.side-panel input[type=file]').last().setInputFiles({ name: 'sketch.png', mimeType: 'image/png', buffer: png })
+  const box = page.locator('.side-panel textarea').last()
+  await expect(box).toHaveValue(/!\[sketch\]\(\/api\/attachments\/[0-9a-f-]+\/content\)/)
+  await page.locator('.side-panel .btn-primary').last().click()
+  const img = page.locator('.side-panel .comment-image img')
+  await expect(img).toHaveAttribute('alt', 'sketch')
+  await expect.poll(() => img.evaluate((el) => (el as HTMLImageElement).naturalWidth)).toBe(1)
   // search (index updates asynchronously)
   await expect
     .poll(async () => page.evaluate(async () => (await (await fetch('/api/search?q=mobile')).json()).length), { timeout: 20_000 })
