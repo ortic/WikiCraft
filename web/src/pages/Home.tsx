@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
-import { FileText, Plus, Star, TrendingUp } from 'lucide-react'
+import { FileText, ListChecks, Plus, Star, TrendingUp } from 'lucide-react'
 import { api, formatDate, type PageListItem, type Space } from '../api'
 import { SpaceIcon, useMe } from '../ui'
 import CreateSpaceDialog from '../components/CreateSpaceDialog'
@@ -37,11 +37,35 @@ export default function Home() {
     queryFn: () => api.get<(PageListItem & { views: number; viewers: number })[]>('/popular?days=30'),
     enabled: !!me.data?.user && tab === 'popular',
   })
+  const tasks = useQuery({
+    queryKey: ['tasks', 'open'],
+    queryFn: () => api.get<{ pageId: string; idx: number; text: string; due: string | null; pageTitle: string }[]>('/tasks?status=open'),
+    enabled: !!me.data?.user,
+  })
   const name = me.data?.user?.name?.split(' ')[0]
+  const today = new Date().toISOString().slice(0, 10)
   return (
     <div className="content-pad">
       <h1 style={{ margin: '4px 0 2px' }}>{name ? `Good to see you, ${name}` : me.data?.workspace?.name}</h1>
       <p className="muted" style={{ marginTop: 0 }}>{me.data?.workspace?.name}</p>
+
+      {!!tasks.data?.length && (
+        <div className="card home-tasks">
+          <div className="row">
+            <ListChecks size={16} /> <b>Your open tasks</b>
+            <span className="faint small">{tasks.data.length}</span>
+            <span className="spacer" />
+            <Link to="/tasks" className="small">All tasks</Link>
+          </div>
+          {tasks.data.slice(0, 5).map((t) => (
+            <Link key={`${t.pageId}-${t.idx}`} to={`/pages/${t.pageId}`} className="home-task">
+              <span className="home-task-text">{t.text || 'Untitled task'}</span>
+              <span className="faint small">{t.pageTitle}</span>
+              {t.due && <span className={`badge ${t.due < today ? 'badge-danger' : t.due === today ? 'badge-warning' : ''}`}>{t.due < today ? 'overdue ' : 'due '}{t.due}</span>}
+            </Link>
+          ))}
+        </div>
+      )}
 
       <div className="row" style={{ marginTop: 28 }}>
         <h3 style={{ margin: 0 }}>Spaces</h3>

@@ -486,7 +486,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P2** Login policies: IP allowlists, session duration, device trust `C(Guard)`
 
 ### 4.14 Navigation, home & personalization
-- [~] **P0** Home dashboard: recent pages, starred, drafts, tasks assigned to me `C D O` (no drafts; tasks on separate page)
+- [~] **P0** Home dashboard: recent pages, starred, drafts, tasks assigned to me `C D O` (no drafts; personal space for unpublished work)
 - [x] **P0** Recently viewed / recently edited `C D O`
 - [~] **P1** Starred/favorite pages and spaces `C D O` (pages only)
 - [ ] **P1** Activity feed (following people/spaces; popular in my org) `C X`

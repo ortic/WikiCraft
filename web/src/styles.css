@@ -584,3 +584,9 @@ a.menu-item { color: inherit; text-decoration: none; }
 .drag-handle:active { cursor: grabbing; }
 .ProseMirror .ProseMirror-selectednode, .ProseMirror .ProseMirror-selectednoderange { outline: 2px solid color-mix(in srgb, var(--accent) 45%, transparent); outline-offset: 2px; border-radius: 4px; }
 @media (max-width: 860px) { .drag-handle { display: none; } }
+.home-tasks { margin-top: 18px; display: flex; flex-direction: column; gap: 2px; }
+.home-tasks > .row { gap: 8px; margin-bottom: 6px; }
+.home-task { display: flex; align-items: center; gap: 10px; padding: 6px 8px; border-radius: 6px; color: var(--text); text-decoration: none; }
+.home-task:hover { background: var(--bg-hover); }
+.home-task-text { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 600px) { .home-task .faint { display: none; } }
