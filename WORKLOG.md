@@ -112,6 +112,10 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   space permission subjects as current exports write them (`all-licensed-users` was read as anonymous); full URLs
   of the old site become internal links (2,334 in the ToIP export: a Cloud address can't be redirected); smart
   link embeds. People directory and profiles. A PPTX overview deck was made on request (scratchpad, not in the repo).
+- Confluence page bodies on disk instead of in memory (synthetic 317 MB export: 361 MB → 71 MB peak); scheduled
+  publishing; blueprints (index pages for meeting notes etc.); profile pictures; draw.io diagrams (embed mode,
+  Confluence draw.io macros import editable; e2e test with a stand-in for diagrams.net). The overview deck is in
+  docs/presentation/.
 - Note: running the whole test suite saturates this WSL machine (load ~100); a parallel demo server then hits DB
   pool timeouts, and the mail test's 4-second wait can flake. Both pass when the machine is idle.
 
