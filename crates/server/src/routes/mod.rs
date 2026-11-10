@@ -123,6 +123,8 @@ pub fn router(state: AppState) -> Router {
         .route("/recent", get(search::recent))
         .route("/favorites", get(search::favorites))
         .route("/popular", get(search::popular))
+        .route("/me/searches", get(search::saved_searches).post(search::save_search))
+        .route("/me/searches/{id}", delete(search::delete_search))
         .route("/space-templates", get(space_templates::list))
         .route("/markdown", post(pages::markdown_to_doc))
         .route("/labels/{name}", get(search::by_label))

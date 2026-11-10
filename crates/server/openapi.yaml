@@ -3166,6 +3166,84 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /me/searches:
+    get:
+      tags:
+      - Search
+      summary: Your saved searches
+      operationId: get_me_searches
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: *id002
+                    name: *id001
+                    params: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+      - Search
+      summary: Save a search (the search page's query string)
+      operationId: post_me_searches
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: *id001
+                params: *id001
+              required:
+              - name
+              - params
+      responses:
+        '201':
+          description: Saved
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  id: *id002
+                  name: *id001
+                  params: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/searches/{id}:
+    delete:
+      tags:
+      - Search
+      summary: Delete a saved search
+      operationId: delete_me_searches_id
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '204': *id007
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /space-templates:
     get:
       tags:

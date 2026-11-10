@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
-import { useQuery } from '@tanstack/react-query'
-import { FileText, Sparkles } from 'lucide-react'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { BookmarkPlus, FileText, Sparkles, X } from 'lucide-react'
 import { api, type SearchHit, type Space } from '../api'
 import { Spinner, useMe } from '../ui'
 
@@ -64,6 +64,14 @@ export default function SearchPage() {
   }
   const [input, setInput] = useState(q)
   const [labelInput, setLabelInput] = useState(label)
+  const qc = useQueryClient()
+  const saved = useQuery({ queryKey: ['saved-searches'], queryFn: () => api.get<{ id: string; name: string; params: string }[]>('/me/searches'), enabled: !!me.data?.user })
+  const saveSearch = async () => {
+    const name = window.prompt('Name this search', q)
+    if (!name) return
+    await api.post('/me/searches', { name, params: params.toString() })
+    qc.invalidateQueries({ queryKey: ['saved-searches'] })
+  }
   const spaces = useQuery({ queryKey: ['spaces'], queryFn: () => api.get<Space[]>('/spaces') })
   const ai = useQuery({ queryKey: ['ai-status'], queryFn: () => api.get<{ enabled: boolean }>('/ai/status'), staleTime: 300_000 })
   const [answer, setAnswer] = useState<{ loading: boolean; error?: string; data?: Answer; question: string } | null>(null)
@@ -138,7 +146,32 @@ export default function SearchPage() {
             <input type="checkbox" checked={mine} onChange={(e) => setParam('mine', e.target.checked ? '1' : '')} /> Pages I worked on
           </label>
         )}
+        {me.data?.user && q && (
+          <button type="button" className="btn btn-sm" onClick={saveSearch} title="Keep this search and its filters">
+            <BookmarkPlus size={14} /> Save search
+          </button>
+        )}
       </div>
+      {!!saved.data?.length && (
+        <div className="row saved-searches">
+          <span className="faint small">Saved:</span>
+          {saved.data.map((s) => (
+            <span key={s.id} className={`saved-search ${s.params === params.toString() ? 'active' : ''}`}>
+              <Link to={`/search?${s.params}`} onClick={() => setInput(new URLSearchParams(s.params).get('q') ?? '')}>{s.name}</Link>
+              <button
+                type="button"
+                title="Delete saved search"
+                onClick={async () => {
+                  await api.del(`/me/searches/${s.id}`)
+                  qc.invalidateQueries({ queryKey: ['saved-searches'] })
+                }}
+              >
+                <X size={12} />
+              </button>
+            </span>
+          ))}
+        </div>
+      )}
       {answer && <AnswerCard state={answer} />}
       <div style={{ marginTop: 20 }}>
         {results.isLoading && <Spinner />}

@@ -316,3 +316,59 @@ pub async fn resolve(State(state): State<AppState>, MaybeUser(user): MaybeUser, 
     let (access, _) = crate::authz::page_access(&state, &p, id).await?;
     Ok(Json(json!({ "pageId": if access.view { Some(id) } else { None } })))
 }
+
+#[derive(Deserialize)]
+pub struct SaveSearch {
+    name: String,
+    /// the search page's query string, e.g. `q=release&space=ENG&days=30`
+    params: String,
+}
+
+/// `GET /api/me/searches`
+pub async fn saved_searches(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Value>> {
+    let rows: Vec<(Uuid, String, String)> =
+        sqlx::query_as("SELECT id, name, params FROM saved_searches WHERE user_id = $1 ORDER BY created_at").bind(user.id).fetch_all(&state.db).await?;
+    Ok(Json(json!(rows.into_iter().map(|(id, name, params)| json!({ "id": id, "name": name, "params": params })).collect::<Vec<_>>())))
+}
+
+/// `POST /api/me/searches {name, params}`
+pub async fn save_search(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Json(req): Json<SaveSearch>,
+) -> ApiResult<(axum::http::StatusCode, Json<Value>)> {
+    let name = req.name.trim();
+    if name.is_empty() || name.chars().count() > 120 || req.params.len() > 2000 {
+        return Err(crate::error::ApiError::bad("give the search a name (and keep it short)"));
+    }
+    // only the search page's own parameters
+    let params: String = req
+        .params
+        .trim_start_matches('?')
+        .split('&')
+        .filter(|kv| matches!(kv.split('=').next(), Some("q" | "space" | "kind" | "days" | "label" | "mine")))
+        .collect::<Vec<_>>()
+        .join("&");
+    if !params.split('&').any(|kv| kv.starts_with("q=") && kv.len() > 2) {
+        return Err(crate::error::ApiError::bad("a saved search needs a query"));
+    }
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM saved_searches WHERE user_id = $1").bind(user.id).fetch_one(&state.db).await?;
+    if count >= 50 {
+        return Err(crate::error::ApiError::bad("you can keep up to 50 saved searches"));
+    }
+    let id = crate::app::new_id();
+    sqlx::query("INSERT INTO saved_searches (id, user_id, name, params) VALUES ($1, $2, $3, $4)")
+        .bind(id)
+        .bind(user.id)
+        .bind(name)
+        .bind(&params)
+        .execute(&state.db)
+        .await?;
+    Ok((axum::http::StatusCode::CREATED, Json(json!({ "id": id, "name": name, "params": params }))))
+}
+
+/// `DELETE /api/me/searches/{id}`
+pub async fn delete_search(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<axum::http::StatusCode> {
+    sqlx::query("DELETE FROM saved_searches WHERE id = $1 AND user_id = $2").bind(id).bind(user.id).execute(&state.db).await?;
+    Ok(axum::http::StatusCode::NO_CONTENT)
+}

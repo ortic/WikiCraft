@@ -439,7 +439,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P1** Highlighted snippets, typo tolerance, stemming per language, CJK tokenization `C X` (snippets only)
 - [x] **P1** Search within a space (scoped) and within a page (Ctrl+F style) `C`
 - [ ] **P1** Query language (CQL-like: `space = ENG AND label = runbook AND lastModified > now("-30d")`) for macros/API `C`
-- [ ] **P1** Saved searches `X`
+- [x] **P1** Saved searches `X`
 - [x] **P1** Incremental indexing via the job queue; full reindex CLI `X`
 - [ ] **P2** Semantic / hybrid search (BM25 + vectors, reciprocal rank fusion) `C D`
 - [ ] **P2** Search analytics (top queries, zero-result queries) `C`

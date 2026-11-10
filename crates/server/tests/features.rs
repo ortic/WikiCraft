@@ -245,3 +245,23 @@ async fn muted_notification_kinds() {
     let (_, n) = app.get(&member, "/notifications").await;
     assert!(kinds(&n).contains(&"comment".to_string()), "unmuting shows them again: {n}");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn saved_searches() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (other, _) = app.user(&owner, "ss@acme.test", "member").await;
+    assert_eq!(app.post(&owner, "/me/searches", json!({"name": "x", "params": "space=ENG"})).await.0, 400, "needs a query");
+    let (st, s) = app.post(&owner, "/me/searches", json!({"name": "Recent runbooks", "params": "?q=runbook&days=30&evil=1&label=ops"})).await;
+    assert_eq!(st, 201);
+    assert_eq!(s["params"], "q=runbook&days=30&label=ops", "unknown parameters are dropped");
+    let (_, list) = app.get(&owner, "/me/searches").await;
+    assert_eq!(list.as_array().unwrap().len(), 1);
+    let (_, theirs) = app.get(&other, "/me/searches").await;
+    assert_eq!(theirs.as_array().unwrap().len(), 0, "searches are personal");
+    let id = s["id"].as_str().unwrap();
+    assert_eq!(app.delete(&other, &format!("/me/searches/{id}")).await, 204);
+    assert_eq!(app.get(&owner, "/me/searches").await.1.as_array().unwrap().len(), 1, "others can't delete it");
+    assert_eq!(app.delete(&owner, &format!("/me/searches/{id}")).await, 204);
+    assert_eq!(app.get(&owner, "/me/searches").await.1.as_array().unwrap().len(), 0);
+}
