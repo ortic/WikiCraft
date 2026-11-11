@@ -5,8 +5,8 @@ WORKDIR /web
 COPY web/package.json web/package-lock.json ./
 RUN npm ci --no-audit --no-fund
 COPY web/ ./
-# shared icon set (also compiled into the server)
-COPY crates/doc-model/assets/icons.json /crates/doc-model/assets/icons.json
+# assets shared with the server (icon set, block types)
+COPY crates/doc-model/assets/ /crates/doc-model/assets/
 RUN npm run build
 
 # ---- backend ----
