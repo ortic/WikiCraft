@@ -7,11 +7,26 @@ import { useQueryClient } from '@tanstack/react-query'
 import { Check, X } from 'lucide-react'
 import { api } from '../api'
 
+// stored as these English names (as Confluence does), shown in the reader's language
 export const PAGE_STATUSES: { value: string; color: string }[] = [
-  { value: t('Rough draft'), color: 'grey' },
-  { value: t('In progress'), color: 'blue' },
-  { value: t('Ready for review'), color: 'yellow' },
+  { value: 'Rough draft', color: 'grey' },
+  { value: 'In progress', color: 'blue' },
+  { value: 'Ready for review', color: 'yellow' },
 ]
+
+/** A status as the reader reads it: the built-in ones translated, custom ones as written. */
+export function statusLabel(s: string): string {
+  switch (s.toLowerCase()) {
+    case 'rough draft':
+      return t('Rough draft')
+    case 'in progress':
+      return t('In progress')
+    case 'ready for review':
+      return t('Ready for review')
+    default:
+      return s
+  }
+}
 
 const colorOf = (s: string) => PAGE_STATUSES.find((x) => x.value.toLowerCase() === s.toLowerCase())?.color ?? 'purple'
 
@@ -45,7 +60,7 @@ export function PageStatus({ pageId, status, canEdit, open, onOpenChange }: Prop
           aria-expanded={canEdit ? open : undefined}
           onClick={() => canEdit && onOpenChange(!open)}
         >
-          {status}
+          {statusLabel(status)}
         </button>
       ) : (
         <span className="faint small">{t('Status:')}</span>
@@ -55,7 +70,7 @@ export function PageStatus({ pageId, status, canEdit, open, onOpenChange }: Prop
           <div className="menu-label">{t('Page status')}</div>
           {PAGE_STATUSES.map((s) => (
             <div key={s.value} className="menu-item" role="menuitemradio" aria-checked={status === s.value} onClick={() => set(s.value)}>
-              <span className="status-lozenge" data-color={s.color}>{s.value}</span>
+              <span className="status-lozenge" data-color={s.color}>{statusLabel(s.value)}</span>
               <span className="spacer" />
               {status === s.value && <Check size={14} />}
             </div>

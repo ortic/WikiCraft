@@ -28,7 +28,7 @@ function when(day: string): string {
 export function PageViews({ pageId, views, viewers, canSeeWho }: { pageId: string; views: number; viewers: number; canSeeWho: boolean }) {
   const [open, setOpen] = useState(false)
   const list = useQuery({ queryKey: ['viewers', pageId], queryFn: () => api.get<Viewer[]>(`/pages/${pageId}/viewers`), enabled: open })
-  const label = `${views} view${views === 1 ? '' : 's'}`
+  const label = t('{count} views', { count: views })
   if (!canSeeWho) return <span title={t('{count} people', { count: viewers })}>{label}</span>
   return (
     <span className="page-views">

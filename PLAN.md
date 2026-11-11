@@ -191,7 +191,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P1** Multi-workspace (multi-tenant) mode for SaaS / large orgs, each with its own branding, users and settings `C`
 - [ ] **P2** XWiki-style "subwikis" / wiki farm: isolated wikis sharing users `X`
 - [ ] **P1** Custom domain per workspace; base-path deployments (`/wiki`) `C X`
-- [~] **P1** Workspace-level settings: name, logo, favicon, colors, default language, timezone, date format `C D X` (Admin → Overview: name; logo (header, sign-in and shared pages, also the browser tab icon); accent colour (light and dark variants adjusted for AA contrast, the high-contrast theme keeps its own); date format (reader's language or a fixed pattern, also in server-rendered report tables); default time zone (people without their own; also for due-task reminders). No default language until the UI is translated)
+- [~] **P1** Workspace-level settings: name, logo, favicon, colors, default language, timezone, date format `C D X` (Admin → Overview: name; logo (header, sign-in and shared pages, also the browser tab icon); accent colour (light and dark variants adjusted for AA contrast, the high-contrast theme keeps its own); date format (reader's language or a fixed pattern, also in server-rendered report tables); default time zone (people without their own; also for due-task reminders); default interface language (people without their own))
 - [ ] **P2** Sandbox / staging workspace cloned from production `C`
 - [ ] **P2** Release tracks (choose when new features roll out) `C`
 
@@ -478,7 +478,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** LDAP / Active Directory (bind auth + group sync) `DC D X B`
 - [~] **P1** MFA: TOTP, WebAuthn/passkeys, recovery codes; enforce per workspace/group `C D` (TOTP + recovery codes; required for admins or everyone as a workspace setting, enforced on every session incl. SSO; no passkeys)
 - [~] **P1** Personal API tokens (scoped, expiring) and OAuth2 apps (authorization code + PKCE) `C D X O B` (read-only or read/write scope and expiry; read-only tokens also limit the MCP tools; no OAuth2 apps)
-- [~] **P1** User profiles (avatar, title, department, timezone, language, bio) and people directory `C X` (job title, department, location, time zone with local time, bio; People directory with search and departments; profiles list recent pages the viewer can see; mentions and bylines link to profiles; profile pictures: uploaded, cropped square, 256 px PNG re-encoded (no EXIF / GPS), shown wherever a person appears; no language setting yet)
+- [~] **P1** User profiles (avatar, title, department, timezone, language, bio) and people directory `C X` (job title, department, location, time zone with local time, bio; People directory with search and departments; profiles list recent pages the viewer can see; mentions and bylines link to profiles; profile pictures: uploaded, cropped square, 256 px PNG re-encoded (no EXIF / GPS), shown wherever a person appears; interface language in Settings → Appearance)
 - [ ] **P2** SCIM 2.0 provisioning (users + groups) `C D`
 - [x] **P2** JIT provisioning + group mapping from IdP claims `C D`
 - [ ] **P2** Service accounts / bot users `C`
@@ -493,7 +493,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P1** "For you" / popular pages `C` (popular pages; no personalisation)
 - [x] **P1** Command palette (Ctrl/Cmd+K): jump to page/space/action `C O` — pages (search, recently viewed) plus actions for the context (create page / folder / space, go to Home, Spaces, My tasks, blog, trash, space settings, profile, administration, dark mode, shortcuts); `>` lists actions only
 - [x] **P1** Dark mode, theme switching, high-contrast `C D O` — Settings → Appearance (system / light / dark / high contrast); the high-contrast theme also follows the system's "more contrast" setting and is checked against WCAG AAA contrast (7:1) on the main screens in the e2e suite
-- [ ] **P1** UI localization (i18n; ≥ EN, DE, FR, ES, PT, IT, NL, PL, JA, ZH, KO); RTL support (AR, HE) `C D X`
+- [~] **P1** UI localization (i18n; ≥ EN, DE, FR, ES, PT, IT, NL, PL, JA, ZH, KO); RTL support (AR, HE) `C D X` — every interface text goes through `t()` (English as the key, placeholders, Intl plurals, translator notes `[[…]]`); dates and relative times via Intl; language from profile → workspace default → browser; English, German and French complete (1552 messages); RTL: `dir=rtl` and a stylesheet in logical properties, but no Arabic/Hebrew catalog yet. Missing: ES, PT, IT, NL, PL, JA, ZH, KO, AR, HE catalogs; e-mails, server error messages and export texts are still English
 - [ ] **P2** Customizable home per workspace (announcements, featured spaces) `C X`
 - [ ] **P2** Sidebar customization per user (pinned items) `C`
 
@@ -601,7 +601,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P2** Embedding pipeline: chunk by block, re-embed on publish, ACL fingerprint per chunk, background backfill
 
 ### 4.23 Multilingual content
-- [ ] **P1** UI i18n (Crowdin/Weblate workflow) `C D X`
+- [~] **P1** UI i18n (Crowdin/Weblate workflow) `C D X` — catalogs in `web/src/locales/<code>.json`, `web/scripts/i18n.mjs extract|check` (missing keys, lost placeholders), docs/translating.md; no Weblate/Crowdin project connected yet
 - [ ] **P3** Page translations: one page with language variants, fallback language, translation status (outdated marker) `X`
 - [ ] **P3** AI-assisted translation that keeps variants in sync
 

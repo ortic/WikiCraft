@@ -4,7 +4,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useCanonicalSpaceKey } from '../useCanonicalKey'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Archive, Trash2, RotateCcw, Users, X } from 'lucide-react'
-import { api, can, formatDate, type Perm, type Shortcut, type Space, type SpaceLook } from '../api'
+import { api, can, formatDate, type Perm, type Shortcut, type Space, type SpaceLook, spaceRoleName } from '../api'
 import { SymbolPicker } from '../icons'
 import ExportPanel from '../components/ExportPanel'
 import { ErrorBox, SpaceIcon, Spinner, useFeatures, useToast } from '../ui'
@@ -428,7 +428,7 @@ function Permissions({ space }: { space: Space }) {
         <div className="row" style={{ gap: 12 }}>
           <select id="default-role" className="select" value={defaultRole} onChange={(e) => setDefaultRole(e.target.value)} style={{ maxWidth: 320 }}>
             <option value="none">{tr('No access')}</option>
-            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+            {ROLES.map((r) => <option key={r} value={r}>{spaceRoleName(r)}</option>)}
           </select>
           {defaultRole !== 'none' && <PermissionSummary role={defaultRole} denied={defaultDenied} catalog={catalog} open={expanded === 'default'} onToggle={() => toggle('default')} />}
         </div>
@@ -458,7 +458,7 @@ function Permissions({ space }: { space: Space }) {
                   <td className="row">{g.subjectType === 'group' && <Users size={15} />} {name}</td>
                   <td style={{ width: 170 }}>
                     <select className="select" aria-label={tr('Role of {name}', { name })} value={g.role} onChange={(e) => setGrants(grants.map((x, j) => (j === i ? { ...x, role: e.target.value } : x)))}>
-                      {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                      {ROLES.map((r) => <option key={r} value={r}>{spaceRoleName(r)}</option>)}
                     </select>
                   </td>
                   <td style={{ width: 170 }}>
@@ -501,7 +501,7 @@ function ArchivedList({ space }: { space: Space }) {
         <tbody>
           {list.data?.map((t) => (
             <tr key={t.id}>
-              <td><Link to={`/pages/${t.id}`}><b>{t.title}</b></Link>{t.descendants > 0 && <span className="faint small">{' '}{tr('and {descendants} page', { descendants: t.descendants })}{t.descendants === 1 ? '' : tr('s')}{' '}{tr('under it')}</span>}</td>
+              <td><Link to={`/pages/${t.id}`}><b>{t.title}</b></Link>{t.descendants > 0 && <span className="faint small">{' '}{tr('and {count} pages under it', { count: t.descendants })}</span>}</td>
               <td className="faint small">{tr('Archived {date} by', { date: formatDate(t.archivedAt) })}{' '}{t.archivedBy ?? tr('someone')}</td>
               <td style={{ width: 120 }}>
                 {t.canRestore && (

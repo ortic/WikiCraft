@@ -89,8 +89,8 @@ export default function TextStyleMenu({ editor }: { editor: Editor }) {
                 key={align}
                 onMouseDown={keep}
                 className={`swatch${editor.isActive({ textAlign: align }) ? ' on' : ''}`}
-                title={t('Align {align}', { align })}
-                aria-label={t('Align {align}', { align })}
+                title={align === 'left' ? t('Align left') : align === 'center' ? t('Center') : t('Align right')}
+                aria-label={align === 'left' ? t('Align left') : align === 'center' ? t('Center') : t('Align right')}
                 onClick={() => run((c) => c.setTextAlign(align))}
               >
                 <Icon size={14} />

@@ -1,4 +1,4 @@
-import { LANGUAGES, chooseLanguage, rememberLanguage, t as tr } from '../i18n'
+import { AVAILABLE, chooseLanguage, rememberLanguage, t as tr } from '../i18n'
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { KeyRound, Trash2, Copy, Bot, Mail } from 'lucide-react'
@@ -22,7 +22,7 @@ function Appearance() {
   const me = useMe()
   const toast = useToast()
   const workspaceLanguage = me.data?.workspace?.defaultLanguage
-  const fallback = LANGUAGES.find((l) => l.code === chooseLanguage(null, workspaceLanguage))?.name ?? 'English'
+  const fallback = AVAILABLE.find((l) => l.code === chooseLanguage(null, workspaceLanguage))?.name ?? 'English'
   const setLanguage = async (code: string) => {
     try {
       await api.put('/me/profile', { language: code })
@@ -58,7 +58,7 @@ function Appearance() {
           <label htmlFor="language">{tr('Language')}</label>
           <select id="language" className="select" style={{ maxWidth: 320 }} value={me.data.language ?? ''} onChange={(e) => setLanguage(e.target.value)}>
             <option value="">{workspaceLanguage ? tr('Workspace default ({language})', { language: fallback }) : tr('Browser language ({language})', { language: fallback })}</option>
-            {LANGUAGES.map((l) => (
+            {AVAILABLE.map((l) => (
               <option key={l.code} value={l.code} lang={l.code}>{l.name}</option>
             ))}
           </select>

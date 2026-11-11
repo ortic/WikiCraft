@@ -1,4 +1,4 @@
-import { LANGUAGES, t as tr } from '../i18n'
+import { AVAILABLE, t as tr } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -251,7 +251,7 @@ function LookSettings() {
           <label htmlFor="ws-lang">{tr('Default language')}</label>
           <select id="ws-lang" className="input" value={ws.defaultLanguage ?? ''} onChange={(e) => save({ defaultLanguage: e.target.value }, tr('Language saved'))}>
             <option value="">{tr('Each reader’s browser')}</option>
-            {LANGUAGES.map((l) => <option key={l.code} value={l.code} lang={l.code}>{l.name}</option>)}
+            {AVAILABLE.map((l) => <option key={l.code} value={l.code} lang={l.code}>{l.name}</option>)}
           </select>
           <p className="faint small" style={{ margin: '6px 0 0' }}>{tr('The interface language for people who haven’t chosen their own (Settings → Appearance).')}</p>
         </div>

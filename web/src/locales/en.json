@@ -27,9 +27,21 @@
   "one": "{count} result",
   "other": "{count} results"
  },
+ "{count} views": {
+  "one": "{count} view",
+  "other": "{count} views"
+ },
+ "{names} and {count} others liked this": {
+  "one": "{names} and {count} other liked this",
+  "other": "{names} and {count} others liked this"
+ },
  "also sees {count} restricted pages above it": {
   "one": "also sees {count} restricted page above it",
   "other": "also sees {count} restricted pages above it"
+ },
+ "and {count} pages under it": {
+  "one": "and {count} page under it",
+  "other": "and {count} pages under it"
  },
  "Deleted {count} pages for good": {
   "one": "Deleted {count} page for good",
@@ -39,6 +51,10 @@
   "one": "Deleted {count} page for good · {kept} restricted ones you can’t see stay",
   "other": "Deleted {count} pages for good · {kept} restricted ones you can’t see stay"
  },
+ "edited ({count} versions)": {
+  "one": "edited ({count} version)",
+  "other": "edited ({count} versions)"
+ },
  "Include the {count} child pages and everything below": {
   "one": "Include the child page and everything below",
   "other": "Include the {count} child pages and everything below"
@@ -46,9 +62,5 @@
  "Viewed by {count} people": {
   "one": "Viewed by {count} person",
   "other": "Viewed by {count} people"
- },
- "edited ({count} versions)": {
-  "one": "edited ({count} version)",
-  "other": "edited ({count} versions)"
  }
 }

@@ -386,6 +386,24 @@ export function formatDate(iso: string | null | undefined): string {
   return formatDay(d)
 }
 
+/** A space role as people read it. */
+export function spaceRoleName(role: string): string {
+  switch (role) {
+    case 'viewer':
+      return t('viewer [[space role]]')
+    case 'commenter':
+      return t('commenter [[space role]]')
+    case 'editor':
+      return t('editor [[space role]]')
+    case 'admin':
+      return t('admin [[space role]]')
+    case 'none':
+      return t('No access')
+    default:
+      return role
+  }
+}
+
 export function formatBytes(n: number): string {
   if (n < 1024) return `${n} B`
   if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`

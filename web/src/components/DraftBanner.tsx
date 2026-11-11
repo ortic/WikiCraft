@@ -30,7 +30,7 @@ export default function DraftBanner({ page, onPublish }: { page: { id: string; k
       await api.put(`/pages/${page.id}/publish-schedule`, { at: at.toISOString() })
       setEditing(false)
       refresh()
-      toast(t('This {what} publishes itself on {date}', { what, date: formatDateTime(at) }))
+      toast(what === 'post' ? t('This post publishes itself on {date}', { date: formatDateTime(at) }) : t('This page publishes itself on {date}', { date: formatDateTime(at) }))
     } catch (e) {
       toast(e instanceof Error ? e.message : t('Could not schedule it'))
     }
@@ -47,7 +47,7 @@ export default function DraftBanner({ page, onPublish }: { page: { id: string; k
         <span className="row" style={{ gap: 6 }}>
           <CalendarClock size={15} />{' '}{t('Publishes itself on {date}. Until then only you see it.', { date: formatDateTime(scheduled) })}</span>
       ) : (
-        <span>{t('Only you can see this {what} and the pages below it. Publish it when it\'s ready.', { what })}</span>
+        <span>{what === 'post' ? t('Only you can see this post and the pages below it. Publish it when it’s ready.') : t('Only you can see this page and the pages below it. Publish it when it’s ready.')}</span>
       )}
       <span className="spacer" />
       {editing ? (

@@ -30,6 +30,11 @@ export const LANGUAGES: Language[] = [
 
 type Entry = string | Partial<Record<Intl.LDMLPluralRule, string>>
 
+const loaders = import.meta.glob<{ default: Record<string, Entry> }>('./locales/[a-z][a-z].json')
+
+/** The languages people can pick: English and the ones with a catalog. */
+export const AVAILABLE: Language[] = LANGUAGES.filter((l) => l.code === 'en' || `./locales/${l.code}.json` in loaders)
+
 let catalog: Record<string, Entry> = {}
 let current = 'en'
 let plurals = new Intl.PluralRules('en')
@@ -41,11 +46,13 @@ export function locale(): string {
   return current
 }
 
-/** Translates `key` (English text) and fills `{name}` placeholders from `vars`; `vars.count` picks the plural form. */
+/** Translates `key` (English text) and fills `{name}` placeholders from `vars`; `vars.count` picks the plural form.
+ *  A key may end in a note for translators, `'Open [[task filter]]'`, when the same English word
+ *  needs different translations; it isn't shown. */
 export function t(key: string, vars?: Record<string, unknown>): string {
   const entry = catalog[key]
   let msg: string
-  if (entry === undefined) msg = key
+  if (entry === undefined) msg = key.replace(/ \[\[[^\]]*\]\]$/, '')
   else if (typeof entry === 'string') msg = entry
   else msg = entry[plurals.select(Number(vars?.count ?? 0))] ?? entry.other ?? key
   if (!vars) return msg
@@ -56,7 +63,7 @@ export function t(key: string, vars?: Record<string, unknown>): string {
 export function supported(tag: string | null | undefined): string | undefined {
   if (!tag) return undefined
   const base = tag.toLowerCase().split(/[-_]/)[0]
-  return LANGUAGES.some((l) => l.code === base) ? base : undefined
+  return AVAILABLE.some((l) => l.code === base) ? base : undefined
 }
 
 /** The language to use: profile, workspace default, the browser's preferences, English. */
@@ -80,8 +87,6 @@ export function rememberLanguage(code: string) {
     /* storage unavailable */
   }
 }
-
-const loaders = import.meta.glob<{ default: Record<string, Entry> }>('./locales/[a-z][a-z].json')
 
 /** Loads a language's catalog and applies it (document language and direction too). */
 export async function loadLanguage(code: string): Promise<void> {

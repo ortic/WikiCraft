@@ -9,9 +9,9 @@ import { Spinner } from '../ui'
 type Task = { pageId: string; idx: number; text: string; done: boolean; due: string | null; pageTitle: string; spaceKey: string; spaceName: string }
 
 const STATUSES = [
-  ['open', tr('Open')],
-  ['done', tr('Done')],
-  ['all', tr('All')],
+  ['open', tr('Open [[task filter]]')],
+  ['done', tr('Done [[task filter]]')],
+  ['all', tr('All [[task filter]]')],
 ] as const
 
 function dueLabel(due: string) {

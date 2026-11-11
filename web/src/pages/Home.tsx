@@ -45,7 +45,7 @@ function ActivityFeed() {
   const following = useQuery({ queryKey: ['following'], queryFn: () => api.get<{ id: string; name: string }[]>('/me/following'), enabled: scope === 'following' })
   const q = useQuery({ queryKey: ['activity', scope], queryFn: () => api.get<ActivityEvent[]>(`/activity?scope=${scope}&limit=40`) })
   const verb = (e: ActivityEvent) =>
-    e.kind === 'created' ? 'created' : e.kind === 'commented' ? 'commented on' : e.count > 1 ? tr('edited ({count} versions)', { count: e.count }) : 'edited'
+    e.kind === 'created' ? tr('created') : e.kind === 'commented' ? tr('commented on') : e.count > 1 ? tr('edited ({count} versions)', { count: e.count }) : tr('edited')
   const Icon = ({ kind }: { kind: ActivityEvent['kind'] }) =>
     kind === 'created' ? <FilePlus2 size={13} /> : kind === 'commented' ? <MessageSquare size={13} /> : <PencilLine size={13} />
   return (

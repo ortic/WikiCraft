@@ -3,7 +3,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Archive, ArchiveRestore, Trash2, Users, X } from 'lucide-react'
-import { api, formatBytes, formatDate } from '../api'
+import { api, formatBytes, formatDate, spaceRoleName } from '../api'
 import { SpaceIcon, Spinner, useToast } from '../ui'
 
 interface SpaceRow {
@@ -73,7 +73,7 @@ export default function AdminSpaces() {
               <td>{s.pages}</td>
               <td className="small">{s.attachments} · {formatBytes(s.storageBytes)}</td>
               <td className="faint small">{formatDate(s.lastUpdated)}</td>
-              <td className="small">{s.anonymousAccess ? t('public') : s.defaultRole === 'none' ? t('invited only') : t('members: {defaultRole}', { defaultRole: s.defaultRole })}</td>
+              <td className="small">{s.anonymousAccess ? t('public') : s.defaultRole === 'none' ? t('invited only') : t('members: {defaultRole}', { defaultRole: spaceRoleName(s.defaultRole) })}</td>
               <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                 {s.archivedAt ? (
                   <>
@@ -156,7 +156,7 @@ function NewSpaceDefaults() {
         <label htmlFor="ns-role">{t('Everyone signed in (except guests)')}</label>
         <select id="ns-role" className="select" style={{ maxWidth: 260 }} value={role} onChange={(e) => { setRole(e.target.value); setDirty(true) }}>
           <option value="none">{t('No access')}</option>
-          {ROLES.filter((r) => r !== 'admin').map((r) => <option key={r} value={r}>{r}</option>)}
+          {ROLES.filter((r) => r !== 'admin').map((r) => <option key={r} value={r}>{spaceRoleName(r)}</option>)}
         </select>
         <p className="faint small" style={{ margin: '4px 0 0' }}>{t('Preselected when someone creates a space; they can still pick another.')}</p>
       </div>
@@ -179,7 +179,7 @@ function NewSpaceDefaults() {
                 <td className="row">{g.subjectType === 'group' && <Users size={15} />} {nameOf(g)}</td>
                 <td style={{ width: 170 }}>
                   <select className="select" aria-label={t('Role of {nameOf}', { nameOf: nameOf(g) })} value={g.role} onChange={(e) => { setGrants(grants.map((x, j) => (j === i ? { ...x, role: e.target.value } : x))); setDirty(true) }}>
-                    {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                    {ROLES.map((r) => <option key={r} value={r}>{spaceRoleName(r)}</option>)}
                   </select>
                 </td>
                 <td style={{ width: 40 }}>

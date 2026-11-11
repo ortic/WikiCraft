@@ -468,8 +468,9 @@ export default function PageView() {
             ) : null}
             {(p.likes?.count ?? 0) > 0 && (
               <span className="faint small">
-                {p.likes!.names.slice(0, 3).join(', ')}
-                {p.likes!.count > 3 ? ' ' + tr('and {value} others', { value: p.likes!.count - 3 }) + '' : ''}{' '}{tr('liked this')}</span>
+                {p.likes!.count > 3
+                  ? tr('{names} and {count} others liked this', { names: p.likes!.names.slice(0, 3).join(', '), count: p.likes!.count - 3 })
+                  : tr('{names} liked this', { names: p.likes!.names.slice(0, 3).join(', '), count: p.likes!.names.length })}</span>
             )}
           </div>
           </>

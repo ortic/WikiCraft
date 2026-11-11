@@ -57,7 +57,6 @@ function DrawingView({ node, updateAttributes, editor, extension, selected }: Re
     if (!drawio) setOpen(false)
     setError(null)
   }
-  const label = drawio ? 'diagram' : 'drawing'
   const Icon = drawio ? Workflow : PenTool
   return (
     <NodeViewWrapper className={`drawing-block${selected ? ' is-selected' : ''}`} contentEditable={false}>
@@ -65,12 +64,12 @@ function DrawingView({ node, updateAttributes, editor, extension, selected }: Re
         <img src={preview} alt={title ?? (drawio ? tr('Diagram') : tr('Drawing'))} className="drawing-preview" draggable={false} onClick={() => (canEdit ? setOpen(true) : setZoom(true))} />
       ) : (
         <button type="button" className="drawing-empty" onClick={() => canEdit && setOpen(true)} disabled={!canEdit}>
-          <Icon size={20} /> {canEdit ? (drawio ? tr('Empty {label}: click to edit in draw.io', { label }) : tr('Empty {label}: click to draw', { label })) : drawio && editable ? tr('draw.io diagrams are turned off on this wiki') : tr('Empty {label}', { label })}
+          <Icon size={20} /> {canEdit ? (drawio ? tr('Empty diagram: click to edit in draw.io') : tr('Empty drawing: click to draw')) : drawio && editable ? tr('draw.io diagrams are turned off on this wiki') : drawio ? tr('Empty diagram') : tr('Empty drawing')}
         </button>
       )}
       {canEdit && preview && (
         <button type="button" className="btn btn-sm drawing-edit" onClick={() => setOpen(true)}>
-          <Icon size={13} />{' '}{tr('Edit {label}', { label })}
+          <Icon size={13} />{' '}{drawio ? tr('Edit diagram') : tr('Edit drawing')}
         </button>
       )}
       {error && <div className="error-text small">{error}</div>}
