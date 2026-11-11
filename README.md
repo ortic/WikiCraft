@@ -43,6 +43,7 @@ life (2029-03-28).
 
 - REST API with an OpenAPI 3.1 description, webhooks (JSON, Slack / Mattermost, Microsoft Teams, Google Chat)
 - Built-in [MCP](https://modelcontextprotocol.io) server: Claude & co. search, query, read and write pages with the user's permissions
+- Retrieval API for RAG: the passages that best answer a question (sections of pages and attached files, cut along headings), hybrid keyword + semantic ranking, permission-filtered, each with a link to the exact block; semantic part optional with any OpenAI-compatible embeddings API (OpenAI, Ollama, vLLM, Voyage, …) and pgvector
 - *Ask the wiki*: answers from the pages a person can see, with sources (optional, needs an Anthropic API key)
 
 **Interface and administration**
@@ -192,6 +193,10 @@ All settings are flags or environment variables:
 | `WIKICRAFT_UNFURL_ALLOW_PRIVATE` | `false` | let link previews fetch private / loopback addresses (closed intranets only) |
 | `WIKICRAFT_AI_API_KEY` | — | Anthropic API key: turns on *Ask the wiki* (off when unset; nothing leaves the server) |
 | `WIKICRAFT_AI_MODEL` / `WIKICRAFT_AI_BASE_URL` | `claude-opus-5-5` / `https://api.anthropic.com` | model and API endpoint (e.g. a gateway) for *Ask the wiki* |
+| `WIKICRAFT_EMBEDDINGS_URL` / `WIKICRAFT_EMBEDDINGS_MODEL` | — | OpenAI-compatible embeddings API and model: turns on semantic retrieval (e.g. `https://api.openai.com/v1` + `text-embedding-3-small`, or Ollama's `http://localhost:11434/v1` + `nomic-embed-text`); needs pgvector ≥ 0.7. Off when unset: keyword retrieval only, nothing leaves the server |
+| `WIKICRAFT_EMBEDDINGS_API_KEY` | — | bearer token for the embeddings API |
+| `WIKICRAFT_EMBEDDINGS_DIMENSIONS` | — | ask for shorter vectors (models that support it, like `text-embedding-3-*`); at most 4000 |
+| `WIKICRAFT_EMBEDDINGS_QUERY_PREFIX` / `…_DOCUMENT_PREFIX` | — | text put before questions / passages for models trained with prefixes (`nomic-embed-text`: `search_query: ` / `search_document: `) |
 
 ### Sign-in: SSO, LDAP / Active Directory, SAML
 
@@ -274,7 +279,7 @@ endpoints:
 | Pages | `POST /pages`, `GET/PATCH/DELETE /pages/{id}`, `PUT /pages/{id}/content` (ProseMirror JSON or Markdown), `POST /pages/{id}/move`, `/copy`, `/restore`, `GET /pages/{id}/children`, `GET/POST /pages/{id}/versions`, `POST /pages/{id}/versions/{n}/restore`, `GET/PUT /pages/{id}/restrictions`, `GET/PUT /pages/{id}/labels`, `GET/PUT /pages/{id}/properties`, `GET /pages/{id}/export?format=md\|html\|docx\|pdf\|json` (`tree`, `toc`, `cover`), `GET /pages/{id}/collab` (WebSocket) |
 | Comments | `GET/POST /pages/{id}/comments`, `PATCH/DELETE /comments/{id}` |
 | Attachments | `GET/POST /pages/{id}/attachments`, `GET /attachments/{id}/content`, `PUT /attachments/{id}/labels`, `DELETE /attachments/{id}` |
-| Discovery | `GET /search?q=&space=`, `GET /cql?cql=&space=` (query language), `GET /recent`, `GET /favorites`, `GET /labels/{name}`, `GET /labels/{name}/attachments`, `GET /resolve?space=&title=` / `?source=confluence:<id>` |
+| Discovery | `GET /search?q=&space=`, `GET /cql?cql=&space=` (query language), `GET/POST /retrieve` (passages for RAG, below), `GET /recent`, `GET /favorites`, `GET /labels/{name}`, `GET /labels/{name}/attachments`, `GET /resolve?space=&title=` / `?source=confluence:<id>` |
 | Reports | `GET /reports/pages?labels=&spaces=&cql=&sort=&max=`, `GET /reports/properties?labels=&where=`, `GET /reports/tasks?spaces=&status=`, `GET /reports/decisions`, `GET /tasks` (mine) |
 | Sharing | `GET/POST /pages/{id}/share-links`, `DELETE /share-links/{id}`, public: `GET /public/{token}[/pages/{id}]`, `GET /public/{token}/attachments/{id}` |
 | Import / export | `POST /imports/confluence` (multipart `file`, `options`), `POST /imports/confluence/analyze`, `POST /imports/markdown`, `POST /imports/backup`, `POST /spaces/{key}/export {format: html\|markdown\|backup}`, `GET /jobs/{id}`, `GET /jobs/{id}/download` |
@@ -302,6 +307,49 @@ Chat channels: pick *Slack or Mattermost*, *Microsoft Teams (Workflows)* or *Goo
 the format (`"format": "slack" | "teams" | "googlechat"`) and paste the channel's incoming-webhook
 URL; events then arrive as readable messages ("Ann updated *Q3 plan* in Finance") with a link.
 
+## Retrieval API (RAG)
+
+Other AI applications can use the wiki as their knowledge source: `GET /api/retrieve?q=…` (or
+`POST /api/retrieve {"query": …}`) returns the passages that best answer a question, taken only
+from pages the caller may open (API token or session; read-only tokens work for both).
+
+```bash
+curl -H "Authorization: Bearer wct_…" "https://your-wiki/api/retrieve?q=How+do+I+rotate+the+VPN+certificates&space=IT&limit=5"
+```
+
+```json
+{"mode": "hybrid", "passages": [{
+  "pageId": "…", "title": "VPN guide", "spaceKey": "IT", "spaceName": "IT", "path": ["Infrastructure"],
+  "headings": ["Operations", "Certificates"], "blockId": "x1y2z3", "url": "https://your-wiki/pages/…#block-x1y2z3",
+  "text": "## Certificates\n\nCertificates expire after 90 days. Rotate them with …", "labels": ["vpn"],
+  "updatedAt": "…", "version": 12, "attachment": null, "score": 0.0325, "matchedBy": ["keyword", "semantic"]}]}
+```
+
+- **Passages** follow the document's structure: a new one starts at every heading, long sections
+  are cut between blocks (~1200 characters), big tables and code blocks between lines (repeating
+  the table header / code fence). Each passage is Markdown, knows its heading path and links to
+  the block it starts at. The extracted text of attached files (PDF, Word, text, …) adds
+  passages of its own (`attachment` says which file). Passages are cut again whenever a page,
+  its labels or its attachments change.
+- **Ranking**: keyword retrieval (the full-text search picks candidate pages, BM25 picks their
+  passages) and, when configured, semantic retrieval (nearest passage vectors) are fused by
+  reciprocal rank fusion. `mode`: `auto` (default: hybrid when semantic retrieval is available),
+  `hybrid`, `keyword` or `semantic`; `note` explains when semantic retrieval was asked for but
+  couldn't run.
+- **Parameters**: `space` (keys, comma-separated), `label` (pages with any of them), `limit`
+  (default 8, at most 50), `perPage` (passages per page, default 3), `maxChars` (character budget
+  for the passage texts).
+- **Semantic retrieval** needs `WIKICRAFT_EMBEDDINGS_URL` + `WIKICRAFT_EMBEDDINGS_MODEL` (any
+  OpenAI-compatible `/embeddings` endpoint) and the pgvector extension (≥ 0.7; the Docker Compose
+  file uses the `pgvector/pgvector` image; elsewhere run `CREATE EXTENSION vector;` once as a
+  superuser). A background worker embeds every passage, then only passages whose text changed;
+  vectors are stored as `halfvec` with an HNSW index, and changing the model embeds everything
+  again. Page text goes to the embeddings API, so pick a local model (Ollama) if it must stay
+  in-house. Admin → Overview shows progress and errors.
+- Keeping an external vector store in sync instead? Export spaces as Markdown
+  (`POST /spaces/{key}/export`) and follow the webhooks. Content copied out of the wiki no longer
+  follows its permissions, though; the retrieval API does.
+
 ## AI assistants (MCP)
 
 Create a personal API token (profile menu → *Profile, API tokens & AI*) and point any MCP client
@@ -311,18 +359,18 @@ at `https://your-wiki/api/mcp`:
 claude mcp add --transport http wikicraft https://your-wiki/api/mcp --header "Authorization: Bearer wct_…"
 ```
 
-Tools: `search`, `query_pages` (CQL), `get_page` (Markdown), `list_spaces`, `list_children`,
+Tools: `retrieve` (the passages that best answer a question, with URLs to cite), `search`, `query_pages` (CQL), `get_page` (Markdown), `list_spaces`, `list_children`,
 `recent_changes`, `create_page`, `update_page`, `append_to_page`, `add_comment`. Every call runs
 through the same authorization checks as the UI. Give an assistant that should only read a
 **read-only** token (`{"scope": "read"}` when creating it): the writing tools then refuse.
 
 ## Ask the wiki
 
-With `WIKICRAFT_AI_API_KEY` set, the search page offers *Ask the wiki*: the question runs through
-the normal, permission-filtered search, the most relevant passages of the best pages are sent to
-Claude, and the answer comes back with numbered citations linking to those pages. Only pages the
-asker can open are ever sent; page text is passed as data, not instructions. Questions are rate
-limited per person (20 per 10 minutes).
+With `WIKICRAFT_AI_API_KEY` set, the search page offers *Ask the wiki*: the question goes through
+the retrieval above (hybrid when embeddings are configured), the best passages are sent to
+Claude, and the answer comes back with numbered citations linking to the exact sections. Only
+pages the asker can open are ever sent; page text is passed as data, not instructions. Questions
+are rate limited per person (20 per 10 minutes).
 
 ## License
 

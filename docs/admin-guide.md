@@ -240,6 +240,18 @@ Thai, …) install fonts on the server, e.g. `apt install fonts-noto-cjk` in you
 - **Ask the wiki**: set `WIKICRAFT_AI_API_KEY` (Anthropic). Questions are answered from the pages
   the asker can open, with citations. Without the key nothing leaves your server. A switch under
   *Sharing and features* turns it off again.
+- **Retrieval API for other AI applications** (`/api/retrieve`, also the MCP tool `retrieve`):
+  the passages that best answer a question, from the pages the caller can open. It works out of
+  the box with keyword ranking. For semantic ranking as well, point WikiCraft at an
+  OpenAI-compatible embeddings API (`WIKICRAFT_EMBEDDINGS_URL`, `WIKICRAFT_EMBEDDINGS_MODEL`,
+  `WIKICRAFT_EMBEDDINGS_API_KEY`) and install pgvector ≥ 0.7 in the database (Docker: the
+  `pgvector/pgvector:pg17` image; otherwise the `postgresql-17-pgvector` package and
+  `CREATE EXTENSION vector;` as a superuser, unless WikiCraft's database user may create it). For
+  a local model: `ollama pull nomic-embed-text`, then `WIKICRAFT_EMBEDDINGS_URL=http://ollama:11434/v1`,
+  `WIKICRAFT_EMBEDDINGS_MODEL=nomic-embed-text`, `WIKICRAFT_EMBEDDINGS_QUERY_PREFIX="search_query: "`,
+  `WIKICRAFT_EMBEDDINGS_DOCUMENT_PREFIX="search_document: "`. The first run embeds every passage in
+  the background (Admin → Overview → *Retrieval* shows progress and the last error); afterwards
+  only changed passages are embedded. With a cloud API, page text is sent to that provider.
 
 ## Security checklist
 

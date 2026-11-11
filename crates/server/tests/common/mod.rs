@@ -92,6 +92,12 @@ pub async fn spawn_with(tweak: impl FnOnce(&mut Config)) -> TestApp {
         ai_api_key: None,
         ai_model: "claude-opus-5-5".into(),
         ai_base_url: "https://api.anthropic.com".into(),
+        embeddings_url: None,
+        embeddings_model: None,
+        embeddings_api_key: None,
+        embeddings_dimensions: None,
+        embeddings_query_prefix: String::new(),
+        embeddings_document_prefix: String::new(),
     };
     tweak(&mut config);
     let state = AppState::new(config).await.unwrap();
@@ -100,6 +106,7 @@ pub async fn spawn_with(tweak: impl FnOnce(&mut Config)) -> TestApp {
     wikicraft::jobs::spawn_worker(&state);
     wikicraft::mail::spawn_worker(&state);
     wikicraft::webhooks::spawn_worker(&state);
+    wikicraft::embeddings::spawn_worker(&state);
     let app = wikicraft::routes::router(state.clone());
     tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
     TestApp { base: format!("http://{addr}"), state, _data: data }

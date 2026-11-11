@@ -20,6 +20,7 @@ pub mod pages;
 pub mod people;
 pub mod properties;
 pub mod reports;
+pub mod retrieve;
 pub mod search;
 pub mod security;
 pub mod share;
@@ -157,6 +158,7 @@ pub fn router(state: AppState) -> Router {
         // discovery
         .route("/search", get(search::search))
         .route("/cql", get(search::cql))
+        .route("/retrieve", get(retrieve::get).post(retrieve::post))
         .route("/recent", get(search::recent))
         .route("/favorites", get(search::favorites))
         .route("/popular", get(search::popular))

@@ -30,6 +30,10 @@
  "· valid until {value}": "· gültig bis {value}",
  "“{title}” doesn't exist yet": "„{title}“ existiert noch nicht",
  "(.zip). Both the classic XML format (Server/Data Center, older Cloud) and the new Cloud CSV format are supported. Pages, hierarchy, history, attachments, comments (including inline comments), labels, restrictions and authors are imported; links and mentions are rewritten. Run an analysis first to see what will be imported.": "(.zip) hoch. Unterstützt werden sowohl das klassische XML-Format (Server/Data Center, ältere Cloud) als auch das neue Cloud-CSV-Format. Seiten, Hierarchie, Verlauf, Anhänge, Kommentare (einschließlich Inline-Kommentaren), Labels, Einschränkungen und Autoren werden importiert; Links und Erwähnungen werden umgeschrieben. Führen Sie zuerst eine Analyse durch, um zu sehen, was importiert wird.",
+ "({count} pages waiting)": {
+  "one": "({count} Seite wartet)",
+  "other": "({count} Seiten warten)"
+ },
  "({count} versions).": {
   "one": "({count} Version).",
   "other": "({count} Versionen)."
@@ -109,6 +113,7 @@
  },
  "{names} liked this": "Gefällt {names}",
  "{pageCount} pages": "{pageCount} Seiten",
+ "{passages} passages from {pages} pages": "{passages} Abschnitte aus {pages} Seiten",
  "{shown}px": "{shown}px",
  "{size} · {pages} pages · {attachments} attachments": "{size} · {pages} Seiten · {attachments} Anhänge",
  "{time} local time": "{time} Ortszeit",
@@ -789,6 +794,7 @@
  "Key": "Schlüssel",
  "Keyboard shortcuts": "Tastenkürzel",
  "keys help": "tastenkürzel tasten hilfe keys help",
+ "keyword only (WIKICRAFT_EMBEDDINGS_URL not set)": "nur Stichwörter (WIKICRAFT_EMBEDDINGS_URL nicht gesetzt)",
  "Kind of space": "Art des Bereichs",
  "Label": "Label",
  "label name": "Labelname",
@@ -1204,6 +1210,7 @@
  "Restrictions": "Einschränkungen",
  "Result": "Ergebnis",
  "Resume": "Fortsetzen",
+ "Retrieval (AI)": "Retrieval (KI)",
  "Retry": "Erneut versuchen",
  "retrying {date} · {lastError}": "neuer Versuch {date} · {lastError}",
  "Retrying continues this import: what it already brought in is updated, not duplicated.": "Ein erneuter Versuch setzt diesen Import fort: Bereits Importiertes wird aktualisiert, nicht dupliziert.",
@@ -1247,6 +1254,7 @@
  "Search…": "Suchen…",
  "See all results for “{debounced}” →": "Alle Ergebnisse für „{debounced}“ anzeigen →",
  "Select": "Auswahl",
+ "semantic: {model}, {embedded} embedded, {pending} waiting": "semantisch: {model}, {embedded} eingebettet, {pending} ausstehend",
  "Send a test e-mail to me": "Test-E-Mail an mich senden",
  "Send confirmation link": "Bestätigungslink senden",
  "Send invitation": "Einladung senden",

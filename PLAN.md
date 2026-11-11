@@ -167,7 +167,7 @@
 - [ ] **P1** `audit_event` (append-only, hash-chained for tamper evidence in P2)
 - [ ] **P1** `job`, `import_run`, `import_mapping` (source id → new id, for re-runs and link fixups)
 - [ ] **P2** `database`, `database_field`, `database_row` (JSONB values + typed indexes), `database_view`
-- [ ] **P2** `embedding` (chunk, vector, node, version, acl fingerprint)
+- [x] **P2** `embedding` (chunk, vector, node, version, acl fingerprint) — `page_chunks` (passages of pages and attachment text: heading path, start block, Markdown, content hash) + `chunk_vectors` (pgvector `halfvec`, HNSW, addressed by the hash, created for the configured model); no ACL fingerprint: permissions are checked at query time
 - [ ] **P0** Every row carries `workspace_id`; optional Postgres Row-Level Security as defense-in-depth (P2) — partial: top-level tables (users, groups, spaces, pages, attachments, jobs, audit_events, import_mappings, webhooks, templates) carry `workspace_id` / child tables (page_versions, comments, attachment_versions, labels, sessions, notifications, …) only via their parent; no RLS
 - [ ] **P0** IDs: UUIDv7 (sortable); human-friendly short slugs for URLs; permanent URLs survive renames and moves — partial: UUIDv7 ids (`app::new_id`), permanent `/pages/<id>` URLs survive renames and moves / no human-friendly slugs
 
@@ -441,7 +441,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** Query language (CQL-like: `space = ENG AND label = runbook AND lastModified > now("-30d")`) for macros/API `C` — `GET /api/cql`, Search → Query, the MCP tool `query_pages` and contentbylabel blocks (an imported query with unknown fields falls back to its labels/spaces): space, title, text, label, type, creator, contributor, mention, favourite, watcher, created, lastModified, id/parent/ancestor (also imported Confluence ids), status, property[Name]; = != ~ !~ < <= > >= in / not in, and/or/not, order by; currentUser(), currentSpace(), now(), startOf/endOf Day/Week/Month/Year. Compiled to parameterised SQL with a 10 s statement timeout, then filtered by permissions. No attachments/comments as result types yet
 - [x] **P1** Saved searches `X`
 - [x] **P1** Incremental indexing via the job queue; full reindex CLI `X`
-- [ ] **P2** Semantic / hybrid search (BM25 + vectors, reciprocal rank fusion) `C D`
+- [~] **P2** Semantic / hybrid search (BM25 + vectors, reciprocal rank fusion) `C D` (the retrieval API and Ask the wiki rank passages hybrid: full-text candidates + BM25 per passage, fused by RRF with nearest vectors; the search page itself still lists keyword results)
 - [ ] **P2** Search analytics (top queries, zero-result queries) `C`
 - [ ] **P2** Federated search across connected tools (GitHub, Drive, Slack) `C(Rovo)`
 - [ ] **P2** OpenSearch/Elasticsearch backend for very large installs `DC X`
@@ -587,9 +587,10 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P3** Custom themes/skins API `X`
 
 ### 4.22 AI (self-hostable, permission-aware)
-- [ ] **P2** Provider abstraction: OpenAI-compatible APIs, Azure OpenAI, Anthropic, Gemini, Ollama, vLLM, local embeddings `D`
+- [x] **P1** Retrieval API for other AI applications (RAG): `GET/POST /api/retrieve` and the MCP tool `retrieve` return the passages that best answer a question, permission-filtered (spaces, restrictions, drafts, archive), with page, path, heading path, Markdown and a URL to the exact block; space/label filters, passages per page, character budget; passages follow headings (tables/code cut between lines with header/fence repeated), attachment text included, re-cut on every change; keyword + optional semantic ranking fused by RRF; read-only tokens work
+- [~] **P2** Provider abstraction: OpenAI-compatible APIs, Azure OpenAI, Anthropic, Gemini, Ollama, vLLM, local embeddings `D` (embeddings: any OpenAI-compatible `/embeddings` API incl. Ollama/vLLM/Voyage, query/document prefixes, shortened dimensions; answers: Anthropic only)
 - [~] **P2** Admin controls: enable per workspace/space, data retention, no-training guarantee, classification-aware exclusion `C` (workspace feature switch; nothing per space)
-- [~] **P2** Ask the wiki (RAG chat) with citations to blocks, follow-ups, permission-filtered retrieval `C D O` (search page: permission-filtered retrieval, Claude Messages API, numbered citations to pages, rate limited; no follow-ups, citations to pages not blocks; only tested against a stub API so far)
+- [~] **P2** Ask the wiki (RAG chat) with citations to blocks, follow-ups, permission-filtered retrieval `C D O` (search page: hybrid passage retrieval, Claude Messages API, numbered citations linking to the cited section, rate limited; no follow-ups; only tested against a stub API so far)
 - [ ] **P2** AI semantic search / answers in the search bar `C D O`
 - [ ] **P2** Writing assist in editor: improve, shorten, expand, fix grammar, change tone, translate, summarize, continue `C D`
 - [ ] **P2** Page / thread summaries; "catch me up" on changes since last visit `C`

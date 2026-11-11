@@ -3,7 +3,9 @@
 #   docker compose -f deploy/compose/docker-compose.scale.yml up -d --build   → http://localhost:8788
 services:
   db:
-    image: postgres:17-alpine
+    # PostgreSQL 17 with pgvector (semantic retrieval). Moving an existing volume from the
+    # postgres:17-alpine image: run REINDEX DATABASE wikicraft; once (different C library).
+    image: pgvector/pgvector:pg17
     environment: { POSTGRES_USER: wikicraft, POSTGRES_PASSWORD: wikicraft, POSTGRES_DB: wikicraft }
     volumes: [db:/var/lib/postgresql/data]
     healthcheck: { test: ["CMD-SHELL", "pg_isready -U wikicraft"], interval: 5s, retries: 10 }

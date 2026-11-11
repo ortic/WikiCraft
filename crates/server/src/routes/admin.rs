@@ -79,6 +79,7 @@ pub async fn system(State(state): State<AppState>, CurrentUser(user): CurrentUse
     .await?;
     let pages: i64 = sqlx::query_scalar("SELECT count(*) FROM pages WHERE deleted_at IS NULL").fetch_one(&state.db).await?;
     let indexed = state.search.indexed_documents(&state.db).await.ok();
+    let retrieval = crate::embeddings::status(&state).await.unwrap_or(Value::Null);
     Ok(Json(json!({
         "version": env!("CARGO_PKG_VERSION"),
         "node": state.node_id,
@@ -92,6 +93,7 @@ pub async fn system(State(state): State<AppState>, CurrentUser(user): CurrentUse
         },
         "jobs": { "queued": queued, "running": running, "failedLastDay": failed_day },
         "search": { "backend": state.search.backend_name(), "indexed": indexed, "pages": pages },
+        "retrieval": retrieval,
         "mail": { "enabled": state.mailer.enabled() },
         "virusScan": { "enabled": state.config.clamav.as_deref().is_some_and(|c| !c.trim().is_empty()), "failOpen": state.config.clamav_fail_open },
         "storage": { "backend": state.blobs.backend_name() },

@@ -110,6 +110,7 @@ impl SearchIndex {
         let (tx, rx) = mpsc::unbounded_channel();
         let s = SearchIndex { inner: Arc::new(Inner { backend, db: db.clone(), tx }) };
         tokio::spawn(s.clone().worker(rx, db.clone()));
+        crate::retrieval::spawn_backfill(db.clone());
         if matches!(s.inner.backend, Backend::Postgres) {
             // pages written while no indexer ran (fresh migration, crashed replica)
             let s2 = s.clone();
@@ -168,6 +169,15 @@ impl SearchIndex {
     }
 
     async fn index_batch(&self, db: &PgPool, ids: Vec<Uuid>) -> anyhow::Result<()> {
+        let indexed = self.index_batch_search(db, &ids).await;
+        // the passages for retrieval (RAG) follow the same changes
+        if let Err(e) = crate::retrieval::rechunk(db, &ids).await {
+            tracing::error!("cutting pages into passages failed: {e:#}");
+        }
+        indexed
+    }
+
+    async fn index_batch_search(&self, db: &PgPool, ids: &[Uuid]) -> anyhow::Result<()> {
         match &self.inner.backend {
             Backend::Postgres => {
                 // weighted: title (A) > labels (B) > body + attachment text (C); 'simple' config = language agnostic
@@ -181,12 +191,12 @@ impl SearchIndex {
                             FROM comments c WHERE c.page_id = p.id AND c.deleted_at IS NULL), ''), 300000)), 'C')
                      WHERE p.id = ANY($1)",
                 )
-                .bind(&ids)
+                .bind(ids)
                 .execute(db)
                 .await?;
                 Ok(())
             }
-            Backend::Tantivy(_) => self.tantivy_index_batch(db, ids).await,
+            Backend::Tantivy(_) => self.tantivy_index_batch(db, ids.to_vec()).await,
         }
     }
 

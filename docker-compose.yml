@@ -1,7 +1,9 @@
 # WikiCraft + PostgreSQL. Start with:  docker compose up -d   → http://localhost:8787
 services:
   db:
-    image: postgres:17-alpine
+    # PostgreSQL 17 with pgvector (semantic retrieval). Moving an existing volume from the
+    # postgres:17-alpine image: run REINDEX DATABASE wikicraft; once (different C library).
+    image: pgvector/pgvector:pg17
     environment:
       POSTGRES_USER: wikicraft
       POSTGRES_PASSWORD: ${WIKICRAFT_DB_PASSWORD:-change-me}

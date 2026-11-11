@@ -191,7 +191,7 @@ pub struct ScopeCheckedByCaller;
 /// POST endpoints that only read (conversions, questions), open to read-only tokens.
 fn reads_only(path: &str) -> bool {
     let p = path.trim_end_matches('/');
-    p.ends_with("/markdown") || p.ends_with("/ai/ask")
+    p.ends_with("/markdown") || p.ends_with("/ai/ask") || p.ends_with("/retrieve")
 }
 
 async fn user_from_api_token(state: &AppState, token: &str) -> Result<Option<(User, TokenScope)>, ApiError> {

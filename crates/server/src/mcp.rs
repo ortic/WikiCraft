@@ -101,6 +101,18 @@ pub struct CommentArgs {
 }
 
 #[derive(Deserialize, JsonSchema)]
+pub struct RetrieveArgs {
+    /// The question or topic, in natural language (e.g. "How do we rotate the VPN certificates?")
+    pub query: String,
+    /// Only these spaces (space keys)
+    pub space_keys: Option<Vec<String>>,
+    /// Only pages with one of these labels
+    pub labels: Option<Vec<String>>,
+    /// Max passages (default 8, at most 30)
+    pub limit: Option<usize>,
+}
+
+#[derive(Deserialize, JsonSchema)]
 pub struct QueryArgs {
     /// A CQL query, e.g. `space = ENG and label = runbook and lastModified > now("-30d") order by title`.
     /// Fields: space, space.title, title, text, label, type (page, blogpost, folder), creator,
@@ -210,6 +222,34 @@ impl WikiMcp {
                     .collect();
                 ok_json(json!(list))
             }
+            Err(e) => api_err(e),
+        }
+    }
+
+    #[tool(
+        description = "Find the passages of the wiki that best answer a question (semantic + keyword retrieval over page sections and attached files). Returns the best-matching sections, each with its page, heading path and a URL to the exact section — the best first step to answer a question from the wiki; cite the URLs. Use get_page to read a whole page."
+    )]
+    async fn retrieve(&self, Extension(parts): Extension<axum::http::request::Parts>, Parameters(a): Parameters<RetrieveArgs>) -> ToolResult {
+        let user = match self.user(&parts).await {
+            Ok(u) => u,
+            Err(e) => return api_err(e),
+        };
+        let p = match crate::authz::Principal::load(&self.state, Some(user.0)).await {
+            Ok(p) => p,
+            Err(e) => return api_err(e),
+        };
+        let opts = crate::retrieval::Options {
+            query: a.query,
+            spaces: a.space_keys.unwrap_or_default(),
+            labels: a.labels.unwrap_or_default(),
+            limit: a.limit.unwrap_or(8).clamp(1, 30),
+            per_page: 3,
+            mode: crate::retrieval::Mode::Auto,
+            max_chars: Some(40_000),
+        };
+        match crate::retrieval::retrieve(&self.state, &p, &opts).await {
+            Ok(r) if r.passages.is_empty() => ok_text("No passages match. Try other words, or search / query_pages to browse."),
+            Ok(r) => ok_text(crate::retrieval::to_markdown(&r.passages)),
             Err(e) => api_err(e),
         }
     }
@@ -399,7 +439,7 @@ impl ServerHandler for WikiMcp {
     fn get_info(&self) -> ServerConfig {
         ServerConfig::new(ServerCapabilities::builder().enable_tools().build())
             .with_server_info(Implementation::new("wikicraft", env!("CARGO_PKG_VERSION")))
-            .with_instructions("WikiCraft team wiki. Use `search` to find pages, `get_page` to read them (Markdown), and `create_page`/`update_page`/`append_to_page`/`add_comment` to write. You act with the permissions of the API token's user.")
+            .with_instructions("WikiCraft team wiki. To answer a question, start with `retrieve` (the best-matching sections, with URLs to cite); use `search` or `query_pages` (CQL) to find pages, `get_page` to read them (Markdown), and `create_page`/`update_page`/`append_to_page`/`add_comment` to write. You act with the permissions of the API token's user.")
     }
 }
 

@@ -4518,6 +4518,147 @@ paths:
       - {}
       - session: []
       - token: []
+  /retrieve:
+    get:
+      tags:
+      - Discovery
+      summary: Passages that best match a question (RAG)
+      operationId: get_retrieve
+      parameters:
+      - name: q
+        in: query
+        required: false
+        description: the question or topic (up to 2000 characters)
+        schema: *id001
+      - name: space
+        in: query
+        required: false
+        description: space keys, comma-separated
+        schema: *id001
+      - name: label
+        in: query
+        required: false
+        description: labels, comma-separated (pages with any of them)
+        schema: *id001
+      - name: limit
+        in: query
+        required: false
+        description: max passages (default 8, at most 50)
+        schema: *id001
+      - name: perPage
+        in: query
+        required: false
+        description: max passages from one page (default 3)
+        schema: *id001
+      - name: mode
+        in: query
+        required: false
+        description: auto | hybrid | keyword | semantic
+        schema: *id001
+      - name: maxChars
+        in: query
+        required: false
+        description: stop adding passages once their text reaches this many characters
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: &id010
+                type: object
+                properties:
+                  mode: *id001
+                  passages:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        pageId: *id002
+                        title: *id001
+                        spaceKey: *id001
+                        spaceName: *id001
+                        path:
+                          type: array
+                          items: *id001
+                        headings:
+                          type: array
+                          items: *id001
+                        blockId:
+                          type:
+                          - string
+                          - 'null'
+                        url: *id001
+                        text: *id001
+                        labels:
+                          type: array
+                          items: *id001
+                        updatedAt: *id004
+                        version: *id005
+                        attachment:
+                          type:
+                          - object
+                          - 'null'
+                          properties:
+                            id: *id002
+                            filename: *id001
+                            url: *id001
+                        score: *id005
+                        matchedBy:
+                          type: array
+                          items: *id001
+                  note: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - {}
+      - session: []
+      - token: []
+    post:
+      tags:
+      - Discovery
+      summary: Passages that best match a question (RAG), parameters in the body; open to read-only tokens
+      operationId: post_retrieve
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                query: *id001
+                spaces:
+                  type: array
+                  items: *id001
+                labels:
+                  type: array
+                  items: *id001
+                limit: *id005
+                perPage: *id005
+                mode: *id001
+                maxChars: *id005
+              required:
+              - query
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: *id010
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - {}
+      - session: []
+      - token: []
   /search:
     get:
       tags:
@@ -5180,6 +5321,17 @@ paths:
                         title: *id001
                         spaceKey: *id001
                         spaceName: *id001
+                        headings:
+                          type: array
+                          items: *id001
+                        blockId:
+                          type:
+                          - string
+                          - 'null'
+                        attachment:
+                          type:
+                          - string
+                          - 'null'
                   model: *id001
         4XX:
           description: Error
@@ -5767,8 +5919,8 @@ paths:
     get:
       tags:
       - Admin
-      summary: 'System state: version, database (version, size, schema, connections), job queue, search index, mail, file
-        storage, sign-in providers, cluster'
+      summary: 'System state: version, database (version, size, schema, connections), job queue, search index, retrieval passages
+        and embeddings, mail, file storage, sign-in providers, cluster'
       operationId: get_admin_system
       responses:
         '200':
@@ -5872,7 +6024,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id010
+              schema: &id011
                 type: object
                 properties:
                   publicLinks: *id003
@@ -5934,13 +6086,13 @@ paths:
         required: true
         content:
           application/json:
-            schema: *id010
+            schema: *id011
       responses:
         '200':
           description: OK
           content:
             application/json:
-              schema: *id010
+              schema: *id011
         4XX:
           description: Error
           content:
@@ -5958,7 +6110,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id010
+              schema: *id011
         4XX:
           description: Error
           content:

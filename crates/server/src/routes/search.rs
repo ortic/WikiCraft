@@ -130,6 +130,11 @@ pub async fn visible_hits(state: &AppState, p: &Principal, query: &str, space: O
     if let Some(k) = space {
         spaces.retain(|(s, _)| s.key.eq_ignore_ascii_case(k));
     }
+    hits_in(state, p, query, &spaces, limit).await
+}
+
+/// Full-text hits for `query` among the pages `p` may see in `spaces` (from [`visible_spaces`]).
+pub async fn hits_in(state: &AppState, p: &Principal, query: &str, spaces: &[(SpaceRow, Role)], limit: usize) -> ApiResult<Vec<SearchResult>> {
     let ids: Vec<Uuid> = spaces.iter().map(|(s, _)| s.id).collect();
     let limit = limit.clamp(1, 100);
     let mut hits = state.search.search(query, &ids, limit * 2).await.map_err(ApiError::Internal)?;
@@ -153,7 +158,7 @@ pub async fn visible_hits(state: &AppState, p: &Principal, query: &str, space: O
     let archived = crate::authz::archived_among(state, &hits.iter().map(|h| h.page_id).collect::<Vec<_>>()).await?;
     hits.retain(|h| !archived.contains(&h.page_id));
     let pairs: Vec<(Uuid, Uuid)> = hits.iter().map(|h| (h.page_id, h.space_id)).collect();
-    let visible = filter_visible(state, p, &spaces, &pairs).await?;
+    let visible = filter_visible(state, p, spaces, &pairs).await?;
     let by_id: HashMap<Uuid, &SpaceRow> = spaces.iter().map(|(s, _)| (s.id, s)).collect();
     let out = hits
         .into_iter()

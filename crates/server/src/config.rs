@@ -154,6 +154,33 @@ pub struct Config {
     /// Base URL of the Anthropic API (a gateway or proxy may sit in between).
     #[arg(long, env = "WIKICRAFT_AI_BASE_URL", default_value = "https://api.anthropic.com")]
     pub ai_base_url: String,
+
+    /// OpenAI-compatible embeddings API for semantic retrieval, e.g. `https://api.openai.com/v1`
+    /// or Ollama's `http://localhost:11434/v1`. Unset = keyword retrieval only, and no page text
+    /// leaves the server for it. Needs the pgvector extension in the database.
+    #[arg(long, env = "WIKICRAFT_EMBEDDINGS_URL")]
+    pub embeddings_url: Option<String>,
+
+    /// Embedding model, e.g. `text-embedding-3-small`, `nomic-embed-text`, `voyage-3.5`.
+    #[arg(long, env = "WIKICRAFT_EMBEDDINGS_MODEL")]
+    pub embeddings_model: Option<String>,
+
+    /// API key for the embeddings API (sent as a bearer token; not needed for a local Ollama).
+    #[arg(long, env = "WIKICRAFT_EMBEDDINGS_API_KEY", hide_env_values = true)]
+    pub embeddings_api_key: Option<String>,
+
+    /// Ask for vectors of this size (for models that can shorten theirs, like text-embedding-3-*).
+    #[arg(long, env = "WIKICRAFT_EMBEDDINGS_DIMENSIONS")]
+    pub embeddings_dimensions: Option<u32>,
+
+    /// Text put before each question, for models trained with prefixes
+    /// (nomic-embed-text: `search_query: `, E5: `query: `).
+    #[arg(long, env = "WIKICRAFT_EMBEDDINGS_QUERY_PREFIX", default_value = "")]
+    pub embeddings_query_prefix: String,
+
+    /// Text put before each passage (nomic-embed-text: `search_document: `, E5: `passage: `).
+    #[arg(long, env = "WIKICRAFT_EMBEDDINGS_DOCUMENT_PREFIX", default_value = "")]
+    pub embeddings_document_prefix: String,
 }
 
 impl Config {

@@ -80,7 +80,8 @@ async fn ask_the_wiki() {
     assert_eq!(r["answer"], "Install WireGuard and import the company profile [1].");
     assert_eq!(r["sources"].as_array().unwrap().len(), 1, "the restricted page isn't a source: {r}");
     assert_eq!(r["sources"][0]["title"], "VPN guide");
-    assert!(r["answerHtml"].as_str().unwrap().contains(&format!("/pages/{guide}\"")), "{r}");
+    assert!(r["answerHtml"].as_str().unwrap().contains(&format!("/pages/{guide}#block-")), "citations link to the passage: {r}");
+    assert!(r["sources"][0]["blockId"].is_string(), "{r}");
 
     let got = mock.got.lock().unwrap().clone();
     assert_eq!(got.len(), 2, "retried after 529");

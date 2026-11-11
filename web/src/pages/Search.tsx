@@ -2,14 +2,14 @@ import { t } from '../i18n'
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookmarkPlus, Braces, FileText, Sparkles, X } from 'lucide-react'
+import { BookmarkPlus, Braces, FileText, Paperclip, Sparkles, X } from 'lucide-react'
 import { api, formatDate, type SearchHit, type Space } from '../api'
 import { Spinner, useMe } from '../ui'
 
 interface Answer {
   answer: string
   answerHtml: string
-  sources: { n: number; pageId: string; title: string; spaceName: string }[]
+  sources: { n: number; pageId: string; title: string; spaceName: string; headings?: string[]; blockId?: string | null; attachment?: string | null }[]
   model: string | null
 }
 
@@ -31,11 +31,15 @@ function AnswerCard({ state }: { state: { loading: boolean; error?: string; data
           <div className="ai-answer-body prose" dangerouslySetInnerHTML={{ __html: state.data.answerHtml }} />
           {state.data.sources.length > 0 && (
             <div className="ai-sources">
-              {state.data.sources.map((s) => (
-                <Link key={s.pageId} to={`/pages/${s.pageId}`} className="ai-source" title={s.spaceName}>
-                  <span className="ai-source-n">{s.n}</span> <FileText size={13} /> {s.title}
-                </Link>
-              ))}
+              {state.data.sources.map((s) => {
+                const section = s.headings?.length ? s.headings[s.headings.length - 1] : null
+                return (
+                  <Link key={s.n} to={`/pages/${s.pageId}${s.blockId ? `#block-${s.blockId}` : ''}`} className="ai-source" title={[s.spaceName, ...(s.headings ?? [])].join(' › ')}>
+                    <span className="ai-source-n">{s.n}</span> {s.attachment ? <Paperclip size={13} /> : <FileText size={13} />} {s.title}
+                    {section && <span className="faint">{' › '}{section}</span>}
+                  </Link>
+                )
+              })}
             </div>
           )}
           <div className="faint small" style={{ marginTop: 8 }}>{t('Written by AI')}{state.data.model ? ` (${state.data.model})` : ''}{' '}{t('from pages you can access. Check the sources before relying on it.')}</div>

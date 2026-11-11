@@ -1,4 +1,8 @@
 {
+ "({count} pages waiting)": {
+  "one": "({count} page waiting)",
+  "other": "({count} pages waiting)"
+ },
  "({count} versions).": {
   "one": "({count} version).",
   "other": "({count} versions)."

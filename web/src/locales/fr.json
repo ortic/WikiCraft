@@ -30,6 +30,10 @@
  "· valid until {value}": "· valable jusqu’au {value}",
  "“{title}” doesn't exist yet": "« {title} » n’existe pas encore",
  "(.zip). Both the classic XML format (Server/Data Center, older Cloud) and the new Cloud CSV format are supported. Pages, hierarchy, history, attachments, comments (including inline comments), labels, restrictions and authors are imported; links and mentions are rewritten. Run an analysis first to see what will be imported.": "(.zip). L’ancien format XML (Server/Data Center, ancien Cloud) et le nouveau format CSV de Cloud sont tous deux pris en charge. Les pages, la hiérarchie, l’historique, les pièces jointes, les commentaires (y compris les commentaires en ligne), les étiquettes, les restrictions et les auteurs sont importés ; les liens et les mentions sont réécrits. Lancez d’abord une analyse pour voir ce qui sera importé.",
+ "({count} pages waiting)": {
+  "one": "({count} page en attente)",
+  "other": "({count} pages en attente)"
+ },
  "({count} versions).": {
   "one": "({count} version).",
   "many": "({count} versions).",
@@ -122,6 +126,7 @@
   "other": "{names} ont aimé"
  },
  "{pageCount} pages": "{pageCount} pages",
+ "{passages} passages from {pages} pages": "{passages} passages issus de {pages} pages",
  "{shown}px": "{shown} px",
  "{size} · {pages} pages · {attachments} attachments": "{size} · {pages} pages · {attachments} pièces jointes",
  "{time} local time": "{time} heure locale",
@@ -808,6 +813,7 @@
  "Key": "Clé",
  "Keyboard shortcuts": "Raccourcis clavier",
  "keys help": "touches aide raccourcis clavier keys help",
+ "keyword only (WIKICRAFT_EMBEDDINGS_URL not set)": "mots-clés uniquement (WIKICRAFT_EMBEDDINGS_URL non défini)",
  "Kind of space": "Type d’espace",
  "Label": "Étiquette",
  "label name": "nom de l’étiquette",
@@ -1223,6 +1229,7 @@
  "Restrictions": "Restrictions",
  "Result": "Résultat",
  "Resume": "Reprendre",
+ "Retrieval (AI)": "Recherche de passages (IA)",
  "Retry": "Réessayer",
  "retrying {date} · {lastError}": "nouvel essai le {date} · {lastError}",
  "Retrying continues this import: what it already brought in is updated, not duplicated.": "Réessayer poursuit cet import : ce qui a déjà été importé est mis à jour, pas dupliqué.",
@@ -1266,6 +1273,7 @@
  "Search…": "Rechercher…",
  "See all results for “{debounced}” →": "Voir tous les résultats pour « {debounced} » →",
  "Select": "Sélection",
+ "semantic: {model}, {embedded} embedded, {pending} waiting": "sémantique : {model}, {embedded} vectorisés, {pending} en attente",
  "Send a test e-mail to me": "M’envoyer un e-mail de test",
  "Send confirmation link": "Envoyer le lien de confirmation",
  "Send invitation": "Envoyer l’invitation",

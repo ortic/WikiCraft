@@ -270,11 +270,32 @@ interface SystemState {
   database: { version: string; sizeBytes: number; schema: number | null; connections: number; idleConnections: number }
   jobs: { queued: number; running: number; failedLastDay: number }
   search: { backend: string; indexed: number | null; pages: number }
+  retrieval?: {
+    passages: number
+    pages: number
+    pagesPending: number
+    semantic: { configured: boolean; model?: string; dims?: number | null; embedded?: number; pending?: number; error?: string | null }
+  } | null
   mail: { enabled: boolean }
   virusScan?: { enabled: boolean; failOpen: boolean }
   storage: { backend: string }
   liveRooms: number
   signIn: { id: string; kind: string; name: string }[]
+}
+
+/** Passages for AI applications and, when configured, how far their embedding has come. */
+function retrievalSummary(r: SystemState['retrieval']): React.ReactNode {
+  if (!r) return '?'
+  const passages = tr('{passages} passages from {pages} pages', { passages: r.passages, pages: r.pages }) + (r.pagesPending ? ' ' + tr('({count} pages waiting)', { count: r.pagesPending }) : '')
+  const sem = r.semantic
+  if (!sem.configured) return `${passages} · ${tr('keyword only (WIKICRAFT_EMBEDDINGS_URL not set)')}`
+  const progress = tr('semantic: {model}, {embedded} embedded, {pending} waiting', { model: sem.model ?? '?', embedded: sem.embedded ?? 0, pending: sem.pending ?? 0 })
+  return (
+    <>
+      {passages} · {progress}
+      {sem.error && <div className="error-text small">{sem.error}</div>}
+    </>
+  )
 }
 
 /** Admin → Overview: what this installation runs on and how it's doing. */
@@ -288,6 +309,7 @@ function SystemInfo() {
     [tr('Database'), tr('PostgreSQL {version} · {value} · schema {value2} · {value3} of {connections} connections busy', { version: s.database.version, value: formatBytes(s.database.sizeBytes), value2: s.database.schema ?? '?', value3: s.database.connections - s.database.idleConnections, connections: s.database.connections })],
     [tr('Background jobs'), `${s.jobs.queued} queued · ${s.jobs.running} running${s.jobs.failedLastDay ? ' ' + tr('· {failedLastDay} failed in the last day', { failedLastDay: s.jobs.failedLastDay }) + '' : ''}`],
     [tr('Search'), `${s.search.backend} · ${s.search.indexed ?? '?'} of ${s.search.pages} pages indexed${behind ? ' ' + tr('(catching up, or rebuild the index)') + '' : ''}`],
+    [tr('Retrieval (AI)'), retrievalSummary(s.retrieval)],
     ['E-mail', s.mail.enabled ? 'configured' : tr('off (WIKICRAFT_SMTP_URL not set)')],
     [tr('File storage'), s.storage.backend],
     [tr('Virus scanning'), s.virusScan?.enabled ? `ClamAV${s.virusScan.failOpen ? ' ' + tr('(files pass when it is down)') + '' : ''}` : tr('off (WIKICRAFT_CLAMAV not set)')],
