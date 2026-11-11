@@ -319,10 +319,8 @@ fn indent_of(el: &Element) -> Option<i64> {
         n.trim().parse::<f64>().ok()?
     } else if let Some(n) = v.strip_suffix("pt") {
         n.trim().parse::<f64>().ok()? * 4.0 / 3.0
-    } else if let Some(n) = v.strip_suffix("em") {
-        n.trim().parse::<f64>().ok()? * 16.0
     } else {
-        return None;
+        v.strip_suffix("em")?.trim().parse::<f64>().ok()? * 16.0
     };
     let level = (px / 30.0).round() as i64;
     (level > 0).then_some(level.min(wikicraft_doc_model::node::MAX_INDENT))
