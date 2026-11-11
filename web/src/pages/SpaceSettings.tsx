@@ -1,9 +1,9 @@
-import { useEffect, useState } from 'react'
+import { Fragment, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useCanonicalSpaceKey } from '../useCanonicalKey'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Archive, Trash2, RotateCcw, Users, X } from 'lucide-react'
-import { api, formatDate, type Shortcut, type Space, type SpaceLook } from '../api'
+import { api, can, formatDate, type Perm, type Shortcut, type Space, type SpaceLook } from '../api'
 import { SymbolPicker } from '../icons'
 import ExportPanel from '../components/ExportPanel'
 import { ErrorBox, SpaceIcon, Spinner, useFeatures, useToast } from '../ui'
@@ -13,10 +13,69 @@ interface Grant {
   subjectType: 'user' | 'group'
   subjectId: string
   role: string
+  /** permissions of the role this grant leaves out */
+  denied?: Perm[]
   subjectName?: string | null
 }
 
 const ROLES = ['viewer', 'commenter', 'editor', 'admin']
+const RANK: Record<string, number> = { none: 0, viewer: 1, commenter: 2, editor: 3, admin: 4 }
+
+/** What each space permission lets people do (the server's `authz::Perm`). */
+const PERM_LABELS: Record<Perm, string> = {
+  'page.add': 'Add pages',
+  'page.delete': 'Delete pages',
+  'blog.add': 'Add blog posts',
+  'blog.delete': 'Delete blog posts',
+  'comment.add': 'Add comments',
+  'comment.delete': "Delete others' comments",
+  'attachment.add': 'Add files',
+  'attachment.delete': 'Delete files',
+  restrict: 'Set page restrictions',
+  export: 'Export',
+  archive: 'Archive pages',
+  'delete.own': 'Delete own content',
+}
+
+interface PermInfo {
+  key: Perm
+  minRole: string
+  confluence: string
+}
+
+/** The permissions a role brings, each one a checkbox: unchecked ones the grant leaves out. */
+function PermissionChecks({ role, denied, catalog, onChange, label }: { role: string; denied: Perm[]; catalog: PermInfo[]; onChange: (denied: Perm[]) => void; label: string }) {
+  const brought = catalog.filter((p) => RANK[role] >= RANK[p.minRole])
+  if (!brought.length) return null
+  return (
+    <fieldset className="perm-checks" aria-label={`Permissions of ${label}`}>
+      {brought.map((p) => (
+        <label key={p.key} className="row" title={`Confluence: ${p.confluence}`}>
+          <input
+            type="checkbox"
+            checked={!denied.includes(p.key)}
+            onChange={(e) => onChange(e.target.checked ? denied.filter((d) => d !== p.key) : [...denied, p.key])}
+          />{' '}
+          {PERM_LABELS[p.key] ?? p.key}
+        </label>
+      ))}
+    </fieldset>
+  )
+}
+
+/** "All permissions" or how many the grant leaves out; opens the checklist. */
+function PermissionSummary({ role, denied, catalog, open, onToggle }: { role: string; denied: Perm[]; catalog: PermInfo[]; open: boolean; onToggle: () => void }) {
+  if (role === 'admin') return <span className="faint small">All permissions</span>
+  const brought = catalog.filter((p) => RANK[role] >= RANK[p.minRole])
+  if (!brought.length) return <span className="faint small">View only</span>
+  const kept = brought.filter((p) => !denied.includes(p.key)).length
+  const text = kept === brought.length ? 'All permissions' : role === 'viewer' && kept === 0 ? 'View only' : `${kept} of ${brought.length} permissions`
+  return (
+    <button type="button" className="link-btn small" style={{ whiteSpace: 'nowrap' }} aria-expanded={open} onClick={onToggle}>
+      {text}
+    </button>
+  )
+}
 
 export default function SpaceSettings() {
   const { key } = useParams()
@@ -29,7 +88,7 @@ export default function SpaceSettings() {
   if (space.error) return <div className="content-pad"><ErrorBox error={space.error} /></div>
   const s = space.data!
   // non-admins have no details/permissions tabs
-  const exports = features.exports !== false
+  const exports = features.exports !== false && can(s, 'export')
   const fallback = exports ? 'export' : 'archived'
   const tab =
     (s.role !== 'admin' && (requested === 'details' || requested === 'permissions')) || (!exports && requested === 'export') ? fallback : requested
@@ -331,11 +390,16 @@ function SpaceOwner({ space }: { space: Space }) {
 function Permissions({ space }: { space: Space }) {
   const qc = useQueryClient()
   const toast = useToast()
-  const perms = useQuery({ queryKey: ['space-perms', space.key], queryFn: () => api.get<{ defaultRole: string; anonymousAccess: boolean; grants: Grant[] }>(`/spaces/${space.key}/permissions`) })
+  const perms = useQuery({
+    queryKey: ['space-perms', space.key],
+    queryFn: () => api.get<{ defaultRole: string; defaultDenied: Perm[]; anonymousAccess: boolean; grants: Grant[]; permissions: PermInfo[] }>(`/spaces/${space.key}/permissions`),
+  })
   const users = useQuery({ queryKey: ['users-all'], queryFn: () => api.get<{ id: string; name: string }[]>('/users') })
   const groups = useQuery({ queryKey: ['groups'], queryFn: () => api.get<{ id: string; name: string }[]>('/groups') })
   const [grants, setGrants] = useState<Grant[]>([])
   const [defaultRole, setDefaultRole] = useState('editor')
+  const [defaultDenied, setDefaultDenied] = useState<Perm[]>([])
+  const [expanded, setExpanded] = useState<string | null>(null)
   const [anon, setAnon] = useState(false)
   const [pick, setPick] = useState('')
   const [error, setError] = useState<string | null>(null)
@@ -343,13 +407,14 @@ function Permissions({ space }: { space: Space }) {
     if (perms.data) {
       setGrants(perms.data.grants)
       setDefaultRole(perms.data.defaultRole)
+      setDefaultDenied(perms.data.defaultDenied ?? [])
       setAnon(perms.data.anonymousAccess)
     }
   }, [perms.data])
   const save = async () => {
     setError(null)
     try {
-      await api.put(`/spaces/${space.key}/permissions`, { defaultRole, anonymousAccess: anon, grants })
+      await api.put(`/spaces/${space.key}/permissions`, { defaultRole, defaultDenied, anonymousAccess: anon, grants })
       qc.invalidateQueries()
       toast('Permissions saved')
     } catch (e) {
@@ -364,14 +429,22 @@ function Permissions({ space }: { space: Space }) {
     setPick('')
   }
   if (perms.isLoading) return <Spinner />
+  const catalog = perms.data?.permissions ?? []
+  const toggle = (id: string) => setExpanded(expanded === id ? null : id)
   return (
     <div style={{ maxWidth: 720 }}>
       <div className="field">
-        <label>All workspace members (except guests)</label>
-        <select className="select" value={defaultRole} onChange={(e) => setDefaultRole(e.target.value)} style={{ maxWidth: 320 }}>
-          <option value="none">No access</option>
-          {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-        </select>
+        <label htmlFor="default-role">All workspace members (except guests)</label>
+        <div className="row" style={{ gap: 12 }}>
+          <select id="default-role" className="select" value={defaultRole} onChange={(e) => setDefaultRole(e.target.value)} style={{ maxWidth: 320 }}>
+            <option value="none">No access</option>
+            {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+          </select>
+          {defaultRole !== 'none' && <PermissionSummary role={defaultRole} denied={defaultDenied} catalog={catalog} open={expanded === 'default'} onToggle={() => toggle('default')} />}
+        </div>
+        {expanded === 'default' && defaultRole !== 'admin' && defaultRole !== 'none' && (
+          <PermissionChecks role={defaultRole} denied={defaultDenied} catalog={catalog} onChange={setDefaultDenied} label="all workspace members" />
+        )}
       </div>
       <label className="row" style={{ marginBottom: 18 }}>
         <input type="checkbox" checked={anon} onChange={(e) => setAnon(e.target.checked)} /> Anyone on the internet can view this space (anonymous access)
@@ -387,19 +460,35 @@ function Permissions({ space }: { space: Space }) {
       </div>
       <table className="list">
         <tbody>
-          {grants.map((g, i) => (
-            <tr key={g.subjectType + g.subjectId}>
-              <td className="row">{g.subjectType === 'group' && <Users size={15} />} {g.subjectName ?? g.subjectId}</td>
-              <td style={{ width: 180 }}>
-                <select className="select" value={g.role} onChange={(e) => setGrants(grants.map((x, j) => (j === i ? { ...x, role: e.target.value } : x)))}>
-                  {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
-                </select>
-              </td>
-              <td style={{ width: 40 }}>
-                <button className="icon-btn" onClick={() => setGrants(grants.filter((_, j) => j !== i))}><X size={14} /></button>
-              </td>
-            </tr>
-          ))}
+          {grants.map((g, i) => {
+            const id = g.subjectType + g.subjectId
+            const name = g.subjectName ?? g.subjectId
+            return (
+              <Fragment key={id}>
+                <tr>
+                  <td className="row">{g.subjectType === 'group' && <Users size={15} />} {name}</td>
+                  <td style={{ width: 170 }}>
+                    <select className="select" aria-label={`Role of ${name}`} value={g.role} onChange={(e) => setGrants(grants.map((x, j) => (j === i ? { ...x, role: e.target.value } : x)))}>
+                      {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
+                    </select>
+                  </td>
+                  <td style={{ width: 170 }}>
+                    <PermissionSummary role={g.role} denied={g.denied ?? []} catalog={catalog} open={expanded === id} onToggle={() => toggle(id)} />
+                  </td>
+                  <td style={{ width: 40 }}>
+                    <button className="icon-btn" aria-label={`Remove ${name}`} onClick={() => setGrants(grants.filter((_, j) => j !== i))}><X size={14} /></button>
+                  </td>
+                </tr>
+                {expanded === id && g.role !== 'admin' && (
+                  <tr>
+                    <td colSpan={4}>
+                      <PermissionChecks role={g.role} denied={g.denied ?? []} catalog={catalog} label={name} onChange={(denied) => setGrants(grants.map((x, j) => (j === i ? { ...x, denied } : x)))} />
+                    </td>
+                  </tr>
+                )}
+              </Fragment>
+            )
+          })}
         </tbody>
       </table>
       {error && <p className="error-text">{error}</p>}

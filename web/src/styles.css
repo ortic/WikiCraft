@@ -808,6 +808,9 @@ tr:hover .star-toggle, .star-toggle:focus-visible, .star-toggle.on { opacity: 1;
 /* attachment versions */
 .link-btn { display: inline-flex; align-items: center; gap: 3px; padding: 0; border: 0; background: none; color: var(--accent-text, var(--accent)); font: inherit; cursor: pointer; }
 .link-btn:hover { text-decoration: underline; }
+/* Space settings → Permissions: the checklist of a grant's permissions */
+.perm-checks { display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 6px 16px; margin: 4px 0 10px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 8px; background: var(--bg-soft); }
+.perm-checks label { font-size: 13px; gap: 6px; cursor: pointer; }
 .attachment-versions { list-style: none; margin: 8px 0 0; padding: 6px 0 0; border-top: 1px dashed var(--border); display: flex; flex-direction: column; gap: 4px; }
 .attachment-versions li { gap: 8px; align-items: flex-start; }
 .attachment-versions .link-btn, .attachment-versions .badge { white-space: nowrap; flex: none; }

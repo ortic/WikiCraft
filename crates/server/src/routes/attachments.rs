@@ -9,7 +9,7 @@ use uuid::Uuid;
 
 use crate::app::{AppState, new_id};
 use crate::auth::{CurrentUser, MaybeUser};
-use crate::authz::{Need, Principal, require_page};
+use crate::authz::{Need, Perm, Principal, require_page};
 use crate::error::{ApiError, ApiResult};
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -329,7 +329,8 @@ pub async fn upload(
     mut mp: Multipart,
 ) -> ApiResult<(StatusCode, Json<Vec<AttachmentRow>>)> {
     let p = Principal::load(&state, Some(user.clone())).await?;
-    let (_, space) = require_page(&state, &p, page_id, Need::Edit).await?;
+    let (access, space) = require_page(&state, &p, page_id, Need::Edit).await?;
+    access.require(Perm::AddAttachments)?;
     let mut ids = Vec::new();
     while let Some(field) = mp.next_field().await.map_err(|e| ApiError::bad(format!("multipart: {e}")))? {
         let Some(name) = field.file_name().map(String::from) else { continue };
@@ -442,13 +443,17 @@ fn urlencode(s: &str) -> String {
 }
 
 pub async fn delete(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
-    let page_id: Uuid = sqlx::query_scalar("SELECT page_id FROM attachments WHERE id = $1 AND deleted_at IS NULL")
+    let (page_id, created_by): (Uuid, Option<Uuid>) = sqlx::query_as("SELECT page_id, created_by FROM attachments WHERE id = $1 AND deleted_at IS NULL")
         .bind(id)
         .fetch_optional(&state.db)
         .await?
         .ok_or(ApiError::NotFound("attachment"))?;
+    let me = user.id;
     let p = Principal::load(&state, Some(user)).await?;
-    require_page(&state, &p, page_id, Need::Edit).await?;
+    let (access, _) = require_page(&state, &p, page_id, Need::Edit).await?;
+    if !access.may_delete(Perm::DeleteAttachments, created_by == Some(me)) {
+        return Err(ApiError::Forbidden);
+    }
     sqlx::query("UPDATE attachments SET deleted_at = now() WHERE id = $1").bind(id).execute(&state.db).await?;
     state.search.enqueue(page_id);
     Ok(StatusCode::NO_CONTENT)
@@ -513,7 +518,8 @@ pub async fn restore_version(
 ) -> ApiResult<Json<serde_json::Value>> {
     let page_id = page_of(&state, id).await?;
     let p = Principal::load(&state, Some(user.clone())).await?;
-    require_page(&state, &p, page_id, Need::Edit).await?;
+    let (access, _) = require_page(&state, &p, page_id, Need::Edit).await?;
+    access.require(Perm::AddAttachments)?;
     let mut tx = state.db.begin().await?;
     let current: i32 = sqlx::query_scalar("SELECT version FROM attachments WHERE id = $1 FOR UPDATE").bind(id).fetch_one(&mut *tx).await?;
     let old: Option<(Option<String>, i64, String)> =

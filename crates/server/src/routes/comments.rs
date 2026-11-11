@@ -8,7 +8,7 @@ use wikicraft_doc_model::{Node, markdown, text};
 
 use crate::app::{AppState, new_id};
 use crate::auth::{CurrentUser, MaybeUser};
-use crate::authz::{Need, Principal, require_page};
+use crate::authz::{Need, Perm, Principal, require_page};
 use crate::error::{ApiError, ApiResult};
 
 #[derive(Serialize, sqlx::FromRow)]
@@ -293,7 +293,10 @@ pub async fn delete(State(state): State<AppState>, CurrentUser(user): CurrentUse
         .ok_or(ApiError::NotFound("comment"))?;
     let p = Principal::load(&state, Some(user.clone())).await?;
     let (access, _) = require_page(&state, &p, page_id, Need::View).await?;
-    if author != Some(user.id) && !access.admin {
+    // others' comments: "delete comments" (and edit access to the page); your own: also "delete own"
+    let mine = author == Some(user.id);
+    let allowed = (access.admin && access.can(Perm::DeleteComments)) || (mine && access.may_delete(Perm::DeleteComments, true));
+    if !allowed {
         return Err(ApiError::Forbidden);
     }
     sqlx::query("UPDATE comments SET deleted_at = now() WHERE id = $1 OR parent_id = $1").bind(id).execute(&state.db).await?;

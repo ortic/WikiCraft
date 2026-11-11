@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Lock, Users, X } from 'lucide-react'
-import { api, type Page } from '../api'
+import { api, can, type Page } from '../api'
 import AccessCheck from './AccessCheck'
 import { Modal, useMe } from '../ui'
 
@@ -20,6 +20,8 @@ interface Subject {
 
 export default function RestrictionsDialog({ page, onClose }: { page: Page; onClose: () => void }) {
   const qc = useQueryClient()
+  // editors change restrictions when the space lets them; space admins always can
+  const manage = page.access.admin && can(page.access, 'restrict')
   const me = useMe()
   const data = useQuery({ queryKey: ['restrictions', page.id], queryFn: () => api.get<{ restrictions: Entry[]; inheritedFrom: { id: string; title: string }[] }>(`/pages/${page.id}/restrictions`) })
   const users = useQuery({ queryKey: ['users-all'], queryFn: () => api.get<{ id: string; name: string }[]>('/users') })
@@ -75,7 +77,7 @@ export default function RestrictionsDialog({ page, onClose }: { page: Page; onCl
       }
       onClose={onClose}
       footer={
-        page.access.admin ? (
+        manage ? (
           <>
             <button className="btn" onClick={onClose}>
               Cancel
@@ -94,7 +96,7 @@ export default function RestrictionsDialog({ page, onClose }: { page: Page; onCl
       ) : null}
       <div className="field">
         <label>Who can see and edit this page?</label>
-        <select className="select" value={mode} disabled={!page.access.admin} onChange={(e) => changeMode(e.target.value as typeof mode)}>
+        <select className="select" value={mode} disabled={!manage} onChange={(e) => changeMode(e.target.value as typeof mode)}>
           <option value="none">Anyone with space access can view and edit</option>
           <option value="edit">Anyone can view, only specific people can edit</option>
           <option value="view">Only specific people can view and edit</option>
@@ -102,7 +104,7 @@ export default function RestrictionsDialog({ page, onClose }: { page: Page; onCl
       </div>
       {mode !== 'none' && (
         <>
-          {page.access.admin && (
+          {manage && (
             <div className="row" style={{ marginBottom: 10 }}>
               <select className="select" value={pick} onChange={(e) => setPick(e.target.value)}>
                 <option value="">Add a person or group…</option>
@@ -124,7 +126,7 @@ export default function RestrictionsDialog({ page, onClose }: { page: Page; onCl
               <span>{nameOf(p)}</span>
               <span className="spacer" />
               <span className="faint small">{mode === 'view' ? 'Can view & edit' : 'Can edit'}</span>
-              {page.access.admin && (
+              {manage && (
                 <button className="icon-btn" onClick={() => setEntries((es) => es.filter((e) => e.subjectId !== p.subjectId))}>
                   <X size={14} />
                 </button>

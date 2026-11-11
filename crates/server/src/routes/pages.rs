@@ -11,9 +11,9 @@ use wikicraft_doc_model::{Node, html, markdown, text};
 use crate::app::{AppState, new_id};
 use crate::audit;
 use crate::auth::{CurrentUser, MaybeUser};
-use crate::authz::{Need, Principal, Role, require_page};
+use crate::authz::{Need, Perm, Principal, Role, require_page};
 use crate::error::{ApiError, ApiResult};
-use crate::routes::spaces::load_space;
+use crate::routes::spaces::{load_space, load_space_with_access};
 
 pub struct NewPage {
     pub id: Uuid,
@@ -205,8 +205,8 @@ pub async fn get_default_template(
 
 pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUser, Json(req): Json<CreatePage>) -> ApiResult<(StatusCode, Json<Value>)> {
     let p = Principal::load(&state, Some(user.clone())).await?;
-    let (space, role) = load_space(&state, &p, &req.space_key).await?;
-    if role < Role::Editor {
+    let (space, sa) = load_space_with_access(&state, &p, &req.space_key).await?;
+    if sa.role < Role::Editor {
         return Err(ApiError::Forbidden);
     }
     if let Some(parent) = req.parent_id {
@@ -218,6 +218,9 @@ pub async fn create(State(state): State<AppState>, CurrentUser(user): CurrentUse
     let kind = req.kind.clone().unwrap_or_else(|| "page".into());
     if !matches!(kind.as_str(), "page" | "folder" | "blog" | "link") {
         return Err(ApiError::bad("kind must be page, folder, blog or link"));
+    }
+    if !sa.perms.has(if kind == "blog" { Perm::AddBlog } else { Perm::AddPages }) {
+        return Err(ApiError::Forbidden);
     }
     // a link in the page tree: its content is a single link preview of the URL
     let mut link_title = None;
@@ -833,8 +836,11 @@ pub async fn move_page(
     let (_, from_space) = require_page(&state, &p, id, Need::Admin).await?;
     let target_space = match &req.space_key {
         Some(k) => {
-            let (s, role) = load_space(&state, &p, k).await?;
-            if role < Role::Editor {
+            let (s, a) = load_space_with_access(&state, &p, k).await?;
+            if a.role < Role::Editor {
+                return Err(ApiError::Forbidden);
+            }
+            if s.id != from_space && !a.perms.has(Perm::AddPages) {
                 return Err(ApiError::Forbidden);
             }
             s.id
@@ -974,17 +980,24 @@ pub async fn copy(
     if role < Role::Editor {
         return Err(ApiError::Forbidden);
     }
-    let source_parent: Option<Uuid> = sqlx::query_scalar("SELECT parent_id FROM pages WHERE id = $1").bind(id).fetch_one(&state.db).await?;
+    let (source_parent, kind): (Option<Uuid>, String) = sqlx::query_as("SELECT parent_id, kind FROM pages WHERE id = $1").bind(id).fetch_one(&state.db).await?;
+    let add = if kind == "blog" { Perm::AddBlog } else { Perm::AddPages };
     // where the copy goes: this space, or another one the caller may write in
     let target_space = match &req.space_key {
         Some(k) => {
-            let (s, r) = load_space(&state, &p, k).await?;
-            if r < Role::Editor {
+            let (s, a) = load_space_with_access(&state, &p, k).await?;
+            if a.role < Role::Editor || !a.perms.has(add) {
                 return Err(ApiError::Forbidden);
             }
             s.id
         }
-        None => space,
+        None => {
+            let sa = crate::authz::load_space_access(&state, space).await?;
+            if !crate::authz::space_access(&state, &p, &sa).await?.perms.has(add) {
+                return Err(ApiError::Forbidden);
+            }
+            space
+        }
     };
     let target_parent = match req.parent_id {
         Some(par) => {
@@ -1201,10 +1214,20 @@ pub async fn copy_tree(state: &AppState, opts: &TreeCopy<'_>, roots: Vec<(Uuid, 
 pub async fn trash(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
     let p = Principal::load(&state, Some(user.clone())).await?;
     let (access, space) = require_page(&state, &p, id, Need::Admin).await?;
-    let subtree: Vec<Uuid> = sqlx::query_scalar("WITH RECURSIVE sub AS (SELECT id FROM pages WHERE id = $1 UNION ALL SELECT p.id FROM pages p JOIN sub ON p.parent_id = sub.id WHERE p.deleted_at IS NULL) SELECT id FROM sub")
-        .bind(id)
-        .fetch_all(&state.db)
-        .await?;
+    let subtree: Vec<(Uuid, String, Option<Uuid>)> = sqlx::query_as(
+        "WITH RECURSIVE sub AS (SELECT id, kind, created_by FROM pages WHERE id = $1
+            UNION ALL SELECT p.id, p.kind, p.created_by FROM pages p JOIN sub ON p.parent_id = sub.id WHERE p.deleted_at IS NULL)
+         SELECT id, kind, created_by FROM sub",
+    )
+    .bind(id)
+    .fetch_all(&state.db)
+    .await?;
+    // the delete permission for each kind, or "delete own" when everything in it is the caller's
+    let all_mine = subtree.iter().all(|(_, _, by)| *by == Some(user.id));
+    if !subtree.iter().all(|(_, kind, _)| access.may_delete(if kind == "blog" { Perm::DeleteBlog } else { Perm::DeletePages }, all_mine)) {
+        return Err(ApiError::Forbidden);
+    }
+    let subtree: Vec<Uuid> = subtree.into_iter().map(|(id, _, _)| id).collect();
     let pairs: Vec<(Uuid, Option<Uuid>)> =
         sqlx::query_as("SELECT id, parent_id FROM pages WHERE space_id = $1 AND deleted_at IS NULL").bind(space).fetch_all(&state.db).await?;
     let visible = crate::authz::visible_page_ids(&state, &p, space, access.space_role.unwrap_or(Role::None), &pairs).await?;
@@ -1495,6 +1518,7 @@ pub async fn put_restrictions(
 ) -> ApiResult<StatusCode> {
     let p = Principal::load(&state, Some(user.clone())).await?;
     let (access, _) = require_page(&state, &p, id, Need::Admin).await?;
+    access.require(Perm::Restrict)?;
     // don't let users lock themselves out (unless they're space admins, who bypass restrictions)
     if access.space_role != Some(Role::Admin) {
         for kind in ["view", "edit"] {
@@ -1583,7 +1607,8 @@ pub struct ExportQuery {
 /// Exports a page as Markdown, standalone HTML, Word (`docx`) or JSON.
 pub async fn export(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path(id): Path<Uuid>, Query(q): Query<ExportQuery>) -> ApiResult<Response> {
     let p = Principal::load(&state, user).await?;
-    require_page(&state, &p, id, Need::View).await?;
+    let (access, _) = require_page(&state, &p, id, Need::View).await?;
+    access.require(Perm::Export)?;
     let ws: Uuid =
         sqlx::query_scalar("SELECT s.workspace_id FROM pages p JOIN spaces s ON s.id = p.space_id WHERE p.id = $1").bind(id).fetch_one(&state.db).await?;
     crate::routes::share::require_exports(&state, ws, p.user.as_ref()).await?;

@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::app::AppState;
 use crate::audit;
 use crate::auth::CurrentUser;
-use crate::authz::{Need, Principal, page_access, require_page};
+use crate::authz::{Need, Perm, Principal, page_access, require_page};
 use crate::error::{ApiError, ApiResult};
 use crate::routes::spaces::load_space;
 
@@ -21,7 +21,7 @@ pub async fn archive(State(state): State<AppState>, CurrentUser(user): CurrentUs
     if access.archived_page.is_some() {
         return Err(ApiError::Conflict("the page is already archived".into()));
     }
-    if !access.edit {
+    if !access.edit || !access.can(Perm::Archive) {
         return Err(ApiError::Forbidden);
     }
     let home: Option<Uuid> = sqlx::query_scalar("SELECT home_page_id FROM spaces WHERE id = $1").bind(space).fetch_one(&state.db).await?;
@@ -42,7 +42,7 @@ pub async fn unarchive(State(state): State<AppState>, CurrentUser(user): Current
         Some(a) if a != id => return Err(ApiError::bad("the page is archived together with a page above it; restore that page")),
         _ => {}
     }
-    if !access.admin {
+    if !access.admin || !access.can(Perm::Archive) {
         return Err(ApiError::Forbidden);
     }
     sqlx::query("UPDATE pages SET archived_at = NULL, archived_by = NULL WHERE id = $1").bind(id).execute(&state.db).await?;

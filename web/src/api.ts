@@ -107,6 +107,8 @@ export interface Space {
   defaultRole: Role
   anonymousAccess: boolean
   role: Role
+  /** the caller's space permissions */
+  perms?: Perm[]
   pageCount: number
   updatedAt: string
   archivedAt?: string | null
@@ -151,6 +153,30 @@ export interface PageAccess {
   admin: boolean
   /** the archived page this one is (or is under) */
   archivedPage?: string | null
+  /** the caller's space permissions on this page */
+  perms?: Perm[]
+  /** the caller created the page ("delete own" covers it) */
+  own?: boolean
+}
+
+/** Space permissions (Confluence's set): a role brings them, a space grant may leave some out. */
+export type Perm =
+  | 'page.add'
+  | 'page.delete'
+  | 'blog.add'
+  | 'blog.delete'
+  | 'comment.add'
+  | 'comment.delete'
+  | 'attachment.add'
+  | 'attachment.delete'
+  | 'restrict'
+  | 'export'
+  | 'archive'
+  | 'delete.own'
+
+/** Whether a space or page access carries a permission (the server decides when it's not sent). */
+export function can(x: { perms?: Perm[] } | null | undefined, p: Perm): boolean {
+  return !x?.perms || x.perms.includes(p)
 }
 
 export interface PmNode {

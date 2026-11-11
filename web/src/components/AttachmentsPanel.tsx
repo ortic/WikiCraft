@@ -2,7 +2,7 @@ import { useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Paperclip, Upload, Trash2, X, FileText, Image as ImageIcon, History, RotateCcw, Tag } from 'lucide-react'
 import { Link } from 'react-router-dom'
-import { api, formatBytes, formatDate, type Attachment, type Page } from '../api'
+import { api, can, formatBytes, formatDate, type Attachment, type Page } from '../api'
 import { useToast } from '../ui'
 
 export default function AttachmentsPanel({ page, onClose }: { page: Page; onClose: () => void }) {
@@ -11,6 +11,7 @@ export default function AttachmentsPanel({ page, onClose }: { page: Page; onClos
   const input = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
   const [history, setHistory] = useState<string | null>(null)
+  const canAdd = page.access.edit && can(page.access, 'attachment.add')
   const list = useQuery({ queryKey: ['attachments', page.id], queryFn: () => api.get<Attachment[]>(`/pages/${page.id}/attachments`) })
   const upload = async (files: FileList | null) => {
     if (!files?.length) return
@@ -28,14 +29,14 @@ export default function AttachmentsPanel({ page, onClose }: { page: Page; onClos
     }
   }
   return (
-    <aside className="side-panel" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (page.access.edit) upload(e.dataTransfer.files) }}>
+    <aside className="side-panel" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (canAdd) upload(e.dataTransfer.files) }}>
       <h3>
         <Paperclip size={16} /> Attachments <span className="spacer" />
         <button className="icon-btn" onClick={onClose}>
           <X size={16} />
         </button>
       </h3>
-      {page.access.edit && (
+      {canAdd && (
         <>
           <input ref={input} type="file" multiple hidden onChange={(e) => upload(e.target.files)} />
           <button className="btn" style={{ width: '100%', justifyContent: 'center', marginBottom: 12 }} disabled={busy} onClick={() => input.current?.click()}>
@@ -64,7 +65,7 @@ export default function AttachmentsPanel({ page, onClose }: { page: Page; onClos
             <FileLabels attachment={a} canEdit={page.access.edit} onSaved={() => qc.invalidateQueries({ queryKey: ['attachments', page.id] })} />
             {history === a.id && <VersionList attachmentId={a.id} current={a.version} canEdit={page.access.edit} onRestored={() => qc.invalidateQueries({ queryKey: ['attachments', page.id] })} />}
           </div>
-          {page.access.edit && (
+          {page.access.edit && (can(page.access, 'attachment.delete') || can(page.access, 'delete.own')) && (
             <button
               className="icon-btn"
               title="Delete"

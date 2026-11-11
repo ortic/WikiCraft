@@ -94,12 +94,28 @@ was deactivated. Its **New spaces** card sets how spaces start out: the role eve
 gets (preselected when someone creates a space; they can pick another) and people or groups
 added to every new space with a role, e.g. a *Wiki gardeners* group as admins.
 
+**Space permissions** fine-tune a role, as in Confluence. A role brings these permissions:
+
+| Permission | From role | Confluence |
+|---|---|---|
+| Export | viewer | `EXPORTSPACE` |
+| Add comments, delete own content | commenter | `COMMENT`, `REMOVEOWNCONTENT` |
+| Add / delete pages, add / delete blog posts, add / delete files, delete others' comments, set page restrictions, archive pages | editor | `EDITSPACE`, `REMOVEPAGE`, `EDITBLOG`, `REMOVEBLOG`, `CREATEATTACHMENT`, `REMOVEATTACHMENT`, `REMOVECOMMENT`, `SETPAGEPERMISSIONS`, `ARCHIVEPAGE` |
+
+In *Space settings → Permissions*, the permission count next to a grant (or next to the default
+role) opens a checklist; unticked permissions are left out for that person or group, e.g. editors
+who may change pages but not delete them. Permissions add up over everything that applies to
+someone (their own grant, their groups, the default role), and space admins always have all of
+them. *Delete own content* lets people delete pages, blog posts, comments and files they created
+without the delete permissions. Editing page content stays with the editor role.
+
 **Drafts** are the exception to all of this: an unpublished draft (and what's below it) is only
 visible to the person who created it, space and workspace admins included, until they publish it.
 
 **Page restrictions** narrow this down per page: *view* restrictions apply to the page and
 everything below it (as in Confluence), *edit* restrictions to the page itself. *Inspect
-permissions* on a page explains who can see or edit it and why.
+permissions* on a page explains who can see or edit it and why, including the permissions a
+grant leaves out.
 
 Adding people:
 

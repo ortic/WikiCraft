@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query'
-import { api, type Space, type TreeNode } from '../api'
+import { api, can, type Space, type TreeNode } from '../api'
 
 /** Where a page goes: a space you can write in and a parent page in it (or its top level).
  * `exclude` leaves out a page and everything below it (a page can't move below itself). */
@@ -18,7 +18,7 @@ export default function PlacePicker({
 }) {
   const spaces = useQuery({ queryKey: ['spaces'], queryFn: () => api.get<Space[]>('/spaces') })
   const tree = useQuery({ queryKey: ['tree', spaceKey], queryFn: () => api.get<{ nodes: TreeNode[] }>(`/spaces/${spaceKey}/tree`) })
-  const writable = (spaces.data ?? []).filter((s) => (s.role === 'editor' || s.role === 'admin' || s.key === spaceKey) && !s.archivedAt)
+  const writable = (spaces.data ?? []).filter((s) => (((s.role === 'editor' || s.role === 'admin') && can(s, 'page.add')) || s.key === spaceKey) && !s.archivedAt)
   // the page tree, flattened in order with its depth (folders and pages; not links)
   const options: { id: string; title: string; depth: number }[] = []
   const nodes = (tree.data?.nodes ?? []).filter((n) => n.kind !== 'link' && n.kind !== 'blog')

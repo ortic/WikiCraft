@@ -2,7 +2,7 @@ import { useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { FilePlus2 } from 'lucide-react'
-import { api, type Space } from '../api'
+import { api, can, type Space } from '../api'
 import { Spinner } from '../ui'
 
 /**
@@ -24,7 +24,7 @@ export default function Missing() {
     if (resolved.data?.pageId) nav(`/pages/${resolved.data.pageId}`, { replace: true })
   }, [resolved.data, nav])
   if (resolved.isLoading || resolved.data?.pageId) return <div className="content-pad"><Spinner /></div>
-  const canCreate = !!space && !!title && spaceInfo.data && ['editor', 'admin'].includes(spaceInfo.data.role)
+  const canCreate = !!space && !!title && spaceInfo.data && ['editor', 'admin'].includes(spaceInfo.data.role) && can(spaceInfo.data, 'page.add')
   return (
     <div className="content-pad" style={{ textAlign: 'center', paddingTop: 80 }}>
       <FilePlus2 size={44} className="faint" />

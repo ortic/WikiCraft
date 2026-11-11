@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, RotateCcw, Trash2, X, MessageSquare, ThumbsUp, Pencil, ImagePlus } from 'lucide-react'
-import { api, formatDate, type Comment, type Page, type PmNode } from '../api'
+import { api, can, formatDate, type Comment, type Page, type PmNode } from '../api'
 import { Avatar, useMe, useToast } from '../ui'
 
 /** An image in a comment: this wiki's attachments are shown; anything else stays a link (no
@@ -295,7 +295,7 @@ export default function CommentsPanel({ page, focus, pending, onPendingDone, onC
               <Pencil size={13} />
             </button>
           )}
-          {(mine || page.access.admin) && (
+          {((mine && (can(page.access, 'comment.delete') || can(page.access, 'delete.own'))) || (page.access.admin && can(page.access, 'comment.delete'))) && (
             <button
               className="icon-btn"
               style={{ width: 24, height: 24 }}

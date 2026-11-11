@@ -72,22 +72,27 @@ pub async fn explain(State(state): State<AppState>, CurrentUser(me): CurrentUser
         Some(u) if u.is_admin() => steps.push(step(Some(true), "Workspace admins have full access to every space")),
         Some(u) if space.personal_owner_id == Some(u.id) => steps.push(step(Some(true), "Owner of this personal space")),
         Some(u) => {
-            let grants: Vec<(String, Uuid, String)> =
-                sqlx::query_as("SELECT subject_type, subject_id, role FROM space_permissions WHERE space_id = $1").bind(space_id).fetch_all(&state.db).await?;
+            let grants: Vec<(String, Uuid, String, Vec<String>)> =
+                sqlx::query_as("SELECT subject_type, subject_id, role, denied FROM space_permissions WHERE space_id = $1")
+                    .bind(space_id)
+                    .fetch_all(&state.db)
+                    .await?;
             let mut any = false;
-            for (kind, id, r) in &grants {
+            for (kind, id, r, denied) in &grants {
                 if p.matches(kind, *id) {
                     any = true;
                     let label = if kind == "group" { format!("member of group “{}”", name("group", *id).await) } else { "granted directly".to_string() };
-                    steps.push(step(Some(Role::parse(r) > Role::None), format!("Space role {r} — {label}")));
+                    let without = if denied.is_empty() || r == "admin" { String::new() } else { format!(", without: {}", denied.join(", ")) };
+                    steps.push(step(Some(Role::parse(r) > Role::None), format!("Space role {r} — {label}{without}")));
                 }
             }
             if u.is_guest() {
                 steps.push(step(None, format!("Guests don't get the space's default role ({}); only explicit grants count", space.default_role)));
             } else {
+                let without = if space.default_denied.is_empty() { String::new() } else { format!(", without: {}", space.default_denied.join(", ")) };
                 steps.push(step(
                     Some(Role::parse(&space.default_role) > Role::None),
-                    format!("Space default role for workspace members: {}", space.default_role),
+                    format!("Space default role for workspace members: {}{without}", space.default_role),
                 ));
             }
             if space.anonymous_access {
@@ -154,7 +159,7 @@ pub async fn explain(State(state): State<AppState>, CurrentUser(me): CurrentUser
     Ok(Json(json!({
         "user": target.map(|u| json!({"id": u.id, "name": u.name, "role": u.role, "status": u.status})),
         "spaceRole": role.as_str(),
-        "access": {"view": access.view, "comment": access.comment, "edit": access.edit, "admin": access.admin},
+        "access": {"view": access.view, "comment": access.comment, "edit": access.edit, "admin": access.admin, "perms": access.perms},
         "steps": steps,
     })))
 }

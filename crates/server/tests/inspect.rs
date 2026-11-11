@@ -40,7 +40,13 @@ async fn explains_space_roles_groups_and_inherited_restrictions() {
     // Fiona: editor through the group, on the inherited restriction list
     let (st, r) = app.get(&owner, &format!("/pages/{q1}/access/{fiona_id}")).await;
     assert_eq!(st, 200, "{r}");
-    assert_eq!(r["access"], json!({"view": true, "comment": true, "edit": true, "admin": true}));
+    assert_eq!(
+        r["access"],
+        json!({"view": true, "comment": true, "edit": true, "admin": true, "perms": [
+            "page.add", "page.delete", "blog.add", "blog.delete", "comment.add", "comment.delete",
+            "attachment.add", "attachment.delete", "restrict", "export", "archive", "delete.own"
+        ]})
+    );
     assert_eq!(r["spaceRole"], "editor");
     let t = texts(&r);
     assert!(t.contains("Space role editor — member of group “Finance”"), "{t}");

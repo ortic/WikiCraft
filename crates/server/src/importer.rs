@@ -15,6 +15,7 @@ use wikicraft_confluence::{Export, PlanOptions, Planner, Source, Stats};
 use wikicraft_doc_model::{Mark, Node, marks, nodes, text, ydoc};
 
 use crate::app::{AppState, new_id};
+use crate::authz::{Perm, Perms, Role, clean_denied};
 
 #[derive(Debug, Clone, Deserialize, serde::Serialize, Default)]
 #[serde(rename_all = "camelCase", default)]
@@ -304,17 +305,47 @@ fn anchor_by_text(doc: &mut Node, needle: &str, comment_id: Uuid) -> bool {
     go(doc, needle, comment_id)
 }
 
-fn role_for_confluence(perms: &[&str]) -> Option<&'static str> {
+fn role_for_confluence(perms: &[&str]) -> Option<Role> {
     if perms.contains(&"SETSPACEPERMISSIONS") {
-        Some("admin")
+        Some(Role::Admin)
     } else if perms.contains(&"EDITSPACE") {
-        Some("editor")
+        Some(Role::Editor)
     } else if perms.contains(&"COMMENT") {
-        Some("commenter")
+        Some(Role::Commenter)
     } else if perms.contains(&"VIEWSPACE") {
-        Some("viewer")
+        Some(Role::Viewer)
     } else {
         None
+    }
+}
+
+/// The permissions `role` brings that the Confluence subject didn't have (archiving only when
+/// the export knows that permission: older sites have none).
+fn denied_for_confluence(role: Role, perms: &[&str], knows_archive: bool) -> Vec<String> {
+    let full = Perms::of_role(role);
+    let denied: Vec<String> = Perm::ALL
+        .into_iter()
+        .filter(|p| full.has(*p) && !perms.contains(&p.confluence()) && (*p != Perm::Archive || knows_archive))
+        .map(|p| p.key().to_string())
+        .collect();
+    clean_denied(role, &denied)
+}
+
+#[cfg(test)]
+mod permission_tests {
+    use super::*;
+
+    #[test]
+    fn confluence_permissions_become_role_and_denied() {
+        let editor = ["VIEWSPACE", "EDITSPACE", "COMMENT", "CREATEATTACHMENT", "REMOVEOWNCONTENT", "EXPORTSPACE", "EDITBLOG"];
+        assert_eq!(role_for_confluence(&editor), Some(Role::Editor));
+        assert_eq!(denied_for_confluence(Role::Editor, &editor, false), vec!["page.delete", "blog.delete", "comment.delete", "attachment.delete", "restrict"]);
+        assert!(denied_for_confluence(Role::Editor, &editor, true).contains(&"archive".to_string()));
+        assert_eq!(role_for_confluence(&["VIEWSPACE"]), Some(Role::Viewer));
+        assert_eq!(denied_for_confluence(Role::Viewer, &["VIEWSPACE"], false), vec!["export"]);
+        assert!(denied_for_confluence(Role::Admin, &["SETSPACEPERMISSIONS"], true).is_empty(), "admins keep everything");
+        // roles order by power, not by name
+        assert!(Role::Editor > Role::None && Role::Commenter > Role::Viewer);
     }
 }
 
@@ -617,41 +648,55 @@ async fn import(state: &AppState, job: Uuid, ws: Uuid, actor: Uuid, path: &Path,
                         by_subject.entry(("user".into(), u.clone())).or_default().push(perm.kind.as_str());
                     }
                 }
-                default_role = if s.permissions.is_empty() { "editor" } else { "none" };
-                if let Some(r) = role_for_confluence(&all_users_perms) {
-                    default_role = r.max(default_role);
+                // all signed-in users and the default users group → the space's default role;
+                // what Confluence didn't grant them is left out of it, per subject for the rest
+                let knows_archive = s.permissions.iter().any(|p| p.kind == "ARCHIVEPAGE");
+                let mut default_perms: Vec<&str> = all_users_perms.clone();
+                for ((ty, subject), perms) in &by_subject {
+                    if ty == "group" && (subject.eq_ignore_ascii_case(&default_group) || subject == "confluence-users" || subject == "users") {
+                        default_perms.extend(perms.iter().copied());
+                    }
                 }
+                let (role, default_denied) = match role_for_confluence(&default_perms) {
+                    Some(r) => (r, denied_for_confluence(r, &default_perms, knows_archive)),
+                    None if s.permissions.is_empty() => (Role::Editor, Vec::new()),
+                    None => (Role::None, Vec::new()),
+                };
+                default_role = role.as_str();
                 for ((ty, subject), perms) in &by_subject {
                     let Some(role) = role_for_confluence(perms) else { continue };
+                    let denied = denied_for_confluence(role, perms, knows_archive);
                     if ty == "group" {
                         if subject.eq_ignore_ascii_case(&default_group) || subject == "confluence-users" || subject == "users" {
-                            default_role = role.max(default_role);
                             continue;
                         }
                         let gid = ensure_group(state, ws, subject).await?;
                         sqlx::query(
-                            "INSERT INTO space_permissions (space_id, subject_type, subject_id, role) VALUES ($1, 'group', $2, $3) ON CONFLICT DO NOTHING",
+                            "INSERT INTO space_permissions (space_id, subject_type, subject_id, role, denied) VALUES ($1, 'group', $2, $3, $4) ON CONFLICT DO NOTHING",
                         )
                         .bind(space.id)
                         .bind(gid)
-                        .bind(role)
+                        .bind(role.as_str())
+                        .bind(&denied)
                         .execute(&state.db)
                         .await?;
                     } else if let Some(uid) = users.get(subject) {
                         sqlx::query(
-                            "INSERT INTO space_permissions (space_id, subject_type, subject_id, role) VALUES ($1, 'user', $2, $3) ON CONFLICT DO NOTHING",
+                            "INSERT INTO space_permissions (space_id, subject_type, subject_id, role, denied) VALUES ($1, 'user', $2, $3, $4) ON CONFLICT DO NOTHING",
                         )
                         .bind(space.id)
                         .bind(uid)
-                        .bind(role)
+                        .bind(role.as_str())
+                        .bind(&denied)
                         .execute(&state.db)
                         .await?;
                     }
                 }
                 // never publish an imported space automatically: report it, an admin decides
-                sqlx::query("UPDATE spaces SET default_role = $2, anonymous_access = false WHERE id = $1")
+                sqlx::query("UPDATE spaces SET default_role = $2, default_denied = $3, anonymous_access = false WHERE id = $1")
                     .bind(space.id)
                     .bind(default_role)
+                    .bind(&default_denied)
                     .execute(&state.db)
                     .await?;
 

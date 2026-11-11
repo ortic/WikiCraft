@@ -11,10 +11,10 @@ use uuid::Uuid;
 
 use crate::app::{AppState, new_id};
 use crate::auth::{CurrentUser, require_admin};
-use crate::authz::{Principal, Role};
+use crate::authz::{Perm, Principal, Role};
 use crate::error::{ApiError, ApiResult};
 use crate::export::Format;
-use crate::routes::spaces::load_space;
+use crate::routes::spaces::load_space_with_access;
 
 #[derive(Deserialize)]
 pub struct ExportRequest {
@@ -29,8 +29,8 @@ pub async fn start(
     Json(req): Json<ExportRequest>,
 ) -> ApiResult<(StatusCode, Json<Value>)> {
     let p = Principal::load(&state, Some(user.clone())).await?;
-    let (space, role) = load_space(&state, &p, &key).await?;
-    if req.format == Format::Backup && role < Role::Admin {
+    let (space, a) = load_space_with_access(&state, &p, &key).await?;
+    if (req.format == Format::Backup && a.role < Role::Admin) || !a.perms.has(Perm::Export) {
         return Err(ApiError::Forbidden);
     }
     crate::routes::share::require_exports(&state, user.workspace_id, Some(&user)).await?;

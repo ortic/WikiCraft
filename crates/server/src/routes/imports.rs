@@ -14,11 +14,11 @@ use wikicraft_doc_model::{Node, markdown, nodes};
 
 use crate::app::{AppState, new_id};
 use crate::auth::{CurrentUser, User, require_admin};
-use crate::authz::{Principal, Role};
+use crate::authz::{Perm, Principal, Role};
 use crate::error::{ApiError, ApiResult};
 use crate::importer::{self, ImportOptions};
 use crate::routes::pages::{NewPage, insert_page};
-use crate::routes::spaces::load_space;
+use crate::routes::spaces::load_space_with_access;
 
 /// Streams the uploaded file field to disk. Returns (path, other text fields).
 pub(crate) async fn receive_upload(state: &AppState, mp: &mut Multipart) -> ApiResult<(PathBuf, HashMap<String, String>, Option<String>)> {
@@ -248,8 +248,8 @@ async fn import_markdown(state: &AppState, user: &User, path: &std::path::Path, 
     let _slot = MARKDOWN_IMPORTS.acquire().await.map_err(|e| ApiError::Internal(e.into()))?;
     let p = Principal::load(state, Some(user.clone())).await?;
     let key = fields.get("spaceKey").ok_or(ApiError::bad("spaceKey is required"))?;
-    let (space, role) = load_space(state, &p, key).await?;
-    if role < Role::Editor {
+    let (space, a) = load_space_with_access(state, &p, key).await?;
+    if a.role < Role::Editor || !a.perms.has(Perm::AddPages) {
         return Err(ApiError::Forbidden);
     }
     let root_parent: Option<Uuid> = fields.get("parentId").and_then(|s| s.parse().ok());

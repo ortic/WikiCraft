@@ -455,7 +455,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Groups (local) and group-based grants `C D X B`
 - [x] **P0** Page-level restrictions: restrict view and/or edit to users/groups; **inherited by descendants** `C D X`
 - [x] **P0** Permission checks enforced in API, collab WebSocket, search, exports, AI, notifications, webhooks (single authz crate, no bypass paths)
-- [ ] **P1** Granular space permissions (Confluence-compatible set): view, add/delete pages, add/delete blog, add/delete comments, add/delete attachments, set page restrictions, export, admin, archive, delete own content `C DC`
+- [x] **P1** Granular space permissions (Confluence-compatible set): view, add/delete pages, add/delete blog, add/delete comments, add/delete attachments, set page restrictions, export, admin, archive, delete own content `C DC` — roles bring them (viewer: export; commenter: + add comments, delete own; editor: the rest; admin: all); each grant and the space default role can leave some out (Space settings → Permissions, a checklist per grant); permissions add up over a person's grants, groups and the default role; enforced in the API, MCP and imports, hidden in the UI, explained by Inspect permissions; Confluence imports keep each subject's set (and the default group's) instead of collapsing it to a role
 - [x] **P1** Anonymous / public access per space (read-only) `C X B O`
 - [x] **P1** Public share links for a single page (with optional expiry, password, subtree inclusion, disable globally) `C D O` — passwords: Argon2 hash, unlock grants a 12-hour HttpOnly cookie scoped to the link, wrong guesses throttled per link, revoking ends unlocks
 - [x] **P1** Guest users limited to specific spaces `C`

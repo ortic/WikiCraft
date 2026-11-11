@@ -3,7 +3,7 @@ import { LineIcon, parseSymbol } from '../icons'
 import { useMatch, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, ChevronDown, FileText, Folder, FolderPlus, Plus, Lock, Link2, ExternalLink } from 'lucide-react'
-import { api, type Space, type TreeNode } from '../api'
+import { api, can, type Space, type TreeNode } from '../api'
 import { useToast } from '../ui'
 
 interface TreeData {
@@ -24,6 +24,7 @@ export default function SpaceTree({ space }: { space: Space }) {
   const [drag, setDrag] = useState<string | null>(null)
   const [drop, setDrop] = useState<{ id: string; pos: DropPos } | null>(null)
   const canEdit = space.role === 'editor' || space.role === 'admin'
+  const canAdd = canEdit && can(space, 'page.add')
 
   const { children, parentOf } = useMemo(() => {
     const children = new Map<string, TreeNode[]>()
@@ -124,7 +125,7 @@ export default function SpaceTree({ space }: { space: Space }) {
             {n.draft && <span className="tree-draft-badge">draft</span>}
             {n.kind === 'link' && <ExternalLink size={11} className="faint" style={{ flex: 'none' }} aria-label="opens in a new tab" />}
             {n.restricted && <Lock size={12} className="faint" />}
-            {canEdit && (
+            {canAdd && (
               <span className="actions">
                 <button
                   className="icon-btn"
@@ -149,7 +150,7 @@ export default function SpaceTree({ space }: { space: Space }) {
     <div style={{ marginTop: 6 }}>
       <div className="sidebar-section" style={{ marginTop: 8 }}>
         Pages <span className="spacer" />
-        {canEdit && (
+        {canAdd && (
           <>
             <button className="icon-btn" style={{ width: 24, height: 24 }} title="New folder at top level" aria-label="New folder at top level" onClick={() => createChild(null, 'folder')}>
               <FolderPlus size={14} />

@@ -9,7 +9,7 @@ use uuid::Uuid;
 use crate::app::{AppState, new_id};
 use crate::audit;
 use crate::auth::{CurrentUser, MaybeUser};
-use crate::authz::{Principal, Role, SpaceAccessRow, space_role, visible_page_ids};
+use crate::authz::{Perms, Principal, Role, SpaceAccess, SpaceAccessRow, clean_denied, space_access, visible_page_ids};
 use crate::error::{ApiError, ApiResult};
 
 #[derive(Debug, Clone, Serialize, sqlx::FromRow)]
@@ -43,9 +43,13 @@ pub struct SpaceRow {
     /// the space's own look: `{accentColor?, hideBlog?}`
     #[sqlx(default)]
     pub look: Value,
+    /// permissions the default role leaves out (space admins read them from the permissions endpoint)
+    #[sqlx(default)]
+    #[serde(skip)]
+    pub default_denied: Vec<String>,
 }
 
-pub const SPACE_COLUMNS: &str = "id, workspace_id, key, name, description, icon, home_page_id, default_role, anonymous_access, personal_owner_id, created_at, updated_at, archived_at, default_template, category, owner_id, shortcuts, look";
+pub const SPACE_COLUMNS: &str = "id, workspace_id, key, name, description, icon, home_page_id, default_role, anonymous_access, personal_owner_id, created_at, updated_at, archived_at, default_template, category, owner_id, shortcuts, look, default_denied";
 
 impl SpaceRow {
     pub fn access_row(&self) -> SpaceAccessRow {
@@ -53,6 +57,7 @@ impl SpaceRow {
             id: self.id,
             workspace_id: self.workspace_id,
             default_role: self.default_role.clone(),
+            default_denied: self.default_denied.clone(),
             anonymous_access: self.anonymous_access,
             personal_owner_id: self.personal_owner_id,
             archived: self.archived_at.is_some(),
@@ -72,6 +77,12 @@ pub async fn workspace_of(state: &AppState, p: &Principal) -> ApiResult<Uuid> {
 
 /// Loads a space by key and the principal's role in it (404 if no access).
 pub async fn load_space(state: &AppState, p: &Principal, key: &str) -> ApiResult<(SpaceRow, Role)> {
+    let (space, a) = load_space_with_access(state, p, key).await?;
+    Ok((space, a.role))
+}
+
+/// [`load_space`] with the principal's space permissions.
+pub async fn load_space_with_access(state: &AppState, p: &Principal, key: &str) -> ApiResult<(SpaceRow, SpaceAccess)> {
     let ws = workspace_of(state, p).await?;
     // the current key, else a former one (renamed spaces keep their old links)
     let space = sqlx::query_as::<_, SpaceRow>(sqlx::AssertSqlSafe(format!(
@@ -84,11 +95,11 @@ pub async fn load_space(state: &AppState, p: &Principal, key: &str) -> ApiResult
     .fetch_optional(&state.db)
     .await?
     .ok_or(ApiError::NotFound("space"))?;
-    let role = space_role(state, p, &space.access_row()).await?;
-    if role == Role::None {
+    let a = space_access(state, p, &space.access_row()).await?;
+    if a.role == Role::None {
         return Err(if p.user.is_none() { ApiError::Unauthorized } else { ApiError::NotFound("space") });
     }
-    Ok((space, role))
+    Ok((space, a))
 }
 
 #[derive(Serialize)]
@@ -97,6 +108,8 @@ pub struct SpaceView {
     #[serde(flatten)]
     space: SpaceRow,
     role: Role,
+    /// the caller's space permissions (`authz::Perm` keys)
+    perms: Perms,
     page_count: i64,
     /// the caller watches the whole space
     watching: bool,
@@ -136,11 +149,11 @@ pub async fn list(State(state): State<AppState>, MaybeUser(user): MaybeUser, Que
     };
     let mut out = Vec::new();
     for s in spaces {
-        let role = space_role(&state, &p, &s.access_row()).await?;
-        if role > Role::None {
+        let a = space_access(&state, &p, &s.access_row()).await?;
+        if a.role > Role::None {
             let page_count = counts.get(&s.id).copied().unwrap_or(0);
             let starred = starred.contains(&s.id);
-            out.push(SpaceView { space: s, role, page_count, watching: false, starred, owner_name: None });
+            out.push(SpaceView { space: s, role: a.role, perms: a.perms, page_count, watching: false, starred, owner_name: None });
         }
     }
     Ok(Json(out))
@@ -374,7 +387,7 @@ pub async fn copy(
         .await?;
     if req.include_permissions.unwrap_or(true) {
         sqlx::query(
-            "INSERT INTO space_permissions (space_id, subject_type, subject_id, role) SELECT $2, subject_type, subject_id, role FROM space_permissions WHERE space_id = $1
+            "INSERT INTO space_permissions (space_id, subject_type, subject_id, role, denied) SELECT $2, subject_type, subject_id, role, denied FROM space_permissions WHERE space_id = $1
              ON CONFLICT DO NOTHING",
         )
         .bind(src.id)
@@ -594,7 +607,7 @@ pub async fn create_my_space(State(state): State<AppState>, CurrentUser(user): C
 
 pub async fn get(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path(key): Path<String>) -> ApiResult<Json<SpaceView>> {
     let p = Principal::load(&state, user).await?;
-    let (space, role) = load_space(&state, &p, &key).await?;
+    let (space, SpaceAccess { role, perms }) = load_space_with_access(&state, &p, &key).await?;
     let page_count: i64 =
         sqlx::query_scalar("SELECT count(*) FROM pages WHERE space_id = $1 AND deleted_at IS NULL").bind(space.id).fetch_one(&state.db).await?;
     let (watching, starred): (bool, bool) = match &p.user {
@@ -614,7 +627,7 @@ pub async fn get(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path
         Some(o) => sqlx::query_scalar("SELECT name FROM users WHERE id = $1").bind(o).fetch_optional(&state.db).await?,
         None => None,
     };
-    Ok(Json(SpaceView { space, role, page_count, watching, starred, owner_name }))
+    Ok(Json(SpaceView { space, role, perms, page_count, watching, starred, owner_name }))
 }
 
 #[derive(Deserialize)]
@@ -921,6 +934,9 @@ pub struct Grant {
     pub subject_type: String,
     pub subject_id: Uuid,
     pub role: String,
+    /// permissions of the role this grant leaves out (`authz::Perm` keys)
+    #[serde(default)]
+    pub denied: Vec<String>,
     #[sqlx(default)]
     #[serde(default)]
     pub subject_name: Option<String>,
@@ -933,20 +949,33 @@ pub async fn get_permissions(State(state): State<AppState>, CurrentUser(user): C
         return Err(ApiError::Forbidden);
     }
     let grants = sqlx::query_as::<_, Grant>(
-        "SELECT sp.subject_type, sp.subject_id, sp.role, COALESCE(u.name, g.name) AS subject_name FROM space_permissions sp
+        "SELECT sp.subject_type, sp.subject_id, sp.role, sp.denied, COALESCE(u.name, g.name) AS subject_name FROM space_permissions sp
          LEFT JOIN users u ON sp.subject_type = 'user' AND u.id = sp.subject_id LEFT JOIN groups g ON sp.subject_type = 'group' AND g.id = sp.subject_id
          WHERE sp.space_id = $1 ORDER BY sp.subject_type, subject_name",
     )
     .bind(space.id)
     .fetch_all(&state.db)
     .await?;
-    Ok(Json(json!({ "defaultRole": space.default_role, "anonymousAccess": space.anonymous_access, "grants": grants })))
+    Ok(Json(json!({
+        "defaultRole": space.default_role,
+        "defaultDenied": space.default_denied,
+        "anonymousAccess": space.anonymous_access,
+        "grants": grants,
+        "permissions": permission_catalog(),
+    })))
+}
+
+/// The space permissions with the least role that brings each, for the settings screen.
+pub fn permission_catalog() -> Vec<Value> {
+    crate::authz::Perm::ALL.iter().map(|p| json!({"key": p.key(), "minRole": p.min_role(), "confluence": p.confluence()})).collect()
 }
 
 #[derive(Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct PutPermissions {
     default_role: Option<String>,
+    /// permissions the default role leaves out (unchanged when absent)
+    default_denied: Option<Vec<String>>,
     anonymous_access: Option<bool>,
     grants: Vec<Grant>,
 }
@@ -970,6 +999,10 @@ pub async fn put_permissions(
         validate_role(r)?;
         sqlx::query("UPDATE spaces SET default_role = $2 WHERE id = $1").bind(space.id).bind(r).execute(&mut *tx).await?;
     }
+    if let Some(d) = &req.default_denied {
+        let role = Role::parse(req.default_role.as_deref().unwrap_or(&space.default_role));
+        sqlx::query("UPDATE spaces SET default_denied = $2 WHERE id = $1").bind(space.id).bind(clean_denied(role, d)).execute(&mut *tx).await?;
+    }
     if let Some(a) = req.anonymous_access {
         if a && !space.anonymous_access && !user.is_admin() {
             return Err(ApiError::bad("only workspace admins can make a space public"));
@@ -982,11 +1015,12 @@ pub async fn put_permissions(
         if !matches!(g.subject_type.as_str(), "user" | "group") {
             return Err(ApiError::bad("subjectType must be user or group"));
         }
-        sqlx::query("INSERT INTO space_permissions (space_id, subject_type, subject_id, role) VALUES ($1, $2, $3, $4) ON CONFLICT DO NOTHING")
+        sqlx::query("INSERT INTO space_permissions (space_id, subject_type, subject_id, role, denied) VALUES ($1, $2, $3, $4, $5) ON CONFLICT DO NOTHING")
             .bind(space.id)
             .bind(&g.subject_type)
             .bind(g.subject_id)
             .bind(&g.role)
+            .bind(clean_denied(Role::parse(&g.role), &g.denied))
             .execute(&mut *tx)
             .await?;
     }

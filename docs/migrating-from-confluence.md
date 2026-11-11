@@ -26,7 +26,7 @@ It works the same for Confluence Server, Data Center and Cloud exports.
 | Tasks (with assignees and due dates) | Task lists | they show up under *My tasks* |
 | Users referenced anywhere | Accounts or *imported authors* | see [step 5](#5-people-imported-authors) |
 | Groups | Groups | |
-| Space permissions | Space roles | `SETSPACEPERMISSIONS` → admin, `EDITSPACE` → editor, `COMMENT` → commenter, `VIEWSPACE` → viewer |
+| Space permissions | Space roles and permissions | `SETSPACEPERMISSIONS` → admin, `EDITSPACE` → editor, `COMMENT` → commenter, `VIEWSPACE` → viewer; what a user or group didn't have of the rest (delete pages, blog, files, comments, restrictions, export, archive, delete own) is left out of their grant. All signed-in users and the `confluence-users` group become the space's default role |
 | Page restrictions (view / edit) | Page restrictions | view restrictions are inherited, as in Confluence; a restriction is never dropped silently (unknown subjects get an account) |
 | Anonymous access | **off** | reported as `anonymousAccessInConfluence`; turn it on per space if you really want it |
 | Links between pages, to attachments, to users | Rewritten | links to pages that are not in the export stay as "missing page" links and are resolved when the page arrives in a later import |

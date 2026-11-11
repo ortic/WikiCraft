@@ -108,6 +108,10 @@ components:
         anonymousAccess: &id003
           type: boolean
         role: *id001
+        perms:
+          type: array
+          items:
+            $ref: '#/components/schemas/Perm'
         starred: *id003
         watching: *id003
     PmNode:
@@ -121,6 +125,51 @@ components:
         comment: *id003
         edit: *id003
         admin: *id003
+        perms:
+          type: array
+          items:
+            $ref: '#/components/schemas/Perm'
+        own:
+          type: boolean
+          description: the caller created the page ("delete own" covers it)
+    Perm:
+      enum:
+      - page.add
+      - page.delete
+      - blog.add
+      - blog.delete
+      - comment.add
+      - comment.delete
+      - attachment.add
+      - attachment.delete
+      - restrict
+      - export
+      - archive
+      - delete.own
+      description: 'a space permission (Confluence''s set): a role brings the ones at or below it, a grant may leave some
+        out'
+    SpaceGrant:
+      type: object
+      properties:
+        subjectType:
+          enum:
+          - user
+          - group
+        subjectId: *id002
+        role:
+          enum:
+          - viewer
+          - commenter
+          - editor
+          - admin
+        denied:
+          type: array
+          items:
+            $ref: '#/components/schemas/Perm'
+        subjectName:
+          type:
+          - string
+          - 'null'
     PropertyType:
       type: string
       enum:
@@ -2037,7 +2086,7 @@ paths:
     get:
       tags:
       - Spaces
-      summary: Space role grants
+      summary: Space role grants and the permissions each leaves out (space admins)
       operationId: get_spaces_key_permissions
       parameters:
       - name: key
@@ -2047,6 +2096,30 @@ paths:
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  defaultRole: *id001
+                  defaultDenied:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Perm'
+                  anonymousAccess: *id003
+                  grants:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/SpaceGrant'
+                  permissions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key:
+                          $ref: '#/components/schemas/Perm'
+                        minRole: *id001
+                        confluence: *id001
         4XX:
           description: Error
           content:
@@ -2056,7 +2129,7 @@ paths:
     put:
       tags:
       - Spaces
-      summary: Replace space role grants
+      summary: Replace space role grants; `denied` leaves permissions of a role out (ignored for admins)
       operationId: put_spaces_key_permissions
       parameters:
       - name: key
@@ -2071,15 +2144,17 @@ paths:
               type: object
               properties:
                 defaultRole: *id001
+                defaultDenied:
+                  type: array
+                  items:
+                    $ref: '#/components/schemas/Perm'
                 anonymousAccess: *id003
                 grants:
                   type: array
                   items:
-                    type: object
-                    properties:
-                      subjectType: *id001
-                      subjectId: *id002
-                      role: *id001
+                    $ref: '#/components/schemas/SpaceGrant'
+              required:
+              - grants
       responses:
         '204': *id007
         4XX:

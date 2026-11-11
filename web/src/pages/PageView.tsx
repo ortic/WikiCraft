@@ -3,7 +3,7 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate, FileText, BadgeCheck, UserCheck, Archive, RotateCcw, UserCog, CircleDot, FolderInput, ListPlus, Pin } from 'lucide-react'
 import { NoAccess, OwnerDialog, RequestReviewDialog, VerificationBadge, VerifyDialog } from '../components/Verification'
-import { ApiError, api, formatDate, type Page, type Space } from '../api'
+import { ApiError, api, can, formatDate, type Page, type Space } from '../api'
 import { PageDecor } from '../components/PageDecor'
 import { ErrorBox, Modal, Spinner, useFeatures, useMe, useToast } from '../ui'
 import { SaveTemplateDialog } from '../components/TemplateManager'
@@ -109,6 +109,8 @@ export default function PageView() {
   }
   const p = page.data!
   const canEdit = p.access.edit
+  // "delete own" also needs every page below to be yours (the server checks those)
+  const canTrash = p.access.admin && (can(p.access, p.kind === 'blog' ? 'blog.delete' : 'page.delete') || (!!p.access.own && can(p.access, 'delete.own')))
 
   const saveTitle = async () => {
     const t = title.trim() || 'Untitled'
@@ -231,7 +233,7 @@ export default function PageView() {
             </button>
             {menu && (
               <div className="dropdown menu page-menu" onMouseLeave={() => setMenu(false)}>
-                {p.access.admin && (
+                {p.access.admin && can(p.access, 'restrict') && (
                   <div className="menu-item" onClick={() => { setMenu(false); setRestrictions(true) }}>
                     <Lock size={15} /> Restrictions
                   </div>
@@ -333,7 +335,7 @@ export default function PageView() {
                     <FolderInput size={15} /> Move…
                   </div>
                 )}
-                {features.exports !== false && (<>
+                {features.exports !== false && can(p.access, 'export') && (<>
                 <div className="menu-sep" />
                 <div className="menu-label">Export</div>
                 <div className="menu-item" onClick={() => { setMenu(false); setTimeout(() => window.print(), 50) }}>
@@ -352,13 +354,13 @@ export default function PageView() {
                   <Download size={15} /> HTML
                 </a>
                 </>)}
-                {(p.access.admin || (canEdit && space.data?.homePageId !== p.id)) && <div className="menu-sep" />}
-                {canEdit && space.data?.homePageId !== p.id && (
+                {(canTrash || (canEdit && space.data?.homePageId !== p.id)) && <div className="menu-sep" />}
+                {canEdit && can(p.access, 'archive') && space.data?.homePageId !== p.id && (
                   <div className="menu-item" onClick={() => { setMenu(false); archive() }}>
                     <Archive size={15} /> Archive page
                   </div>
                 )}
-                {p.access.admin && (
+                {canTrash && (
                   <div className="menu-item btn-danger" onClick={trash}>
                     <Trash2 size={15} /> Move to trash
                   </div>
@@ -429,7 +431,7 @@ export default function PageView() {
               <span>
                 {p.access.archivedPage === p.id ? 'This page is archived.' : 'This page is in an archived section.'} It's read-only and hidden from the page tree and search.
               </span>
-              {p.access.admin && p.access.archivedPage === p.id && (
+              {p.access.admin && can(p.access, 'archive') && p.access.archivedPage === p.id && (
                 <button className="btn btn-sm" onClick={unarchive}><RotateCcw size={13} /> Restore</button>
               )}
               {p.access.archivedPage !== p.id && <Link to={`/pages/${p.access.archivedPage}`}>Go to the archived page</Link>}

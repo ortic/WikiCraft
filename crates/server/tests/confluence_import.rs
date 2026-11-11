@@ -585,3 +585,53 @@ async fn drawio_diagrams_stay_editable() {
         }
     }
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn space_permissions_from_confluence() {
+    let app = common::spawn().await;
+    let c = app.setup().await;
+    let (_bob, bob_id) = app.user(&c, "bob@acme.test", "member").await;
+    let users = ("group", "confluence-users");
+    let auditors = ("group", "auditors");
+    let bob = ("userSubject", "@ConfluenceUserImpl:u-bob");
+    let ids: Vec<String> = (100..120).map(|i| i.to_string()).collect();
+    let mut objects: Vec<(&str, &str, Vec<(&str, &str)>)> = vec![
+        ("Space", "1", vec![("key", "PRM"), ("name", "Permissions")]),
+        ("ConfluenceUserImpl", "u-bob", vec![("name", "bob"), ("email", "bob@acme.test")]),
+        ("Page", "10", vec![("title", "Home"), ("contentStatus", "current"), ("space", "@Space:1"), ("version", "1")]),
+    ];
+    for (i, (kind, subject)) in [
+        ("VIEWSPACE", users),
+        ("EDITSPACE", users),
+        ("COMMENT", users),
+        ("CREATEATTACHMENT", users),
+        ("REMOVEOWNCONTENT", users),
+        ("VIEWSPACE", auditors),
+        ("VIEWSPACE", bob),
+        ("EDITSPACE", bob),
+        ("REMOVEPAGE", bob),
+        ("COMMENT", bob),
+        ("CREATEATTACHMENT", bob),
+        ("REMOVEATTACHMENT", bob),
+        ("EXPORTSPACE", bob),
+    ]
+    .into_iter()
+    .enumerate()
+    {
+        objects.push(("SpacePermission", &ids[i], vec![("space", "@Space:1"), ("type", kind), subject]));
+    }
+    let refs: Vec<(&str, &str, &[(&str, &str)])> = objects.iter().map(|(c, i, p)| (*c, *i, p.as_slice())).collect();
+    let result = import(&app, &c, entities_zip(&refs), json!({})).await;
+    // the default group's editing rights make editor the default role (roles compare by power)
+    assert_eq!(result["spaces"][0]["defaultRole"], "editor", "{result}");
+    let (_, perms) = app.get(&c, "/spaces/PRM/permissions").await;
+    assert_eq!(perms["defaultRole"], "editor");
+    assert_eq!(perms["defaultDenied"], json!(["page.delete", "blog.add", "blog.delete", "comment.delete", "attachment.delete", "restrict", "export"]));
+    let grant =
+        |name: &str| perms["grants"].as_array().unwrap().iter().find(|g| g["subjectName"] == name).cloned().unwrap_or_else(|| panic!("{name}: {perms}"));
+    assert_eq!(grant("auditors")["role"], "viewer");
+    assert_eq!(grant("auditors")["denied"], json!(["export"]));
+    let b = perms["grants"].as_array().unwrap().iter().find(|g| g["subjectId"] == bob_id.as_str()).unwrap();
+    assert_eq!(b["role"], "editor");
+    assert_eq!(b["denied"], json!(["blog.add", "blog.delete", "comment.delete", "restrict", "delete.own"]), "what bob didn't have in Confluence");
+}

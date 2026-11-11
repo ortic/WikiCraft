@@ -3,7 +3,7 @@ import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Search, Home as HomeIcon, LayoutGrid, Star, Settings, Plus, LogOut, Moon, Shield, Menu, Trash2, UserCog, Newspaper, ListChecks, Download, Info, TriangleAlert, CircleCheck, X, Keyboard, FolderPlus, Users, Link2, ExternalLink } from 'lucide-react'
 import ShortcutsDialog from './ShortcutsDialog'
-import { api, type Page, type Space } from '../api'
+import { api, can, type Page, type Space } from '../api'
 import { Avatar, Logo, SpaceIcon, useFeatures, useMe } from '../ui'
 import SpaceTree from './SpaceTree'
 import SearchPalette, { type PaletteAction } from './SearchPalette'
@@ -73,7 +73,7 @@ export default function Layout() {
   }
 
   // Ctrl+K actions, for where you are and what you may do
-  const canCreate = !!user && !!current && current.role !== 'viewer' && current.role !== 'commenter'
+  const canCreate = !!user && !!current && current.role !== 'viewer' && current.role !== 'commenter' && can(current, 'page.add')
   const isAdmin = !!user && (user.role === 'owner' || user.role === 'admin')
   const paletteActions: PaletteAction[] = [
     ...(canCreate
@@ -128,7 +128,7 @@ export default function Layout() {
           <Search size={15} /> <span className="search-label">Search pages…</span> <span className="spacer" /> <span className="kbd">Ctrl K</span>
         </button>
         <span className="spacer" />
-        {user && current && current.role !== 'viewer' && current.role !== 'commenter' && (
+        {canCreate && (
           <button className="btn btn-primary create-btn" onClick={() => setCreatePage(true)} aria-label="Create">
             <Plus size={15} /> <span className="create-label">Create</span>
           </button>
@@ -249,7 +249,7 @@ export default function Layout() {
                 <Trash2 size={15} /> Trash
               </NavLink>
             )}
-            {current.role !== 'admin' && (
+            {current.role !== 'admin' && can(current, 'export') && (
               <NavLink to={`/spaces/${current.key}/settings?tab=export`} className={({ isActive }) => `nav-item${isActive && (new URLSearchParams(loc.search).get('tab') ?? '') === 'export' ? ' active' : ''}`}>
                 <Download size={15} /> Export
               </NavLink>

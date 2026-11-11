@@ -499,3 +499,93 @@ async fn defaults_for_new_spaces() {
     let (st, _) = app.post(&member, "/spaces", json!({"key": "NS3", "name": "Later"})).await;
     assert_eq!(st, 201);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn granular_space_permissions() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (ed, ed_id) = app.user(&owner, "ed@acme.test", "member").await;
+    let (cy, cy_id) = app.user(&owner, "cy@acme.test", "member").await;
+    let (mo, _) = app.user(&owner, "mo@acme.test", "member").await;
+    app.post(&owner, "/spaces", json!({"key": "PERM", "name": "Permissions", "defaultRole": "none"})).await;
+    let (st, _) = app
+        .put(
+            &owner,
+            "/spaces/PERM/permissions",
+            json!({"grants": [
+                {"subjectType": "user", "subjectId": ed_id, "role": "editor",
+                 "denied": ["page.delete", "attachment.delete", "comment.delete", "restrict", "archive", "export", "bogus"]},
+                {"subjectType": "user", "subjectId": cy_id, "role": "commenter", "denied": ["comment.add", "page.add"]},
+                {"subjectType": "user", "subjectId": app.get(&owner, "/me").await.1["user"]["id"], "role": "admin", "denied": ["export"]},
+            ]}),
+        )
+        .await;
+    assert_eq!(st, 204);
+    let (_, perms) = app.get(&owner, "/spaces/PERM/permissions").await;
+    let denied_of = |id: &str| perms["grants"].as_array().unwrap().iter().find(|g| g["subjectId"] == id).unwrap()["denied"].clone();
+    assert_eq!(
+        denied_of(&ed_id),
+        json!(["page.delete", "comment.delete", "attachment.delete", "restrict", "export", "archive"]),
+        "known keys, canonical order"
+    );
+    assert_eq!(denied_of(&cy_id), json!(["comment.add"]), "a commenter has no page.add to leave out");
+    assert_eq!(perms["permissions"].as_array().unwrap().len(), 12);
+    let (_, sp) = app.get(&ed, "/spaces/PERM").await;
+    assert_eq!(sp["perms"], json!(["page.add", "blog.add", "blog.delete", "comment.add", "attachment.add", "delete.own"]));
+    assert_eq!(app.get(&owner, "/spaces/PERM").await.1["perms"].as_array().unwrap().len(), 12, "admins keep everything");
+
+    let (_, theirs) = app.post(&owner, "/pages", json!({"spaceKey": "PERM", "title": "Owner's page", "markdown": "x"})).await;
+    let theirs = theirs["id"].as_str().unwrap().to_string();
+    let (st, mine) = app.post(&ed, "/pages", json!({"spaceKey": "PERM", "title": "Ed's page", "markdown": "y"})).await;
+    assert_eq!(st, 201, "{mine}");
+    let mine = mine["id"].as_str().unwrap().to_string();
+    assert_eq!(app.post(&ed, "/pages", json!({"spaceKey": "PERM", "title": "Ed's post", "kind": "blog"})).await.0, 201);
+    let (_, page) = app.get(&ed, &format!("/pages/{theirs}")).await;
+    assert_eq!(page["access"]["edit"], true);
+    assert!(!page["access"]["perms"].as_array().unwrap().contains(&json!("page.delete")));
+    assert_eq!(app.put(&ed, &format!("/pages/{theirs}/content"), json!({"markdown": "edited"})).await.0, 200, "editing stays");
+
+    // delete: someone else's page no, own page yes ("delete own")
+    assert_eq!(app.delete(&ed, &format!("/pages/{theirs}")).await, 403);
+    assert_eq!(app.delete(&ed, &format!("/pages/{mine}")).await, 204);
+    // restrictions, archive, export
+    assert_eq!(app.put(&ed, &format!("/pages/{theirs}/restrictions"), json!({"restrictions": []})).await.0, 403);
+    assert_eq!(app.post(&ed, &format!("/pages/{theirs}/archive"), json!({})).await.0, 403);
+    assert_eq!(app.get(&ed, &format!("/pages/{theirs}/export?format=md")).await.0, 403);
+    assert_eq!(app.post(&ed, "/spaces/PERM/export", json!({"format": "html"})).await.0, 403);
+    assert_eq!(app.get(&owner, &format!("/pages/{theirs}/export?format=md")).await.0, 200, "admin grants ignore denied");
+
+    // files: add yes, delete someone else's no, own yes
+    let upload = |c: &reqwest::Client, name: &str| {
+        let form = reqwest::multipart::Form::new().part("file", reqwest::multipart::Part::bytes(b"hello".to_vec()).file_name(name.to_string()));
+        c.post(app.url(&format!("/pages/{theirs}/attachments"))).multipart(form).send()
+    };
+    let a: Value = upload(&owner, "owner.txt").await.unwrap().json().await.unwrap();
+    let r = upload(&ed, "ed.txt").await.unwrap();
+    assert_eq!(r.status(), 201);
+    let b: Value = r.json().await.unwrap();
+    assert_eq!(app.delete(&ed, &format!("/attachments/{}", a[0]["id"].as_str().unwrap())).await, 403);
+    assert_eq!(app.delete(&ed, &format!("/attachments/{}", b[0]["id"].as_str().unwrap())).await, 204);
+
+    // comments: cy may view but not comment; ed can't delete others' comments, only their own
+    let (_, page) = app.get(&cy, &format!("/pages/{theirs}")).await;
+    assert_eq!(page["access"]["comment"], false);
+    assert_eq!(app.post(&cy, &format!("/pages/{theirs}/comments"), json!({"text": "hi"})).await.0, 403);
+    let (_, oc) = app.post(&owner, &format!("/pages/{theirs}/comments"), json!({"text": "owner"})).await;
+    let (_, ec) = app.post(&ed, &format!("/pages/{theirs}/comments"), json!({"text": "ed"})).await;
+    assert_eq!(app.delete(&ed, &format!("/comments/{}", oc["id"].as_str().unwrap())).await, 403);
+    assert_eq!(app.delete(&ed, &format!("/comments/{}", ec["id"].as_str().unwrap())).await, 204);
+
+    // inspect explains the left-out permissions
+    let (_, why) = app.get(&owner, &format!("/pages/{theirs}/access/{ed_id}")).await;
+    assert!(why["steps"].to_string().contains("without: page.delete"), "{why}");
+
+    // the default role can leave permissions out too; grants add up
+    let (st, _) = app.put(&owner, "/spaces/PERM/permissions", json!({"defaultRole": "editor", "defaultDenied": ["page.add"], "grants": perms["grants"]})).await;
+    assert_eq!(st, 204);
+    assert_eq!(app.get(&owner, "/spaces/PERM/permissions").await.1["defaultDenied"], json!(["page.add"]));
+    assert_eq!(app.post(&mo, "/pages", json!({"spaceKey": "PERM", "title": "Nope"})).await.0, 403);
+    assert_eq!(app.put(&mo, &format!("/pages/{theirs}/content"), json!({"markdown": "mo edits"})).await.0, 200);
+    assert_eq!(app.post(&cy, &format!("/pages/{theirs}/comments"), json!({"text": "now as an editor"})).await.0, 201, "the default role brings comments");
+    assert_eq!(app.delete(&ed, &format!("/pages/{theirs}")).await, 204, "the default role brings page.delete");
+}
