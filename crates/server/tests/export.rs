@@ -569,3 +569,55 @@ async fn jobs_can_be_cancelled_and_retried() {
     let row = list.as_array().unwrap().iter().find(|x| x["id"] == running.to_string()).unwrap().clone();
     assert_eq!(row["status"], "cancelled");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn pdf_export_of_a_page_tree() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, _) = app.user(&owner, "pdf@acme.test", "member").await;
+    let (_, sp) = app.post(&owner, "/spaces", json!({"key": "PDF", "name": "Printed"})).await;
+    let home = sp["homePageId"].as_str().unwrap().to_string();
+    let (_, root) = app.post(&owner, "/pages", json!({"spaceKey": "PDF", "parentId": home, "title": "Handbook"})).await;
+    let root = root["id"].as_str().unwrap().to_string();
+    let (_, a) =
+        app.post(&owner, "/pages", json!({"spaceKey": "PDF", "parentId": root, "title": "Chapter Alpha", "markdown": "## Setup\n\nAlpha body text."})).await;
+    let a = a["id"].as_str().unwrap().to_string();
+    let (_, b) = app.post(&owner, "/pages", json!({"spaceKey": "PDF", "parentId": root, "title": "Chapter Secret", "markdown": "Secret body"})).await;
+    let b = b["id"].as_str().unwrap().to_string();
+    // an image, a table, a task, a link into the export; the second chapter is restricted
+    let png = {
+        let mut buf = std::io::Cursor::new(Vec::new());
+        image::RgbImage::from_pixel(40, 20, image::Rgb([30, 120, 200])).write_to(&mut buf, image::ImageFormat::Png).unwrap();
+        buf.into_inner()
+    };
+    let form = reqwest::multipart::Form::new().part("file", reqwest::multipart::Part::bytes(png).file_name("chart.png"));
+    let rows: Value = owner.post(app.url(&format!("/pages/{root}/attachments"))).multipart(form).send().await.unwrap().json().await.unwrap();
+    let att = rows[0]["id"].as_str().unwrap().to_string();
+    let md = format!(
+        "Start with [chapter alpha](/pages/{a}).\n\n![chart](/api/attachments/{att}/content)\n\n| Name | Value |\n|---|---|\n| rows | 3 |\n\n- [x] printed task\n\n```rust\nfn main() {{}}\n```"
+    );
+    assert_eq!(app.put(&owner, &format!("/pages/{root}/content"), json!({ "markdown": md })).await.0, 200);
+    let (_, me) = app.get(&owner, "/me").await;
+    let owner_id = me["user"]["id"].as_str().unwrap().to_string();
+    app.put(&owner, &format!("/pages/{b}/restrictions"), json!({"restrictions": [{"kind": "view", "subjectType": "user", "subjectId": owner_id}]})).await;
+
+    let pdf = |c: reqwest::Client, url: String| async move {
+        let r = c.get(url).send().await.unwrap();
+        assert_eq!(r.status(), 200);
+        assert_eq!(r.headers()["content-type"], "application/pdf");
+        assert!(r.headers()["content-disposition"].to_str().unwrap().contains("Handbook.pdf"));
+        let bytes = r.bytes().await.unwrap().to_vec();
+        assert!(bytes.starts_with(b"%PDF"));
+        wikicraft::extract::extract("application/pdf", "x.pdf", &bytes).unwrap_or_default()
+    };
+    let text = pdf(member.clone(), app.url(&format!("/pages/{root}/export?format=pdf&tree=true&toc=true&cover=true"))).await;
+    for want in ["Handbook", "Contents", "Chapter Alpha", "Alpha body text", "printed task", "rows", "fn main", "Printed", "Exported by pdf"] {
+        assert!(text.contains(want), "{want} missing in:\n{text}");
+    }
+    assert!(!text.contains("Chapter Secret") && !text.contains("Secret body"), "restricted pages are left out");
+    // without tree: just the page
+    let text = pdf(owner.clone(), app.url(&format!("/pages/{root}/export?format=pdf"))).await;
+    assert!(text.contains("Handbook") && !text.contains("Alpha body text"));
+    // a page tree needs a signed-in reader
+    assert_eq!(common::client().get(app.url(&format!("/pages/{root}/export?format=pdf&tree=true"))).send().await.unwrap().status(), 401);
+}

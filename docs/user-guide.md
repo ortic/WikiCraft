@@ -172,8 +172,11 @@ public spaces work as is, for others give the feed reader a read-only API token 
 
 ## Exporting
 
-Page menu → *Export*: Word (.docx), Markdown, HTML or print / PDF. Space admins can export a whole
-space as a browsable HTML site, a Markdown folder tree or a full backup.
+Page menu → *Export*: PDF, Word (.docx), Markdown, HTML or print. *PDF…* typesets A4 pages with
+the space and title in the header and page numbers in the footer; it can include the pages below
+(each starts on a new page), a table of contents and a cover page. Links between the exported
+pages and to headings keep working inside the PDF. Space admins can export a whole space as a
+browsable HTML site, a Markdown folder tree or a full backup.
 
 ## Keeping pages healthy
 

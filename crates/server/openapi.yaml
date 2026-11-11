@@ -3797,7 +3797,7 @@ paths:
     get:
       tags:
       - Import & export
-      summary: Export one page (Markdown, HTML, Word or JSON)
+      summary: Export one page (Markdown, HTML, Word, PDF or JSON)
       operationId: get_pages_id_export
       parameters:
       - name: id
@@ -3807,12 +3807,22 @@ paths:
       - name: format
         in: query
         required: false
-        description: md | html | docx | json
+        description: md | html | docx | pdf | json
         schema: *id001
       - name: tree
         in: query
         required: false
-        description: 'docx: true = include every descendant page you can see'
+        description: 'docx, pdf: true = include every descendant page you can see'
+        schema: *id001
+      - name: toc
+        in: query
+        required: false
+        description: 'pdf: true = a table of contents'
+        schema: *id001
+      - name: cover
+        in: query
+        required: false
+        description: 'pdf: true = a cover page'
         schema: *id001
       responses:
         '200':

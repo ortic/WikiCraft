@@ -21,6 +21,7 @@ pub mod mail;
 pub mod mcp;
 pub mod metrics;
 pub mod mfa;
+pub mod pdf;
 pub mod purge;
 pub mod routes;
 pub mod schema_upgrade;

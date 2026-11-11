@@ -1600,8 +1600,12 @@ pub async fn unfavorite(State(state): State<AppState>, CurrentUser(user): Curren
 #[derive(Deserialize)]
 pub struct ExportQuery {
     format: Option<String>,
-    /// Word only: include every descendant page the reader can see
+    /// Word and PDF: include every descendant page the reader can see
     tree: Option<bool>,
+    /// PDF: a table of contents
+    toc: Option<bool>,
+    /// PDF: a cover page
+    cover: Option<bool>,
 }
 
 /// Exports a page as Markdown, standalone HTML, Word (`docx`) or JSON.
@@ -1620,6 +1624,15 @@ pub async fn export(State(state): State<AppState>, MaybeUser(user): MaybeUser, P
         None => Node::from_json(&content)?,
     };
     let safe_name: String = title.chars().map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect();
+    if q.format.as_deref() == Some("pdf") {
+        let opts = PdfExport { tree: q.tree.unwrap_or(false), toc: q.toc.unwrap_or(false), cover: q.cover.unwrap_or(false) };
+        let body = export_pdf(&state, &p, id, title, doc, opts).await?;
+        return Ok((
+            [(header::CONTENT_TYPE, "application/pdf".to_string()), (header::CONTENT_DISPOSITION, format!("attachment; filename=\"{safe_name}.pdf\""))],
+            body,
+        )
+            .into_response());
+    }
     if q.format.as_deref() == Some("docx") {
         let body = export_docx(&state, &p, id, title, doc, q.tree.unwrap_or(false)).await?;
         let mime = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
@@ -1706,10 +1719,66 @@ async fn docx_page(state: &AppState, p: &Principal, id: Uuid, title: String, doc
 /// The page, or with `tree` the page and every descendant the reader can see (depth first,
 /// at most 200 pages), as one Word document.
 async fn export_docx(state: &AppState, p: &Principal, id: Uuid, title: String, doc: Node, tree: bool) -> ApiResult<Vec<u8>> {
+    let _slot = DOCX_EXPORTS.acquire().await.map_err(|e| ApiError::Internal(e.into()))?;
+    let (pages, images) = export_pages(state, p, id, title, doc, tree).await?;
+    let base = state.config.base_url.trim_end_matches('/').to_string();
+    let bytes = tokio::task::spawn_blocking(move || crate::docx::render_many(&export_inputs(&pages, &images, &base)))
+        .await
+        .map_err(|e| ApiError::Internal(e.into()))?
+        .map_err(ApiError::Internal)?;
+    Ok(bytes)
+}
+
+struct PdfExport {
+    tree: bool,
+    toc: bool,
+    cover: bool,
+}
+
+/// PDF of a page (or its tree), typeset with Typst; at most two at a time.
+async fn export_pdf(state: &AppState, p: &Principal, id: Uuid, title: String, doc: Node, opts: PdfExport) -> ApiResult<Vec<u8>> {
+    let _slot = DOCX_EXPORTS.acquire().await.map_err(|e| ApiError::Internal(e.into()))?;
+    let space: String =
+        sqlx::query_scalar("SELECT s.name FROM pages p JOIN spaces s ON s.id = p.space_id WHERE p.id = $1").bind(id).fetch_one(&state.db).await?;
+    let (pages, images) = export_pages(state, p, id, title, doc, opts.tree).await?;
+    let base = state.config.base_url.trim_end_matches('/').to_string();
+    let date = chrono::Utc::now().date_naive();
+    let shown = date.format("%-d %b %Y");
+    let footer = match &p.user {
+        Some(u) => format!("Exported by {} on {shown}", u.name),
+        None => format!("Exported on {shown}"),
+    };
+    let pdf_opts = crate::pdf::PdfOptions { toc: opts.toc, cover: opts.cover, header: space, footer, date, lang: "en".into() };
+    let font_dirs = crate::pdf::font_dirs(&state.config.data_dir);
+    let bytes = tokio::task::spawn_blocking(move || crate::pdf::render(&export_inputs(&pages, &images, &base), &pdf_opts, &font_dirs))
+        .await
+        .map_err(|e| ApiError::Internal(e.into()))?
+        .map_err(ApiError::Internal)?;
+    Ok(bytes)
+}
+
+fn export_inputs<'a>(pages: &'a [DocxPage], images: &'a crate::docx::Images, base: &'a str) -> Vec<crate::docx::DocxInput<'a>> {
+    pages
+        .iter()
+        .map(|pg| crate::docx::DocxInput {
+            title: &pg.title,
+            subtitle: Some(pg.subtitle.clone()),
+            doc: &pg.doc,
+            images,
+            base_url: base,
+            children: &pg.children,
+            macros: &pg.macros,
+            page_id: Some(pg.id),
+        })
+        .collect()
+}
+
+/// The pages of a Word or PDF export (the page, and with `tree` its descendants the reader can
+/// see, at most 200) with their report macros evaluated, and the images they show.
+async fn export_pages(state: &AppState, p: &Principal, id: Uuid, title: String, doc: Node, tree: bool) -> ApiResult<(Vec<DocxPage>, crate::docx::Images)> {
     if tree && p.user.is_none() {
         return Err(ApiError::Unauthorized);
     }
-    let _slot = DOCX_EXPORTS.acquire().await.map_err(|e| ApiError::Internal(e.into()))?;
     let mut budget = DOCX_MACRO_BUDGET;
     let mut pages = vec![docx_page(state, p, id, title, doc, &mut budget).await?];
     if tree {
@@ -1743,27 +1812,7 @@ async fn export_docx(state: &AppState, p: &Principal, id: Uuid, title: String, d
     for pg in &pages {
         crate::docx::load_images(state, p, &pg.doc, &mut images).await;
     }
-    let base = state.config.base_url.trim_end_matches('/').to_string();
-    let bytes = tokio::task::spawn_blocking(move || {
-        let inputs: Vec<crate::docx::DocxInput> = pages
-            .iter()
-            .map(|pg| crate::docx::DocxInput {
-                title: &pg.title,
-                subtitle: Some(pg.subtitle.clone()),
-                doc: &pg.doc,
-                images: &images,
-                base_url: &base,
-                children: &pg.children,
-                macros: &pg.macros,
-                page_id: Some(pg.id),
-            })
-            .collect();
-        crate::docx::render_many(&inputs)
-    })
-    .await
-    .map_err(|e| ApiError::Internal(e.into()))?
-    .map_err(ApiError::Internal)?;
-    Ok(bytes)
+    Ok((pages, images))
 }
 
 #[derive(Deserialize)]

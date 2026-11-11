@@ -223,6 +223,14 @@ servers, run draw.io yourself (for example the `jgraph/drawio` container behind 
 set its https address under *Admin → Overview → draw.io diagrams*. An empty address turns
 diagram editing off; existing diagrams stay visible as pictures.
 
+## PDF export and fonts
+
+PDF exports are typeset on the server (no browser or extra service needed). Noto Sans is built in
+for Latin, Greek and Cyrillic text; for other scripts (Chinese, Japanese, Korean, Arabic, Hebrew,
+Thai, …) install fonts on the server, e.g. `apt install fonts-noto-cjk` in your image, or put
+`.ttf`/`.otf` files in `<data dir>/fonts`. WikiCraft reads `/usr/share/fonts`,
+`/usr/local/share/fonts` and `<data dir>/fonts` once, at the first PDF export after a start.
+
 ## AI features (optional)
 
 - **MCP server** at `/api/mcp`: AI assistants (Claude and others) search, read and write pages

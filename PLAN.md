@@ -547,7 +547,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P1** Re-runnable & incremental imports (stable source-id mapping; update instead of duplicate) (Confluence: update imports, see §6.3; Notion / Word / HTML / Markdown imports still create new pages)
 
 ### 4.19 Export, print & publishing
-- [~] **P1** Export page / subtree to PDF (headers/footers, TOC, page numbers, cover page, custom CSS/template) `C X B` (browser print-to-PDF only)
+- [x] **P1** Export page / subtree to PDF (headers/footers, TOC, page numbers, cover page, custom CSS/template) `C X B` — typeset on the server with Typst (page menu → Export → PDF…): A4, header (space, title), footer (exported by, page x / y), optional cover page and table of contents, page trees with one page per section and working links between them and to headings, PDF bookmarks; Noto Sans built in, server fonts for other scripts. No custom templates/CSS yet
 - [x] **P1** Export to Word (DOCX) `C X B` (page or page tree; report macros evaluated)
 - [x] **P1** Export to Markdown / HTML (zip with attachments) `D O B`
 - [x] **P1** Print-friendly view `C X B`

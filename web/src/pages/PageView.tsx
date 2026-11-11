@@ -42,6 +42,7 @@ export default function PageView() {
   const [saveTplOpen, setSaveTplOpen] = useState(false)
   const [copyOpen, setCopyOpen] = useState(false)
   const [moveOpen, setMoveOpen] = useState(false)
+  const [pdfOpen, setPdfOpen] = useState(false)
   const [restrictions, setRestrictions] = useState(false)
   const [share, setShare] = useState(false)
   const [verifyOpen, setVerifyOpen] = useState(false)
@@ -338,8 +339,11 @@ export default function PageView() {
                 {features.exports !== false && can(p.access, 'export') && (<>
                 <div className="menu-sep" />
                 <div className="menu-label">Export</div>
+                <div className="menu-item" onClick={() => { setMenu(false); setPdfOpen(true) }}>
+                  <FileText size={15} /> PDF…
+                </div>
                 <div className="menu-item" onClick={() => { setMenu(false); setTimeout(() => window.print(), 50) }}>
-                  <Printer size={15} /> Print or PDF
+                  <Printer size={15} /> Print
                 </div>
                 <a className="menu-item" href={`/api/pages/${p.id}/export?format=docx`}>
                   <FileText size={15} /> Word
@@ -569,6 +573,7 @@ export default function PageView() {
       {childTplOpen && <ChildTemplateDialog page={p} onClose={() => setChildTplOpen(false)} />}
       {saveTplOpen && <SaveTemplateDialog page={p} onClose={() => setSaveTplOpen(false)} />}
       {moveOpen && <MovePageDialog page={p} onClose={() => setMoveOpen(false)} />}
+      {pdfOpen && <PdfExportDialog page={p} onClose={() => setPdfOpen(false)} />}
       {share && <ShareDialog pageId={p.id} title={p.title} restricted={!!p.restricted} onClose={() => setShare(false)} />}
     </div>
   )
@@ -576,6 +581,38 @@ export default function PageView() {
 
 /** Copy a page, optionally with the pages below it (restricted ones you can't see stay behind). */
 /** Which template new pages below this one start from (for them and the pages below them). */
+/** PDF of the page (or with the pages below it), typeset on the server. */
+function PdfExportDialog({ page, onClose }: { page: Page; onClose: () => void }) {
+  const [tree, setTree] = useState(false)
+  const [toc, setToc] = useState(false)
+  const [cover, setCover] = useState(false)
+  const href = `/api/pages/${page.id}/export?format=pdf&tree=${tree}&toc=${toc}&cover=${cover}`
+  return (
+    <Modal
+      title="Export as PDF"
+      onClose={onClose}
+      width={420}
+      footer={
+        <>
+          <button className="btn" onClick={onClose}>Cancel</button>
+          <a className="btn btn-primary" href={href} onClick={() => setTimeout(onClose, 100)}>Download PDF</a>
+        </>
+      }
+    >
+      <p className="muted" style={{ marginTop: 0 }}>A4 pages with the space and title in the header and page numbers in the footer.</p>
+      <label className="row" style={{ marginBottom: 8 }}>
+        <input type="checkbox" checked={tree} onChange={(e) => { setTree(e.target.checked); if (e.target.checked) setToc(true) }} /> Include the pages below this one
+      </label>
+      <label className="row" style={{ marginBottom: 8 }}>
+        <input type="checkbox" checked={toc} onChange={(e) => setToc(e.target.checked)} /> Table of contents
+      </label>
+      <label className="row">
+        <input type="checkbox" checked={cover} onChange={(e) => setCover(e.target.checked)} /> Cover page
+      </label>
+    </Modal>
+  )
+}
+
 function ChildTemplateDialog({ page, onClose }: { page: Page; onClose: () => void }) {
   const qc = useQueryClient()
   const toast = useToast()

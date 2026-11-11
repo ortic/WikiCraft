@@ -23,9 +23,9 @@ use crate::routes::reports::Snapshot;
 /// An image ready to embed: PNG bytes plus its natural display size in CSS pixels.
 #[derive(Clone)]
 pub struct DocxImage {
-    png: Vec<u8>,
-    w: u32,
-    h: u32,
+    pub(crate) png: Vec<u8>,
+    pub(crate) w: u32,
+    pub(crate) h: u32,
 }
 
 /// Images referenced by the document, keyed by their `src`.
@@ -179,14 +179,14 @@ pub fn rasterize_svg(data: &[u8], display_px: Option<u32>) -> Option<DocxImage> 
     Some(DocxImage { png: pixmap.encode_png().ok()?, w: dw, h: dh })
 }
 
-fn line_icon_svg(group: &str, name: &str, color: &str) -> Option<String> {
+pub(crate) fn line_icon_svg(group: &str, name: &str, color: &str) -> Option<String> {
     let inner = icons::inner_markup(group, name)?.replace("currentColor", color);
     Some(format!(
         "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\" fill=\"none\" stroke=\"{color}\" stroke-width=\"1.75\" stroke-linecap=\"round\" stroke-linejoin=\"round\">{inner}</svg>"
     ))
 }
 
-fn checkbox_svg(checked: bool) -> String {
+pub(crate) fn checkbox_svg(checked: bool) -> String {
     if checked {
         "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 24 24\" width=\"24\" height=\"24\"><rect x=\"3\" y=\"3\" width=\"18\" height=\"18\" rx=\"4\" fill=\"#2563EB\"/><path d=\"M7.5 12.5l3 3 6-6.5\" fill=\"none\" stroke=\"#fff\" stroke-width=\"2.2\" stroke-linecap=\"round\" stroke-linejoin=\"round\"/></svg>".into()
     } else {
@@ -195,7 +195,7 @@ fn checkbox_svg(checked: bool) -> String {
 }
 
 /// `#rgb`, `#rrggbb(aa)`, `rgb(r, g, b)` and a few colour names as Word's `RRGGBB`.
-fn hex_color(c: &str) -> Option<String> {
+pub(crate) fn hex_color(c: &str) -> Option<String> {
     let c = c.trim().to_ascii_lowercase();
     if let Some(h) = c.strip_prefix('#') {
         if !h.chars().all(|ch| ch.is_ascii_hexdigit()) {
