@@ -24,6 +24,7 @@ pub mod mail;
 pub mod mcp;
 pub mod metrics;
 pub mod mfa;
+pub mod paths;
 pub mod pdf;
 pub mod purge;
 pub mod retrieval;

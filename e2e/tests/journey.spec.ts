@@ -79,6 +79,8 @@ test('owner creates a space and a page with rich content', async ({ browser }) =
   await page.goto(pageUrl)
   const editor = page.locator('.ProseMirror[contenteditable="true"]')
   await expect(editor).toBeVisible({ timeout: 20_000 })
+  // the address bar shows the readable address
+  await expect(page).toHaveURL(/\/wiki\/PRODUCT\/roadmap-2027$/)
   await editor.click()
   await page.keyboard.type('Our plan for the year: ship the mobile app.')
   await page.keyboard.press('Enter')
@@ -323,7 +325,7 @@ test('a template asks for its variables before creating the page', async ({ brow
   await expect(dialog).toContainText('New page: Incident postmortem')
   await dialog.getByLabel('Incident').fill('Checkout outage')
   await dialog.getByRole('button', { name: 'Create page' }).click()
-  await expect(page).toHaveURL(/\/pages\//)
+  await expect(page).toHaveURL(/\/(pages|wiki)\//)
   await expect(page.locator('textarea.page-title')).toHaveValue('Postmortem: Checkout outage', { timeout: 15_000 })
   await ctx.close()
 })

@@ -11,13 +11,14 @@ import { Spinner } from '../ui'
  * old Confluence ids (`/missing?source=confluence:123`). Resolves to the page if it exists now,
  * otherwise offers to create it.
  */
-export default function Missing() {
+export default function Missing(props: { space?: string; title?: string } = {}) {
   const [params] = useSearchParams()
   const nav = useNavigate()
   const qc = useQueryClient()
-  const space = params.get('space')
-  const title = params.get('title')
-  const source = params.get('source')
+  // a readable address (`/wiki/KEY/slug`) that leads nowhere passes its parts in
+  const space = props.space ?? params.get('space')
+  const title = props.title ?? params.get('title')
+  const source = props.space ? null : params.get('source')
   const qs = source ? `source=${encodeURIComponent(source)}` : `space=${encodeURIComponent(space ?? '')}&title=${encodeURIComponent(title ?? '')}`
   const resolved = useQuery({ queryKey: ['resolve', qs], queryFn: () => api.get<{ pageId: string | null }>(`/resolve?${qs}`), retry: false })
   const spaceInfo = useQuery({ queryKey: ['space', space], queryFn: () => api.get<Space>(`/spaces/${space}`), enabled: !!space, retry: false })

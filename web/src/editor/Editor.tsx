@@ -12,7 +12,7 @@ import { TableKit, TableCell, TableHeader, Table, TableView } from '@tiptap/exte
 import { CellSelection } from '@tiptap/pm/tables'
 import { NodeSelection } from '@tiptap/pm/state'
 import { TaskList, TaskItem } from '@tiptap/extension-list'
-import Image from '@tiptap/extension-image'
+import Image, { type ImageOptions } from '@tiptap/extension-image'
 import { Placeholder, CharacterCount } from '@tiptap/extensions'
 import { TextStyle, Color } from '@tiptap/extension-text-style'
 import Highlight from '@tiptap/extension-highlight'
@@ -132,7 +132,11 @@ const withBackground = <T extends typeof TableCell>(ext: T) =>
     },
   })
 
-const ImageExt = Image.extend({
+const ImageExt = Image.extend<ImageOptions & { pageId: string }>({
+  addOptions() {
+    // the page, for the annotation tool's uploads
+    return { ...this.parent!(), pageId: '' }
+  },
   addAttributes() {
     return {
       ...this.parent?.(),
@@ -146,7 +150,7 @@ const ImageExt = Image.extend({
   addNodeView() {
     return ReactNodeViewRenderer(ImageView)
   },
-}).configure({ inline: true, allowBase64: false })
+})
 
 export interface Presence {
   clientId: number
@@ -221,7 +225,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
         withBackground(TableHeader as unknown as typeof TableCell),
         TaskList,
         TaskItem.configure({ nested: true }),
-        ImageExt,
+        ImageExt.configure({ inline: true, allowBase64: false, pageId }),
         Placeholder.configure({ placeholder: ({ node }) => (node.type.name === 'heading' ? tr('Heading') : tr('Type \'/\' for commands, \'@\' to mention someone')) }),
         CharacterCount,
         TextStyle,
@@ -308,9 +312,13 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
   )
   editorRef.current = editor
 
-  // read-only until the initial sync: typing into the empty pre-sync doc would interleave with the server state
+  // read-only until the initial sync: typing into the empty pre-sync doc would interleave with the server state.
+  // `isEditable` mirrors it for rendering (setEditable alone doesn't re-render this component, so the
+  // drag handle and table menu would only appear after some unrelated re-render)
+  const [isEditable, setIsEditable] = useState(false)
   useEffect(() => {
     editor?.setEditable(editable && synced)
+    setIsEditable(!!editor && editable && synced)
   }, [editor, editable, synced])
 
   useEffect(() => {
@@ -464,7 +472,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
       {editor && (
         <BubbleMenu editor={editor} shouldShow={({ editor, state }) => !state.selection.empty && !findKey.getState(state)?.query && (editor.isEditable || !!onRequestComment) && !editor.isActive('image') && !(state.selection instanceof CellSelection) && !(state.selection instanceof NodeSelection && state.selection.node.isBlock && state.selection.node.isAtom)}>
           <div className="bubble">
-            {editor.isEditable && (
+            {isEditable && (
               <>
                 <button className={`icon-btn ${editor.isActive('bold') ? 'active' : ''}`} title={tr('Bold (Ctrl+B)')} onClick={() => editor.chain().focus().toggleBold().run()}><Bold size={15} /></button>
                 <button className={`icon-btn ${editor.isActive('italic') ? 'active' : ''}`} title={tr('Italic (Ctrl+I)')} onClick={() => editor.chain().focus().toggleItalic().run()}><Italic size={15} /></button>
@@ -486,9 +494,9 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
           </div>
         </BubbleMenu>
       )}
-      {editor && editor.isEditable && <TableMenu editor={editor} />}
+      {editor && isEditable && <TableMenu editor={editor} />}
       {/* drag blocks (and list items) to move them; click to select the block */}
-      {editor && editor.isEditable && (
+      {editor && isEditable && (
         <DragHandle editor={editor} className="drag-handle" nested onNodeChange={({ node }) => setHandleNode(node)}>
           {handleBlockId && (
             <button
@@ -511,7 +519,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
           </span>
         </DragHandle>
       )}
-      {editor && !editor.isEditable && hoverBlock && (
+      {editor && !isEditable && hoverBlock && (
         <button
           type="button"
           className="block-link block-link-float"
@@ -529,7 +537,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
       <EditorContent editor={editor} />
       {/* clicking the empty space below the document puts the cursor at the end */}
       <div
-        style={{ minHeight: 120, cursor: editor?.isEditable ? 'text' : 'default' }}
+        style={{ minHeight: 120, cursor: isEditable ? 'text' : 'default' }}
         onMouseDown={(e) => {
           if (!editor?.isEditable) return
           e.preventDefault()

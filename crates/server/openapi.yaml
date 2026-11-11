@@ -5110,18 +5110,23 @@ paths:
     get:
       tags:
       - Discovery
-      summary: Find a page by space + title or by imported Confluence id
+      summary: Find a page by space + title or slug (readable address /wiki/KEY/slug; exact title first, then slug, then addresses the page had before a rename or move) or by imported Confluence id
       operationId: get_resolve
       parameters:
       - name: space
         in: query
         required: false
-        description: space key
+        description: space key (also a former one)
         schema: *id001
       - name: title
         in: query
         required: false
         description: page title
+        schema: *id001
+      - name: slug
+        in: query
+        required: false
+        description: slug of a readable address (the `slug` of GET /pages/{id})
         schema: *id001
       - name: source
         in: query

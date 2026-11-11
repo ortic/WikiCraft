@@ -19,14 +19,12 @@ use crate::routes::spaces::load_space;
 /// rows a report lists at most
 const REPORT_LIMIT: usize = 1000;
 
-/// A `/missing?space=…&title=…` link (`l`) that now leads to the page `t` (columns `id`, `title`,
-/// `space_id`, `created_at`): the oldest live page with that title in the space, which is what
-/// [`crate::routes::search::resolve`] opens.
-const MISSING_LEADS_TO_T: &str = "l.missing_title IS NOT NULL AND lower(l.missing_title) = lower(t.title)
-    AND (lower(l.missing_space) = (SELECT lower(key) FROM spaces WHERE id = t.space_id)
-         OR lower(l.missing_space) IN (SELECT lower(key) FROM space_key_aliases WHERE space_id = t.space_id))
-    AND NOT EXISTS (SELECT 1 FROM pages o WHERE o.space_id = t.space_id AND lower(o.title) = lower(t.title) AND o.deleted_at IS NULL
-                    AND (o.created_at, o.id) < (t.created_at, t.id))";
+/// A link to a page by name (`l`: `/wiki/KEY/slug`, `/display/KEY/Title`,
+/// `/missing?space=KEY&title=T`) that leads to the page `t` ([`crate::paths`]); the slug test
+/// narrows the candidates down by index before resolving.
+const NAMED_LEADS_TO_T: &str = "l.missing_title IS NOT NULL
+    AND wc_slug(l.missing_title) IN (SELECT wc_slug(t.title) UNION ALL SELECT h.slug FROM page_paths h WHERE h.page_id = t.id)
+    AND wc_resolve(wc_space_by_key(t.workspace_id, l.missing_space), l.missing_title) = t.id";
 
 /// A `/missing?source=…` link (`l`) that now leads to the page `t` (a later import brought it in).
 const SOURCE_LEADS_TO_T: &str = "l.missing_source IS NOT NULL AND EXISTS (SELECT 1 FROM import_mappings m
@@ -62,7 +60,7 @@ pub async fn backlinks(State(state): State<AppState>, MaybeUser(user): MaybeUser
         "SELECT DISTINCT ON (src.id) src.id, src.title, src.icon, src.kind, src.space_id, s.key AS space_key, s.name AS space_name, l.kind AS via
          FROM pages t
          JOIN page_links l ON l.kind <> 'children' AND l.source_id <> t.id
-              AND (l.target_id = t.id OR ({MISSING_LEADS_TO_T}) OR ({SOURCE_LEADS_TO_T}))
+              AND (l.target_id = t.id OR ({NAMED_LEADS_TO_T}) OR ({SOURCE_LEADS_TO_T}))
          JOIN pages src ON src.id = l.source_id AND src.deleted_at IS NULL
          JOIN spaces s ON s.id = src.space_id
          WHERE t.id = $1
@@ -140,8 +138,7 @@ pub async fn report(State(state): State<AppState>, MaybeUser(user): MaybeUser, P
                        CASE WHEN NOT EXISTS (SELECT 1 FROM pages t WHERE t.id = l.target_id) THEN 'deleted'
                             WHEN EXISTS (SELECT 1 FROM pages t WHERE t.id = l.target_id AND t.deleted_at IS NOT NULL) THEN 'trashed' END
                      WHEN l.missing_title IS NOT NULL THEN
-                       CASE WHEN NOT EXISTS (SELECT 1 FROM pages t WHERE t.deleted_at IS NULL AND t.space_id IN (SELECT id FROM spaces WHERE workspace_id = $2) AND ({MISSING_LEADS_TO_T}))
-                            THEN 'missing' END
+                       CASE WHEN wc_resolve(wc_space_by_key($2, l.missing_space), l.missing_title) IS NULL THEN 'missing' END
                      ELSE
                        CASE WHEN NOT EXISTS (SELECT 1 FROM pages t WHERE t.deleted_at IS NULL AND t.space_id IN (SELECT id FROM spaces WHERE workspace_id = $2) AND ({SOURCE_LEADS_TO_T}))
                             THEN 'notImported' END
@@ -166,7 +163,7 @@ pub async fn report(State(state): State<AppState>, MaybeUser(user): MaybeUser, P
                            WHERE l.target_id = t.id AND l.source_id <> t.id)
            AND NOT EXISTS (SELECT 1 FROM page_links l WHERE l.kind = 'children' AND l.source_id = t.parent_id AND l.target_id = t.parent_id)
            AND NOT EXISTS (SELECT 1 FROM page_links l JOIN pages src ON src.id = l.source_id AND src.deleted_at IS NULL
-                           WHERE (({MISSING_LEADS_TO_T}) OR ({SOURCE_LEADS_TO_T})) AND l.source_id <> t.id)
+                           WHERE (({NAMED_LEADS_TO_T}) OR ({SOURCE_LEADS_TO_T})) AND l.source_id <> t.id)
          ORDER BY lower(t.title), t.id"
     )))
     .bind(space.id)

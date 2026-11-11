@@ -1527,3 +1527,71 @@ async fn link_graph_backlinks_and_link_report() {
     assert_eq!(r["brokenLinks"], json!([]), "{r}");
     app.eventually(|| async { (app.get(&member, "/spaces/LNK/link-report").await.1["pending"] == 0).then_some(()) }).await;
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn readable_addresses_survive_renames_and_moves() {
+    let app = spawn().await;
+    let owner = app.setup().await;
+    app.post(&owner, "/spaces", json!({"key": "PTH", "name": "Paths"})).await;
+    app.post(&owner, "/spaces", json!({"key": "QA", "name": "Quality"})).await;
+    let mk = |t: &'static str| {
+        let (app, owner) = (&app, &owner);
+        async move { app.post(owner, "/pages", json!({"spaceKey": "PTH", "title": t})).await.1["id"].as_str().unwrap().to_string() }
+    };
+    let slug = |id: String| {
+        let (app, owner) = (&app, &owner);
+        async move { app.get(owner, &format!("/pages/{id}")).await.1["slug"].clone() }
+    };
+    let resolve = |space: &'static str, q: String| {
+        let (app, owner) = (&app, &owner);
+        async move { app.get(owner, &format!("/resolve?space={space}&{q}")).await.1["pageId"].clone() }
+    };
+    let release = mk("Release Process").await;
+    let dup = mk("release process").await;
+    let runbook = mk("Runbook").await;
+    let uni = mk("Übersicht: Café & Co. — 2026").await;
+    assert_eq!(slug(release.clone()).await, "release-process");
+    assert_eq!(slug(dup.clone()).await, Value::Null, "the older page has the address");
+    assert_eq!(slug(uni.clone()).await, "übersicht-café-co-2026");
+    assert_eq!(resolve("PTH", "slug=release-process".into()).await, release.as_str());
+    assert_eq!(resolve("pth", "slug=%C3%9Cbersicht-caf%C3%A9-co-2026".into()).await, uni.as_str());
+    // an exact title wins over the slug
+    assert_eq!(resolve("PTH", "title=release%20process".into()).await, release.as_str(), "case-insensitive: the oldest");
+    assert_eq!(resolve("PTH", "slug=nothing-here".into()).await, Value::Null);
+
+    // renamed: the old address now belongs to the page that has that slug today
+    app.patch(&owner, &format!("/pages/{release}"), json!({"title": "Shipping"})).await;
+    assert_eq!(slug(release.clone()).await, "shipping");
+    assert_eq!(slug(dup.clone()).await, "release-process");
+    assert_eq!(resolve("PTH", "slug=release-process".into()).await, dup.as_str());
+    // a former address nobody took over still leads to the page, also after a move
+    app.patch(&owner, &format!("/pages/{runbook}"), json!({"title": "On-call runbook"})).await;
+    assert_eq!(resolve("PTH", "slug=runbook".into()).await, runbook.as_str());
+    assert_eq!(app.post(&owner, &format!("/pages/{runbook}/move"), json!({"spaceKey": "QA"})).await.0, 204);
+    assert_eq!(resolve("PTH", "slug=on-call-runbook".into()).await, runbook.as_str());
+    assert_eq!(resolve("QA", "slug=on-call-runbook".into()).await, runbook.as_str());
+    // a renamed space key keeps working
+    assert_eq!(app.patch(&owner, "/spaces/PTH", json!({"key": "PATHS"})).await.0, 200);
+    assert_eq!(resolve("PTH", "slug=shipping".into()).await, release.as_str());
+    // old Confluence addresses by title go through the same lookup
+    let manual = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).build().unwrap();
+    let r = manual.get(format!("{}/display/PTH/Runbook", app.base)).send().await.unwrap();
+    assert_eq!(r.headers()["location"], format!("/pages/{runbook}").as_str());
+
+    // links by readable address count in the link graph
+    let linker = app.post(&owner, "/pages", json!({"spaceKey": "PATHS", "title": "Index"})).await.1["id"].as_str().unwrap().to_string();
+    let md = "[ship](/wiki/PATHS/shipping) [old name](/wiki/PTH/runbook) [nothing](/wiki/PATHS/no-such-page)";
+    app.put(&owner, &format!("/pages/{linker}/content"), json!({"markdown": md})).await;
+    let back = app
+        .eventually(|| async {
+            let (_, b) = app.get(&owner, &format!("/pages/{release}/backlinks")).await;
+            (b["pages"].as_array().unwrap().len() == 1).then_some(b)
+        })
+        .await;
+    assert_eq!(back["pages"][0]["title"], "Index");
+    let (_, b) = app.get(&owner, &format!("/pages/{runbook}/backlinks")).await;
+    assert_eq!(b["pages"][0]["title"], "Index", "{b}");
+    let (_, r) = app.get(&owner, "/spaces/PATHS/link-report").await;
+    let broken: Vec<&str> = r["brokenLinks"].as_array().unwrap().iter().map(|b| b["label"].as_str().unwrap()).collect();
+    assert_eq!(broken, ["nothing"], "{r}");
+}

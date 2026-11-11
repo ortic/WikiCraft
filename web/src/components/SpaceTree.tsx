@@ -1,7 +1,8 @@
 import { t } from '../i18n'
 import { useMemo, useState, type DragEvent } from 'react'
 import { LineIcon, parseSymbol } from '../icons'
-import { useMatch, useNavigate } from 'react-router-dom'
+import { useNavigate } from 'react-router-dom'
+import { useCurrentPageId } from '../pagePath'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { ChevronRight, ChevronDown, FileText, Folder, FolderPlus, Plus, Lock, Link2, ExternalLink } from 'lucide-react'
 import { api, can, type Space, type TreeNode } from '../api'
@@ -19,7 +20,7 @@ export default function SpaceTree({ space }: { space: Space }) {
   const qc = useQueryClient()
   const nav = useNavigate()
   const toast = useToast()
-  const active = useMatch('/pages/:id/*')?.params.id
+  const active = useCurrentPageId()
   const tree = useQuery({ queryKey: ['tree', space.key], queryFn: () => api.get<TreeData>(`/spaces/${space.key}/tree`) })
   const [open, setOpen] = useState<Record<string, boolean>>({})
   const [drag, setDrag] = useState<string | null>(null)

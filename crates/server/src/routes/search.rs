@@ -291,14 +291,15 @@ pub async fn by_label(State(state): State<AppState>, MaybeUser(user): MaybeUser,
 
 #[derive(Deserialize)]
 pub struct ResolveQuery {
-    /// space key + title (missing-page links from imports, wiki links)
+    /// space key + title (missing-page links from imports, wiki links) or slug (`/wiki/KEY/slug`)
     space: Option<String>,
     title: Option<String>,
+    slug: Option<String>,
     /// legacy Confluence page id (old URL redirects): `confluence:<id>`
     source: Option<String>,
 }
 
-/// Resolves a page by (space, title) or by imported source id.
+/// Resolves a page by (space, title or slug) or by imported source id.
 pub async fn resolve(State(state): State<AppState>, MaybeUser(user): MaybeUser, Query(q): Query<ResolveQuery>) -> ApiResult<Json<Value>> {
     let p = Principal::load(&state, user).await?;
     let ws = workspace_of(&state, &p).await?;
@@ -310,15 +311,14 @@ pub async fn resolve(State(state): State<AppState>, MaybeUser(user): MaybeUser, 
             .bind(sid)
             .fetch_optional(&state.db)
             .await?
-    } else if let (Some(space), Some(title)) = (&q.space, &q.title) {
-        sqlx::query_scalar("SELECT p.id FROM pages p JOIN spaces s ON s.id = p.space_id WHERE s.workspace_id = $1 AND lower(s.key) = lower($2) AND lower(p.title) = lower($3) AND p.deleted_at IS NULL ORDER BY p.created_at LIMIT 1")
-            .bind(ws)
-            .bind(space)
-            .bind(title)
-            .fetch_optional(&state.db)
-            .await?
+    } else if let (Some(space), Some(name)) = (&q.space, q.title.as_ref().or(q.slug.as_ref())) {
+        // exact title, then slug, then an address the page had before a rename or move
+        match crate::paths::space_by_key(&state.db, ws, space).await? {
+            Some(sid) => crate::paths::resolve(&state.db, sid, name).await?,
+            None => None,
+        }
     } else {
-        return Err(ApiError::bad("space+title or source required"));
+        return Err(ApiError::bad("space+title, space+slug or source required"));
     };
     let Some(id) = id else { return Ok(Json(json!({ "pageId": null }))) };
     let (access, _) = crate::authz::page_access(&state, &p, id).await?;

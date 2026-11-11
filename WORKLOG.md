@@ -149,6 +149,11 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   (`retrieval_state.linker` version). "Linked from" below pages (incl. `/missing?…` red links that now resolve),
   a warning before trashing a linked page, and Space settings → Links (broken links: trashed / deleted / missing /
   not imported; orphaned pages). Verified in Chromium against a seeded workspace.
+- Readable addresses `/wiki/<KEY>/<slug>` (migration 0055: `wc_slug()`, `wc_resolve()`, `wc_space_by_key()` in SQL,
+  `page_paths` kept by a trigger on title/space changes, backfilled from version titles). The address bar switches
+  to it (before the editor mounts, so the collaboration socket opens once); `/resolve`, Confluence `/display` links
+  and the link graph share the resolution. Found on the way: the drag handle and table menu only rendered after an
+  unrelated re-render once the editor turned editable (the e2e journey caught it): editability is now React state.
 
 ## Security review 4 (independent review agent, 2026-11-10 ~03:40 UTC: link previews, banner, switches, decision log, branding) — status
 No critical or high findings. All five fixed in `9f0b9a9`:

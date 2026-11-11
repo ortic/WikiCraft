@@ -20,7 +20,7 @@ use uuid::Uuid;
 use wikicraft_doc_model::{Node, marks, nodes};
 
 /// Bumped when link extraction changes: every page is scanned again at the next start.
-pub const LINKER_VERSION: i32 = 1;
+pub const LINKER_VERSION: i32 = 2;
 /// links per page beyond this are not recorded
 const MAX_LINKS: usize = 2000;
 /// characters of link text kept for reports
@@ -29,10 +29,12 @@ const MAX_LABEL: usize = 200;
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum Target {
     Page(Uuid),
-    /// a page that didn't exist when the link was made
-    Missing {
+    /// a page by space key and name (title or slug): readable addresses (`/wiki/KEY/slug`), old
+    /// Confluence ones (`/display/KEY/Title`) and links made to pages that didn't exist
+    /// (`/missing?space=KEY&title=T`), resolved when read ([`crate::paths`])
+    Named {
         space: String,
-        title: String,
+        name: String,
     },
     /// a page of another system that wasn't imported (`confluence:<id>`)
     Source(String),
@@ -66,8 +68,9 @@ pub struct Link {
     pub label: String,
 }
 
-/// The page a URL points at, if it is a link into this wiki: `/pages/<id>[#…|?…|/…]`, the same
-/// on `base_url`, or a `/missing?…` link.
+/// The page a URL points at, if it is a link into this wiki: `/pages/<id>[#…|?…|/…]`,
+/// `/wiki/<KEY>/<slug>`, `/display/<KEY>/<Title>`, a `/missing?…` link, or any of them on
+/// `base_url`.
 pub fn parse_href(href: &str, base_url: &str) -> Option<Target> {
     let href = href.trim();
     let base = base_url.trim_end_matches('/');
@@ -78,6 +81,27 @@ pub fn parse_href(href: &str, base_url: &str) -> Option<Target> {
     if let Some(rest) = path.strip_prefix("/pages/") {
         let id = rest.split(['#', '?', '/']).next()?;
         return id.parse().ok().map(Target::Page);
+    }
+    let named = |rest: &str, plus: bool| -> Option<Target> {
+        let rest = rest.split(['#', '?']).next().unwrap_or(rest);
+        let (key, name) = rest.split_once('/')?;
+        if key.is_empty() || name.is_empty() || name.contains('/') {
+            return None;
+        }
+        let name = if plus { name.replace('+', " ") } else { name.to_string() };
+        let name = crate::importer::decode_component(&name.replace('+', "%2B"));
+        let name = name.trim();
+        (!name.is_empty()).then(|| Target::Named { space: crate::importer::decode_component(key), name: name.to_string() })
+    };
+    if let Some(rest) = path.strip_prefix("/wiki/display/").or_else(|| path.strip_prefix("/display/")) {
+        return named(rest, true);
+    }
+    if let Some(rest) = path.strip_prefix("/wiki/") {
+        // Confluence Cloud addresses and short links are no names
+        if ["spaces/", "pages/", "x/"].iter().any(|p| rest.starts_with(p)) {
+            return None;
+        }
+        return named(rest, false);
     }
     let query = path.strip_prefix("/missing?")?;
     let query = query.split('#').next().unwrap_or(query);
@@ -94,7 +118,7 @@ pub fn parse_href(href: &str, base_url: &str) -> Option<Target> {
     }
     match (source, space, title) {
         (Some(s), _, _) if !s.trim().is_empty() => Some(Target::Source(s.trim().to_string())),
-        (_, Some(space), Some(title)) if !title.trim().is_empty() => Some(Target::Missing { space: space.trim().to_string(), title: title.trim().to_string() }),
+        (_, Some(space), Some(title)) if !title.trim().is_empty() => Some(Target::Named { space: space.trim().to_string(), name: title.trim().to_string() }),
         _ => None,
     }
 }
@@ -172,7 +196,7 @@ fn rows_for(page: Uuid, links: Vec<Link>) -> Vec<Row> {
         let label: String = l.label.split_whitespace().collect::<Vec<_>>().join(" ").chars().take(MAX_LABEL).collect();
         let (id, space, title, source) = match l.target {
             Target::Page(id) => (Some(id), None, None, None),
-            Target::Missing { space, title } => (None, Some(space), Some(title), None),
+            Target::Named { space, name } => (None, Some(space), Some(name), None),
             Target::Source(s) => (None, None, None, Some(s)),
         };
         rows.push((rows.len() as i32, l.kind.as_str(), id, space, title, source, l.block_id, label));
@@ -283,11 +307,18 @@ mod tests {
         assert_eq!(parse_href(&format!("https://elsewhere.example.com/pages/{id}"), BASE), None);
         assert_eq!(parse_href("/pages/not-an-id", BASE), None);
         assert_eq!(parse_href("https://example.com", BASE), None);
-        assert_eq!(
-            parse_href("/missing?space=ENG&title=Release%20Notes+2", BASE),
-            Some(Target::Missing { space: "ENG".into(), title: "Release Notes 2".into() })
-        );
+        assert_eq!(parse_href("/missing?space=ENG&title=Release%20Notes+2", BASE), Some(Target::Named { space: "ENG".into(), name: "Release Notes 2".into() }));
         assert_eq!(parse_href("/missing?source=confluence%3A123", BASE), Some(Target::Source("confluence:123".into())));
+        let named = |space: &str, name: &str| Some(Target::Named { space: space.into(), name: name.into() });
+        assert_eq!(parse_href("/wiki/ENG/release-process", BASE), named("ENG", "release-process"));
+        assert_eq!(parse_href(&format!("{BASE}/wiki/ENG/%C3%BCbersicht#block-a1"), BASE), named("ENG", "übersicht"));
+        assert_eq!(parse_href("/wiki/ENG/c++-guide", BASE), named("ENG", "c++-guide"));
+        assert_eq!(parse_href("/display/ENG/Release+Notes", BASE), named("ENG", "Release Notes"));
+        assert_eq!(parse_href("/wiki/display/ENG/C%2B%2B+guide", BASE), named("ENG", "C++ guide"));
+        assert_eq!(parse_href("/wiki/spaces/ENG/pages/123/Title", BASE), None);
+        assert_eq!(parse_href("/wiki/x/AbC", BASE), None);
+        assert_eq!(parse_href("/wiki/ENG", BASE), None);
+        assert_eq!(parse_href("/wiki/ENG/a/b", BASE), None);
         assert_eq!(parse_href("/missing?space=ENG", BASE), None);
     }
 
@@ -316,7 +347,7 @@ mod tests {
                 Link { kind: Kind::Link, target: Target::Page(a), block_id: Some("p1".into()), label: "the guide".into() },
                 Link {
                     kind: Kind::Link,
-                    target: Target::Missing { space: "OPS".into(), title: "Old page".into() },
+                    target: Target::Named { space: "OPS".into(), name: "Old page".into() },
                     block_id: Some("l1".into()),
                     label: "Old page".into()
                 },

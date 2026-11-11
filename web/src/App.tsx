@@ -1,6 +1,6 @@
 import { t } from './i18n'
 import { useEffect } from 'react'
-import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
+import { Navigate, Route, Routes, useLocation, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import SecuritySettings from './components/SecuritySettings'
 import { api, setDateConventions } from './api'
@@ -14,6 +14,7 @@ import SpacesPage, { SpaceHome } from './pages/Spaces'
 import PageView from './pages/PageView'
 import History from './pages/History'
 import Missing from './pages/Missing'
+import WikiPage from './pages/WikiPage'
 import SearchPage from './pages/Search'
 import Admin from './pages/Admin'
 import SpaceSettings from './pages/SpaceSettings'
@@ -50,7 +51,7 @@ export default function App() {
   applyFavicon(me.data?.workspace?.logoVersion)
   const user = me.data?.user
   // anonymous visitors may read public spaces; everything else needs a login
-  const publicPath = loc.pathname.startsWith('/pages/') || loc.pathname.startsWith('/spaces/')
+  const publicPath = loc.pathname.startsWith('/pages/') || loc.pathname.startsWith('/spaces/') || loc.pathname.startsWith('/wiki/')
   // public share links: no account, no app chrome
   if (loc.pathname.startsWith('/s/'))
     return (
@@ -86,6 +87,8 @@ export default function App() {
           <Route path="/pages/:id" element={<PageView />} />
           <Route path="/pages/:id/history" element={<History />} />
           <Route path="/missing" element={<Missing />} />
+          <Route path="/wiki/:key/:slug" element={<WikiPage />} />
+          <Route path="/wiki/:key" element={<WikiSpace />} />
           <Route path="/search" element={<SearchPage />} />
           <Route path="/labels/:name" element={<LabelPage />} />
           <Route path="/admin/*" element={<Admin />} />
@@ -128,4 +131,10 @@ function TwoFactorRequired() {
       </div>
     </div>
   )
+}
+
+/** `/wiki/<KEY>`: the space's home. */
+function WikiSpace() {
+  const { key } = useParams()
+  return <Navigate to={`/spaces/${encodeURIComponent(key ?? '')}`} replace />
 }

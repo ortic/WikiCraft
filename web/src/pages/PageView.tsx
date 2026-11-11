@@ -1,11 +1,12 @@
 import { t as tr } from '../i18n'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
+import { Link, useLocation, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate, FileText, BadgeCheck, UserCheck, Archive, RotateCcw, UserCog, CircleDot, FolderInput, ListPlus, Pin } from 'lucide-react'
 import { NoAccess, OwnerDialog, RequestReviewDialog, VerificationBadge, VerifyDialog } from '../components/Verification'
 import { ApiError, api, can, formatDate, type Backlink, type Page, type Space } from '../api'
 import Backlinks from '../components/Backlinks'
+import { wikiPath, wikiPathKey } from '../pagePath'
 import { PageDecor } from '../components/PageDecor'
 import { ErrorBox, Modal, Spinner, useFeatures, useMe, useToast } from '../ui'
 import { SaveTemplateDialog } from '../components/TemplateManager'
@@ -24,8 +25,20 @@ import { PageProperties } from '../components/PageProperties'
 
 type Panel = 'comments' | 'attachments' | null
 
-export default function PageView() {
-  const { id } = useParams()
+/** Whether two (possibly percent-encoded) paths are the same; undefined if one doesn't decode. */
+function samePath(a: string, b: string): boolean | undefined {
+  try {
+    return decodeURIComponent(a) === decodeURIComponent(b)
+  } catch {
+    return undefined
+  }
+}
+
+/** A page, at `/pages/<id>` or at its readable address (`/wiki/<KEY>/<slug>`, see `WikiPage`). */
+export default function PageView({ pageId }: { pageId?: string } = {}) {
+  const routeId = useParams().id
+  const id = pageId ?? routeId
+  const loc = useLocation()
   const [params, setParams] = useSearchParams()
   const nav = useNavigate()
   const qc = useQueryClient()
@@ -93,6 +106,18 @@ export default function PageView() {
     }
   }, [title])
 
+  // the address bar shows the readable address (also after a rename, or when the page was
+  // opened at a former one); the permanent /pages/<id> keeps working
+  const readable = page.data ? wikiPath(page.data) : null
+  const atPermalink = loc.pathname === `/pages/${id}`
+  const atWiki = loc.pathname.startsWith('/wiki/')
+  const moveTo = readable && (atPermalink || atWiki) && samePath(loc.pathname, readable) === false ? readable : atWiki && page.data && !readable ? `/pages/${id}` : null
+  useEffect(() => {
+    if (!moveTo || !page.data) return
+    if (page.data.slug) qc.setQueryData(wikiPathKey(page.data.spaceKey, page.data.slug), { pageId: page.data.id })
+    nav(moveTo + loc.search + loc.hash, { replace: true })
+  }, [moveTo, page.data, qc, nav, loc.search, loc.hash])
+
   const onPresence = useCallback((p: Presence[]) => setPresence(p), [])
   const onStats = useCallback((w: number) => setWords(w), [])
   const onCommentClick = useCallback((cid: string) => {
@@ -110,6 +135,8 @@ export default function PageView() {
     if (status === 404 || status === 403) return <div className="page-wrap"><NoAccess pageId={id!} signedIn={!!user} /></div>
     return <div className="page-wrap"><ErrorBox error={page.error} /></div>
   }
+  // about to move to the readable address: don't open the editor twice
+  if (moveTo && atPermalink) return <div className="page-wrap"><Spinner /></div>
   const p = page.data!
   const canEdit = p.access.edit
   // "delete own" also needs every page below to be yours (the server checks those)
@@ -561,7 +588,7 @@ export default function PageView() {
       {saveTplOpen && <SaveTemplateDialog page={p} onClose={() => setSaveTplOpen(false)} />}
       {moveOpen && <MovePageDialog page={p} onClose={() => setMoveOpen(false)} />}
       {pdfOpen && <PdfExportDialog page={p} onClose={() => setPdfOpen(false)} />}
-      {share && <ShareDialog pageId={p.id} title={p.title} restricted={!!p.restricted} onClose={() => setShare(false)} />}
+      {share && <ShareDialog pageId={p.id} title={p.title} restricted={!!p.restricted} path={wikiPath(p)} onClose={() => setShare(false)} />}
     </div>
   )
 }

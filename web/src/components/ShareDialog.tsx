@@ -18,7 +18,7 @@ interface ShareLink {
 }
 
 /** Copy the page link for colleagues, or create a public read-only link for anyone. */
-export default function ShareDialog({ pageId, title, restricted, onClose }: { pageId: string; title: string; restricted: boolean; onClose: () => void }) {
+export default function ShareDialog({ pageId, title, restricted, path, onClose }: { pageId: string; title: string; restricted: boolean; path?: string | null; onClose: () => void }) {
   const qc = useQueryClient()
   const toast = useToast()
   const links = useQuery({ queryKey: ['share-links', pageId], queryFn: () => api.get<{ enabled: boolean; links: ShareLink[] }>(`/pages/${pageId}/share-links`) })
@@ -54,7 +54,9 @@ export default function ShareDialog({ pageId, title, restricted, onClose }: { pa
     qc.invalidateQueries({ queryKey: ['share-links', pageId] })
     toast(t('Link turned off'))
   }
-  const internal = `${location.origin}/pages/${pageId}`
+  // the readable address when the page has one; the permanent one survives any rename
+  const permanent = `${location.origin}/pages/${pageId}`
+  const internal = path ? `${location.origin}${path}` : permanent
   return (
     <Modal title={t('Share “{title}”', { title })} onClose={onClose} width={620}>
       <h4 className="row" style={{ margin: '0 0 6px' }}><Link2 size={15} />{' '}{t('People in your workspace')}</h4>
@@ -62,7 +64,15 @@ export default function ShareDialog({ pageId, title, restricted, onClose }: { pa
         <input className="input" readOnly value={internal} onFocus={(e) => e.target.select()} />
         <button className="btn" onClick={() => copy(internal)}><Copy size={14} />{' '}{t('Copy')}</button>
       </div>
-      <p className="faint small" style={{ margin: '6px 0 18px' }}>{t('They see the page if their space role and the page restrictions allow it.')}</p>
+      <p className="faint small" style={{ margin: '6px 0 18px' }}>
+        {t('They see the page if their space role and the page restrictions allow it.')}
+        {path && (
+          <>
+            {' '}
+            <button className="link-btn" onClick={() => copy(permanent)}>{t('Copy permanent link')}</button>
+          </>
+        )}
+      </p>
 
       <h4 className="row" style={{ margin: '0 0 6px' }}><Globe size={15} />{' '}{t('Anyone with the link')}</h4>
       {links.isLoading ? (

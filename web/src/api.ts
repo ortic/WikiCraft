@@ -225,6 +225,8 @@ export interface LinkReport {
 export interface Page {
   id: string
   spaceId: string
+  /** readable address `/wiki/<spaceKey>/<slug>` (null: only the permanent `/pages/<id>`) */
+  slug?: string | null
   spaceKey: string
   spaceName: string
   parentId: string | null

@@ -688,6 +688,8 @@ pub async fn get(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path
     let mut v = serde_json::to_value(&page)?;
     let o = v.as_object_mut().expect("object");
     o.insert("breadcrumbs".into(), serde_json::to_value(crumbs)?);
+    // readable address: /wiki/<space key>/<slug>
+    o.insert("slug".into(), json!(crate::paths::slug_of(&state.db, id).await?));
     o.insert("labels".into(), json!(labels));
     o.insert("properties".into(), serde_json::to_value(crate::routes::properties::load(&state, &p, id).await?)?);
     o.insert("changedSince".into(), changed_since);

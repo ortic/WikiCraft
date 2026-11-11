@@ -12,11 +12,11 @@ import CreateSpaceDialog from './CreateSpaceDialog'
 import NotificationsMenu from './NotificationsMenu'
 import TemplatePicker from './TemplatePicker'
 import { applySpaceAccent } from '../look'
+import { useCurrentPageId } from '../pagePath'
 
 export function useCurrentSpaceKey(): string | undefined {
-  const pageMatch = useMatch('/pages/:id/*')
   const spaceMatch = useMatch('/spaces/:key/*')
-  const pageId = pageMatch?.params.id
+  const pageId = useCurrentPageId()
   const page = useQuery({ queryKey: ['page', pageId], queryFn: () => api.get<Page>(`/pages/${pageId}`), enabled: !!pageId, retry: false })
   return spaceMatch?.params.key ?? page.data?.spaceKey
 }

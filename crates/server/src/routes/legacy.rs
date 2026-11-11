@@ -47,14 +47,14 @@ async fn by_title(state: &AppState, space: &str, title: &str) -> ApiResult<Redir
     .bind(space)
     .fetch_optional(&state.db)
     .await?;
+    let space_id = match (space_id, ws) {
+        (Some(s), _) => Some(s),
+        (None, Some(ws)) => crate::paths::space_by_key(&state.db, ws, space).await?,
+        (None, None) => None,
+    };
     let page: Option<Uuid> = match space_id {
-        Some(sid) => {
-            sqlx::query_scalar("SELECT id FROM pages WHERE space_id = $1 AND lower(title) = lower($2) AND deleted_at IS NULL ORDER BY created_at LIMIT 1")
-                .bind(sid)
-                .bind(title)
-                .fetch_optional(&state.db)
-                .await?
-        }
+        // pages renamed or moved since keep their old addresses
+        Some(sid) => crate::paths::resolve(&state.db, sid, title).await?,
         None => None,
     };
     Ok(match page {

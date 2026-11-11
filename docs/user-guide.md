@@ -27,6 +27,11 @@ Mac) in the app for the keyboard shortcuts.
 - **Folders** group pages without content of their own; create one with the folder icon in the
   page tree.
 - **My tasks** lists every task assigned to you, across spaces.
+- **Page addresses**: the address bar shows a readable address, `/wiki/<SPACE KEY>/<page-title>`
+  (e.g. `/wiki/ENG/release-process`); you can also type one. After a rename or a move the old
+  address still leads to the page, unless another page has taken that title since. Share →
+  *Copy permanent link* gives the `/pages/<id>` address, which never changes. Typing the address
+  of a page that doesn't exist offers to create it.
 
 ## Writing
 

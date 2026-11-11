@@ -51,14 +51,14 @@ export function Lightbox({ src, alt, caption, onClose }: { src: string; alt: str
 }
 
 /** Image with drag-to-resize, alignment, caption and alt text. */
-export function ImageView({ node, updateAttributes, deleteNode, selected, editor, getPos }: ReactNodeViewProps) {
+export function ImageView({ node, updateAttributes, deleteNode, selected, editor, getPos, extension }: ReactNodeViewProps) {
   const { src, alt, width, align, caption, border } = node.attrs as { src: string; alt: string | null; width: number | null; align: string | null; caption: string | null; border: boolean | null }
   const img = useRef<HTMLImageElement>(null)
   const [dragWidth, setDragWidth] = useState<number | null>(null)
   const [captionOpen, setCaptionOpen] = useState(false)
   const [zoom, setZoom] = useState(false)
   const [annotate, setAnnotate] = useState(false)
-  const pageId = location.pathname.match(/\/pages\/([0-9a-f-]{36})/)?.[1]
+  const pageId = (extension.options as { pageId?: string }).pageId || undefined
   // annotations are drawn over the image and saved as a new image (the original stays attached)
   const saveAnnotated = async (_scene: string, png: Blob | null) => {
     if (!png || !pageId) return setAnnotate(false)
