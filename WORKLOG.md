@@ -164,6 +164,9 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   (restored copy served by a second app: login, pages, attachment bytes, comments, former addresses, search).
 - Image renditions (`crate::renditions`): `?w=` copies cached in storage; the client picks the width from the measured
   column × devicePixelRatio and uses a plain `src` (a `srcset` with width descriptors would blow small images up).
+- CI flake (`semantic_retrieval_with_embeddings`, 2 of 3 runs): the tantivy reader only reloads when its 500 ms
+  file watch notices a commit; on CI the whole test ran in 1.2 s, so keyword search still saw an empty index. The
+  indexer now reloads the reader right after each commit (searches see a saved page at once).
 
 ## Security review 4 (independent review agent, 2026-11-10 ~03:40 UTC: link previews, banner, switches, decision log, branding) — status
 No critical or high findings. All five fixed in `9f0b9a9`:

@@ -469,6 +469,10 @@ impl SearchIndex {
                 ))?;
             }
             w.commit()?;
+            drop(w);
+            // searches see the change right away, not when the reader's file watch notices it
+            // (retrieval and "search right after saving" depend on it)
+            t.reader.reload()?;
             Ok(())
         })
         .await??;
