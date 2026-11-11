@@ -1,41 +1,65 @@
 # WikiCraft
 
-A self-hosted team wiki with a **Rust backend**, a modern real-time editor, and first-class
-**Confluence migration**. Built for teams that need a home after Confluence Data Center goes
-end-of-life (2029-03-28).
+A self-hosted team wiki with a **Rust backend**, a real-time editor and first-class **Confluence
+migration**. Built for teams that need a new home when Confluence Data Center reaches its end of
+life (2029-03-28).
 
-- **Spaces & page trees**: unlimited nesting, drag-and-drop reordering, trash with restore, archive, copy, labels, favorites; space templates (team, project, knowledge base, engineering), space categories, personal spaces, space key rename (old links keep working), external links as page-tree items
-- **Real-time collaboration**: Google-Docs-style co-editing with live cursors (Yjs CRDT; the server speaks the y-websocket protocol via `yrs`)
-- **Rich editor**: slash commands, drag handles, tables (merge, colours, sort by column, normal / wide / full width), task lists, callouts with custom icons, expand blocks, code blocks with syntax highlighting and line numbers, math, mentions, status lozenges, dates, decisions with a live decision log, task reports, instructional text in templates, embeds and link previews, file previews, table of contents, child pages, includes, heading links, links to any block (every block has a stable id), find & replace
-- **Drawings & images**: Excalidraw sketches stored in the page, image annotation (arrows, boxes, text), text wrap around images, lightbox
+![A runbook page in WikiCraft: page tree, status, page properties, callout, tasks and a table](docs/screenshots/page.png)
+
+## Features
+
+**Writing and collaboration**
+
+- **Real-time co-editing** with live cursors (Yjs CRDT; the server speaks the y-websocket protocol via `yrs`)
+- **Rich editor**: slash commands, drag handles, tables (merge, colours, sort, numbered rows, normal / wide / full width), task lists with assignees, due dates and reminders, callouts with custom icons, expand blocks, columns, text colours and highlights, code blocks with syntax highlighting, Mermaid diagrams, math, mentions, status lozenges, dates, decisions, table of contents, child pages, includes, embeds (YouTube, Vimeo, Loom, Figma, Miro, Google Docs) and link previews, file previews, links to any block, find & replace
+- **Drawings**: Excalidraw sketches and draw.io diagrams stored in the page; image annotation, text wrap around images
 - **Paste anything**: Markdown becomes formatted content, spreadsheet cells become tables, images upload on paste or drop
-- **Version history** with per-block diff and restore; automatic versions when editors leave; "changed since your last visit" banner
-- **Page lifecycle**: owners, verification ("this page is accurate" with expiry), archive, request access
-- **Comments**: page and inline comments, threads, resolve/reopen, mention notifications
-- **Permissions**: workspace roles, space roles (viewer/commenter/editor/admin) for users and groups, page view/edit restrictions (view restrictions are inherited, like Confluence), anonymous access, guests
-- **Search**: full-text (tantivy or Postgres) with snippets, permission-aware, filters (type, label, contributor, date), comments indexed, saved searches, browser search (OpenSearch)
-- **Confluence import**: classic XML exports *and* the new Cloud CSV exports, with history, attachments, comments (incl. inline), labels, restrictions, authors, macro mapping, link rewriting and a dry-run report; imported authors without an account can later be merged into the right person
-- **Markdown / Obsidian / Notion / HTML import**: zip of Markdown or HTML files (including Confluence's HTML space export) with images, attachments and links between pages
-- **Word**: import .docx (headings, lists, tables, images, footnotes) and export pages or whole page trees to .docx
-- **Export & backup**: single pages as Word/Markdown/HTML/PDF; whole spaces as a browsable static HTML site, a Markdown folder tree (re-importable) or a full backup that restores into a new space
-- **Sign-in**: local accounts, OpenID Connect (Microsoft Entra ID, Google, GitLab, Okta, Keycloak, Authentik, …), GitHub, LDAP / Active Directory and SAML 2.0 — several at once, with just-in-time provisioning, domain rules, group sync and account linking
-- **E-mail**: invitations, password reset, open sign-up for your e-mail domains (with confirmation) and notification digests over SMTP (outbox with retries)
-- **AI-ready**: built-in [MCP](https://modelcontextprotocol.io) server — Claude & co. can search, read and write pages with the user's permissions; *Ask the wiki* answers questions from the pages a person can see, with sources (optional, needs an Anthropic API key)
-- **Templates**: built-in (meeting notes, decision record, how-to, retrospective, runbook, PRD), custom space/workspace templates and a default template per space
-- **Notifications**: mentions, comments, watched-page and watched-space updates (in-app and as e-mail digest), per-page muting; a "My tasks" view of task items assigned to you; webhooks with Slack, Microsoft Teams and Google Chat formats
-- **Administration**: workspace name and logo, announcement banner, feature switches (public links, exports, Ask the wiki, personal spaces), audit log, usage overview
-- **Migration-friendly URLs**: old Confluence links (`/display/KEY/Title`, `viewpage.action?pageId=`, Cloud `/wiki/spaces/…/pages/ID`, `/x/` tiny links) redirect to the imported pages
-- **API**: REST + personal API tokens; audit log
+- **Drafts and history**: private drafts until published, scheduled publishing, minor changes, version history with word-by-word comparison and restore, "changed since your last visit" highlights
+- **Templates and blueprints**: built-in and custom templates with variables, a default template per space or for the pages below a page, blueprints that file pages under an index page
+- **Comments**: page and inline comments, threads, images, resolve/reopen, mentions, likes
+
+**Organising and finding**
+
+- **Spaces**: page trees with folders and links, trash, archive, copy and move, blog with Atom feeds, space templates, categories and a space directory, personal spaces, shortcuts, an accent colour per space, key renames that keep old links working
+- **Labels** on pages, blog posts and files; **page properties** (typed fields) with properties reports; live reports for content by label, recently updated pages, tasks and decisions
+- **Search**: full text with snippets, inside attachments (PDF, Office, text), filters, saved searches, a **query language** (CQL: `space = ENG and label = runbook and lastModified > now("-30d")`) and browser search integration
+- **People**: profiles with photos, a people directory, following people's activity, who viewed a page
+- **Notifications**: watch pages, page trees or spaces; in-app and e-mail digests; "My tasks"
+
+**Permissions and security**
+
+- Workspace roles, **space roles with Confluence's permission set** (add/delete pages, blog posts, comments and files, restrictions, export, archive, delete own content) per user, group and the space default
+- Page view/edit restrictions (view restrictions are inherited, as in Confluence), *Inspect permissions*, access requests, anonymous (public) spaces, guests, public share links with expiry, password and subtree
+- **Sign-in**: local accounts, OpenID Connect (Microsoft Entra ID, Google, GitLab, Okta, Keycloak, Authentik, …), GitHub, LDAP / Active Directory and SAML 2.0, several at once, with group sync; **two-factor authentication** (TOTP and recovery codes, can be required)
+- Audit log, personal API tokens (read-only or read/write, expiring), virus scanning with ClamAV, strict CSP and HSTS
+
+**Moving in and out**
+
+- **Confluence import**: classic XML exports and Cloud CSV exports with history, attachments, comments (incl. inline), labels, restrictions and space permissions, authors, statuses, drafts and trash, watches and favourites, 50+ macros mapped, links rewritten, a dry-run report, and update imports that bring later changes across. Old Confluence URLs (`/display/KEY/Title`, `viewpage.action?pageId=`, Cloud `/wiki/spaces/…/pages/ID`, `/x/` tiny links) redirect to the imported pages
+- **Other imports**: Markdown / Obsidian, Notion (databases become page properties), HTML (incl. Confluence's HTML export) and Word (.docx)
+- **Export**: pages and page trees as **PDF** (typeset on the server: cover, contents, headers, page numbers), Word, Markdown or HTML; whole spaces as a browsable static site, a Markdown folder tree or a full backup that restores into a new space
+
+**Integrations and AI**
+
+- REST API with an OpenAPI 3.1 description, webhooks (JSON, Slack / Mattermost, Microsoft Teams, Google Chat)
+- Built-in [MCP](https://modelcontextprotocol.io) server: Claude & co. search, query, read and write pages with the user's permissions
+- *Ask the wiki*: answers from the pages a person can see, with sources (optional, needs an Anthropic API key)
+
+**Interface and administration**
+
+- English, German and French ([translating](docs/translating.md)); light, dark and high-contrast themes; mobile layout; checked against WCAG 2.2 AA
+- Workspace name, logo, accent colour, date format, time zone and default language; announcement banner; feature switches; attachment limits and blocked file types; usage overview; space administration
 
 Documentation: [user guide](docs/user-guide.md) · [admin guide](docs/admin-guide.md) ·
 [leaving Confluence Data Center](docs/migrating-from-confluence.md) ·
-[overview deck](docs/presentation/WikiCraft-overview.pptx) (PowerPoint)
+[translating](docs/translating.md) · [overview deck](docs/presentation/WikiCraft-overview.pptx) (PowerPoint)
 
 ## Quick start (Docker)
 
 ```bash
-docker compose up -d
-open http://localhost:8787     # first visit runs the setup wizard
+export WIKICRAFT_DB_PASSWORD=$(openssl rand -hex 16)   # else the database password is "change-me"
+docker compose up -d                                    # builds the image on first start (takes a while)
+open http://localhost:8787                              # the first visit runs the setup wizard
 ```
 
 ## Deployment & scaling
@@ -61,16 +85,18 @@ Nothing else is kept on local disk in scaled mode: `/data` only holds import scr
   request gets an `x-request-id` (accepted from your proxy or generated), included in the logs.
   Levels via `RUST_LOG` (e.g. `info,wikicraft=debug`).
 - **Probes**: liveness `GET /api/health`, readiness `GET /api/ready` (503 while shutting down or
-  when the database is unreachable).
+  when the database is unreachable); `wikicraft healthcheck` for container `HEALTHCHECK`s.
 - **Metrics**: Prometheus text format at `GET /api/metrics` (HTTP responses, latency, WebSocket
   connections, live rooms, DB pool, jobs); protect with `WIKICRAFT_METRICS_TOKEN`.
 - **Shutdown**: SIGTERM marks the pod not-ready, drains and flushes live documents.
 - **Migrations** run automatically on startup and are serialized by a Postgres advisory lock, so
   rolling updates with several pods are safe.
+- **Fonts for PDF export**: Noto Sans is built in; for other scripts (CJK, Arabic, …) install fonts
+  in the image or put `.ttf`/`.otf` files in `<data dir>/fonts`.
 
 ## Development
 
-Requirements: Rust ≥ 1.85, Node ≥ 20, PostgreSQL ≥ 15 (or Docker).
+Requirements: Rust ≥ 1.94, Node 20.19+ or 22.12+, PostgreSQL ≥ 15 (or Docker).
 
 ```bash
 # Postgres for development (port 55432)
@@ -91,28 +117,34 @@ cargo run -p wikicraft -- serve          # http://127.0.0.1:8787
 cd web && npm run dev                     # http://127.0.0.1:5199
 ```
 
+Interface texts go through `t()` with the English text as the key; `node web/scripts/i18n.mjs
+check de fr` lists translations that are missing (see [translating](docs/translating.md)).
+
 ### Tests
 
 ```bash
 cargo test                                # unit + integration tests (needs the dev Postgres)
-./research/confluence-import/fetch_fixtures.sh   # optional: real Confluence exports for the import tests
+./research/confluence-import/fetch_xwiki_corpus.sh    # XWiki's Confluence test corpus (pinned), for the importer regression tests
+./research/confluence-import/fetch_fixtures.sh        # optional: real Confluence exports
 cargo test -p wikicraft-confluence --release --test real_exports -- --nocapture
 ```
 
 Integration tests create a throwaway database per test, boot the full app on an ephemeral port
 and exercise it over HTTP and WebSockets (auth/CSRF, permissions, collaboration between two Yjs
-peers, both Confluence export formats end-to-end, security regressions).
+peers, both Confluence export formats end-to-end, exports, security regressions).
 
 ### Browser tests (end to end)
 
-`e2e/` drives Chromium through one journey on a fresh database: setup, a space and a page with
-rich content, two people editing live, comments and search, a public link, space export and
-two-factor sign-in.
+`e2e/` drives Chromium through one journey on a fresh database (24 steps): setup, rich content,
+two people editing live, comments and search, public links, exports, two-factor sign-in, templates,
+draw.io, history, page properties and reports, the workspace look, and accessibility checks
+(axe, WCAG 2.2 AA; the high-contrast theme at 7:1).
 
 ```bash
 cd web && npm run build && cd ../e2e
 npm ci && npx playwright install chromium
 npx playwright test      # starts the server on :8799 with a fresh database (scripts/e2e-server.sh)
+E2E_BASE_URL=http://127.0.0.1:8799 npx playwright test   # against a server you started yourself
 ```
 
 ### CLI
@@ -123,6 +155,7 @@ wikicraft migrate                                  # apply migrations
 wikicraft analyze-confluence export.zip            # dry run: JSON report, nothing written
 wikicraft import-confluence export.zip --as-user admin@example.com [--space-key KEY] [--skip-history] [--skip-drafts] [--skip-trash] [--update [--overwrite-local-changes]]
 wikicraft reindex                                  # rebuild the search index
+wikicraft healthcheck                              # probe a running server's /api/health
 ```
 
 ## Configuration
@@ -134,7 +167,7 @@ All settings are flags or environment variables:
 | `WIKICRAFT_DATABASE_URL` | `postgres://wikicraft:wikicraft@127.0.0.1:55432/wikicraft` | PostgreSQL |
 | `WIKICRAFT_BIND` | `127.0.0.1:8787` | listen address |
 | `WIKICRAFT_BASE_URL` | `http://127.0.0.1:8787` | public URL |
-| `WIKICRAFT_DATA_DIR` | `./data` | search index, uploads, local attachment storage |
+| `WIKICRAFT_DATA_DIR` | `./data` | search index, uploads, local attachment storage, extra fonts (`fonts/`) |
 | `WIKICRAFT_STATIC_DIR` | `./web/dist` | built frontend; when it holds no build, the copy embedded in the binary is served |
 | `WIKICRAFT_S3_BUCKET` / `WIKICRAFT_S3_ENDPOINT` | — | store attachments and uploads in S3/MinIO/R2/Ceph |
 | `WIKICRAFT_S3_REGION` / `WIKICRAFT_S3_ACCESS_KEY_ID` / `WIKICRAFT_S3_SECRET_ACCESS_KEY` | `AWS_*` env | S3 credentials |
@@ -153,8 +186,9 @@ All settings are flags or environment variables:
 | `WIKICRAFT_MICROSOFT_CLIENT_ID` / `_SECRET` / `_TENANT` / `_ALLOWED_DOMAINS` | — | "Continue with Microsoft" (Entra ID) shortcut |
 | `WIKICRAFT_OIDC_ISSUER` / `_CLIENT_ID` / `_CLIENT_SECRET` / `_NAME` / `_AUTO_CREATE` | — | single generic OIDC provider (redirect URI `{BASE_URL}/api/auth/oidc/callback`) |
 | `WIKICRAFT_DISABLE_PASSWORD_LOGIN` | `false` | turn off local passwords (SSO / LDAP only) |
-| `WIKICRAFT_SMTP_URL` | — | outgoing mail: `smtps://user:pass@host` (TLS), `smtp://user:pass@host:587?tls=required` (STARTTLS) or `smtp://host:25` (plain, local relays) |
+| `WIKICRAFT_SMTP_URL` | — | outgoing mail: `smtps://user:pass@host` (TLS), `smtp://user:pass@host:587?tls=required` (STARTTLS) or `smtp://host:25` (plain, local relays); also turns on *Forgot password?* |
 | `WIKICRAFT_MAIL_FROM` | `WikiCraft <wikicraft@localhost>` | sender address |
+| `WIKICRAFT_WEBHOOK_ALLOW_PRIVATE` | `false` | let webhooks call private / loopback addresses |
 | `WIKICRAFT_UNFURL_ALLOW_PRIVATE` | `false` | let link previews fetch private / loopback addresses (closed intranets only) |
 | `WIKICRAFT_AI_API_KEY` | — | Anthropic API key: turns on *Ask the wiki* (off when unset; nothing leaves the server) |
 | `WIKICRAFT_AI_MODEL` / `WIKICRAFT_AI_BASE_URL` | `claude-opus-5-5` / `https://api.anthropic.com` | model and API endpoint (e.g. a gateway) for *Ask the wiki* |
@@ -200,14 +234,16 @@ local group gets a "(provider)" suffix instead of taking that group over).
 
 Accounts are linked by the provider's stable subject id; on first login an existing account with
 the same verified e-mail (including authors imported from Confluence) is claimed. Deactivated
-users can't sign in through any provider.
+users can't sign in through any provider. Workspaces can require two-factor authentication for
+admins or for everyone; it then applies after SSO sign-ins too.
 
 ## Architecture
 
 ```
-web/                React 19 + Tiptap 3 (ProseMirror) + Yjs, TanStack Query
+web/                React 19 + Tiptap 3 (ProseMirror) + Yjs, TanStack Query; translations in src/locales
 crates/server       axum 0.8 HTTP API + WebSocket collaboration (yrs), sqlx/PostgreSQL,
-                    tantivy search, object_store blobs, importers, CLI  → single binary
+                    tantivy search, object_store blobs, CQL, importers, Word and PDF (Typst)
+                    exports, MCP server, CLI  → single binary
 crates/doc-model    ProseMirror-compatible document model: Yjs ⇄ JSON (y-prosemirror format),
                     Markdown ⇄ JSON, safe HTML rendering, plain text
 crates/confluence   Confluence export readers (entities.xml streaming, Cloud CSV),
@@ -228,21 +264,22 @@ same API without the version, used by the web app). Authenticate with the sessio
 must send `x-wikicraft: 1`) or with a personal token: `Authorization: Bearer wct_…`
 (create one via `POST /api/me/tokens`). The full **OpenAPI 3.1** description is served at
 `/api/openapi.yaml` (generated by `scripts/gen-openapi.py`; a unit test fails when a route is
-missing from it) — load it into Swagger UI, Redoc, Postman or a client generator.
+missing from it) — load it into Swagger UI, Redoc, Postman or a client generator. The main
+endpoints:
 
 | Area | Endpoints |
 |---|---|
 | Auth | `GET/POST /setup`, `POST /auth/login`, `POST /auth/logout`, `GET /me`, `GET/POST /me/tokens` |
-| Spaces | `GET/POST /spaces`, `GET/PATCH/DELETE /spaces/{key}`, `GET /spaces/{key}/tree`, `GET/PUT /spaces/{key}/permissions`, `GET /spaces/{key}/trash` |
-| Pages | `POST /pages`, `GET/PATCH/DELETE /pages/{id}`, `PUT /pages/{id}/content` (ProseMirror JSON or Markdown), `POST /pages/{id}/move`, `/copy`, `/restore`, `GET /pages/{id}/children`, `GET/POST /pages/{id}/versions`, `POST /pages/{id}/versions/{n}/restore`, `GET/PUT /pages/{id}/restrictions`, `GET/PUT /pages/{id}/labels`, `GET /pages/{id}/export?format=md\|html\|json`, `GET /pages/{id}/collab` (WebSocket) |
+| Spaces | `GET/POST /spaces`, `GET/PATCH/DELETE /spaces/{key}`, `GET /spaces/{key}/tree`, `GET/PUT /spaces/{key}/permissions` (roles and the permissions each grant leaves out), `GET /spaces/{key}/trash` |
+| Pages | `POST /pages`, `GET/PATCH/DELETE /pages/{id}`, `PUT /pages/{id}/content` (ProseMirror JSON or Markdown), `POST /pages/{id}/move`, `/copy`, `/restore`, `GET /pages/{id}/children`, `GET/POST /pages/{id}/versions`, `POST /pages/{id}/versions/{n}/restore`, `GET/PUT /pages/{id}/restrictions`, `GET/PUT /pages/{id}/labels`, `GET/PUT /pages/{id}/properties`, `GET /pages/{id}/export?format=md\|html\|docx\|pdf\|json` (`tree`, `toc`, `cover`), `GET /pages/{id}/collab` (WebSocket) |
 | Comments | `GET/POST /pages/{id}/comments`, `PATCH/DELETE /comments/{id}` |
-| Attachments | `GET/POST /pages/{id}/attachments`, `GET /attachments/{id}/content`, `DELETE /attachments/{id}` |
-| Discovery | `GET /search?q=&space=`, `GET /recent`, `GET /favorites`, `GET /labels/{name}`, `GET /resolve?space=&title=` / `?source=confluence:<id>` |
-| Reports | `GET /reports/pages?labels=&spaces=&operator=all&sort=&max=`, `GET /reports/properties?labels=`, `GET /reports/tasks?spaces=&status=`, `GET /tasks` (mine) |
+| Attachments | `GET/POST /pages/{id}/attachments`, `GET /attachments/{id}/content`, `PUT /attachments/{id}/labels`, `DELETE /attachments/{id}` |
+| Discovery | `GET /search?q=&space=`, `GET /cql?cql=&space=` (query language), `GET /recent`, `GET /favorites`, `GET /labels/{name}`, `GET /labels/{name}/attachments`, `GET /resolve?space=&title=` / `?source=confluence:<id>` |
+| Reports | `GET /reports/pages?labels=&spaces=&cql=&sort=&max=`, `GET /reports/properties?labels=&where=`, `GET /reports/tasks?spaces=&status=`, `GET /reports/decisions`, `GET /tasks` (mine) |
 | Sharing | `GET/POST /pages/{id}/share-links`, `DELETE /share-links/{id}`, public: `GET /public/{token}[/pages/{id}]`, `GET /public/{token}/attachments/{id}` |
 | Import / export | `POST /imports/confluence` (multipart `file`, `options`), `POST /imports/confluence/analyze`, `POST /imports/markdown`, `POST /imports/backup`, `POST /spaces/{key}/export {format: html\|markdown\|backup}`, `GET /jobs/{id}`, `GET /jobs/{id}/download` |
-| Account | `POST /auth/forgot`, `POST /auth/reset`, `GET /auth/invite`, `POST /auth/accept-invite`, `GET/PUT /me/preferences`, `GET /auth/providers` |
-| Admin | `GET/POST /users`, `POST /users/invite`, `PATCH /users/{id}`, `GET/POST /groups`, group members, `GET /admin/audit`, `GET /admin/stats`, `POST /admin/reindex`, `GET/PUT /admin/settings`, `GET /admin/mail`, `POST /admin/mail/test`, webhooks (below) |
+| Account | `POST /auth/forgot`, `POST /auth/reset`, `GET /auth/invite`, `POST /auth/accept-invite`, `GET/PUT /me/preferences`, `PUT /me/profile` (incl. `language`), `GET /auth/providers` |
+| Admin | `GET/POST /users`, `POST /users/invite`, `PATCH /users/{id}`, `GET/POST /groups`, group members, `PUT /admin/workspace` (name, look, date format, time zone, default language), `GET /admin/audit`, `GET /admin/stats`, `POST /admin/reindex`, `GET/PUT /admin/settings`, `GET /admin/mail`, `POST /admin/mail/test`, webhooks (below) |
 
 ### Webhooks
 
@@ -274,10 +311,10 @@ at `https://your-wiki/api/mcp`:
 claude mcp add --transport http wikicraft https://your-wiki/api/mcp --header "Authorization: Bearer wct_…"
 ```
 
-Tools: `search`, `get_page` (Markdown), `list_spaces`, `list_children`, `recent_changes`,
-`create_page`, `update_page`, `append_to_page`, `add_comment`. Every call runs through the same
-authorization checks as the UI. Give an assistant that should only read a **read-only** token
-(`{"scope": "read"}` when creating it): the writing tools then refuse.
+Tools: `search`, `query_pages` (CQL), `get_page` (Markdown), `list_spaces`, `list_children`,
+`recent_changes`, `create_page`, `update_page`, `append_to_page`, `add_comment`. Every call runs
+through the same authorization checks as the UI. Give an assistant that should only read a
+**read-only** token (`{"scope": "read"}` when creating it): the writing tools then refuse.
 
 ## Ask the wiki
 
