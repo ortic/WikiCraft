@@ -1,8 +1,9 @@
 import { t } from '../i18n'
-import { useState, type FormEvent } from 'react'
+import { useEffect, useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Building2, KeyRound } from 'lucide-react'
+import { Building2, Fingerprint, KeyRound } from 'lucide-react'
 import { api } from '../api'
+import { cancelled, passkeysSupported, signWithPasskey } from '../passkeys'
 import { Logo, Spinner } from '../ui'
 
 export function Setup() {
@@ -86,6 +87,15 @@ export function Login() {
   // `?mfa=1`: an SSO login or password reset left a challenge cookie for the code step
   const [mfaToken, setMfaToken] = useState<string | null>(() => (new URLSearchParams(location.search).get('mfa') ? '' : null))
   const [code, setCode] = useState('')
+  // second step: what the person can use (a code and/or a passkey); unknown after SSO until asked
+  const [methods, setMethods] = useState<string[] | null>(null)
+  useEffect(() => {
+    if (mfaToken !== null && methods === null)
+      api
+        .post<{ methods: string[] }>('/auth/mfa/passkey', { mfaToken: mfaToken || undefined })
+        .then((r) => setMethods(r.methods))
+        .catch(() => setMethods(['code']))
+  }, [mfaToken, methods])
   const redirects = (info.data?.providers ?? []).filter((p) => p.loginUrl)
   const directory = (info.data?.providers ?? []).filter((p) => p.type === 'ldap')
   // the form signs in local accounts and directory (LDAP / AD) accounts
@@ -100,8 +110,9 @@ export function Login() {
         location.href = safeNext(r.next ?? next)
         return
       } else {
-        const r = await api.post<{ ok?: boolean; mfaRequired?: boolean; mfaToken?: string }>('/auth/login', { email, password })
+        const r = await api.post<{ ok?: boolean; mfaRequired?: boolean; mfaToken?: string; methods?: string[] }>('/auth/login', { email, password })
         if (r.mfaRequired && r.mfaToken) {
+          setMethods(r.methods ?? null)
           setMfaToken(r.mfaToken)
           setBusy(false)
           return
@@ -113,22 +124,64 @@ export function Login() {
       setBusy(false)
     }
   }
+  // the second step with a passkey
+  const passkeyStep = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const step = await api.post<{ publicKey: Record<string, unknown> | null }>('/auth/mfa/passkey', { mfaToken: mfaToken || undefined })
+      if (!step.publicKey) throw new Error(t('You have no passkey'))
+      const passkey = await signWithPasskey(step.publicKey)
+      const r = await api.post<{ next?: string | null }>('/auth/mfa', { mfaToken: mfaToken || undefined, passkey })
+      location.href = safeNext(r.next ?? next)
+    } catch (e) {
+      if (!cancelled(e)) setError(e instanceof Error ? e.message : t('Login failed'))
+      setBusy(false)
+    }
+  }
+  // signing in with a passkey alone (it verified the person: two factors in one)
+  const passkeyLogin = async () => {
+    setBusy(true)
+    setError(null)
+    try {
+      const o = await api.post<{ token: string; publicKey: Record<string, unknown> }>('/auth/passkey/options')
+      const credential = await signWithPasskey(o.publicKey)
+      await api.post('/auth/passkey', { token: o.token, credential })
+      location.href = safeNext(next)
+    } catch (e) {
+      if (!cancelled(e)) setError(e instanceof Error ? e.message : t('Login failed'))
+      setBusy(false)
+    }
+  }
   const wide = { width: '100%', justifyContent: 'center', height: 38 } as const
+  const withCode = methods === null || methods.includes('code')
+  const withPasskey = !!methods?.includes('passkey') && passkeysSupported()
   if (mfaToken !== null)
     return (
       <div className="auth">
         <form className="auth-card" onSubmit={submit}>
           <Logo />
           <h1>{t('Two-factor sign-in')}</h1>
-          <p className="muted" style={{ marginTop: 0 }}>{t('Enter the 6-digit code from your authenticator app, or one of your recovery codes.')}</p>
-          <div className="field">
-            <label htmlFor="login-code">{t('Code')}</label>
-            <input id="login-code" className="input otp-input" inputMode="numeric" autoComplete="one-time-code" required value={code} onChange={(e) => setCode(e.target.value)} autoFocus placeholder="123 456" />
-          </div>
+          {withPasskey && (
+            <>
+              <p className="muted" style={{ marginTop: 0 }}>{t('Confirm with your passkey (fingerprint, face, device PIN or security key).')}</p>
+              <button type="button" className="btn btn-primary" style={wide} disabled={busy} onClick={passkeyStep} autoFocus={!withCode}><Fingerprint size={16} />{' '}{t('Use your passkey')}</button>
+              {withCode && <div className="faint small" style={{ textAlign: 'center', margin: '14px 0' }}>{t('or with a code')}</div>}
+            </>
+          )}
+          {withCode && (
+            <>
+              {!withPasskey && <p className="muted" style={{ marginTop: 0 }}>{t('Enter the 6-digit code from your authenticator app, or one of your recovery codes.')}</p>}
+              <div className="field">
+                <label htmlFor="login-code">{t('Code')}</label>
+                <input id="login-code" className="input otp-input" inputMode="numeric" autoComplete="one-time-code" required value={code} onChange={(e) => setCode(e.target.value)} autoFocus={!withPasskey} placeholder="123 456" />
+              </div>
+            </>
+          )}
           {error && <p className="error-text">{error}</p>}
-          <button className="btn btn-primary" style={wide} disabled={busy}>{t('Verify')}</button>
+          {withCode && <button className={`btn${withPasskey ? '' : ' btn-primary'}`} style={wide} disabled={busy}>{t('Verify')}</button>}
           <p className="small" style={{ textAlign: 'center', marginBottom: 0 }}>
-            <a href="/login" onClick={(e) => { e.preventDefault(); setMfaToken(null); setCode(''); setError(null) }}>{t('Use a different account')}</a>
+            <a href="/login" onClick={(e) => { e.preventDefault(); setMfaToken(null); setMethods(null); setCode(''); setError(null) }}>{t('Use a different account')}</a>
           </p>
         </form>
       </div>
@@ -171,6 +224,9 @@ export function Login() {
         {error && <p className="error-text">{error}</p>}
         {showForm && (
           <button className="btn btn-primary" style={wide} disabled={busy}>{t('Log in')}</button>
+        )}
+        {passkeysSupported() && (
+          <button type="button" className="btn" style={{ ...wide, marginTop: 10 }} disabled={busy} onClick={passkeyLogin}><Fingerprint size={16} />{' '}{t('Sign in with a passkey')}</button>
         )}
         {signup.data?.enabled && (
           <p className="small" style={{ textAlign: 'center', marginBottom: 0 }}>{t('New here?')}{' '}<a href="/signup">{t('Create an account')}</a>

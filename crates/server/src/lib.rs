@@ -35,4 +35,5 @@ pub mod schema_upgrade;
 pub mod search;
 pub mod sso;
 pub mod web_assets;
+pub mod webauthn;
 pub mod webhooks;

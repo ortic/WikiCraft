@@ -232,3 +232,130 @@ async fn required_two_factor() {
     enrol(&app, &member).await;
     assert_eq!(app.get(&member, "/spaces").await.0, 200);
 }
+
+/// Registers a passkey for the signed-in client with a software authenticator.
+async fn add_passkey(app: &common::TestApp, c: &reqwest::Client, ed25519: bool, password: Option<&str>) -> wikicraft::webauthn::testing::Authenticator {
+    use wikicraft::webauthn::{RelyingParty, b64, testing::Authenticator, unb64};
+    let rp = RelyingParty::from_base_url(&app.base).unwrap();
+    let (st, opts) = app.post(c, "/me/passkeys/options", json!({"password": password})).await;
+    assert_eq!(st, 200, "{opts}");
+    let auth = Authenticator::new(rp, ed25519);
+    let challenge = unb64(opts["publicKey"]["challenge"].as_str().unwrap()).unwrap();
+    let (client_data, attestation) = auth.register(&challenge);
+    let (st, row) = app
+        .post(
+            c,
+            "/me/passkeys",
+            json!({"token": opts["token"], "name": "Laptop", "credential": {
+                "id": b64(&auth.credential_id), "rawId": b64(&auth.credential_id), "type": "public-key",
+                "response": {"clientDataJSON": b64(&client_data), "attestationObject": b64(&attestation), "transports": ["internal"]}
+            }}),
+        )
+        .await;
+    assert_eq!(st, 201, "{row}");
+    auth
+}
+
+fn assertion(auth: &mut wikicraft::webauthn::testing::Authenticator, options: &Value, user: Option<&str>) -> Value {
+    use wikicraft::webauthn::{b64, unb64};
+    let challenge = unb64(options["challenge"].as_str().unwrap()).unwrap();
+    let (client_data, data, sig) = auth.sign(&challenge);
+    json!({"id": b64(&auth.credential_id), "rawId": b64(&auth.credential_id), "type": "public-key", "response": {
+        "clientDataJSON": b64(&client_data), "authenticatorData": b64(&data), "signature": b64(&sig), "userHandle": user
+    }})
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn passkeys_as_second_step_and_without_a_password() {
+    use wikicraft::webauthn::b64;
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (mia, mia_id) = app.user(&owner, "mia@acme.test", "member").await;
+    let uuid: uuid::Uuid = mia_id.parse().unwrap();
+    let handle = b64(uuid.as_bytes());
+
+    // the options name this wiki and the person (their id as the user handle)
+    let (_, opts) = app.post(&mia, "/me/passkeys/options", json!({})).await;
+    assert_eq!(opts["publicKey"]["rp"]["id"], "127.0.0.1");
+    assert_eq!(opts["publicKey"]["user"]["id"], handle.as_str());
+    let mut key = add_passkey(&app, &mia, false, None).await;
+    let (_, list) = app.get(&mia, "/me/passkeys").await;
+    assert_eq!(list[0]["name"], "Laptop");
+    let (_, s) = app.get(&mia, "/me/mfa").await;
+    assert_eq!(s["passkeys"], 1);
+    // the same authenticator can't be registered twice; the options leave it out
+    let (_, opts) = app.post(&mia, "/me/passkeys/options", json!({})).await;
+    assert_eq!(opts["publicKey"]["excludeCredentials"][0]["id"], b64(&key.credential_id).as_str());
+
+    // a sign-in older than 15 minutes needs the password to add one
+    sqlx::query("UPDATE sessions SET created_at = now() - interval '1 hour' WHERE user_id = $1::uuid").bind(&mia_id).execute(&app.state.db).await.unwrap();
+    let (st, err) = app.post(&mia, "/me/passkeys/options", json!({})).await;
+    assert_eq!(st, 403, "{err}");
+    assert_eq!(app.post(&mia, "/me/passkeys/options", json!({"password": "wrong"})).await.0, 403);
+    let mut phone = add_passkey(&app, &mia, true, Some("password123")).await;
+
+    // the password is no longer enough: the second step takes the passkey
+    let c = client();
+    let (_, login) = app.post(&c, "/auth/login", json!({"email": "mia@acme.test", "password": "password123"})).await;
+    assert_eq!(login["mfaRequired"], true);
+    assert_eq!(login["methods"], json!(["passkey"]));
+    let token = login["mfaToken"].as_str().unwrap();
+    assert_eq!(
+        app.post(&c, "/auth/mfa", json!({"mfaToken": token, "passkey": assertion(&mut key, &json!({"challenge": b64(&[0; 32])}), None)})).await.0,
+        400,
+        "the passkey step must be started"
+    );
+    let (_, step) = app.post(&c, "/auth/mfa/passkey", json!({"mfaToken": token})).await;
+    assert_eq!(step["methods"], json!(["passkey"]));
+    assert_eq!(step["publicKey"]["allowCredentials"].as_array().unwrap().len(), 2);
+    let answer = assertion(&mut phone, &step["publicKey"], Some(&handle));
+    let (st, done) = app.post(&c, "/auth/mfa", json!({"mfaToken": token, "passkey": answer})).await;
+    assert_eq!(st, 200, "{done}");
+    assert_eq!(app.get(&c, "/me").await.1["user"]["id"], mia_id.as_str());
+    // the same answer again (a replay) is refused
+    let c2 = client();
+    let (_, login) = app.post(&c2, "/auth/login", json!({"email": "mia@acme.test", "password": "password123"})).await;
+    let token = login["mfaToken"].as_str().unwrap();
+    app.post(&c2, "/auth/mfa/passkey", json!({"mfaToken": token})).await;
+    assert_eq!(app.post(&c2, "/auth/mfa", json!({"mfaToken": token, "passkey": answer})).await.0, 400);
+    // someone else's passkey doesn't do
+    let (other, _) = app.user(&owner, "ola@acme.test", "member").await;
+    let mut olas = add_passkey(&app, &other, false, None).await;
+    let (_, step) = app.post(&c2, "/auth/mfa/passkey", json!({"mfaToken": token})).await;
+    assert_eq!(app.post(&c2, "/auth/mfa", json!({"mfaToken": token, "passkey": assertion(&mut olas, &step["publicKey"], None)})).await.0, 400);
+
+    // without a password: the authenticator verified the person
+    let c3 = client();
+    let (_, opts) = app.post(&c3, "/auth/passkey/options", json!({})).await;
+    assert_eq!(opts["publicKey"]["userVerification"], "required");
+    let (st, r) = app.post(&c3, "/auth/passkey", json!({"token": opts["token"], "credential": assertion(&mut key, &opts["publicKey"], Some(&handle))})).await;
+    assert_eq!(st, 200, "{r}");
+    assert_eq!(app.get(&c3, "/me").await.1["user"]["id"], mia_id.as_str());
+    // … not when it only saw someone touch it
+    key.user_verified = false;
+    let c4 = client();
+    let (_, opts) = app.post(&c4, "/auth/passkey/options", json!({})).await;
+    let (st, r) = app.post(&c4, "/auth/passkey", json!({"token": opts["token"], "credential": assertion(&mut key, &opts["publicKey"], None)})).await;
+    assert_eq!(st, 400, "{r}");
+    assert_eq!(app.get(&c4, "/me").await.1["user"], Value::Null);
+
+    // a passkey counts as two-factor when the workspace requires it
+    let (newbie, _) = app.user(&owner, "neo@acme.test", "member").await;
+    assert_eq!(app.put(&owner, "/admin/settings", json!({"requireTwoFactor": "everyone"})).await.0, 200);
+    assert_eq!(app.get(&newbie, "/me").await.1["mustSetUpTwoFactor"], true);
+    assert_eq!(app.get(&newbie, "/spaces").await.0, 403);
+    add_passkey(&app, &newbie, false, None).await;
+    assert_eq!(app.get(&newbie, "/me").await.1["mustSetUpTwoFactor"], false);
+    assert_eq!(app.get(&newbie, "/spaces").await.0, 200);
+
+    // rename, remove; an admin reset removes them all
+    let (_, list) = app.get(&mia, "/me/passkeys").await;
+    let first = list[0]["id"].as_str().unwrap().to_string();
+    assert_eq!(app.patch(&mia, &format!("/me/passkeys/{first}"), json!({"name": "Work laptop"})).await.1["name"], "Work laptop");
+    assert_eq!(app.delete(&mia, &format!("/me/passkeys/{first}")).await, 204);
+    assert_eq!(app.delete(&other, &format!("/me/passkeys/{}", list[1]["id"].as_str().unwrap())).await, 404, "not theirs");
+    enrol(&app, &owner).await;
+    assert_eq!(app.post(&owner, &format!("/users/{mia_id}/reset-mfa"), json!({})).await.0, 204);
+    let n: i64 = sqlx::query_scalar("SELECT count(*) FROM passkeys WHERE user_id = $1::uuid").bind(&mia_id).fetch_one(&app.state.db).await.unwrap();
+    assert_eq!(n, 0);
+}

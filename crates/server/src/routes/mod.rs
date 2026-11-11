@@ -18,6 +18,7 @@ pub mod links;
 pub mod notifications;
 pub mod openapi;
 pub mod pages;
+pub mod passkeys;
 pub mod people;
 pub mod properties;
 pub mod reports;
@@ -55,6 +56,12 @@ pub fn router(state: AppState) -> Router {
         .route("/auth/providers", get(crate::sso::list))
         .route("/auth/forgot", post(account::forgot))
         .route("/auth/mfa", post(security::login))
+        .route("/auth/mfa/passkey", post(security::passkey_challenge))
+        .route("/auth/passkey/options", post(passkeys::login_options))
+        .route("/auth/passkey", post(passkeys::login))
+        .route("/me/passkeys", get(passkeys::list).post(passkeys::add))
+        .route("/me/passkeys/options", post(passkeys::add_options))
+        .route("/me/passkeys/{id}", axum::routing::patch(passkeys::rename).delete(passkeys::delete))
         .route("/me/sessions", get(security::sessions))
         .route("/me/sessions/{id}", delete(security::revoke_session))
         .route("/me/sessions/revoke-others", post(security::revoke_others))

@@ -477,7 +477,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** OIDC (Google, Microsoft Entra ID, Okta, Keycloak, Authentik, GitLab) `C D X B O`
 - [x] **P1** SAML 2.0 SSO `C D X B`
 - [x] **P1** LDAP / Active Directory (bind auth + group sync) `DC D X B`
-- [~] **P1** MFA: TOTP, WebAuthn/passkeys, recovery codes; enforce per workspace/group `C D` (TOTP + recovery codes; required for admins or everyone as a workspace setting, enforced on every session incl. SSO; no passkeys)
+- [x] **P1** MFA: TOTP, WebAuthn/passkeys, recovery codes; enforce per workspace/group `C D` — TOTP + recovery codes; passkeys (`crate::webauthn`: ES256 / EdDSA / RS256 verified with ring, no attestation, rising signature counter; added with a recent sign-in or the password) as the second step or for signing in without a password (user verification required); required for admins or everyone as a workspace setting (a passkey counts), enforced on every session incl. SSO. Per group: not yet
 - [~] **P1** Personal API tokens (scoped, expiring) and OAuth2 apps (authorization code + PKCE) `C D X O B` (read-only or read/write scope and expiry; read-only tokens also limit the MCP tools; no OAuth2 apps)
 - [~] **P1** User profiles (avatar, title, department, timezone, language, bio) and people directory `C X` (job title, department, location, time zone with local time, bio; People directory with search and departments; profiles list recent pages the viewer can see; mentions and bylines link to profiles; profile pictures: uploaded, cropped square, 256 px PNG re-encoded (no EXIF / GPS), shown wherever a person appears; interface language in Settings → Appearance)
 - [ ] **P2** SCIM 2.0 provisioning (users + groups) `C D`

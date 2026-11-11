@@ -241,6 +241,12 @@ Trash*). Restore it from there; space admins can also delete pages for good.
 
 ## Your profile
 
-Profile menu → *Profile, API tokens & AI*: name, password, two-factor authentication (an
+Profile menu → *Profile, API tokens & AI*: name, password, passkeys, two-factor authentication (an
 authenticator app), active sessions, e-mail notifications and API tokens (for scripts and AI
 assistants that work with the wiki on your behalf).
+
+**Passkeys** sign you in with your device's fingerprint, face or PIN (or a security key):
+*Sign in with a passkey* on the sign-in page needs no password, and after a password the passkey
+can be the second step instead of a code. A passkey only works on this wiki, so it can't be
+phished. Add one under *Passkeys* (right after signing in, or with your password); passkeys
+synced by your password manager or phone show *Synced*.

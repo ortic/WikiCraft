@@ -527,7 +527,7 @@ paths:
                 password: *id001
       responses:
         '200':
-          description: Session cookie set, or a two-factor challenge
+          description: Session cookie set, or a two-factor challenge with the methods the person has
           content:
             application/json:
               schema:
@@ -536,6 +536,12 @@ paths:
                   ok: *id003
                   mfaRequired: *id003
                   mfaToken: *id001
+                  methods:
+                    type: array
+                    items:
+                      enum:
+                      - code
+                      - passkey
         4XX:
           description: Error
           content:
@@ -550,7 +556,7 @@ paths:
     post:
       tags:
       - Auth
-      summary: Complete a sign-in with a TOTP or recovery code
+      summary: Complete a sign-in with a TOTP or recovery code, or a passkey (after /auth/mfa/passkey)
       operationId: post_auth_mfa
       requestBody:
         required: true
@@ -561,9 +567,131 @@ paths:
               properties:
                 mfaToken: *id001
                 code: *id001
+                passkey: &id007
+                  type: object
+                  properties:
+                    id: *id001
+                    rawId: *id001
+                    type: *id001
+                    response:
+                      type: object
+                      properties:
+                        clientDataJSON: *id001
+                        authenticatorData: *id001
+                        signature: *id001
+                        userHandle:
+                          type:
+                          - string
+                          - 'null'
+                  required:
+                  - rawId
+                  - response
       responses:
         '200':
           description: OK
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - {}
+      - session: []
+      - token: []
+  /auth/mfa/passkey:
+    post:
+      tags:
+      - Auth
+      summary: 'Second step with a passkey: options for navigator.credentials.get() (null without passkeys) and the methods
+        the person has'
+      operationId: post_auth_mfa_passkey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                mfaToken: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  methods:
+                    type: array
+                    items: *id001
+                  publicKey:
+                    type:
+                    - object
+                    - 'null'
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - {}
+      - session: []
+      - token: []
+  /auth/passkey/options:
+    post:
+      tags:
+      - Auth
+      summary: Start a sign-in with a passkey alone (binary values base64url)
+      operationId: post_auth_passkey_options
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: *id001
+                  publicKey: *id006
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - {}
+      - session: []
+      - token: []
+  /auth/passkey:
+    post:
+      tags:
+      - Auth
+      summary: 'Sign in with a passkey that verified the person (PIN, fingerprint, face): no password, no second step'
+      operationId: post_auth_passkey
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token: *id001
+                credential: *id007
+              required:
+              - token
+              - credential
+      responses:
+        '200':
+          description: Session cookie set
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  ok: *id003
         4XX:
           description: Error
           content:
@@ -581,7 +709,7 @@ paths:
       summary: Sign out (deletes the session)
       operationId: post_auth_logout
       responses:
-        '204': &id007
+        '204': &id008
           description: Done
         4XX:
           description: Error
@@ -623,7 +751,7 @@ paths:
               properties:
                 email: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -841,7 +969,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id008
+              schema: &id009
                 type: object
                 properties:
                   text: *id001
@@ -883,7 +1011,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id008
+              schema: *id009
         4XX:
           description: Error
           content:
@@ -1149,7 +1277,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -1272,7 +1400,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -1303,6 +1431,162 @@ paths:
       responses:
         '200':
           description: OK
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/passkeys:
+    get:
+      tags:
+      - Account
+      summary: Your passkeys
+      operationId: get_me_passkeys
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: &id010
+                  type: object
+                  properties:
+                    id: *id002
+                    name: *id001
+                    backedUp:
+                      type: boolean
+                      description: synced to the person's other devices
+                    createdAt: *id004
+                    lastUsedAt:
+                      type:
+                      - string
+                      - 'null'
+                      format: date-time
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    post:
+      tags:
+      - Account
+      summary: Store a new passkey (the answer of navigator.credentials.create(), as PublicKeyCredential.toJSON())
+      operationId: post_me_passkeys
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                token: *id001
+                name: *id001
+                credential:
+                  type: object
+                  properties:
+                    rawId: *id001
+                    response:
+                      type: object
+                      properties:
+                        clientDataJSON: *id001
+                        attestationObject: *id001
+                        transports:
+                          type: array
+                          items: *id001
+              required:
+              - token
+              - credential
+      responses:
+        '201':
+          description: Added
+          content:
+            application/json:
+              schema: *id010
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/passkeys/options:
+    post:
+      tags:
+      - Account
+      summary: Options for navigator.credentials.create() (binary values base64url); needs a sign-in from the last 15 minutes
+        or the password
+      operationId: post_me_passkeys_options
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token: *id001
+                  publicKey: *id006
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /me/passkeys/{id}:
+    patch:
+      tags:
+      - Account
+      summary: Rename a passkey
+      operationId: patch_me_passkeys_id
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                name: *id001
+              required:
+              - name
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema: *id010
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+      - Account
+      summary: Remove a passkey
+      operationId: delete_me_passkeys_id
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -1363,7 +1647,7 @@ paths:
                 password: *id001
                 code: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -1491,7 +1775,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -1509,7 +1793,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -1590,7 +1874,7 @@ paths:
       summary: Remove your profile picture
       operationId: delete_me_avatar
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -1763,7 +2047,7 @@ paths:
                 status: *id001
                 password: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -1820,7 +2104,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -1882,7 +2166,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -1909,7 +2193,7 @@ paths:
               properties:
                 userId: *id002
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -1932,7 +2216,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -2068,7 +2352,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -2173,7 +2457,7 @@ paths:
               required:
               - grants
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -2231,7 +2515,8 @@ paths:
     get:
       tags:
       - Spaces
-      summary: Broken links and orphaned pages (pages no other page links to) in the space, among the pages the caller may see
+      summary: Broken links and orphaned pages (pages no other page links to) in the space, among the pages the caller may
+        see
       operationId: get_spaces_key_link_report
       parameters:
       - name: key
@@ -2240,13 +2525,82 @@ paths:
         schema: *id001
       responses:
         '200':
-          description: 'brokenLinks: [{pageId, pageTitle, blockId, label, via (link | include | property), problem (trashed | deleted | missing | notImported), missingSpace, missingTitle, missingSource}], orphans: [{id, title, icon, parentId, parentTitle, updatedAt}], truncated, pending (pages whose links are not read yet)'
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  brokenLinks:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        pageId: *id002
+                        pageTitle: *id001
+                        blockId:
+                          type:
+                          - string
+                          - 'null'
+                        label: *id001
+                        via:
+                          enum:
+                          - link
+                          - include
+                          - property
+                        problem:
+                          enum:
+                          - trashed
+                          - deleted
+                          - missing
+                          - notImported
+                        missingSpace:
+                          type:
+                          - string
+                          - 'null'
+                        missingTitle:
+                          type:
+                          - string
+                          - 'null'
+                        missingSource:
+                          type:
+                          - string
+                          - 'null'
+                  orphans:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: *id002
+                        title: *id001
+                        icon:
+                          type:
+                          - string
+                          - 'null'
+                        parentId:
+                          type:
+                          - string
+                          - 'null'
+                          format: uuid
+                        parentTitle:
+                          type:
+                          - string
+                          - 'null'
+                        updatedAt: *id004
+                  truncated: *id003
+                  pending:
+                    type: integer
+                    description: pages whose links aren't read yet
         4XX:
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      security:
+      - {}
+      - session: []
+      - token: []
   /spaces/{key}/blog:
     get:
       tags:
@@ -2413,7 +2767,7 @@ paths:
                 fullWidth: *id003
                 childTemplate: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -2431,7 +2785,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -2495,7 +2849,7 @@ paths:
                 position:
                   type: number
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -2543,7 +2897,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -2598,7 +2952,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -2636,7 +2990,8 @@ paths:
     get:
       tags:
       - Pages
-      summary: Pages that link to this page (links, included pages, page-link properties), among the pages the caller may see
+      summary: Pages that link to this page (links, included pages, page-link properties), among the pages the caller may
+        see
       operationId: get_pages_id_backlinks
       parameters:
       - name: id
@@ -2645,13 +3000,41 @@ paths:
         schema: *id001
       responses:
         '200':
-          description: 'pages: [{id, title, icon, kind, spaceKey, spaceName, via (link | include | property)}]'
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  pages:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        id: *id002
+                        title: *id001
+                        icon:
+                          type:
+                          - string
+                          - 'null'
+                        kind: *id001
+                        spaceKey: *id001
+                        spaceName: *id001
+                        via:
+                          enum:
+                          - link
+                          - include
+                          - property
         4XX:
           description: Error
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+      security:
+      - {}
+      - session: []
+      - token: []
   /pages/{id}/viewers:
     get:
       tags:
@@ -2723,7 +3106,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -2961,7 +3344,7 @@ paths:
                   items:
                     $ref: '#/components/schemas/Restriction'
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -3174,7 +3557,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -3192,7 +3575,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -3274,7 +3657,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id009
+              schema: &id011
                 type: object
                 properties:
                   status:
@@ -3325,7 +3708,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id009
+              schema: *id011
         4XX:
           description: Error
           content:
@@ -3473,7 +3856,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -3491,7 +3874,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -3621,7 +4004,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -3639,7 +4022,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -3732,7 +4115,7 @@ paths:
               properties:
                 userId: *id002
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -3780,7 +4163,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -3798,7 +4181,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -3825,7 +4208,7 @@ paths:
               properties:
                 includeChildren: *id003
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -3843,7 +4226,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -4023,7 +4406,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -4077,7 +4460,7 @@ paths:
               required:
               - password
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -4249,7 +4632,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -4376,7 +4759,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -4397,9 +4780,9 @@ paths:
       - name: w
         in: query
         required: false
-        description: 'a JPEG, PNG or WebP scaled down to this width: 640, 960, 1280 or 1920 (JPEG stays JPEG, the others become lossless WebP); the original when it is not wider'
-        schema:
-          type: integer
+        description: 'a JPEG, PNG or WebP scaled down to this width: 640, 960, 1280 or 1920 (JPEG stays JPEG, the others become
+          lossless WebP); the original when it isn''t wider'
+        schema: *id005
       responses:
         '200':
           description: OK
@@ -4611,7 +4994,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id010
+              schema: &id012
                 type: object
                 properties:
                   mode: *id001
@@ -4694,7 +5077,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id010
+              schema: *id012
         4XX:
           description: Error
           content:
@@ -4894,7 +5277,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -5116,7 +5499,8 @@ paths:
     get:
       tags:
       - Discovery
-      summary: Find a page by space + title or slug (readable address /wiki/KEY/slug; exact title first, then slug, then addresses the page had before a rename or move) or by imported Confluence id
+      summary: 'Find a page by space + title or slug (readable address /wiki/KEY/slug: exact title first, then slug, then
+        addresses the page had before a rename or move) or by imported Confluence id'
       operationId: get_resolve
       parameters:
       - name: space
@@ -5132,7 +5516,7 @@ paths:
       - name: slug
         in: query
         required: false
-        description: slug of a readable address (the `slug` of GET /pages/{id})
+        description: slug of a readable address (the slug of GET /pages/{id})
         schema: *id001
       - name: source
         in: query
@@ -5190,7 +5574,7 @@ paths:
                   type: array
                   items: *id002
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -5601,7 +5985,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -5629,7 +6013,7 @@ paths:
                 description: *id001
                 pageId: *id002
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -5815,7 +6199,7 @@ paths:
     post:
       tags:
       - Import & export
-      summary: Start an upload in parts (admins; for multi-GB imports)
+      summary: Start an upload in parts (admins; multi-GB imports)
       operationId: post_uploads
       requestBody:
         required: true
@@ -5825,11 +6209,27 @@ paths:
               type: object
               properties:
                 filename: *id001
-                size:
-                  type: integer
+                size: *id005
+              required:
+              - filename
+              - size
       responses:
         '201':
-          description: '{id, filename, size, partSize, parts (parts received: the next to send), received, complete}'
+          description: Started
+          content:
+            application/json:
+              schema: &id013
+                type: object
+                properties:
+                  id: *id002
+                  filename: *id001
+                  size: *id005
+                  partSize: *id005
+                  parts:
+                    type: integer
+                    description: 'parts received: the next one to send has this number'
+                  received: *id005
+                  complete: *id003
         4XX:
           description: Error
           content:
@@ -5849,7 +6249,10 @@ paths:
         schema: *id001
       responses:
         '200':
-          description: '{id, filename, size, partSize, parts (parts received: the next to send), received, complete}'
+          description: OK
+          content:
+            application/json:
+              schema: *id013
         4XX:
           description: Error
           content:
@@ -5867,8 +6270,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204':
-          description: Deleted
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -5879,7 +6281,8 @@ paths:
     put:
       tags:
       - Import & export
-      summary: Part n (from 0) of an upload, raw bytes; parts come in order, every part has partSize bytes except the last; a part sent again is acknowledged
+      summary: 'Part n (from 0), raw bytes: parts come in order and have partSize bytes except the last; a part sent again
+        is acknowledged'
       operationId: put_uploads_id_parts_n
       parameters:
       - name: id
@@ -5899,7 +6302,10 @@ paths:
               format: binary
       responses:
         '200':
-          description: '{id, filename, size, partSize, parts (parts received: the next to send), received, complete}'
+          description: OK
+          content:
+            application/json:
+              schema: *id013
         4XX:
           description: Error
           content:
@@ -5919,7 +6325,7 @@ paths:
         schema: *id001
       responses:
         '200':
-          description: Analysis report
+          description: OK
         4XX:
           description: Error
           content:
@@ -5946,10 +6352,16 @@ paths:
               properties:
                 options:
                   type: object
-                  description: spaceKey, skipHistory, skipDrafts, skipTrash, update, overwriteLocalChanges
+                  description: 'ImportOptions: spaceKey, skipHistory, skipDrafts, skipTrash, update, overwriteLocalChanges'
       responses:
         '202':
-          description: 'Queued: {jobId}'
+          description: Queued
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  jobId: *id002
         4XX:
           description: Error
           content:
@@ -6182,7 +6594,7 @@ paths:
                   type: string
                   description: the space key
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -6201,7 +6613,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -6220,7 +6632,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: &id011
+              schema: &id014
                 type: object
                 properties:
                   publicLinks: *id003
@@ -6282,13 +6694,13 @@ paths:
         required: true
         content:
           application/json:
-            schema: *id011
+            schema: *id014
       responses:
         '200':
           description: OK
           content:
             application/json:
-              schema: *id011
+              schema: *id014
         4XX:
           description: Error
           content:
@@ -6306,7 +6718,7 @@ paths:
           description: OK
           content:
             application/json:
-              schema: *id011
+              schema: *id014
         4XX:
           description: Error
           content:
@@ -6613,7 +7025,7 @@ paths:
                   - teams
                   - googlechat
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:
@@ -6631,7 +7043,7 @@ paths:
         required: true
         schema: *id001
       responses:
-        '204': *id007
+        '204': *id008
         4XX:
           description: Error
           content:

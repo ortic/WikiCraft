@@ -1,8 +1,9 @@
 import { t } from '../i18n'
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Copy, Download, LogOut, Monitor, ShieldCheck, Smartphone } from 'lucide-react'
-import { api, formatDate } from '../api'
+import { Copy, Download, Fingerprint, LogOut, Monitor, ShieldCheck, Smartphone } from 'lucide-react'
+import { ApiError, api, formatDate } from '../api'
+import { cancelled, createPasskey, passkeysSupported } from '../passkeys'
 import { Modal, Spinner, useToast } from '../ui'
 
 interface MfaStatus {
@@ -10,6 +11,16 @@ interface MfaStatus {
   enabledAt: string | null
   recoveryCodesLeft: number
   hasPassword: boolean
+  passkeys: number
+}
+
+interface Passkey {
+  id: string
+  name: string
+  /** synced to the person's other devices */
+  backedUp: boolean
+  createdAt: string
+  lastUsedAt: string | null
 }
 
 interface Session {
@@ -77,6 +88,93 @@ function EnableDialog({ onDone, onClose }: { onDone: (codes: string[]) => void; 
   )
 }
 
+/** Passkeys: sign in with the device's fingerprint, face or PIN, or use one as the second step. */
+function Passkeys({ hasPassword }: { hasPassword: boolean }) {
+  const qc = useQueryClient()
+  const toast = useToast()
+  const list = useQuery({ queryKey: ['passkeys'], queryFn: () => api.get<Passkey[]>('/me/passkeys') })
+  const [busy, setBusy] = useState(false)
+  const changed = () => {
+    qc.invalidateQueries({ queryKey: ['passkeys'] })
+    qc.invalidateQueries({ queryKey: ['mfa'] })
+    // a passkey also fulfils the workspace's two-factor requirement
+    qc.invalidateQueries({ queryKey: ['me'] })
+  }
+  const add = async () => {
+    setBusy(true)
+    try {
+      type Options = { token: string; publicKey: Record<string, unknown> }
+      let options: Options
+      try {
+        options = await api.post<Options>('/me/passkeys/options', {})
+      } catch (e) {
+        // signed in a while ago: confirm with the password first
+        if (!(e instanceof ApiError && e.status === 403)) throw e
+        if (!hasPassword) {
+          toast(t('Sign out and in again, then add the passkey'))
+          return
+        }
+        const password = window.prompt(t('Enter your password to add a passkey'))
+        if (!password) return
+        options = await api.post<Options>('/me/passkeys/options', { password })
+      }
+      const credential = await createPasskey(options.publicKey)
+      await api.post('/me/passkeys', { token: options.token, name: device(navigator.userAgent), credential })
+      toast(t('Passkey added'))
+      changed()
+    } catch (e) {
+      if (!cancelled(e)) toast(e instanceof Error ? e.message : t('Failed'))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const rename = async (p: Passkey) => {
+    const name = window.prompt(t('Name of this passkey'), p.name)
+    if (!name?.trim()) return
+    await api.patch(`/me/passkeys/${p.id}`, { name })
+    changed()
+  }
+  const remove = async (p: Passkey) => {
+    if (!window.confirm(t('Remove the passkey “{name}”? You can’t sign in with it any more.', { name: p.name }))) return
+    await api.del(`/me/passkeys/${p.id}`)
+    toast(t('Passkey removed'))
+    changed()
+  }
+  return (
+    <div className="card" style={{ marginBottom: 16 }}>
+      <h3 style={{ marginTop: 0 }} className="row"><Fingerprint size={17} />{' '}{t('Passkeys')}</h3>
+      <p className="muted" style={{ marginTop: 0 }}>{t('Sign in with your fingerprint, face or device PIN instead of a password, or use a passkey as the second step after it. Passkeys can’t be phished: they only work on this wiki.')}</p>
+      {(list.data?.length ?? 0) > 0 && (
+        <table className="list" style={{ marginBottom: 12 }}>
+          <tbody>
+            {list.data!.map((p) => (
+              <tr key={p.id}>
+                <td>
+                  <b>{p.name}</b>
+                  {p.backedUp && <span className="badge" style={{ marginInlineStart: 6 }} title={t('Synced to your other devices')}>{t('Synced')}</span>}
+                </td>
+                <td className="faint small">
+                  {t('Added {date}', { date: formatDate(p.createdAt) })}
+                  {p.lastUsedAt ? ` · ${t('last used {date}', { date: formatDate(p.lastUsedAt) })}` : ''}
+                </td>
+                <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                  <button className="btn btn-ghost btn-sm" onClick={() => rename(p)}>{t('Rename')}</button>
+                  <button className="btn btn-ghost btn-sm" onClick={() => remove(p)}>{t('Remove')}</button>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {passkeysSupported() ? (
+        <button className={`btn${list.data?.length ? '' : ' btn-primary'}`} disabled={busy} onClick={add}><Fingerprint size={15} />{' '}{t('Add a passkey')}</button>
+      ) : (
+        <p className="faint small" style={{ marginBottom: 0 }}>{t('This browser can’t use passkeys here (they need a secure https connection).')}</p>
+      )}
+    </div>
+  )
+}
+
 /** Settings → Security: two-factor authentication and active sessions. */
 export default function SecuritySettings() {
   const qc = useQueryClient()
@@ -114,6 +212,7 @@ export default function SecuritySettings() {
   }
   return (
     <>
+      <Passkeys hasPassword={mfa.data?.hasPassword ?? true} />
       <div className="card" style={{ marginBottom: 16 }}>
         <h3 style={{ marginTop: 0 }} className="row"><ShieldCheck size={17} />{' '}{t('Two-factor authentication')}</h3>
         {!mfa.data ? (

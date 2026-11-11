@@ -144,7 +144,7 @@ pub struct MustEnrollTwoFactor;
 fn allowed_before_enrollment(method: &Method, path: &str) -> bool {
     let p = path.trim_end_matches('/');
     let p = p.strip_prefix("/api/v1").or_else(|| p.strip_prefix("/api")).unwrap_or(p);
-    matches!(p, "/me" | "/features" | "/auth/logout" | "/me/mfa" | "/me/mfa/setup" | "/me/mfa/enable")
+    matches!(p, "/me" | "/features" | "/auth/logout" | "/me/mfa" | "/me/mfa/setup" | "/me/mfa/enable" | "/me/passkeys" | "/me/passkeys/options")
         || (method == Method::GET && matches!(p, "/setup" | "/me/sessions"))
 }
 
@@ -152,7 +152,8 @@ async fn user_from_session(state: &AppState, token: &str) -> Result<Option<(User
     type Row = (Uuid, Uuid, Option<String>, String, String, String, Option<String>, bool);
     let row: Option<Row> = sqlx::query_as(
         "SELECT u.id, u.workspace_id, u.email, u.name, u.role, u.status, u.avatar_url,
-                u.totp_enabled_at IS NULL AND (COALESCE(w.settings->>'requireTwoFactor', 'off') = 'everyone'
+                u.totp_enabled_at IS NULL AND NOT EXISTS (SELECT 1 FROM passkeys pk WHERE pk.user_id = u.id)
+                    AND (COALESCE(w.settings->>'requireTwoFactor', 'off') = 'everyone'
                     OR (COALESCE(w.settings->>'requireTwoFactor', 'off') = 'admins' AND u.role IN ('owner', 'admin'))) AS must_enroll
            FROM sessions s JOIN users u ON u.id = s.user_id JOIN workspaces w ON w.id = u.workspace_id
           WHERE s.token_hash = $1 AND s.expires_at > now() AND u.status = 'active'

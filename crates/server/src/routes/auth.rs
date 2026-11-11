@@ -133,7 +133,8 @@ pub async fn login(State(state): State<AppState>, headers: HeaderMap, Json(req):
             // second factor: no session yet, just a short-lived challenge
             if crate::routes::security::required(&state, id).await? {
                 let token = crate::routes::security::challenge(&state, id, None).await?;
-                return Ok(Json(json!({ "mfaRequired": true, "mfaToken": token })).into_response());
+                let methods = crate::routes::security::methods(&state, id).await?;
+                return Ok(Json(json!({ "mfaRequired": true, "mfaToken": token, "methods": methods })).into_response());
             }
             let cookie = create_session(&state, id, &headers).await?;
             audit::log(&state, ws, Some(id), "auth.login", None, None, json!({})).await;

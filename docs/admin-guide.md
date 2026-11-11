@@ -148,10 +148,16 @@ Things worth deciding up front:
 - `trustEmail`: only for providers whose e-mail addresses you trust; an account is linked to an
   existing one (or claims an imported author) by verified e-mail.
 
-People can turn on two-factor authentication (TOTP) under their profile; it also applies after
-SSO sign-ins. *Administration → Overview → Two-factor authentication* can require it for
-administrators or for everyone: until they've set it up, those people only see the setup screen.
-API tokens are separate credentials and keep working.
+People can turn on two-factor authentication (TOTP) or add passkeys under their profile; the
+second step also applies after SSO sign-ins. A passkey that verified the person (PIN, fingerprint,
+face) signs in without a password and counts as two factors. *Administration → Overview →
+Two-factor authentication* can require it for administrators or for everyone (a passkey fulfils
+it): until they've set it up, those people only see the setup screen. API tokens are separate
+credentials and keep working. *Reset two-factor* on a user removes their code and their passkeys.
+
+Passkeys belong to the host name of `WIKICRAFT_BASE_URL` and need https (or `localhost`): after a
+move to another domain people sign in with their password and add their passkeys again. Browsers
+don't accept passkeys on a bare IP address.
 
 ## E-mail
 
