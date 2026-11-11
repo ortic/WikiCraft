@@ -114,9 +114,15 @@ test('a link to a block opens the page at that block', async ({ browser }) => {
     return find(p.content)
   }, pageId)
   expect(callout).toMatch(/^[a-z][a-z0-9]{7}$/)
-  // the drag handle's link button copies the block's link
-  await editor.getByText('Dates are estimates.').hover()
-  await page.locator('.drag-handle .block-link').click()
+  // the drag handle's link button copies the block's link; the handle follows mouse movement,
+  // so move again until the editor has placed it (slow CI machines miss a single hover)
+  const handle = page.locator('.drag-handle .block-link')
+  await expect(async () => {
+    await page.mouse.move(0, 0)
+    await editor.getByText('Dates are estimates.').hover()
+    await expect(handle).toBeVisible({ timeout: 1_000 })
+  }).toPass({ timeout: 15_000 })
+  await handle.click()
   await expect(page.locator('.toast')).toHaveText('Link to this block copied')
   const copied = await page.evaluate(() => navigator.clipboard.readText())
   expect(copied).toMatch(new RegExp(`/pages/${pageId}#block-[a-z0-9]{8}$`))

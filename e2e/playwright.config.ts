@@ -10,7 +10,9 @@ export default defineConfig({
   fullyParallel: false,
   timeout: 60_000,
   expect: { timeout: 10_000 },
-  retries: process.env.CI ? 1 : 0,
+  // no retries: the journey's steps build on each other (a retried step would start from a
+  // workspace that's already set up), so a retry only hides the real failure
+  retries: 0,
   reporter: process.env.CI ? [['github'], ['html', { open: 'never' }]] : 'list',
   use: {
     baseURL,
