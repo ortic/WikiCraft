@@ -7,8 +7,9 @@ import { Mark, Node, mergeAttributes } from '@tiptap/core'
 import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { FileText, Paperclip, ListTree, Hash, Puzzle, Link2, Download, Settings2 } from 'lucide-react'
+import { FileText, Paperclip, ListTree, Hash, Puzzle, Link2, Download, Settings2, Code2 } from 'lucide-react'
 import { api, formatDateOnly, type Page, type PmNode } from '../api'
+import { Spinner } from '../ui'
 import { Emoticon as EmoticonIcon, LineIcon, SYMBOL_COLORS, SymbolPicker, parseSymbol } from '../icons'
 import { LIVE_MACROS, LiveMacro } from './MacroView'
 import { useEditable } from './useEditable'
@@ -190,6 +191,9 @@ function AttachmentView({ node }: ReactNodeViewProps) {
   const lower = name.toLowerCase()
   const isImage = /\.(png|jpe?g|gif|webp)$/.test(lower)
   const isPdf = lower.endsWith('.pdf')
+  // the server answers range requests, so players can seek without loading the whole file
+  const isVideo = /\.(mp4|m4v|webm|mov|ogv)$/.test(lower)
+  const isAudio = /\.(mp3|m4a|aac|wav|ogg|oga|opus|flac)$/.test(lower)
   return (
     <NodeViewWrapper className="block-card" contentEditable={false}>
       <div className="attachment-card">
@@ -207,6 +211,8 @@ function AttachmentView({ node }: ReactNodeViewProps) {
       </div>
       {href && isImage && <img src={href} alt={name} style={{ marginTop: 10, maxHeight: 360 }} />}
       {href && isPdf && <iframe src={href} title={name} style={{ width: '100%', height: 420, border: 0, marginTop: 10, borderRadius: 6 }} />}
+      {href && isVideo && <video className="attachment-media" src={href} controls preload="metadata" aria-label={name} />}
+      {href && isAudio && <audio className="attachment-media" src={href} controls preload="metadata" aria-label={name} />}
     </NodeViewWrapper>
   )
 }
@@ -241,20 +247,70 @@ export function embedUrl(url: string): string | null {
     if (host === 'figma.com') return `https://www.figma.com/embed?embed_host=wikicraft&url=${encodeURIComponent(url)}`
     if (host === 'docs.google.com') return url.replace(/\/edit.*$/, '/preview')
     if (host === 'miro.com' && u.pathname.startsWith('/app/board/')) return `https://miro.com/app/live-embed/${u.pathname.split('/')[3]}/`
+    if (host === 'drive.google.com' && /^\/file\/d\/[\w-]+/.test(u.pathname)) return `https://drive.google.com/file/d/${u.pathname.split('/')[3]}/preview`
+    // shared Airtable views and forms (shr…), with or without the base (app…)
+    if (host === 'airtable.com') {
+      const path = u.pathname.replace(/^\/embed/, '')
+      if (/^\/(app\w+\/)?shr\w+\/?$/.test(path)) return `https://airtable.com/embed${path}`
+    }
+    if (host.endsWith('typeform.com') && /^\/to\/\w+/.test(u.pathname)) return `https://form.typeform.com/to/${u.pathname.split('/')[2]}`
+    if (host === 'codepen.io' && /^\/[\w-]+\/(pen|full|details)\/\w+/.test(u.pathname)) {
+      const [, user, , id] = u.pathname.split('/')
+      return `https://codepen.io/${user}/embed/${id}?default-tab=result`
+    }
   } catch {
     /* not a URL */
   }
   return null
 }
 
+/** A GitHub gist (`https://gist.github.com/<user>/<id>`): no frame embed exists, so the server
+ * fetches its files and they show as code. */
+export function isGist(url: string): boolean {
+  return /^https:\/\/gist\.github\.com\/(?:[\w-]+\/)?[0-9a-f]{8,64}\/?$/i.test(url.trim())
+}
+
+interface GistData {
+  url: string
+  description: string | null
+  owner: string | null
+  files: { filename: string; language: string | null; content: string; truncated: boolean }[]
+  error?: string
+}
+
+function GistView({ url }: { url: string }) {
+  const q = useQuery({ queryKey: ['gist', url], queryFn: () => api.get<GistData>(`/unfurl/gist?url=${encodeURIComponent(url)}`), staleTime: 3_600_000, retry: false })
+  const g = q.data
+  return (
+    <>
+      <div className="block-label">
+        <Code2 size={13} />{' '}{tr('GitHub gist')}{g?.owner ? ` · ${g.owner}` : ''}{g?.description ? ` · ${g.description}` : ''}</div>
+      {q.isLoading ? (
+        <Spinner />
+      ) : !g || g.error || !g.files.length ? (
+        <p className="faint small">{tr('The gist couldn’t be loaded.')}</p>
+      ) : (
+        g.files.map((f) => (
+          <div key={f.filename} className="gist-file">
+            <div className="gist-file-name small">{f.filename}{f.truncated ? ` · ${tr('shortened')}` : ''}</div>
+            <pre className="gist-code"><code>{f.content}</code></pre>
+          </div>
+        ))
+      )}
+      <a href={url} target="_blank" rel="noreferrer noopener">{url}</a>
+    </>
+  )
+}
+
 function EmbedView({ node }: ReactNodeViewProps) {
   const url = (node.attrs.url as string) || ''
-  const frame = embedUrl(url)
+  const gist = isGist(url)
+  const frame = gist ? null : embedUrl(url)
   // other sites get a preview card (title, description, site), fetched by the server
   const preview = useQuery({
     queryKey: ['unfurl', url],
     queryFn: () => api.get<{ title: string | null; description: string | null; siteName: string | null }>(`/unfurl?url=${encodeURIComponent(url)}`),
-    enabled: !frame && /^https?:\/\//i.test(url),
+    enabled: !frame && !gist && /^https?:\/\//i.test(url),
     staleTime: 3_600_000,
     retry: false,
   })
@@ -267,11 +323,13 @@ function EmbedView({ node }: ReactNodeViewProps) {
   const p = preview.data
   return (
     <NodeViewWrapper className="block-card" contentEditable={false}>
-      {frame ? (
+      {gist ? (
+        <GistView url={url} />
+      ) : frame ? (
         <>
           <div className="block-label">
             <Link2 size={13} />{' '}{tr('Embed')}</div>
-          <iframe className="embed-frame" src={frame} title={url} sandbox="allow-scripts allow-same-origin allow-popups allow-presentation" allowFullScreen />
+          <iframe className="embed-frame" src={frame} title={url} sandbox="allow-scripts allow-same-origin allow-popups allow-presentation allow-forms" allowFullScreen />
           <a href={url} target="_blank" rel="noreferrer noopener">{url}</a>
         </>
       ) : (

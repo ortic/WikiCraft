@@ -286,13 +286,13 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [~] **P1** Mermaid, PlantUML (server-side render, sandboxed) `D X` (Mermaid client-side only; no PlantUML render)
 - [x] **P1** Draw.io diagrams (embedded editor, stored as attachment + SVG preview) `D X C(app)` — `/draw.io diagram`: draw.io in embed mode in a full-screen frame (diagrams.net by default, or a self-hosted draw.io set in Admin; empty turns editing off), JSON postMessage protocol with origin checks, sandboxed frame; XML kept in the page, PNG preview attachment for readers / shared pages / exports; cell labels searchable; Confluence draw.io macros import as editable diagrams (their diagram file + preview)
 - [x] **P1** Excalidraw sketches `D`
-- [~] **P1** File / attachment block with inline preview (PDF, Office, video, audio) `C D` (PDF/image preview only)
-- [~] **P1** Embeds: YouTube, Vimeo, Loom, Figma, Miro, Google Docs/Sheets/Slides, Airtable, Typeform, GitHub gist, iframe allowlist `C D O` (no Airtable/Typeform/gist)
+- [~] **P1** File / attachment block with inline preview (PDF, Office, video, audio) `C D` (PDF, image, video and audio previews (players seek with HTTP range requests); no Office preview)
+- [x] **P1** Embeds: YouTube, Vimeo, Loom, Figma, Miro, Google Docs/Sheets/Slides, Airtable, Typeform, GitHub gist, iframe allowlist `C D O` — client-side allowlist of iframe URLs (also Google Drive files and CodePen; forms may submit); gists can't be framed, so the server fetches their files from the GitHub API (preview protections and cache) and they show as code; other links become preview cards
 - [x] **P1** Anchors / table of contents block `C X`
 - [x] **P1** Placeholder text (in templates) `C` — "Instructions" (/ slash command, `{?…}` in Markdown templates, Confluence `ac:placeholder`): shown to authors, replaced by typing, hidden from readers, exports and search
 - [ ] **P2** Synced blocks / excerpts: author once, reuse in many pages; edits propagate `C D`
 - [~] **P2** Transclusion (include another page or section) `C X` (plain-text preview; from import only)
-- [ ] **P2** Video / audio upload with streaming (HTTP range) and poster frame `C`
+- [~] **P2** Video / audio upload with streaming (HTTP range) and poster frame `C` (single byte ranges on every file download, 206 / 416; video / audio players in the attachment block; no poster frame)
 - [ ] **P2** Charts from table data `C(macro)`
 - [ ] **P3** Interactive / form blocks (polls, surveys, voting) `C(apps)`
 - [ ] **P3** Slides / presentation mode for a page `C`
@@ -563,7 +563,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P1** Issue trackers: Jira (issue macro, create issue from selection, issue status lozenge), GitHub, GitLab, Linear `C`
 - [ ] **P1** Slack / Microsoft Teams / Mattermost: link unfurl, notifications, search from chat `C O`
 - [~] **P1** Diagrams: draw.io, Excalidraw, Mermaid, PlantUML (server-side, sandboxed) `D X` (Mermaid client-side only)
-- [~] **P1** Embeds: Figma, Miro, Loom, Google Drive/Docs/Sheets, Airtable, Typeform, YouTube, Vimeo `D C` (no Airtable/Typeform)
+- [x] **P1** Embeds: Figma, Miro, Loom, Google Drive/Docs/Sheets, Airtable, Typeform, YouTube, Vimeo `D C` — see §4.4 (plus GitHub gists and CodePen)
 - [ ] **P2** Calendar (team calendars; ICS feed; Google/Outlook sync) `C X`
 - [ ] **P2** Email-to-page (mail in a space; create page/blog/comment) `DC X`
 - [ ] **P2** Office documents: view/edit via Collabora/OnlyOffice (WOPI) `X`

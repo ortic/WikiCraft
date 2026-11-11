@@ -553,5 +553,5 @@ pub async fn attachment(State(state): State<AppState>, headers: axum::http::Head
     if !s.pages.contains(&page) {
         return Err(ApiError::NotFound("attachment"));
     }
-    crate::routes::attachments::serve(&state, filename, media_type, key, size).await
+    crate::routes::attachments::serve(&state, filename, media_type, key, size, headers.get(axum::http::header::RANGE).and_then(|v| v.to_str().ok())).await
 }

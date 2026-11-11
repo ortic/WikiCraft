@@ -165,6 +165,12 @@ impl BlobStore {
         Ok(self.store.get(&Path::from(key)).await?.into_stream())
     }
 
+    /// Streams bytes `start..=end` of a content-addressed file (HTTP range requests).
+    pub async fn stream_range(&self, key: &str, start: u64, end: u64) -> anyhow::Result<BoxStream<'static, object_store::Result<Bytes>>> {
+        let opts = object_store::GetOptions { range: Some(object_store::GetRange::Bounded(start..end + 1)), ..Default::default() };
+        Ok(self.store.get_opts(&Self::path(key), opts).await?.into_stream())
+    }
+
     pub async fn stream(&self, key: &str) -> anyhow::Result<BoxStream<'static, object_store::Result<Bytes>>> {
         Ok(self.store.get(&Self::path(key)).await?.into_stream())
     }

@@ -5374,6 +5374,54 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /unfurl/gist:
+    get:
+      tags:
+      - Pages
+      summary: A GitHub gist's files (gists can't be framed), fetched from the GitHub API with the preview protections and
+        cached
+      operationId: get_unfurl_gist
+      parameters:
+      - name: url
+        in: query
+        required: false
+        description: https://gist.github.com/<user>/<id>
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  url: *id001
+                  description:
+                    type:
+                    - string
+                    - 'null'
+                  owner:
+                    type:
+                    - string
+                    - 'null'
+                  files:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        filename: *id001
+                        language:
+                          type:
+                          - string
+                          - 'null'
+                        content: *id001
+                        truncated: *id003
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /labels:
     get:
       tags:

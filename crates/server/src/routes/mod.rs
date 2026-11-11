@@ -178,6 +178,7 @@ pub fn router(state: AppState) -> Router {
         .route("/space-templates", get(space_templates::list))
         .route("/markdown", post(pages::markdown_to_doc))
         .route("/unfurl", get(unfurl::unfurl))
+        .route("/unfurl/gist", get(unfurl::gist))
         .route("/labels", get(search::suggest_labels))
         .route("/labels/{name}", get(search::by_label))
         .route("/labels/{name}/attachments", get(attachments::by_label))

@@ -412,7 +412,13 @@ pub struct ContentQuery {
     w: Option<u32>,
 }
 
-pub async fn download(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path(id): Path<Uuid>, Query(q): Query<ContentQuery>) -> ApiResult<Response> {
+pub async fn download(
+    State(state): State<AppState>,
+    MaybeUser(user): MaybeUser,
+    Path(id): Path<Uuid>,
+    Query(q): Query<ContentQuery>,
+    req_headers: axum::http::HeaderMap,
+) -> ApiResult<Response> {
     let row: Option<(Uuid, String, String, Option<String>, i64)> =
         sqlx::query_as("SELECT page_id, filename, media_type, blob_key, size FROM attachments WHERE id = $1 AND deleted_at IS NULL")
             .bind(id)
@@ -439,28 +445,89 @@ pub async fn download(State(state): State<AppState>, MaybeUser(user): MaybeUser,
             Err(e) => tracing::warn!(%id, "image rendition failed: {e:#}"),
         }
     }
-    serve(&state, filename, media_type, key, size).await
+    serve(&state, filename, media_type, key, size, req_headers.get(header::RANGE).and_then(|v| v.to_str().ok())).await
 }
 
-/// Streams an attachment whose access was already checked (also used by public share links).
-pub async fn serve(state: &AppState, filename: String, media_type: String, key: Option<String>, size: i64) -> ApiResult<Response> {
+/// A single `Range: bytes=…` request against a file of `size` bytes: `Some(Ok((start, end)))`
+/// (inclusive), `Some(Err(()))` when it can't be satisfied, `None` to send the whole file
+/// (no range, several ranges, or one we don't understand).
+pub fn byte_range(header: Option<&str>, size: u64) -> Option<Result<(u64, u64), ()>> {
+    let spec = header?.trim().strip_prefix("bytes=")?;
+    if spec.contains(',') {
+        return None;
+    }
+    let (a, b) = spec.split_once('-')?;
+    let (a, b) = (a.trim(), b.trim());
+    let range = match (a.is_empty(), b.is_empty()) {
+        // the last n bytes
+        (true, false) => {
+            let n: u64 = b.parse().ok()?;
+            if n == 0 || size == 0 {
+                return Some(Err(()));
+            }
+            (size.saturating_sub(n), size - 1)
+        }
+        (false, _) => {
+            let start: u64 = a.parse().ok()?;
+            let end: u64 = if b.is_empty() { size.saturating_sub(1) } else { b.parse::<u64>().ok()?.min(size.saturating_sub(1)) };
+            if start >= size || end < start {
+                return Some(Err(()));
+            }
+            (start, end)
+        }
+        (true, true) => return None,
+    };
+    Some(Ok(range))
+}
+
+/// Streams an attachment whose access was already checked (also used by public share links);
+/// honours a single byte range (video and audio players seek with them).
+pub async fn serve(state: &AppState, filename: String, media_type: String, key: Option<String>, size: i64, range: Option<&str>) -> ApiResult<Response> {
     let key = key.ok_or(ApiError::NotFound("attachment content"))?;
-    let stream = state.blobs.stream(&key).await.map_err(ApiError::Internal)?;
     // only render a safe allowlist inline; everything else (incl. HTML and SVG) downloads
-    let inline =
-        matches!(media_type.as_str(), "image/png" | "image/jpeg" | "image/gif" | "image/webp" | "application/pdf" | "video/mp4" | "audio/mpeg" | "text/plain");
+    let inline = matches!(
+        media_type.as_str(),
+        "image/png"
+            | "image/jpeg"
+            | "image/gif"
+            | "image/webp"
+            | "application/pdf"
+            | "video/mp4"
+            | "video/webm"
+            | "video/quicktime"
+            | "audio/mpeg"
+            | "audio/mp4"
+            | "audio/ogg"
+            | "audio/wav"
+            | "audio/webm"
+            | "audio/flac"
+            | "text/plain"
+    );
     let disposition = format!("{}; filename*=UTF-8''{}", if inline { "inline" } else { "attachment" }, urlencode(&filename));
-    Ok((
+    let size = size.max(0) as u64;
+    let headers = |len: u64| {
         [
-            (header::CONTENT_TYPE, if inline { media_type } else { "application/octet-stream".into() }),
-            (header::CONTENT_DISPOSITION, disposition),
-            (header::CONTENT_LENGTH, size.to_string()),
+            (header::CONTENT_TYPE, if inline { media_type.clone() } else { "application/octet-stream".into() }),
+            (header::CONTENT_DISPOSITION, disposition.clone()),
+            (header::CONTENT_LENGTH, len.to_string()),
             (header::CACHE_CONTROL, "private, max-age=3600".into()),
             (header::CONTENT_SECURITY_POLICY, "default-src 'none'; sandbox".into()),
-        ],
-        Body::from_stream(stream),
-    )
-        .into_response())
+            (header::ACCEPT_RANGES, "bytes".into()),
+        ]
+    };
+    match byte_range(range, size) {
+        Some(Ok((start, end))) => {
+            let stream = state.blobs.stream_range(&key, start, end).await.map_err(ApiError::Internal)?;
+            let mut resp = (StatusCode::PARTIAL_CONTENT, headers(end - start + 1), Body::from_stream(stream)).into_response();
+            resp.headers_mut().insert(header::CONTENT_RANGE, format!("bytes {start}-{end}/{size}").parse().expect("header"));
+            Ok(resp)
+        }
+        Some(Err(())) => Ok((StatusCode::RANGE_NOT_SATISFIABLE, [(header::CONTENT_RANGE, format!("bytes */{size}"))]).into_response()),
+        None => {
+            let stream = state.blobs.stream(&key).await.map_err(ApiError::Internal)?;
+            Ok((headers(size), Body::from_stream(stream)).into_response())
+        }
+    }
 }
 
 fn urlencode(s: &str) -> String {
@@ -519,7 +586,12 @@ pub async fn versions(State(state): State<AppState>, MaybeUser(user): MaybeUser,
 }
 
 /// `GET /attachments/{id}/versions/{version}/content` — an earlier version of the file.
-pub async fn download_version(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path((id, version)): Path<(Uuid, i32)>) -> ApiResult<Response> {
+pub async fn download_version(
+    State(state): State<AppState>,
+    MaybeUser(user): MaybeUser,
+    Path((id, version)): Path<(Uuid, i32)>,
+    req_headers: axum::http::HeaderMap,
+) -> ApiResult<Response> {
     let row: Option<(Uuid, String, String, Option<String>, i64)> = sqlx::query_as(
         "SELECT a.page_id, a.filename, v.media_type, v.blob_key, v.size FROM attachment_versions v JOIN attachments a ON a.id = v.attachment_id
           WHERE v.attachment_id = $1 AND v.version = $2 AND a.deleted_at IS NULL",
@@ -531,7 +603,7 @@ pub async fn download_version(State(state): State<AppState>, MaybeUser(user): Ma
     let (page_id, filename, media_type, key, size) = row.ok_or(ApiError::NotFound("attachment version"))?;
     let p = Principal::load(&state, user).await?;
     require_page(&state, &p, page_id, Need::View).await?;
-    serve(&state, filename, media_type, key, size).await
+    serve(&state, filename, media_type, key, size, req_headers.get(header::RANGE).and_then(|v| v.to_str().ok())).await
 }
 
 /// `POST /attachments/{id}/versions/{version}/restore` — makes an earlier version current again
@@ -590,4 +662,23 @@ pub async fn restore_version(
     )
     .await;
     Ok(Json(serde_json::json!({ "version": next })))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::byte_range;
+
+    #[test]
+    fn byte_ranges() {
+        assert_eq!(byte_range(Some("bytes=0-99"), 1000), Some(Ok((0, 99))));
+        assert_eq!(byte_range(Some("bytes=500-"), 1000), Some(Ok((500, 999))));
+        assert_eq!(byte_range(Some("bytes=-100"), 1000), Some(Ok((900, 999))));
+        assert_eq!(byte_range(Some("bytes=-5000"), 1000), Some(Ok((0, 999))));
+        assert_eq!(byte_range(Some("bytes=990-2000"), 1000), Some(Ok((990, 999))), "clamped to the end");
+        assert_eq!(byte_range(Some("bytes=1000-"), 1000), Some(Err(())));
+        assert_eq!(byte_range(Some("bytes=5-2"), 1000), Some(Err(())));
+        assert_eq!(byte_range(Some("bytes=0-1,5-9"), 1000), None, "several ranges: the whole file");
+        assert_eq!(byte_range(Some("items=0-5"), 1000), None);
+        assert_eq!(byte_range(None, 1000), None);
+    }
 }

@@ -927,3 +927,8 @@ button.page-prop-key-btn:hover, button.page-prop-key-btn:focus-visible { backgro
 .cql-help { margin-top: 10px; color: var(--text-soft); }
 .cql-help summary { cursor: pointer; color: var(--text-soft); }
 .cql-help p { margin: 6px 0; }
+.gist-file { border: 1px solid var(--border); border-radius: 8px; margin: 8px 0; overflow: hidden; }
+.gist-file-name { padding: 5px 10px; background: var(--bg-soft, var(--bg-hover)); border-bottom: 1px solid var(--border); font-family: var(--mono, ui-monospace, monospace); }
+.gist-code { margin: 0; padding: 10px 12px; max-height: 420px; overflow: auto; font-size: 12.5px; line-height: 1.5; background: var(--bg); }
+.attachment-media { display: block; width: 100%; max-height: 480px; margin-top: 10px; border-radius: 6px; background: #000; }
+audio.attachment-media { background: none; max-height: none; }

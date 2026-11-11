@@ -1769,3 +1769,37 @@ async fn images_come_in_smaller_copies() {
     let anon = common::client();
     assert_eq!(anon.get(app.url(&format!("/attachments/{wide}/content?w=640"))).send().await.unwrap().status(), 401);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn files_answer_byte_ranges() {
+    let app = spawn().await;
+    let owner = app.setup().await;
+    let (_, sp) = app.post(&owner, "/spaces", json!({"key": "MED", "name": "Media"})).await;
+    let home = sp["homePageId"].as_str().unwrap().to_string();
+    let data: Vec<u8> = (0..5000u32).map(|i| (i % 251) as u8).collect();
+    let form = reqwest::multipart::Form::new().part("file", reqwest::multipart::Part::bytes(data.clone()).file_name("clip.mp4"));
+    let v: Value = owner.post(app.url(&format!("/pages/{home}/attachments"))).multipart(form).send().await.unwrap().json().await.unwrap();
+    let id = v[0]["id"].as_str().unwrap().to_string();
+    let get = |range: Option<&'static str>| {
+        let (app, owner, id) = (&app, &owner, &id);
+        async move {
+            let mut r = owner.get(app.url(&format!("/attachments/{id}/content")));
+            if let Some(h) = range {
+                r = r.header("range", h);
+            }
+            let r = r.send().await.unwrap();
+            let h = |n: &str| r.headers().get(n).map(|v| v.to_str().unwrap().to_string());
+            let (status, ctype, crange, accept) = (r.status().as_u16(), h("content-type"), h("content-range"), h("accept-ranges"));
+            (status, ctype, crange, accept, r.bytes().await.unwrap().to_vec())
+        }
+    };
+    let (st, ctype, _, accept, body) = get(None).await;
+    assert_eq!((st, ctype.as_deref(), accept.as_deref(), body.len()), (200, Some("video/mp4"), Some("bytes"), 5000));
+    let (st, _, crange, _, body) = get(Some("bytes=100-199")).await;
+    assert_eq!((st, crange.as_deref()), (206, Some("bytes 100-199/5000")));
+    assert_eq!(body, data[100..200]);
+    let (st, _, crange, _, body) = get(Some("bytes=-10")).await;
+    assert_eq!((st, crange.as_deref(), body.as_slice()), (206, Some("bytes 4990-4999/5000"), &data[4990..]));
+    let (st, _, crange, _, _) = get(Some("bytes=9000-")).await;
+    assert_eq!((st, crange.as_deref()), (416, Some("bytes */5000")));
+}

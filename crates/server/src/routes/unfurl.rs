@@ -85,7 +85,12 @@ pub async fn unfurl(State(state): State<AppState>, CurrentUser(user): CurrentUse
     Ok(Json(data))
 }
 
-async fn fetch(state: &AppState, mut url: openidconnect::url::Url) -> anyhow::Result<String> {
+async fn fetch(state: &AppState, url: openidconnect::url::Url) -> anyhow::Result<String> {
+    fetch_as(state, url, "text/html,application/xhtml+xml", |t| t.contains("text/html") || t.contains("xhtml")).await
+}
+
+/// Fetches `url` with the protections above, accepting the content types `ok` allows.
+async fn fetch_as(state: &AppState, mut url: openidconnect::url::Url, accept: &str, ok: fn(&str) -> bool) -> anyhow::Result<String> {
     for _ in 0..=MAX_REDIRECTS {
         let addr = resolve(&url, state.config.unfurl_allow_private).await?;
         let client = openidconnect::reqwest::Client::builder()
@@ -95,7 +100,7 @@ async fn fetch(state: &AppState, mut url: openidconnect::url::Url) -> anyhow::Re
             .user_agent("WikiCraft-LinkPreview/1")
             .resolve(url.host_str().unwrap_or_default(), addr)
             .build()?;
-        let mut resp = client.get(url.as_str()).header("accept", "text/html,application/xhtml+xml").send().await?;
+        let mut resp = client.get(url.as_str()).header("accept", accept).send().await?;
         let status = resp.status();
         if status.is_redirection() {
             let loc = resp.headers().get("location").and_then(|v| v.to_str().ok()).ok_or_else(|| anyhow::anyhow!("redirect without a location"))?;
@@ -105,7 +110,7 @@ async fn fetch(state: &AppState, mut url: openidconnect::url::Url) -> anyhow::Re
         }
         anyhow::ensure!(status.is_success(), "HTTP {}", status.as_u16());
         let ctype = resp.headers().get("content-type").and_then(|v| v.to_str().ok()).unwrap_or("").to_ascii_lowercase();
-        anyhow::ensure!(ctype.contains("text/html") || ctype.contains("xhtml"), "not an HTML page");
+        anyhow::ensure!(ok(&ctype), "unexpected content type {ctype}");
         let mut body: Vec<u8> = Vec::new();
         while let Some(chunk) = resp.chunk().await? {
             body.extend_from_slice(&chunk);
@@ -117,6 +122,86 @@ async fn fetch(state: &AppState, mut url: openidconnect::url::Url) -> anyhow::Re
         return Ok(String::from_utf8_lossy(&body).into_owned());
     }
     anyhow::bail!("too many redirects")
+}
+
+/// A gist's id from its address (`https://gist.github.com/<user>/<id>`).
+fn gist_id(url: &str) -> Option<String> {
+    let u = openidconnect::url::Url::parse(url.trim()).ok()?;
+    if u.scheme() != "https" || u.host_str()? != "gist.github.com" {
+        return None;
+    }
+    let parts: Vec<&str> = u.path_segments()?.filter(|p| !p.is_empty()).collect();
+    let id = match parts.as_slice() {
+        [_, id] | [id] => *id,
+        _ => return None,
+    };
+    (id.len() >= 8 && id.len() <= 64 && id.bytes().all(|b| b.is_ascii_hexdigit())).then(|| id.to_ascii_lowercase())
+}
+
+/// files of a gist shown at most, and characters of each
+const GIST_FILES: usize = 10;
+const GIST_CHARS: usize = 60_000;
+
+/// `GET /api/unfurl/gist?url=https://gist.github.com/<user>/<id>` → `{url, description, owner,
+/// files: [{filename, language, content, truncated}]}`: a GitHub gist's files, fetched from the
+/// GitHub API with the same protections as previews and cached the same way (gists can't be
+/// embedded as a frame, and their script embed would run GitHub's code in our pages).
+pub async fn gist(State(state): State<AppState>, CurrentUser(user): CurrentUser, Query(q): Query<UnfurlQuery>) -> ApiResult<Json<Value>> {
+    let id = gist_id(&q.url).ok_or_else(|| ApiError::bad("not a gist address (https://gist.github.com/<user>/<id>)"))?;
+    let key = format!("gist:{id}");
+    let cached: Option<Value> = sqlx::query_scalar(
+        "SELECT data FROM link_previews WHERE url = $1
+           AND fetched_at > now() - CASE WHEN data ? 'error' THEN interval '1 hour' ELSE interval '1 day' END",
+    )
+    .bind(&key)
+    .fetch_optional(&state.db)
+    .await?;
+    if let Some(data) = cached {
+        return Ok(Json(data));
+    }
+    if !allow(user.id) {
+        return Err(ApiError::bad("too many link previews; try again in a few minutes"));
+    }
+    let api = validate_url(&format!("https://api.github.com/gists/{id}")).map_err(|e| ApiError::bad(format!("{e}")))?;
+    let data = match fetch_as(&state, api, "application/vnd.github+json", |t| t.contains("json")).await {
+        Ok(body) => match serde_json::from_str::<Value>(&body) {
+            Ok(g) => {
+                let files: Vec<Value> = g["files"]
+                    .as_object()
+                    .map(|m| {
+                        m.values()
+                            .take(GIST_FILES)
+                            .map(|f| {
+                                let content = f["content"].as_str().unwrap_or("");
+                                let cut = content.chars().count() > GIST_CHARS;
+                                json!({
+                                    "filename": f["filename"].as_str().unwrap_or("file"),
+                                    "language": f["language"].as_str(),
+                                    "content": content.chars().take(GIST_CHARS).collect::<String>(),
+                                    "truncated": cut || f["truncated"].as_bool().unwrap_or(false),
+                                })
+                            })
+                            .collect()
+                    })
+                    .unwrap_or_default();
+                json!({ "url": q.url.trim(), "description": g["description"].as_str(), "owner": g["owner"]["login"].as_str(), "files": files })
+            }
+            Err(e) => {
+                tracing::debug!(gist = %id, "gist answer unreadable: {e}");
+                json!({ "url": q.url.trim(), "files": [], "error": "gist unavailable" })
+            }
+        },
+        Err(e) => {
+            tracing::debug!(gist = %id, "gist fetch failed: {e:#}");
+            json!({ "url": q.url.trim(), "files": [], "error": "gist unavailable" })
+        }
+    };
+    sqlx::query("INSERT INTO link_previews (url, data, fetched_at) VALUES ($1, $2, now()) ON CONFLICT (url) DO UPDATE SET data = $2, fetched_at = now()")
+        .bind(&key)
+        .bind(&data)
+        .execute(&state.db)
+        .await?;
+    Ok(Json(data))
 }
 
 #[derive(Default, Debug, PartialEq)]
@@ -234,6 +319,17 @@ fn parse(html: &str) -> Meta {
 
 #[cfg(test)]
 mod tests {
+
+    #[test]
+    fn gist_addresses() {
+        assert_eq!(super::gist_id("https://gist.github.com/octocat/6cad326836d38bd3a7ae").as_deref(), Some("6cad326836d38bd3a7ae"));
+        assert_eq!(super::gist_id("https://gist.github.com/6CAD326836D38BD3A7AE").as_deref(), Some("6cad326836d38bd3a7ae"));
+        assert_eq!(super::gist_id("http://gist.github.com/octocat/6cad326836d38bd3a7ae"), None, "https only");
+        assert_eq!(super::gist_id("https://gist.github.com.evil.com/octocat/6cad326836d38bd3a7ae"), None);
+        assert_eq!(super::gist_id("https://gist.github.com/octocat/../admin"), None);
+        assert_eq!(super::gist_id("https://gist.github.com/octocat/6cad3268/raw/file"), None);
+    }
+
     #[test]
     fn page_metadata() {
         let html = r#"<html><head><title>  Fallback &amp; title </title>
