@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -17,11 +18,11 @@ function AnswerCard({ state }: { state: { loading: boolean; error?: string; data
   return (
     <div className="card ai-answer">
       <div className="row ai-answer-head">
-        <Sparkles size={16} /> <b>Answer</b>
+        <Sparkles size={16} /> <b>{t('Answer')}</b>
         <span className="faint small" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{state.question}</span>
       </div>
       {state.loading && (
-        <div className="row faint"><Spinner /> Reading the wiki…</div>
+        <div className="row faint"><Spinner />{' '}{t('Reading the wiki…')}</div>
       )}
       {state.error && <p className="error-text">{state.error}</p>}
       {state.data && (
@@ -37,9 +38,7 @@ function AnswerCard({ state }: { state: { loading: boolean; error?: string; data
               ))}
             </div>
           )}
-          <div className="faint small" style={{ marginTop: 8 }}>
-            Written by AI{state.data.model ? ` (${state.data.model})` : ''} from pages you can access. Check the sources before relying on it.
-          </div>
+          <div className="faint small" style={{ marginTop: 8 }}>{t('Written by AI')}{state.data.model ? ` (${state.data.model})` : ''}{' '}{t('from pages you can access. Check the sources before relying on it.')}</div>
         </>
       )}
     </div>
@@ -74,7 +73,7 @@ function CqlSearch({ initial, onExit, onRun }: { initial: string; onExit: () => 
     <div className="content-pad">
       <form className="cql-form" onSubmit={(e) => { e.preventDefault(); onRun(input.trim()) }}>
         <label className="field" style={{ marginBottom: 6 }}>
-          <span className="row" style={{ gap: 6 }}><Braces size={15} /> Query</span>
+          <span className="row" style={{ gap: 6 }}><Braces size={15} />{' '}{t('Query')}</span>
           <textarea
             className="input cql-input"
             rows={3}
@@ -87,30 +86,28 @@ function CqlSearch({ initial, onExit, onRun }: { initial: string; onExit: () => 
           />
         </label>
         <div className="row" style={{ gap: 8 }}>
-          <button className="btn btn-primary">Run query</button>
-          <button type="button" className="btn" onClick={onExit}>Back to search</button>
-          <span className="faint small">Ctrl+Enter runs it</span>
+          <button className="btn btn-primary">{t('Run query')}</button>
+          <button type="button" className="btn" onClick={onExit}>{t('Back to search')}</button>
+          <span className="faint small">{t('Ctrl+Enter runs it')}</span>
         </div>
         <details className="cql-help small">
-          <summary>Fields, operators and functions</summary>
+          <summary>{t('Fields, operators and functions')}</summary>
           <p>
-            <b>Fields:</b> space, space.title, title, text, label, type (page, blogpost, folder), creator, contributor, mention, favourite, watcher, created,
-            lastModified, id, parent, ancestor, status, property[Name].
-          </p>
-          <p><b>Operators:</b> = != ~ (contains, * and ? wildcards) !~ &lt; &lt;= &gt; &gt;= in (…) not in (…), combined with and, or, not and parentheses; order by title, created, lastModified or space (asc, desc).</p>
-          <p><b>Functions:</b> currentUser(), now("-7d"), startOfDay(), startOfWeek("-1"), startOfMonth(), startOfYear(), endOfDay() …; dates as YYYY-MM-DD.</p>
-          <p className="faint">Example: <code>{CQL_EXAMPLE}</code></p>
+            <b>{t('Fields:')}</b>{' '}{t('space, space.title, title, text, label, type (page, blogpost, folder), creator, contributor, mention, favourite, watcher, created, lastModified, id, parent, ancestor, status, property[Name].')}</p>
+          <p><b>{t('Operators:')}</b>{' '}{t('= != ~ (contains, * and ? wildcards) !~ < <= > >= in (…) not in (…), combined with and, or, not and parentheses; order by title, created, lastModified or space (asc, desc).')}</p>
+          <p><b>{t('Functions:')}</b>{' '}{t('currentUser(), now("-7d"), startOfDay(), startOfWeek("-1"), startOfMonth(), startOfYear(), endOfDay() …; dates as YYYY-MM-DD.')}</p>
+          <p className="faint">{t('Example:')}{' '}<code>{CQL_EXAMPLE}</code></p>
         </details>
       </form>
       <div style={{ marginTop: 16 }}>
         {results.isLoading && <Spinner />}
         {error && <div className="error-text" role="alert">{error}</div>}
-        {results.data && <div className="faint small" style={{ marginBottom: 8 }}>{results.data.length} results</div>}
+        {results.data && <div className="faint small" style={{ marginBottom: 8 }}>{t('{count} results', { count: results.data.length })}</div>}
         {results.data?.map((r) => (
           <Link key={r.id} to={`/pages/${r.id}`} className="result" style={{ marginBottom: 4 }}>
             <div className="r-title">{r.title}</div>
             <div className="faint small">
-              {r.spaceName}{r.kind === 'blog' ? ' · blog post' : ''} · updated {formatDate(r.updatedAt)}{r.updatedByName ? ` by ${r.updatedByName}` : ''}
+              {r.spaceName}{r.kind === 'blog' ? ' ' + t('· blog post') + '' : ''}{' '}{t('· updated {date}', { date: formatDate(r.updatedAt) })}{r.updatedByName ? ' ' + t('by {updatedByName}', { updatedByName: r.updatedByName }) + '' : ''}
               {r.labels.length > 0 && <> · {r.labels.join(', ')}</>}
             </div>
             {r.excerpt && <div className="r-snippet">{r.excerpt}</div>}
@@ -143,7 +140,7 @@ export default function SearchPage() {
   const qc = useQueryClient()
   const saved = useQuery({ queryKey: ['saved-searches'], queryFn: () => api.get<{ id: string; name: string; params: string }[]>('/me/searches'), enabled: !!me.data?.user })
   const saveSearch = async () => {
-    const name = window.prompt('Name this search', q)
+    const name = window.prompt(t('Name this search'), q)
     if (!name) return
     await api.post('/me/searches', { name, params: params.toString() })
     qc.invalidateQueries({ queryKey: ['saved-searches'] })
@@ -160,7 +157,7 @@ export default function SearchPage() {
       const data = await api.post<Answer>('/ai/ask', { question, spaceKey: space || undefined })
       setAnswer({ loading: false, data, question })
     } catch (e) {
-      setAnswer({ loading: false, error: e instanceof Error ? e.message : 'Could not get an answer', question })
+      setAnswer({ loading: false, error: e instanceof Error ? e.message : t('Could not get an answer'), question })
     }
   }
   const filters = new URLSearchParams({ q, limit: '50' })
@@ -186,63 +183,57 @@ export default function SearchPage() {
           setParam('q', input)
         }}
       >
-        <input className="input" style={{ maxWidth: 520, height: 40, fontSize: 15 }} value={input} onChange={(e) => setInput(e.target.value)} placeholder="Search…" autoFocus />
-        <select className="select" style={{ width: 200, height: 40 }} value={space} onChange={(e) => setParam('space', e.target.value)} aria-label="Space">
-          <option value="">All spaces</option>
+        <input className="input" style={{ maxWidth: 520, height: 40, fontSize: 15 }} value={input} onChange={(e) => setInput(e.target.value)} placeholder={t('Search…')} autoFocus />
+        <select className="select" style={{ width: 200, height: 40 }} value={space} onChange={(e) => setParam('space', e.target.value)} aria-label={t('Space')}>
+          <option value="">{t('All spaces')}</option>
           {spaces.data?.map((s) => (
             <option key={s.key} value={s.key}>
               {s.name}
             </option>
           ))}
         </select>
-        <button className="btn btn-primary" style={{ height: 40 }}>
-          Search
-        </button>
+        <button className="btn btn-primary" style={{ height: 40 }}>{t('Search')}</button>
         {ai.data?.enabled && (
-          <button type="button" className="btn" style={{ height: 40 }} disabled={!input.trim() || answer?.loading} onClick={ask} title="Answer the question from the pages you can see">
-            <Sparkles size={15} /> Ask the wiki
-          </button>
+          <button type="button" className="btn" style={{ height: 40 }} disabled={!input.trim() || answer?.loading} onClick={ask} title={t('Answer the question from the pages you can see')}>
+            <Sparkles size={15} />{' '}{t('Ask the wiki')}</button>
         )}
       </form>
       <div className="row search-filters">
-        <select className="select" value={kind} onChange={(e) => setParam('kind', e.target.value)} aria-label="Type">
-          <option value="">Pages and blog posts</option>
-          <option value="page">Pages</option>
-          <option value="blog">Blog posts</option>
+        <select className="select" value={kind} onChange={(e) => setParam('kind', e.target.value)} aria-label={t('Type')}>
+          <option value="">{t('Pages and blog posts')}</option>
+          <option value="page">{t('Pages')}</option>
+          <option value="blog">{t('Blog posts')}</option>
         </select>
-        <select className="select" value={days} onChange={(e) => setParam('days', e.target.value)} aria-label="Modified">
-          <option value="">Modified any time</option>
-          <option value="1">Modified today</option>
-          <option value="7">In the last 7 days</option>
-          <option value="30">In the last 30 days</option>
-          <option value="365">In the last year</option>
+        <select className="select" value={days} onChange={(e) => setParam('days', e.target.value)} aria-label={t('Modified')}>
+          <option value="">{t('Modified any time')}</option>
+          <option value="1">{t('Modified today')}</option>
+          <option value="7">{t('In the last 7 days')}</option>
+          <option value="30">{t('In the last 30 days')}</option>
+          <option value="365">{t('In the last year')}</option>
         </select>
         <form onSubmit={(e) => { e.preventDefault(); setParam('label', labelInput.trim().toLowerCase()) }}>
-          <input className="input" value={labelInput} onChange={(e) => setLabelInput(e.target.value)} onBlur={() => setParam('label', labelInput.trim().toLowerCase())} placeholder="Label" aria-label="Label" />
+          <input className="input" value={labelInput} onChange={(e) => setLabelInput(e.target.value)} onBlur={() => setParam('label', labelInput.trim().toLowerCase())} placeholder={t('Label')} aria-label={t('Label')} />
         </form>
         {me.data?.user && (
           <label className="row small">
-            <input type="checkbox" checked={mine} onChange={(e) => setParam('mine', e.target.checked ? '1' : '')} /> Pages I worked on
-          </label>
+            <input type="checkbox" checked={mine} onChange={(e) => setParam('mine', e.target.checked ? '1' : '')} />{' '}{t('Pages I worked on')}</label>
         )}
-        <button type="button" className="btn btn-sm" onClick={() => setParams(new URLSearchParams({ cql: '' }))} title="Search with a query language: fields, operators and functions">
-          <Braces size={14} /> Query
-        </button>
+        <button type="button" className="btn btn-sm" onClick={() => setParams(new URLSearchParams({ cql: '' }))} title={t('Search with a query language: fields, operators and functions')}>
+          <Braces size={14} />{' '}{t('Query')}</button>
         {me.data?.user && q && (
-          <button type="button" className="btn btn-sm" onClick={saveSearch} title="Keep this search and its filters">
-            <BookmarkPlus size={14} /> Save search
-          </button>
+          <button type="button" className="btn btn-sm" onClick={saveSearch} title={t('Keep this search and its filters')}>
+            <BookmarkPlus size={14} />{' '}{t('Save search')}</button>
         )}
       </div>
       {!!saved.data?.length && (
         <div className="row saved-searches">
-          <span className="faint small">Saved:</span>
+          <span className="faint small">{t('Saved:')}</span>
           {saved.data.map((s) => (
             <span key={s.id} className={`saved-search ${s.params === params.toString() ? 'active' : ''}`}>
               <Link to={`/search?${s.params}`} onClick={() => setInput(new URLSearchParams(s.params).get('q') ?? '')}>{s.name}</Link>
               <button
                 type="button"
-                title="Delete saved search"
+                title={t('Delete saved search')}
                 onClick={async () => {
                   await api.del(`/me/searches/${s.id}`)
                   qc.invalidateQueries({ queryKey: ['saved-searches'] })
@@ -257,7 +248,7 @@ export default function SearchPage() {
       {answer && <AnswerCard state={answer} />}
       <div style={{ marginTop: 20 }}>
         {results.isLoading && <Spinner />}
-        {results.data && <div className="faint small" style={{ marginBottom: 8 }}>{results.data.length} results</div>}
+        {results.data && <div className="faint small" style={{ marginBottom: 8 }}>{t('{count} results', { count: results.data.length })}</div>}
         {results.data?.map((h) => (
           <Link key={h.pageId} to={`/pages/${h.pageId}`} className="result" style={{ marginBottom: 4 }}>
             <div className="r-title">{h.title}</div>

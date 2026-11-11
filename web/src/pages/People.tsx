@@ -1,3 +1,4 @@
+import { t as tr } from '../i18n'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -59,16 +60,16 @@ export function PeoplePage() {
   })
   return (
     <div className="content-pad" style={{ maxWidth: 1100 }}>
-      <h1 style={{ marginTop: 0 }} className="row"><Users size={22} /> People</h1>
+      <h1 style={{ marginTop: 0 }} className="row"><Users size={22} />{' '}{tr('People')}</h1>
       <div className="row" style={{ flexWrap: 'wrap', gap: 8, marginBottom: 14 }}>
         <div className="search-input" style={{ flex: '1 1 260px', maxWidth: 420 }}>
           <Search size={15} />
-          <input className="input" placeholder="Name, job, department or location" aria-label="Search people" value={q} onChange={(e) => setQ(e.target.value)} />
+          <input className="input" placeholder={tr('Name, job, department or location')} aria-label={tr('Search people')} value={q} onChange={(e) => setQ(e.target.value)} />
         </div>
       </div>
       {!!people.data?.departments.length && (
         <div className="row people-departments" style={{ flexWrap: 'wrap', gap: 6, marginBottom: 16 }}>
-          <button className={`chip${department === null ? ' active' : ''}`} onClick={() => setDepartment(null)}>Everybody</button>
+          <button className={`chip${department === null ? ' active' : ''}`} onClick={() => setDepartment(null)}>{tr('Everybody')}</button>
           {people.data.departments.map((d) => (
             <button key={d.name} className={`chip${department?.toLowerCase() === d.name.toLowerCase() ? ' active' : ''}`} onClick={() => setDepartment(d.name)}>
               {d.name} <span className="faint">{d.count}</span>
@@ -77,7 +78,7 @@ export function PeoplePage() {
         </div>
       )}
       {people.isLoading && <Spinner />}
-      {people.data && !people.data.people.length && <div className="empty">Nobody matches that.</div>}
+      {people.data && !people.data.people.length && <div className="empty">{tr('Nobody matches that.')}</div>}
       <div className="grid-cards people-grid">
         {people.data?.people.map((p) => (
           <Link key={p.id} to={`/people/${p.id}`} className="person-card">
@@ -107,16 +108,16 @@ function FollowButton({ person }: { person: Profile }) {
       qc.invalidateQueries({ queryKey: ['person', person.id] })
       qc.invalidateQueries({ queryKey: ['following'] })
       qc.invalidateQueries({ queryKey: ['activity'] })
-      toast(person.following ? `You no longer follow ${person.name}` : `You follow ${person.name}: Home → Activity → People I follow`)
+      toast(person.following ? tr('You no longer follow {name}', { name: person.name }) : tr('You follow {name}: Home → Activity → People I follow', { name: person.name }))
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'That did not work')
+      toast(e instanceof Error ? e.message : tr('That did not work'))
     } finally {
       setBusy(false)
     }
   }
   return (
     <button className={`btn btn-sm${person.following ? '' : ' btn-primary'}`} disabled={busy} onClick={toggle} aria-pressed={!!person.following}>
-      {person.following ? <UserCheck size={14} /> : <UserPlus size={14} />} {person.following ? 'Following' : 'Follow'}
+      {person.following ? <UserCheck size={14} /> : <UserPlus size={14} />} {person.following ? tr('Following') : tr('Follow')}
     </button>
   )
 }
@@ -128,7 +129,7 @@ export function ProfilePage() {
   const now = useMinute()
   const profile = useQuery({ queryKey: ['person', id], queryFn: () => api.get<Profile>(`/people/${id}`), enabled: !!id })
   if (profile.isLoading) return <div className="content-pad"><Spinner /></div>
-  if (!profile.data) return <div className="empty">This person isn't in the directory.</div>
+  if (!profile.data) return <div className="empty">{tr('This person isn\'t in the directory.')}</div>
   const p = profile.data
   const time = localTime(p.timezone, now)
   const isMe = me.data?.user?.id === p.id
@@ -145,22 +146,22 @@ export function ProfilePage() {
           )}
           <div className="faint small row" style={{ gap: 12, flexWrap: 'wrap', marginTop: 4 }}>
             {p.location && <span className="row" style={{ gap: 4 }}><MapPin size={13} /> {p.location}</span>}
-            {time && <span className="row" style={{ gap: 4 }} title={p.timezone ?? undefined}><Clock size={13} /> {time} local time</span>}
+            {time && <span className="row" style={{ gap: 4 }} title={p.timezone ?? undefined}><Clock size={13} />{' '}{tr('{time} local time', { time })}</span>}
             {p.email && <a className="row" style={{ gap: 4 }} href={`mailto:${p.email}`}><Mail size={13} /> {p.email}</a>}
-            {p.deactivated && <span className="badge">Deactivated</span>}
+            {p.deactivated && <span className="badge">{tr('Deactivated')}</span>}
           </div>
         </div>
         <span className="spacer" />
-        {isMe && <Link className="btn btn-sm" to="/settings">Edit your profile</Link>}
+        {isMe && <Link className="btn btn-sm" to="/settings">{tr('Edit your profile')}</Link>}
         {!isMe && !p.deactivated && me.data?.user?.role !== 'guest' && <FollowButton person={p} />}
       </div>
       {p.bio && <p className="profile-bio">{p.bio}</p>}
       {p.personalSpaceKey && (
-        <p><Link to={`/spaces/${p.personalSpaceKey}`}>Personal space</Link></p>
+        <p><Link to={`/spaces/${p.personalSpaceKey}`}>{tr('Personal space')}</Link></p>
       )}
-      <h3>Recently worked on</h3>
+      <h3>{tr('Recently worked on')}</h3>
       {p.recentPages.length === 0 ? (
-        <div className="empty">Nothing you can see yet.</div>
+        <div className="empty">{tr('Nothing you can see yet.')}</div>
       ) : (
         <div className="list-plain">
           {p.recentPages.map((r) => (
@@ -211,42 +212,42 @@ export function ProfileFields({ userId }: { userId: string }) {
     try {
       await api.upload('/me/avatar', body)
       refreshPicture()
-      toast('Picture saved')
+      toast(tr('Picture saved'))
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not use that picture')
+      toast(e instanceof Error ? e.message : tr('Could not use that picture'))
     }
   }
   const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone
   return (
     <div className="card" style={{ marginBottom: 16 }}>
-      <h3 style={{ marginTop: 0 }}>About you</h3>
-      <p className="muted small" style={{ marginTop: 0 }}>Shown on your profile and in the <Link to="/people">people directory</Link>.</p>
+      <h3 style={{ marginTop: 0 }}>{tr('About you')}</h3>
+      <p className="muted small" style={{ marginTop: 0 }}>{tr('Shown on your profile and in the')}{' '}<Link to="/people">{tr('people directory')}</Link>.</p>
       <div className="row" style={{ gap: 12, marginBottom: 14 }}>
         <Avatar name={profile.data?.name ?? ''} id={userId} size={56} />
         <input ref={pictureInput} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => { const f = e.target.files?.[0]; e.target.value = ''; if (f) void uploadPicture(f) }} />
-        <button className="btn btn-sm" onClick={() => pictureInput.current?.click()}>Upload picture</button>
+        <button className="btn btn-sm" onClick={() => pictureInput.current?.click()}>{tr('Upload picture')}</button>
         {profile.data?.avatarUrl?.startsWith('/api/users/') && (
-          <button className="btn btn-sm" onClick={async () => { await api.del('/me/avatar'); refreshPicture() }}>Remove</button>
+          <button className="btn btn-sm" onClick={async () => { await api.del('/me/avatar'); refreshPicture() }}>{tr('Remove')}</button>
         )}
       </div>
       <div className="profile-fields">
-        <div className="field"><label htmlFor="pf-title">Job title</label><input id="pf-title" className="input" maxLength={100} value={form.jobTitle} onChange={set('jobTitle')} /></div>
+        <div className="field"><label htmlFor="pf-title">{tr('Job title')}</label><input id="pf-title" className="input" maxLength={100} value={form.jobTitle} onChange={set('jobTitle')} /></div>
         <div className="field">
-          <label htmlFor="pf-dept">Department</label>
+          <label htmlFor="pf-dept">{tr('Department')}</label>
           <input id="pf-dept" className="input" maxLength={100} list="pf-departments" value={form.department} onChange={set('department')} />
           <datalist id="pf-departments">{departments.data?.departments.map((d) => <option key={d.name} value={d.name} />)}</datalist>
         </div>
-        <div className="field"><label htmlFor="pf-location">Location</label><input id="pf-location" className="input" maxLength={100} value={form.location} onChange={set('location')} /></div>
+        <div className="field"><label htmlFor="pf-location">{tr('Location')}</label><input id="pf-location" className="input" maxLength={100} value={form.location} onChange={set('location')} /></div>
         <div className="field">
-          <label htmlFor="pf-tz">Time zone</label>
+          <label htmlFor="pf-tz">{tr('Time zone')}</label>
           <select id="pf-tz" className="input" value={form.timezone} onChange={set('timezone')}>
-            <option value="">Not set</option>
+            <option value="">{tr('Not set')}</option>
             {!zones.includes(browserZone) && browserZone && <option value={browserZone}>{browserZone}</option>}
             {zones.map((z) => <option key={z} value={z}>{z}</option>)}
           </select>
         </div>
       </div>
-      <div className="field"><label htmlFor="pf-bio">About</label><textarea id="pf-bio" className="input" rows={3} maxLength={2000} value={form.bio} onChange={set('bio')} /></div>
+      <div className="field"><label htmlFor="pf-bio">{tr('About')}</label><textarea id="pf-bio" className="input" rows={3} maxLength={2000} value={form.bio} onChange={set('bio')} /></div>
       <div className="row" style={{ gap: 8 }}>
         <button
           className="btn btn-primary"
@@ -257,19 +258,17 @@ export function ProfileFields({ userId }: { userId: string }) {
               qc.invalidateQueries({ queryKey: ['people'] })
               // dates follow the new time zone
               qc.invalidateQueries({ queryKey: ['me'] })
-              toast('Profile saved')
+              toast(tr('Profile saved'))
             } catch (e) {
-              toast(e instanceof Error ? e.message : 'Could not save')
+              toast(e instanceof Error ? e.message : tr('Could not save'))
             }
           }}
-        >
-          Save
-        </button>
+        >{tr('Save')}</button>
         {!form.timezone && browserZone && (
-          <button className="btn" onClick={() => setForm({ ...form, timezone: browserZone })}>Use {browserZone}</button>
+          <button className="btn" onClick={() => setForm({ ...form, timezone: browserZone })}>{tr('Use {browserZone}', { browserZone })}</button>
         )}
         <span className="spacer" />
-        <Link to={`/people/${userId}`}>View your profile</Link>
+        <Link to={`/people/${userId}`}>{tr('View your profile')}</Link>
       </div>
     </div>
   )

@@ -1,27 +1,28 @@
 // Text colour, highlight colour and alignment for the selection (from the bubble menu). The
 // colours are mid-tones and translucent highlights that read well in light and dark themes.
 
+import { t } from '../i18n'
 import { useState } from 'react'
 import type { Editor } from '@tiptap/react'
 import { AlignCenter, AlignLeft, AlignRight, Baseline, Ban, IndentDecrease, IndentIncrease } from 'lucide-react'
 
 export const TEXT_COLORS: [string, string][] = [
-  ['Grey', '#6b7280'],
-  ['Red', '#d14343'],
-  ['Orange', '#c2620a'],
-  ['Green', '#2e8540'],
-  ['Teal', '#0f8a8a'],
-  ['Blue', '#2f6fdb'],
-  ['Purple', '#8b4fd6'],
+  [t('Grey'), '#6b7280'],
+  [t('Red'), '#d14343'],
+  [t('Orange'), '#c2620a'],
+  [t('Green'), '#2e8540'],
+  [t('Teal'), '#0f8a8a'],
+  [t('Blue'), '#2f6fdb'],
+  [t('Purple'), '#8b4fd6'],
 ]
 
 export const HIGHLIGHTS: [string, string][] = [
-  ['Yellow', 'rgba(250, 204, 21, 0.35)'],
-  ['Green', 'rgba(34, 197, 94, 0.28)'],
-  ['Blue', 'rgba(59, 130, 246, 0.25)'],
-  ['Purple', 'rgba(168, 85, 247, 0.25)'],
-  ['Red', 'rgba(239, 68, 68, 0.25)'],
-  ['Grey', 'rgba(120, 120, 135, 0.22)'],
+  [t('Yellow'), 'rgba(250, 204, 21, 0.35)'],
+  [t('Green'), 'rgba(34, 197, 94, 0.28)'],
+  [t('Blue'), 'rgba(59, 130, 246, 0.25)'],
+  [t('Purple'), 'rgba(168, 85, 247, 0.25)'],
+  [t('Red'), 'rgba(239, 68, 68, 0.25)'],
+  [t('Grey'), 'rgba(120, 120, 135, 0.22)'],
 ]
 
 export default function TextStyleMenu({ editor }: { editor: Editor }) {
@@ -38,29 +39,29 @@ export default function TextStyleMenu({ editor }: { editor: Editor }) {
       <button
         onMouseDown={keep}
         className={`icon-btn ${open || current || editor.isActive('highlight') ? 'active' : ''}`}
-        title="Text colour, highlight, alignment and indentation"
-        aria-label="Text colour, highlight, alignment and indentation"
+        title={t('Text colour, highlight, alignment and indentation')}
+        aria-label={t('Text colour, highlight, alignment and indentation')}
         aria-expanded={open}
         onClick={() => setOpen((v) => !v)}
       >
         <Baseline size={15} style={current ? { color: current } : undefined} />
       </button>
       {open && (
-        <div className="text-style-pop card" role="group" aria-label="Text style">
+        <div className="text-style-pop card" role="group" aria-label={t('Text style')}>
           <div className="text-style-row">
-            <span className="faint small">Text</span>
-            <button onMouseDown={keep} className="swatch" title="Default colour" aria-label="Default text colour" onClick={() => run((c) => c.unsetColor())}>
+            <span className="faint small">{t('Text')}</span>
+            <button onMouseDown={keep} className="swatch" title={t('Default colour')} aria-label={t('Default text colour')} onClick={() => run((c) => c.unsetColor())}>
               <Ban size={13} />
             </button>
             {TEXT_COLORS.map(([name, color]) => (
-              <button key={name} onMouseDown={keep} className={`swatch${current === color ? ' on' : ''}`} title={name} aria-label={`Text colour ${name}`} onClick={() => run((c) => c.setColor(color))}>
-                <span style={{ color, fontWeight: 700 }}>A</span>
+              <button key={name} onMouseDown={keep} className={`swatch${current === color ? ' on' : ''}`} title={name} aria-label={t('Text colour {name}', { name })} onClick={() => run((c) => c.setColor(color))}>
+                <span style={{ color, fontWeight: 700 }}>{t('A')}</span>
               </button>
             ))}
           </div>
           <div className="text-style-row">
-            <span className="faint small">Highlight</span>
-            <button onMouseDown={keep} className="swatch" title="No highlight" aria-label="No highlight" onClick={() => run((c) => c.unsetHighlight())}>
+            <span className="faint small">{t('Highlight')}</span>
+            <button onMouseDown={keep} className="swatch" title={t('No highlight')} aria-label={t('No highlight')} onClick={() => run((c) => c.unsetHighlight())}>
               <Ban size={13} />
             </button>
             {HIGHLIGHTS.map(([name, color]) => (
@@ -68,15 +69,15 @@ export default function TextStyleMenu({ editor }: { editor: Editor }) {
                 key={name}
                 onMouseDown={keep}
                 className={`swatch${editor.isActive('highlight', { color }) ? ' on' : ''}`}
-                title={`${name} highlight`}
-                aria-label={`Highlight ${name}`}
+                title={t('{name} highlight', { name })}
+                aria-label={t('Highlight {name}', { name })}
                 style={{ background: color }}
                 onClick={() => run((c) => c.setHighlight({ color }))}
               />
             ))}
           </div>
           <div className="text-style-row">
-            <span className="faint small">Align</span>
+            <span className="faint small">{t('Align')}</span>
             {(
               [
                 ['left', AlignLeft],
@@ -88,17 +89,17 @@ export default function TextStyleMenu({ editor }: { editor: Editor }) {
                 key={align}
                 onMouseDown={keep}
                 className={`swatch${editor.isActive({ textAlign: align }) ? ' on' : ''}`}
-                title={`Align ${align}`}
-                aria-label={`Align ${align}`}
+                title={t('Align {align}', { align })}
+                aria-label={t('Align {align}', { align })}
                 onClick={() => run((c) => c.setTextAlign(align))}
               >
                 <Icon size={14} />
               </button>
             ))}
-            <button onMouseDown={keep} className="swatch" title="Indent (Ctrl+])" aria-label="Indent" onClick={() => editor.chain().focus().indent().run()}>
+            <button onMouseDown={keep} className="swatch" title={t('Indent (Ctrl+])')} aria-label={t('Indent')} onClick={() => editor.chain().focus().indent().run()}>
               <IndentIncrease size={14} />
             </button>
-            <button onMouseDown={keep} className="swatch" title="Outdent (Ctrl+[)" aria-label="Outdent" onClick={() => editor.chain().focus().outdent().run()}>
+            <button onMouseDown={keep} className="swatch" title={t('Outdent (Ctrl+[)')} aria-label={t('Outdent')} onClick={() => editor.chain().focus().outdent().run()}>
               <IndentDecrease size={14} />
             </button>
           </div>

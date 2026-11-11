@@ -1,6 +1,7 @@
 // A folder: a container in the page tree without content of its own (Confluence Cloud folders
 // import as these). Shows what's inside, and lets editors add pages and folders to it.
 
+import { t } from '../i18n'
 import { Link, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { FilePlus2, FileText, Folder, FolderPlus, Link2 } from 'lucide-react'
@@ -25,12 +26,12 @@ export function FolderView({ page, canEdit }: { page: Page; canEdit: boolean }) 
   const children = useQuery({ queryKey: ['children', page.id, 1], queryFn: () => api.get<Child[]>(`/pages/${page.id}/children?depth=1`) })
   const create = async (kind: 'page' | 'folder') => {
     try {
-      const r = await api.post<{ id: string }>('/pages', { spaceKey: page.spaceKey, parentId: page.id, kind, title: kind === 'folder' ? 'New folder' : 'Untitled' })
+      const r = await api.post<{ id: string }>('/pages', { spaceKey: page.spaceKey, parentId: page.id, kind, title: kind === 'folder' ? t('New folder') : t('Untitled') })
       qc.invalidateQueries({ queryKey: ['tree', page.spaceKey] })
       qc.invalidateQueries({ queryKey: ['children', page.id] })
       nav(`/pages/${r.id}?new=1`)
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not create it')
+      toast(e instanceof Error ? e.message : t('Could not create it'))
     }
   }
   const icon = (c: Child) => {
@@ -45,8 +46,8 @@ export function FolderView({ page, canEdit }: { page: Page; canEdit: boolean }) 
     <div className="folder-view">
       {canEdit && (
         <div className="row folder-actions">
-          <button className="btn btn-sm" onClick={() => create('page')}><FilePlus2 size={14} /> New page</button>
-          <button className="btn btn-sm" onClick={() => create('folder')}><FolderPlus size={14} /> New folder</button>
+          <button className="btn btn-sm" onClick={() => create('page')}><FilePlus2 size={14} />{' '}{t('New page')}</button>
+          <button className="btn btn-sm" onClick={() => create('folder')}><FolderPlus size={14} />{' '}{t('New folder')}</button>
         </div>
       )}
       {children.isLoading ? (
@@ -54,9 +55,7 @@ export function FolderView({ page, canEdit }: { page: Page; canEdit: boolean }) 
       ) : rows.length === 0 ? (
         <div className="empty">
           <Folder size={28} />
-          <br />
-          This folder is empty.
-        </div>
+          <br />{t('This folder is empty.')}</div>
       ) : (
         <ul className="folder-list">
           {rows.map((c) => (
@@ -64,7 +63,7 @@ export function FolderView({ page, canEdit }: { page: Page; canEdit: boolean }) 
               <Link to={`/pages/${c.id}`} className="folder-item">
                 <span className="folder-item-icon">{icon(c)}</span>
                 <span className="folder-item-text">
-                  <span className="folder-item-title">{c.title || 'Untitled'}</span>
+                  <span className="folder-item-title">{c.title || t('Untitled')}</span>
                   {c.excerpt && <span className="faint small folder-item-excerpt">{c.excerpt}</span>}
                 </span>
                 <span className="faint small">{formatDate(c.updatedAt)}</span>

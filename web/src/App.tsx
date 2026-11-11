@@ -1,8 +1,10 @@
+import { t } from './i18n'
 import { useEffect } from 'react'
 import { Navigate, Route, Routes, useLocation } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import SecuritySettings from './components/SecuritySettings'
 import { api, setDateConventions } from './api'
+import { chooseLanguage, locale, rememberLanguage } from './i18n'
 import { applyAccent, applyFavicon } from './look'
 import { ToastProvider, useMe, Spinner } from './ui'
 import Layout from './components/Layout'
@@ -34,6 +36,14 @@ export default function App() {
     )
   }
   if (setup.data?.needsSetup) return <Setup />
+  // the interface language: the profile's, else the workspace's (loaded before the app, so a
+  // change means one reload)
+  const lang = chooseLanguage(me.data?.language, me.data?.workspace?.defaultLanguage)
+  if (lang !== locale()) {
+    rememberLanguage(lang)
+    window.location.reload()
+    return null
+  }
   // the workspace's look and date conventions (idempotent; before anything renders a date)
   setDateConventions(me.data?.workspace?.dateFormat, me.data?.timeZone || me.data?.workspace?.timeZone)
   applyAccent(me.data?.workspace?.accentColor)
@@ -83,7 +93,7 @@ export default function App() {
           <Route path="/people" element={<PeoplePage />} />
           <Route path="/people/:id" element={<ProfilePage />} />
           <Route path="/tasks" element={<TasksPage />} />
-          <Route path="*" element={<div className="empty">Not found</div>} />
+          <Route path="*" element={<div className="empty">{t('Not found')}</div>} />
         </Route>
       </Routes>
     </ToastProvider>
@@ -101,11 +111,9 @@ function TwoFactorRequired() {
   return (
     <div className="auth">
       <div className="auth-card" style={{ maxWidth: 640 }}>
-        <h1 style={{ marginTop: 0 }}>Set up two-factor authentication</h1>
+        <h1 style={{ marginTop: 0 }}>{t('Set up two-factor authentication')}</h1>
         <p className="muted">
-          {me.data?.workspace?.name ?? 'This wiki'} asks everyone in your role to protect their account with a second step: a code from an authenticator app
-          (for example 1Password, Bitwarden, Google or Microsoft Authenticator). It takes a minute.
-        </p>
+          {me.data?.workspace?.name ?? t('This wiki')}{' '}{t('asks everyone in your role to protect their account with a second step: a code from an authenticator app (for example 1Password, Bitwarden, Google or Microsoft Authenticator). It takes a minute.')}</p>
         <SecuritySettings />
         <p className="small">
           <a
@@ -115,9 +123,7 @@ function TwoFactorRequired() {
               await api.post('/auth/logout')
               location.href = '/login'
             }}
-          >
-            Sign out
-          </a>
+          >{t('Sign out')}</a>
         </p>
       </div>
     </div>

@@ -135,6 +135,10 @@ The moon icon switches between light and dark. *Settings → Appearance* also of
 theme (black text, strong borders, underlined links, a clear focus ring); with *System*, WikiCraft
 follows the device, including its "more contrast" setting.
 
+*Settings → Appearance → Language* sets the language of the interface (menus, buttons, messages)
+for you; without a choice WikiCraft uses the workspace's default language, else your browser's.
+Dates and "3 h ago" follow it too. Pages themselves stay in the language they were written in.
+
 ## People
 
 *People* in the sidebar lists everybody with an account: search by name, job, department or

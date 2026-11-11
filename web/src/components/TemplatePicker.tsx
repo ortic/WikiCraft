@@ -1,3 +1,4 @@
+import { t as tr } from '../i18n'
 import { useState } from 'react'
 import { SymbolTile, parseSymbol } from '../icons'
 import { useNavigate } from 'react-router-dom'
@@ -51,7 +52,7 @@ export default function TemplatePicker({ spaceKey, parentId, onClose }: { spaceK
       ),
   })
   const def = fallback.data?.templateId ?? null
-  const defLabel = fallback.data?.from && fallback.data.from !== 'space' ? `default below “${fallback.data.from.title}”` : 'space default'
+  const defLabel = fallback.data?.from && fallback.data.from !== 'space' ? tr('default below “{title}”', { title: fallback.data.from.title }) : 'space default'
   const ordered = [...(templates.data ?? [])].sort((a, b) => Number(b.id === def) - Number(a.id === def))
   // a template with variables asks for their values first
   const [filling, setFilling] = useState<Template | null>(null)
@@ -67,28 +68,28 @@ export default function TemplatePicker({ spaceKey, parentId, onClose }: { spaceK
   const create = async (templateId?: string, variables?: Record<string, string>) => {
     setBusy(true)
     try {
-      const r = await api.post<{ id: string }>('/pages', { spaceKey, parentId: parentId ?? undefined, templateId, title: templateId ? undefined : 'Untitled', blank: !templateId, draft, variables })
+      const r = await api.post<{ id: string }>('/pages', { spaceKey, parentId: parentId ?? undefined, templateId, title: templateId ? undefined : tr('Untitled'), blank: !templateId, draft, variables })
       qc.invalidateQueries({ queryKey: ['tree', spaceKey] })
       onClose()
       nav(`/pages/${r.id}?new=1`)
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not create page')
+      toast(e instanceof Error ? e.message : tr('Could not create page'))
     } finally {
       setBusy(false)
     }
   }
   const createLink = async () => {
-    const url = window.prompt('Address of the website (https://…)')?.trim()
+    const url = window.prompt(tr('Address of the website (https://…)'))?.trim()
     if (!url) return
-    const title = window.prompt('Name in the page tree (leave empty to use the site name)')?.trim()
+    const title = window.prompt(tr('Name in the page tree (leave empty to use the site name)'))?.trim()
     setBusy(true)
     try {
       await api.post<{ id: string }>('/pages', { spaceKey, parentId: parentId ?? undefined, kind: 'link', url, title: title || undefined })
       qc.invalidateQueries({ queryKey: ['tree', spaceKey] })
-      toast('Link added to the page tree')
+      toast(tr('Link added to the page tree'))
       onClose()
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not add the link')
+      toast(e instanceof Error ? e.message : tr('Could not add the link'))
     } finally {
       setBusy(false)
     }
@@ -111,7 +112,7 @@ export default function TemplatePicker({ spaceKey, parentId, onClose }: { spaceK
         </div>
       </button>
       {onPreview && (
-        <button type="button" className="icon-btn template-preview-btn" title={`Preview ${name}`} aria-label={`Preview ${name}`} onClick={onPreview}>
+        <button type="button" className="icon-btn template-preview-btn" title={tr('Preview {name}', { name })} aria-label={tr('Preview {name}', { name })} onClick={onPreview}>
           <Eye size={15} />
         </button>
       )}
@@ -126,17 +127,17 @@ export default function TemplatePicker({ spaceKey, parentId, onClose }: { spaceK
     }
     return (
       <Modal
-        title={`New page: ${filling.name}`}
+        title={tr('New page: {name}', { name: filling.name })}
         onClose={onClose}
         footer={
           <>
-            <button type="button" className="btn" onClick={() => setFilling(null)}><ArrowLeft size={14} /> All templates</button>
-            <button type="submit" form="template-variables" className="btn btn-primary" disabled={busy}>{busy ? <Spinner /> : null} Create page</button>
+            <button type="button" className="btn" onClick={() => setFilling(null)}><ArrowLeft size={14} />{' '}{tr('All templates')}</button>
+            <button type="submit" form="template-variables" className="btn btn-primary" disabled={busy}>{busy ? <Spinner /> : null}{' '}{tr('Create page')}</button>
           </>
         }
       >
         <form id="template-variables" onSubmit={submit}>
-          <p className="muted small" style={{ marginTop: 0 }}>Fill in what this template asks for. Anything you leave empty stays as a hint in the page.</p>
+          <p className="muted small" style={{ marginTop: 0 }}>{tr('Fill in what this template asks for. Anything you leave empty stays as a hint in the page.')}</p>
           {(filling.variables ?? []).map((v, i) => (
             <div key={v} className="field">
               <label htmlFor={`template-var-${i}`}>{v}</label>
@@ -150,13 +151,13 @@ export default function TemplatePicker({ spaceKey, parentId, onClose }: { spaceK
   if (preview) {
     return (
       <Modal
-        title={`Template: ${preview.name}`}
+        title={tr('Template: {name}', { name: preview.name })}
         onClose={onClose}
         width={760}
         footer={
           <>
-            <button className="btn" onClick={() => setPreview(null)}><ArrowLeft size={14} /> All templates</button>
-            <button className="btn btn-primary" disabled={busy} onClick={() => choose(preview)}>Use this template</button>
+            <button className="btn" onClick={() => setPreview(null)}><ArrowLeft size={14} />{' '}{tr('All templates')}</button>
+            <button className="btn btn-primary" disabled={busy} onClick={() => choose(preview)}>{tr('Use this template')}</button>
           </>
         }
       >
@@ -169,21 +170,19 @@ export default function TemplatePicker({ spaceKey, parentId, onClose }: { spaceK
             <article className="ProseMirror public-article" dangerouslySetInnerHTML={{ __html: previewed.data.html }} />
           </div>
         ) : (
-          <div className="empty">The preview isn't available.</div>
+          <div className="empty">{tr('The preview isn\'t available.')}</div>
         )}
       </Modal>
     )
   }
   return (
-    <Modal title="Create a page" onClose={onClose} width={760}>
+    <Modal title={tr('Create a page')} onClose={onClose} width={760}>
       <label className="row small draft-option">
-        <input type="checkbox" checked={draft} onChange={(e) => rememberDraft(e.target.checked)} />
-        Start as a private draft: only you see it until you publish it
-      </label>
+        <input type="checkbox" checked={draft} onChange={(e) => rememberDraft(e.target.checked)} />{tr('Start as a private draft: only you see it until you publish it')}</label>
       <div className="grid-cards">
-        {card('blank', <FilePlus2 size={22} />, 'Blank page', 'Start from scratch', () => create())}
-        {card('link', <Link2 size={22} />, 'Link to a website', 'A page-tree item that opens an external page', () => void createLink())}
-        {ordered.map((t) => card(t.id, <SymbolTile value={parseSymbol(t.icon) ? t.icon : 'document:slate'} size={30} />, t.name, !parentId && t.filedUnder ? `${t.description ?? ''} · goes under “${t.filedUnder}”` : t.description, () => choose(t), t.id === def ? defLabel : t.builtin ? undefined : t.spaceKey ? 'space' : 'workspace', () => setPreview(t)))}
+        {card('blank', <FilePlus2 size={22} />, tr('Blank page'), tr('Start from scratch'), () => create())}
+        {card('link', <Link2 size={22} />, tr('Link to a website'), tr('A page-tree item that opens an external page'), () => void createLink())}
+        {ordered.map((t) => card(t.id, <SymbolTile value={parseSymbol(t.icon) ? t.icon : 'document:slate'} size={30} />, t.name, !parentId && t.filedUnder ? tr('{value} · goes under “{filedUnder}”', { value: t.description ?? '', filedUnder: t.filedUnder }) : t.description, () => choose(t), t.id === def ? defLabel : t.builtin ? undefined : t.spaceKey ? 'space' : 'workspace', () => setPreview(t)))}
       </div>
     </Modal>
   )

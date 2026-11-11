@@ -1,3 +1,4 @@
+import { t as tr } from '../i18n'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -114,7 +115,7 @@ export default function PageView() {
   const canTrash = p.access.admin && (can(p.access, p.kind === 'blog' ? 'blog.delete' : 'page.delete') || (!!p.access.own && can(p.access, 'delete.own')))
 
   const saveTitle = async () => {
-    const t = title.trim() || 'Untitled'
+    const t = title.trim() || tr('Untitled')
     if (t === p.title) return
     await api.patch(`/pages/${p.id}`, { title: t })
     qc.invalidateQueries({ queryKey: ['page', p.id] })
@@ -128,29 +129,29 @@ export default function PageView() {
   }
   const trash = async () => {
     setMenu(false)
-    if (!confirm(`Move “${p.title}” and its child pages to the trash?`)) return
+    if (!confirm(tr('Move “{title}” and its child pages to the trash?', { title: p.title }))) return
     await api.del(`/pages/${p.id}`)
     qc.invalidateQueries({ queryKey: ['tree', p.spaceKey] })
-    toast('Moved to trash')
+    toast(tr('Moved to trash'))
     nav(p.parentId ? `/pages/${p.parentId}` : `/spaces/${p.spaceKey}`)
   }
   const archive = async () => {
-    if (!confirm('Archive this page and everything under it? It becomes read-only and leaves the page tree and search.')) return
+    if (!confirm(tr('Archive this page and everything under it? It becomes read-only and leaves the page tree and search.'))) return
     try {
       await api.post(`/pages/${p.id}/archive`)
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not archive')
+      toast(e instanceof Error ? e.message : tr('Could not archive'))
       return
     }
     qc.invalidateQueries({ queryKey: ['page', p.id] })
     qc.invalidateQueries({ queryKey: ['tree'] })
-    toast('Archived')
+    toast(tr('Archived'))
   }
   const unarchive = async () => {
     await api.post(`/pages/${p.id}/unarchive`)
     qc.invalidateQueries({ queryKey: ['page', p.id] })
     qc.invalidateQueries({ queryKey: ['tree'] })
-    toast('Restored from the archive')
+    toast(tr('Restored from the archive'))
   }
   const copy = () => {
     setMenu(false)
@@ -162,9 +163,9 @@ export default function PageView() {
       qc.invalidateQueries({ queryKey: ['page', p.id] })
       qc.invalidateQueries({ queryKey: ['tree', p.spaceKey] })
       qc.invalidateQueries({ queryKey: ['drafts'] })
-      toast('Published: everyone who can see this space can read it now')
+      toast(tr('Published: everyone who can see this space can read it now'))
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not publish')
+      toast(e instanceof Error ? e.message : tr('Could not publish'))
     }
   }
   const toggleWatch = async () => {
@@ -172,13 +173,13 @@ export default function PageView() {
     if (p.watching) await api.del(`/pages/${p.id}/watch`)
     else await api.put(`/pages/${p.id}/watch`)
     qc.invalidateQueries({ queryKey: ['page', p.id] })
-    toast(p.watching ? 'You will no longer be notified about changes' : 'You will be notified about changes and comments')
+    toast(p.watching ? tr('You will no longer be notified about changes') : tr('You will be notified about changes and comments'))
   }
   const watchWithChildren = async () => {
     setMenu(false)
     await api.put(`/pages/${p.id}/watch`, { includeChildren: true })
     qc.invalidateQueries({ queryKey: ['page', p.id] })
-    toast('You will be notified about this page and the pages below it, including new ones')
+    toast(tr('You will be notified about this page and the pages below it, including new ones'))
   }
   const saveAsTemplate = () => {
     setMenu(false)
@@ -205,57 +206,55 @@ export default function PageView() {
           <span className="spacer" />
           <PresenceAvatars users={presence} />
           {p.restricted && (
-            <button className="icon-btn" title="This page has restrictions" onClick={() => setRestrictions(true)}>
+            <button className="icon-btn" title={tr('This page has restrictions')} onClick={() => setRestrictions(true)}>
               <Lock size={16} />
             </button>
           )}
           {user && (
-            <button className={`icon-btn ${p.favorite ? 'active' : ''}`} title={p.favorite ? 'Unstar' : 'Star'} onClick={toggleFavorite}>
+            <button className={`icon-btn ${p.favorite ? 'active' : ''}`} title={p.favorite ? tr('Unstar') : tr('Star')} onClick={toggleFavorite}>
               <Star size={16} fill={p.favorite ? 'currentColor' : 'none'} />
             </button>
           )}
-          <button className={`icon-btn ${panel === 'comments' ? 'active' : ''}`} title="Comments" onClick={() => setPanel(panel === 'comments' ? null : 'comments')}>
+          <button className={`icon-btn ${panel === 'comments' ? 'active' : ''}`} title={tr('Comments')} onClick={() => setPanel(panel === 'comments' ? null : 'comments')}>
             <MessageSquare size={16} />
           </button>
-          <button className={`icon-btn ${panel === 'attachments' ? 'active' : ''}`} title="Attachments" onClick={() => setPanel(panel === 'attachments' ? null : 'attachments')}>
+          <button className={`icon-btn ${panel === 'attachments' ? 'active' : ''}`} title={tr('Attachments')} onClick={() => setPanel(panel === 'attachments' ? null : 'attachments')}>
             <Paperclip size={16} />
           </button>
-          <Link className="icon-btn" title="Page history" to={`/pages/${p.id}/history`}>
+          <Link className="icon-btn" title={tr('Page history')} to={`/pages/${p.id}/history`}>
             <HistoryIcon size={16} />
           </Link>
           {user && (
-            <button className="btn small share-btn" title="Share" onClick={() => setShare(true)}>
-              <Share2 size={14} /> Share
-            </button>
+            <button className="btn small share-btn" title={tr('Share')} onClick={() => setShare(true)}>
+              <Share2 size={14} />{' '}{tr('Share')}</button>
           )}
           <div style={{ position: 'relative' }}>
-            <button className="icon-btn" title="More" onClick={() => setMenu((m) => !m)}>
+            <button className="icon-btn" title={tr('More')} onClick={() => setMenu((m) => !m)}>
               <MoreHorizontal size={16} />
             </button>
             {menu && (
               <div className="dropdown menu page-menu" onMouseLeave={() => setMenu(false)}>
                 {p.access.admin && can(p.access, 'restrict') && (
                   <div className="menu-item" onClick={() => { setMenu(false); setRestrictions(true) }}>
-                    <Lock size={15} /> Restrictions
-                  </div>
+                    <Lock size={15} />{' '}{tr('Restrictions')}</div>
                 )}
                 {canEdit && (
                   <div className="menu-item" onClick={async () => { setMenu(false); await api.patch(`/pages/${p.id}`, { fullWidth: !p.fullWidth }); qc.invalidateQueries({ queryKey: ['page', p.id] }) }}>
-                    <Maximize2 size={15} /> {p.fullWidth ? 'Fixed width' : 'Full width'}
+                    <Maximize2 size={15} /> {p.fullWidth ? tr('Fixed width') : tr('Full width')}
                   </div>
                 )}
                 {user && (
                   <div className="menu-item" onClick={toggleWatch}>
-                    {p.watching ? <EyeOff size={15} /> : <Eye size={15} />} {p.watching ? (p.watchingChildren ? 'Stop watching this and the pages below' : 'Stop watching') : 'Watch page'}
+                    {p.watching ? <EyeOff size={15} /> : <Eye size={15} />} {p.watching ? (p.watchingChildren ? tr('Stop watching this and the pages below') : tr('Stop watching')) : tr('Watch page')}
                   </div>
                 )}
                 {user && !p.watchingChildren && (
                   <div className="menu-item" onClick={watchWithChildren}>
-                    <Eye size={15} /> {p.watching ? 'Also watch the pages below' : 'Watch page and the pages below'}
+                    <Eye size={15} /> {p.watching ? tr('Also watch the pages below') : tr('Watch page and the pages below')}
                   </div>
                 )}
                 {user && !p.watching && p.watchedThrough && (
-                  <div className="menu-note faint small">You get updates through “{p.watchedThrough.title}”</div>
+                  <div className="menu-note faint small">{tr('You get updates through “{title}”', { title: p.watchedThrough.title })}</div>
                 )}
                 {user && space.data && (
                   <div
@@ -265,43 +264,37 @@ export default function PageView() {
                       const watching = (space.data as Space & { watching?: boolean }).watching
                       await (watching ? api.del(`/spaces/${p.spaceKey}/watch`) : api.put(`/spaces/${p.spaceKey}/watch`))
                       qc.invalidateQueries({ queryKey: ['space', p.spaceKey] })
-                      toast(watching ? 'You stopped watching this space' : 'You get notified about new and changed pages in this space')
+                      toast(watching ? tr('You stopped watching this space') : tr('You get notified about new and changed pages in this space'))
                     }}
                   >
                     {(space.data as Space & { watching?: boolean }).watching ? <EyeOff size={15} /> : <Eye size={15} />}{' '}
-                    {(space.data as Space & { watching?: boolean }).watching ? 'Stop watching the space' : 'Watch the whole space'}
+                    {(space.data as Space & { watching?: boolean }).watching ? tr('Stop watching the space') : tr('Watch the whole space')}
                   </div>
                 )}
                 {(canEdit || user) && <div className="menu-sep" />}
                 {canEdit && (
                   <div className="menu-item" onClick={() => { setMenu(false); setStatusOpen(true) }}>
-                    <CircleDot size={15} /> Set status…
-                  </div>
+                    <CircleDot size={15} />{' '}{tr('Set status…')}</div>
                 )}
                 {canEdit && (
                   <div className="menu-item" onClick={() => { setMenu(false); setAddingProp(true) }}>
-                    <ListPlus size={15} /> Add property
-                  </div>
+                    <ListPlus size={15} />{' '}{tr('Add property')}</div>
                 )}
                 {canEdit && (
                   <div className="menu-item" onClick={() => { setMenu(false); setVerifyOpen(true) }}>
-                    <BadgeCheck size={15} /> Verify page…
-                  </div>
+                    <BadgeCheck size={15} />{' '}{tr('Verify page…')}</div>
                 )}
                 {user && (p.access.admin || (p as Page & { ownerId?: string }).ownerId === user.id) && (
                   <div className="menu-item" onClick={() => { setMenu(false); setOwnerOpen(true) }}>
-                    <UserCog size={15} /> Change owner…
-                  </div>
+                    <UserCog size={15} />{' '}{tr('Change owner…')}</div>
                 )}
                 {user && (
                   <div className="menu-item" onClick={() => { setMenu(false); setReviewOpen(true) }}>
-                    <UserCheck size={15} /> Request review…
-                  </div>
+                    <UserCheck size={15} />{' '}{tr('Request review…')}</div>
                 )}
                 {canEdit && (
                   <div className="menu-item" onClick={saveAsTemplate}>
-                    <LayoutTemplate size={15} /> Save as template
-                  </div>
+                    <LayoutTemplate size={15} />{' '}{tr('Save as template')}</div>
                 )}
                 {space.data?.role === 'admin' && !(space.data.shortcuts ?? []).some((s) => s.url === `/pages/${p.id}`) && (space.data.shortcuts?.length ?? 0) < 20 && (
                   <div
@@ -309,65 +302,53 @@ export default function PageView() {
                     onClick={async () => {
                       setMenu(false)
                       try {
-                        await api.patch(`/spaces/${p.spaceKey}`, { shortcuts: [...(space.data?.shortcuts ?? []), { title: p.title.slice(0, 80) || 'Untitled', url: `/pages/${p.id}` }] })
+                        await api.patch(`/spaces/${p.spaceKey}`, { shortcuts: [...(space.data?.shortcuts ?? []), { title: p.title.slice(0, 80) || tr('Untitled'), url: `/pages/${p.id}` }] })
                         qc.invalidateQueries({ queryKey: ['space'] })
                         qc.invalidateQueries({ queryKey: ['spaces'] })
-                        toast('Added to the space shortcuts in the sidebar')
+                        toast(tr('Added to the space shortcuts in the sidebar'))
                       } catch (e) {
-                        toast(e instanceof Error ? e.message : 'Could not add the shortcut')
+                        toast(e instanceof Error ? e.message : tr('Could not add the shortcut'))
                       }
                     }}
                   >
-                    <Pin size={15} /> Add to space shortcuts
-                  </div>
+                    <Pin size={15} />{' '}{tr('Add to space shortcuts')}</div>
                 )}
                 {canEdit && p.kind !== 'blog' && (
                   <div className="menu-item" onClick={() => { setMenu(false); setChildTplOpen(true) }}>
-                    <LayoutTemplate size={15} /> Template for pages below…
-                  </div>
+                    <LayoutTemplate size={15} />{' '}{tr('Template for pages below…')}</div>
                 )}
                 {user && (
                   <div className="menu-item" onClick={copy}>
-                    <Copy size={15} /> Copy page
-                  </div>
+                    <Copy size={15} />{' '}{tr('Copy page')}</div>
                 )}
                 {p.access.admin && (
                   <div className="menu-item" onClick={() => { setMenu(false); setMoveOpen(true) }}>
-                    <FolderInput size={15} /> Move…
-                  </div>
+                    <FolderInput size={15} />{' '}{tr('Move…')}</div>
                 )}
                 {features.exports !== false && can(p.access, 'export') && (<>
                 <div className="menu-sep" />
-                <div className="menu-label">Export</div>
+                <div className="menu-label">{tr('Export')}</div>
                 <div className="menu-item" onClick={() => { setMenu(false); setPdfOpen(true) }}>
-                  <FileText size={15} /> PDF…
-                </div>
+                  <FileText size={15} />{' '}{tr('PDF…')}</div>
                 <div className="menu-item" onClick={() => { setMenu(false); setTimeout(() => window.print(), 50) }}>
-                  <Printer size={15} /> Print
-                </div>
+                  <Printer size={15} />{' '}{tr('Print')}</div>
                 <a className="menu-item" href={`/api/pages/${p.id}/export?format=docx`}>
-                  <FileText size={15} /> Word
-                </a>
-                <a className="menu-item" href={`/api/pages/${p.id}/export?format=docx&tree=true`} title="This page and all its child pages in one document">
-                  <FileText size={15} /> Word, with child pages
-                </a>
+                  <FileText size={15} />{' '}{tr('Word')}</a>
+                <a className="menu-item" href={`/api/pages/${p.id}/export?format=docx&tree=true`} title={tr('This page and all its child pages in one document')}>
+                  <FileText size={15} />{' '}{tr('Word, with child pages')}</a>
                 <a className="menu-item" href={`/api/pages/${p.id}/export?format=md`}>
-                  <Download size={15} /> Markdown
-                </a>
+                  <Download size={15} />{' '}{tr('Markdown')}</a>
                 <a className="menu-item" href={`/api/pages/${p.id}/export?format=html`}>
-                  <Download size={15} /> HTML
-                </a>
+                  <Download size={15} />{' '}{tr('HTML')}</a>
                 </>)}
                 {(canTrash || (canEdit && space.data?.homePageId !== p.id)) && <div className="menu-sep" />}
                 {canEdit && can(p.access, 'archive') && space.data?.homePageId !== p.id && (
                   <div className="menu-item" onClick={() => { setMenu(false); archive() }}>
-                    <Archive size={15} /> Archive page
-                  </div>
+                    <Archive size={15} />{' '}{tr('Archive page')}</div>
                 )}
                 {canTrash && (
                   <div className="menu-item btn-danger" onClick={trash}>
-                    <Trash2 size={15} /> Move to trash
-                  </div>
+                    <Trash2 size={15} />{' '}{tr('Move to trash')}</div>
                 )}
               </div>
             )}
@@ -376,7 +357,7 @@ export default function PageView() {
 
         <div className={`page-wrap ${p.fullWidth ? 'full' : ''}`}>
           {space.data?.archivedAt && (
-            <div className="archived-banner">This space was archived on {formatDate(space.data.archivedAt)} and is read-only.</div>
+            <div className="archived-banner">{tr('This space was archived on {date} and is read-only.', { date: formatDate(space.data.archivedAt) })}</div>
           )}
           {p.draft && <DraftBanner page={p} onPublish={publish} />}
           <PageDecor page={p} canEdit={canEdit} onChange={() => qc.invalidateQueries({ queryKey: ['page', p.id] })} />
@@ -386,7 +367,7 @@ export default function PageView() {
             rows={1}
             value={title}
             readOnly={!canEdit}
-            placeholder="Untitled"
+            placeholder={tr('Untitled')}
             onChange={(e) => setTitle(e.target.value.replace(/\n/g, ''))}
             onBlur={saveTitle}
             onKeyDown={(e) => {
@@ -397,65 +378,63 @@ export default function PageView() {
             }}
           />
           <div className="page-meta">
-            <span>
-              Updated {formatDate(p.updatedAt)} by {p.updatedBy && p.updatedByName ? <Link to={`/people/${p.updatedBy}`}>{p.updatedByName}</Link> : (p.updatedByName ?? 'someone')}
+            <span>{tr('Updated {date} by', { date: formatDate(p.updatedAt) })}{' '}{p.updatedBy && p.updatedByName ? <Link to={`/people/${p.updatedBy}`}>{p.updatedByName}</Link> : (p.updatedByName ?? tr('someone'))}
             </span>
             {(p as Page & { ownerName?: string }).ownerName && (
               <>
                 <span>·</span>
-                <span title="Responsible for this page">
-                  Owner: {p.ownerId ? <Link to={`/people/${p.ownerId}`}>{(p as Page & { ownerName?: string }).ownerName}</Link> : (p as Page & { ownerName?: string }).ownerName}
+                <span title={tr('Responsible for this page')}>{tr('Owner:')}{' '}{p.ownerId ? <Link to={`/people/${p.ownerId}`}>{(p as Page & { ownerName?: string }).ownerName}</Link> : (p as Page & { ownerName?: string }).ownerName}
                 </span>
               </>
             )}
             <span>·</span>
-            <span>v{p.version}</span>
+            <span>{tr('v{version}', { version: p.version })}</span>
             {p.views > 0 && (
               <>
                 <span>·</span>
                 <PageViews pageId={p.id} views={p.views} viewers={p.viewers} canSeeWho={!!features.viewerList && canEdit} />
               </>
             )}
-            {p.kind === 'blog' && <span className="badge badge-accent">Blog post</span>}
+            {p.kind === 'blog' && <span className="badge badge-accent">{tr('Blog post')}</span>}
             {words > 0 && (
               <>
                 <span>·</span>
-                <span>{words} words</span>
+                <span>{tr('{words} words', { words })}</span>
               </>
             )}
             <VerificationBadge pageId={p.id} onClick={canEdit ? () => setVerifyOpen(true) : undefined} />
             <PageStatus pageId={p.id} status={p.pageStatus} canEdit={canEdit} open={statusOpen} onOpenChange={setStatusOpen} />
             {canEdit && !p.draft && p.kind !== 'folder' && <MinorEditToggle pageId={p.id} />}
-            {!canEdit && <span className="badge">Read only</span>}
+            {!canEdit && <span className="badge">{tr('Read only')}</span>}
           </div>
           <PageProperties page={p} canEdit={canEdit} adding={addingProp} onAddingDone={() => setAddingProp(false)} />
           {p.access.archivedPage && (
             <div className="archived-banner">
               <Archive size={15} />
               <span>
-                {p.access.archivedPage === p.id ? 'This page is archived.' : 'This page is in an archived section.'} It's read-only and hidden from the page tree and search.
-              </span>
+                {p.access.archivedPage === p.id ? tr('This page is archived.') : tr('This page is in an archived section.')}{' '}{tr('It\'s read-only and hidden from the page tree and search.')}</span>
               {p.access.admin && can(p.access, 'archive') && p.access.archivedPage === p.id && (
-                <button className="btn btn-sm" onClick={unarchive}><RotateCcw size={13} /> Restore</button>
+                <button className="btn btn-sm" onClick={unarchive}><RotateCcw size={13} />{' '}{tr('Restore')}</button>
               )}
-              {p.access.archivedPage !== p.id && <Link to={`/pages/${p.access.archivedPage}`}>Go to the archived page</Link>}
+              {p.access.archivedPage !== p.id && <Link to={`/pages/${p.access.archivedPage}`}>{tr('Go to the archived page')}</Link>}
             </div>
           )}
           {changed?.id === p.id && (
             <div className="changed-banner">
               <HistoryIcon size={15} />
-              <span>
-                Changed since your last visit {formatDate(changed.info.at)}
-                {changed.info.editors.length ? ` by ${changed.info.editors.slice(0, 3).join(', ')}${changed.info.editors.length > 3 ? ' and others' : ''}` : ''}
-                {' '}({changed.info.versions} {changed.info.versions === 1 ? 'version' : 'versions'}).
+              <span>{tr('Changed since your last visit {date}', { date: formatDate(changed.info.at) })}
+                {changed.info.editors.length
+                  ? ' ' + (changed.info.editors.length > 3 ? tr('by {names} and others', { names: changed.info.editors.slice(0, 3).join(', ') }) : tr('by {names}', { names: changed.info.editors.join(', ') }))
+                  : ''}
+                {' '}{tr('({count} versions).', { count: changed.info.versions })}
               </span>
-              <Link to={`/pages/${p.id}/history?since=${changed.info.version}`}>View changes</Link>
+              <Link to={`/pages/${p.id}/history?since=${changed.info.version}`}>{tr('View changes')}</Link>
               {!!changed.info.blocks?.length && p.kind !== 'folder' && (
                 <button className="btn btn-ghost btn-sm" aria-pressed={showChanges} onClick={() => setShowChanges(!showChanges)}>
-                  {showChanges ? 'Hide highlights' : `Highlight ${changed.info.blocks.length === 1 ? 'the change' : 'changes'}`}
+                  {showChanges ? tr('Hide highlights') : changed.info.blocks.length === 1 ? tr('Highlight the change') : tr('Highlight changes')}
                 </button>
               )}
-              <button className="icon-btn" title="Dismiss" onClick={() => setChanged({ id: '', info: changed.info })}><X size={14} /></button>
+              <button className="icon-btn" title={tr('Dismiss')} onClick={() => setChanged({ id: '', info: changed.info })}><X size={14} /></button>
             </div>
           )}
           {p.kind === 'folder' ? (
@@ -478,20 +457,19 @@ export default function PageView() {
             {user ? (
               <button
                 className={`like-btn${p.likes?.liked ? ' liked' : ''}`}
-                title={p.likes?.names.length ? `Liked by ${p.likes.names.join(', ')}${(p.likes.count ?? 0) > p.likes.names.length ? ' and others' : ''}` : 'Like this page'}
+                title={p.likes?.names.length ? ((p.likes.count ?? 0) > p.likes.names.length ? tr('Liked by {names} and others', { names: p.likes.names.join(', ') }) : tr('Liked by {names}', { names: p.likes.names.join(', ') })) : tr('Like this page')}
                 onClick={async () => {
                   const next = await (p.likes?.liked ? api.del(`/pages/${p.id}/like`) : api.put(`/pages/${p.id}/like`))
                   qc.setQueryData(['page', p.id], { ...p, likes: next })
                 }}
               >
-                <ThumbsUp size={14} /> {p.likes?.liked ? 'Liked' : 'Like'}
+                <ThumbsUp size={14} /> {p.likes?.liked ? tr('Liked') : tr('Like')}
               </button>
             ) : null}
             {(p.likes?.count ?? 0) > 0 && (
               <span className="faint small">
                 {p.likes!.names.slice(0, 3).join(', ')}
-                {p.likes!.count > 3 ? ` and ${p.likes!.count - 3} others` : ''} liked this
-              </span>
+                {p.likes!.count > 3 ? ' ' + tr('and {value} others', { value: p.likes!.count - 3 }) + '' : ''}{' '}{tr('liked this')}</span>
             )}
           </div>
           </>
@@ -511,9 +489,7 @@ export default function PageView() {
             ))}
             {canEdit &&
               (labelInput === null ? (
-                <button className="btn btn-ghost btn-sm" onClick={() => setLabelInput('')}>
-                  + Add label
-                </button>
+                <button className="btn btn-ghost btn-sm" onClick={() => setLabelInput('')}>{tr('+ Add label')}</button>
               ) : (
                 <>
                 <input
@@ -521,7 +497,7 @@ export default function PageView() {
                   style={{ width: 160, height: 26 }}
                   autoFocus
                   list="label-suggestions"
-                  aria-label="New label"
+                  aria-label={tr('New label')}
                   value={labelInput}
                   onChange={async (e) => {
                     const v = e.target.value
@@ -541,13 +517,13 @@ export default function PageView() {
                     }
                     if (e.key === 'Escape') setLabelInput(null)
                   }}
-                  placeholder="label name"
+                  placeholder={tr('label name')}
                 />
                 <datalist id="label-suggestions">
                   {labelSuggest.data
                     ?.filter((l) => !p.labels.includes(l.name))
                     .map((l) => (
-                      <option key={l.name} value={l.name}>{l.count === 1 ? '1 page' : `${l.count} pages`}</option>
+                      <option key={l.name} value={l.name}>{tr('{count} pages', { count: l.count })}</option>
                     ))}
                 </datalist>
                 </>
@@ -589,26 +565,23 @@ function PdfExportDialog({ page, onClose }: { page: Page; onClose: () => void })
   const href = `/api/pages/${page.id}/export?format=pdf&tree=${tree}&toc=${toc}&cover=${cover}`
   return (
     <Modal
-      title="Export as PDF"
+      title={tr('Export as PDF')}
       onClose={onClose}
       width={420}
       footer={
         <>
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <a className="btn btn-primary" href={href} onClick={() => setTimeout(onClose, 100)}>Download PDF</a>
+          <button className="btn" onClick={onClose}>{tr('Cancel')}</button>
+          <a className="btn btn-primary" href={href} onClick={() => setTimeout(onClose, 100)}>{tr('Download PDF')}</a>
         </>
       }
     >
-      <p className="muted" style={{ marginTop: 0 }}>A4 pages with the space and title in the header and page numbers in the footer.</p>
+      <p className="muted" style={{ marginTop: 0 }}>{tr('A4 pages with the space and title in the header and page numbers in the footer.')}</p>
       <label className="row" style={{ marginBottom: 8 }}>
-        <input type="checkbox" checked={tree} onChange={(e) => { setTree(e.target.checked); if (e.target.checked) setToc(true) }} /> Include the pages below this one
-      </label>
+        <input type="checkbox" checked={tree} onChange={(e) => { setTree(e.target.checked); if (e.target.checked) setToc(true) }} />{' '}{tr('Include the pages below this one')}</label>
       <label className="row" style={{ marginBottom: 8 }}>
-        <input type="checkbox" checked={toc} onChange={(e) => setToc(e.target.checked)} /> Table of contents
-      </label>
+        <input type="checkbox" checked={toc} onChange={(e) => setToc(e.target.checked)} />{' '}{tr('Table of contents')}</label>
       <label className="row">
-        <input type="checkbox" checked={cover} onChange={(e) => setCover(e.target.checked)} /> Cover page
-      </label>
+        <input type="checkbox" checked={cover} onChange={(e) => setCover(e.target.checked)} />{' '}{tr('Cover page')}</label>
     </Modal>
   )
 }
@@ -623,31 +596,29 @@ function ChildTemplateDialog({ page, onClose }: { page: Page; onClose: () => voi
       await api.patch(`/pages/${page.id}`, { childTemplate: value })
       qc.invalidateQueries({ queryKey: ['page', page.id] })
       qc.invalidateQueries({ queryKey: ['default-template'] })
-      toast(value ? 'New pages below start from that template' : 'New pages below start like the rest of the space')
+      toast(value ? tr('New pages below start from that template') : tr('New pages below start like the rest of the space'))
       onClose()
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not save')
+      toast(e instanceof Error ? e.message : tr('Could not save'))
     }
   }
   return (
     <Modal
-      title="Template for pages below"
+      title={tr('Template for pages below')}
       onClose={onClose}
       width={460}
       footer={
         <>
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" onClick={save}>Save</button>
+          <button className="btn" onClick={onClose}>{tr('Cancel')}</button>
+          <button className="btn btn-primary" onClick={save}>{tr('Save')}</button>
         </>
       }
     >
-      <p className="muted" style={{ marginTop: 0 }}>
-        New pages created below “{page.title}” (and below those) start from this template. People can still pick another one or a blank page.
-      </p>
+      <p className="muted" style={{ marginTop: 0 }}>{tr('New pages created below “{title}” (and below those) start from this template. People can still pick another one or a blank page.', { title: page.title })}</p>
       <label className="field">
-        <span className="sr-only">Template</span>
-        <select className="select" aria-label="Template" value={value} onChange={(e) => setValue(e.target.value)}>
-          <option value="">Same as the rest of the space</option>
+        <span className="sr-only">{tr('Template')}</span>
+        <select className="select" aria-label={tr('Template')} value={value} onChange={(e) => setValue(e.target.value)}>
+          <option value="">{tr('Same as the rest of the space')}</option>
           {templates.data?.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       </label>
@@ -659,7 +630,7 @@ function CopyPageDialog({ page, onClose }: { page: Page; onClose: () => void }) 
   const qc = useQueryClient()
   const nav = useNavigate()
   const toast = useToast()
-  const [title, setTitle] = useState(`Copy of ${page.title}`)
+  const [title, setTitle] = useState(tr('Copy of {title}', { title: page.title }))
   const [children, setChildren] = useState(false)
   const [attachments, setAttachments] = useState(true)
   const [place, setPlace] = useState<{ spaceKey: string; parentId: string | null }>({ spaceKey: page.spaceKey, parentId: page.parentId })
@@ -680,35 +651,33 @@ function CopyPageDialog({ page, onClose }: { page: Page; onClose: () => void }) 
       onClose()
       nav(`/pages/${r.id}`)
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Copy failed')
+      toast(e instanceof Error ? e.message : tr('Copy failed'))
       setBusy(false)
     }
   }
   return (
     <Modal
-      title="Copy page"
+      title={tr('Copy page')}
       onClose={onClose}
       footer={
         <>
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? 'Copying…' : 'Copy'}</button>
+          <button className="btn" onClick={onClose}>{tr('Cancel')}</button>
+          <button className="btn btn-primary" disabled={busy} onClick={submit}>{busy ? tr('Copying…') : tr('Copy')}</button>
         </>
       }
     >
       <div className="field">
-        <label htmlFor="copy-title">Title</label>
+        <label htmlFor="copy-title">{tr('Title')}</label>
         <input id="copy-title" className="input" autoFocus value={title} maxLength={255} onChange={(e) => setTitle(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && submit()} />
       </div>
       <PlacePicker spaceKey={place.spaceKey} parentId={place.parentId} idPrefix="copy" onChange={(spaceKey, parentId) => setPlace({ spaceKey, parentId })} />
       {(kids.data?.length ?? 0) > 0 && (
         <label className="row small">
-          <input type="checkbox" checked={children} onChange={(e) => setChildren(e.target.checked)} /> Include the {kids.data!.length === 1 ? 'child page' : `${kids.data!.length} child pages`} and everything below
-        </label>
+          <input type="checkbox" checked={children} onChange={(e) => setChildren(e.target.checked)} />{' '}{tr('Include the {count} child pages and everything below', { count: kids.data!.length })}</label>
       )}
       <label className="row small">
-        <input type="checkbox" checked={attachments} onChange={(e) => setAttachments(e.target.checked)} /> Copy the attachments too
-      </label>
-      <p className="faint small" style={{ marginBottom: 0 }}>The copy keeps labels and restrictions.</p>
+        <input type="checkbox" checked={attachments} onChange={(e) => setAttachments(e.target.checked)} />{' '}{tr('Copy the attachments too')}</label>
+      <p className="faint small" style={{ marginBottom: 0 }}>{tr('The copy keeps labels and restrictions.')}</p>
     </Modal>
   )
 }
@@ -727,26 +696,26 @@ function MovePageDialog({ page, onClose }: { page: Page; onClose: () => void }) 
       qc.invalidateQueries({ queryKey: ['tree', page.spaceKey] })
       qc.invalidateQueries({ queryKey: ['tree', place.spaceKey] })
       qc.invalidateQueries({ queryKey: ['page', page.id] })
-      toast(place.spaceKey === page.spaceKey ? 'Moved' : `Moved to ${place.spaceKey}`)
+      toast(place.spaceKey === page.spaceKey ? tr('Moved') : tr('Moved to {spaceKey}', { spaceKey: place.spaceKey }))
       onClose()
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Move failed')
+      toast(e instanceof Error ? e.message : tr('Move failed'))
       setBusy(false)
     }
   }
   return (
     <Modal
-      title="Move page"
+      title={tr('Move page')}
       onClose={onClose}
       footer={
         <>
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" disabled={busy || unchanged} onClick={submit}>{busy ? 'Moving…' : 'Move'}</button>
+          <button className="btn" onClick={onClose}>{tr('Cancel')}</button>
+          <button className="btn btn-primary" disabled={busy || unchanged} onClick={submit}>{busy ? tr('Moving…') : tr('Move')}</button>
         </>
       }
     >
       <PlacePicker spaceKey={place.spaceKey} parentId={place.parentId} exclude={page.id} idPrefix="move" onChange={(spaceKey, parentId) => setPlace({ spaceKey, parentId })} />
-      <p className="faint small" style={{ marginBottom: 0 }}>The pages below it move too. Links to it keep working. Moving to another space needs admin rights here.</p>
+      <p className="faint small" style={{ marginBottom: 0 }}>{tr('The pages below it move too. Links to it keep working. Moving to another space needs admin rights here.')}</p>
     </Modal>
   )
 }

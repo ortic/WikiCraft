@@ -1,3 +1,4 @@
+import { t as tr } from '../i18n'
 import { Fragment, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useCanonicalSpaceKey } from '../useCanonicalKey'
@@ -23,18 +24,18 @@ const RANK: Record<string, number> = { none: 0, viewer: 1, commenter: 2, editor:
 
 /** What each space permission lets people do (the server's `authz::Perm`). */
 const PERM_LABELS: Record<Perm, string> = {
-  'page.add': 'Add pages',
-  'page.delete': 'Delete pages',
-  'blog.add': 'Add blog posts',
-  'blog.delete': 'Delete blog posts',
-  'comment.add': 'Add comments',
-  'comment.delete': "Delete others' comments",
-  'attachment.add': 'Add files',
-  'attachment.delete': 'Delete files',
-  restrict: 'Set page restrictions',
-  export: 'Export',
-  archive: 'Archive pages',
-  'delete.own': 'Delete own content',
+  'page.add': tr('Add pages'),
+  'page.delete': tr('Delete pages'),
+  'blog.add': tr('Add blog posts'),
+  'blog.delete': tr('Delete blog posts'),
+  'comment.add': tr('Add comments'),
+  'comment.delete': tr('Delete others\' comments'),
+  'attachment.add': tr('Add files'),
+  'attachment.delete': tr('Delete files'),
+  restrict: tr('Set page restrictions'),
+  export: tr('Export'),
+  archive: tr('Archive pages'),
+  'delete.own': tr('Delete own content'),
 }
 
 interface PermInfo {
@@ -48,9 +49,9 @@ function PermissionChecks({ role, denied, catalog, onChange, label }: { role: st
   const brought = catalog.filter((p) => RANK[role] >= RANK[p.minRole])
   if (!brought.length) return null
   return (
-    <fieldset className="perm-checks" aria-label={`Permissions of ${label}`}>
+    <fieldset className="perm-checks" aria-label={tr('Permissions of {label}', { label })}>
       {brought.map((p) => (
-        <label key={p.key} className="row" title={`Confluence: ${p.confluence}`}>
+        <label key={p.key} className="row" title={tr('Confluence: {confluence}', { confluence: p.confluence })}>
           <input
             type="checkbox"
             checked={!denied.includes(p.key)}
@@ -65,11 +66,11 @@ function PermissionChecks({ role, denied, catalog, onChange, label }: { role: st
 
 /** "All permissions" or how many the grant leaves out; opens the checklist. */
 function PermissionSummary({ role, denied, catalog, open, onToggle }: { role: string; denied: Perm[]; catalog: PermInfo[]; open: boolean; onToggle: () => void }) {
-  if (role === 'admin') return <span className="faint small">All permissions</span>
+  if (role === 'admin') return <span className="faint small">{tr('All permissions')}</span>
   const brought = catalog.filter((p) => RANK[role] >= RANK[p.minRole])
-  if (!brought.length) return <span className="faint small">View only</span>
+  if (!brought.length) return <span className="faint small">{tr('View only')}</span>
   const kept = brought.filter((p) => !denied.includes(p.key)).length
-  const text = kept === brought.length ? 'All permissions' : role === 'viewer' && kept === 0 ? 'View only' : `${kept} of ${brought.length} permissions`
+  const text = kept === brought.length ? tr('All permissions') : role === 'viewer' && kept === 0 ? tr('View only') : tr('{kept} of {length} permissions', { kept, length: brought.length })
   return (
     <button type="button" className="link-btn small" style={{ whiteSpace: 'nowrap' }} aria-expanded={open} onClick={onToggle}>
       {text}
@@ -94,17 +95,17 @@ export default function SpaceSettings() {
     (s.role !== 'admin' && (requested === 'details' || requested === 'permissions')) || (!exports && requested === 'export') ? fallback : requested
   return (
     <div className="content-pad">
-      <h1 style={{ marginTop: 0 }}>{s.name} · Settings</h1>
+      <h1 style={{ marginTop: 0 }}>{tr('{name} · Settings', { name: s.name })}</h1>
       <div className="tabs">
         {s.role === 'admin' && (
           <>
-            <button className={`tab ${tab === 'details' ? 'active' : ''}`} onClick={() => setParams({ tab: 'details' })}>Details</button>
-            <button className={`tab ${tab === 'permissions' ? 'active' : ''}`} onClick={() => setParams({ tab: 'permissions' })}>Permissions</button>
+            <button className={`tab ${tab === 'details' ? 'active' : ''}`} onClick={() => setParams({ tab: 'details' })}>{tr('Details')}</button>
+            <button className={`tab ${tab === 'permissions' ? 'active' : ''}`} onClick={() => setParams({ tab: 'permissions' })}>{tr('Permissions')}</button>
           </>
         )}
-        <button className={`tab ${tab === 'archived' ? 'active' : ''}`} onClick={() => setParams({ tab: 'archived' })}>Archived</button>
-        <button className={`tab ${tab === 'trash' ? 'active' : ''}`} onClick={() => setParams({ tab: 'trash' })}>Trash</button>
-        {exports && <button className={`tab ${tab === 'export' ? 'active' : ''}`} onClick={() => setParams({ tab: 'export' })}>Export</button>}
+        <button className={`tab ${tab === 'archived' ? 'active' : ''}`} onClick={() => setParams({ tab: 'archived' })}>{tr('Archived')}</button>
+        <button className={`tab ${tab === 'trash' ? 'active' : ''}`} onClick={() => setParams({ tab: 'trash' })}>{tr('Trash')}</button>
+        {exports && <button className={`tab ${tab === 'export' ? 'active' : ''}`} onClick={() => setParams({ tab: 'export' })}>{tr('Export')}</button>}
       </div>
       {tab === 'details' && s.role === 'admin' && <Details space={s} />}
       {tab === 'permissions' && s.role === 'admin' && <Permissions space={s} />}
@@ -131,68 +132,66 @@ function Details({ space }: { space: Space }) {
   const save = async () => {
     const newKey = key.trim().toUpperCase()
     const renamed = newKey !== space.key
-    if (renamed && !confirm(`Change the space key from ${space.key} to ${newKey}? Links with ${space.key} keep working.`)) return
+    if (renamed && !confirm(tr('Change the space key from {key} to {newKey}? Links with {key} keep working.', { key: space.key, newKey }))) return
     try {
       await api.patch(`/spaces/${space.key}`, { name, description, icon, category, defaultTemplate, ...(renamed ? { key: newKey } : {}) })
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not save')
+      toast(e instanceof Error ? e.message : tr('Could not save'))
       return
     }
     qc.invalidateQueries({ queryKey: ['spaces'] })
     qc.invalidateQueries({ queryKey: ['space'] })
-    toast('Saved')
+    toast(tr('Saved'))
     if (renamed) nav(`/spaces/${newKey}/settings`, { replace: true })
   }
   return (
     <div style={{ maxWidth: 520 }}>
-      <div className="field"><label>Name</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
+      <div className="field"><label>{tr('Name')}</label><input className="input" value={name} onChange={(e) => setName(e.target.value)} /></div>
       <div className="field">
-        <label className="row">Icon <SpaceIcon space={{ key: space.key, name, icon }} size={26} /></label>
+        <label className="row">{tr('Icon')}{' '}<SpaceIcon space={{ key: space.key, name, icon }} size={26} /></label>
         <SymbolPicker value={icon || null} onChange={(v) => setIcon(v ?? '')} />
       </div>
-      <div className="field"><label>Description</label><textarea className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} /></div>
+      <div className="field"><label>{tr('Description')}</label><textarea className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} /></div>
       <div className="field">
-        <label>Category</label>
-        <input className="input" style={{ maxWidth: 360 }} list="space-categories" value={category} maxLength={60} placeholder="e.g. Teams, Projects, Knowledge base" onChange={(e) => setCategory(e.target.value)} />
+        <label>{tr('Category')}</label>
+        <input className="input" style={{ maxWidth: 360 }} list="space-categories" value={category} maxLength={60} placeholder={tr('e.g. Teams, Projects, Knowledge base')} onChange={(e) => setCategory(e.target.value)} />
         <datalist id="space-categories">{categories.map((c) => <option key={c} value={c} />)}</datalist>
-        <div className="faint small" style={{ marginTop: 4 }}>Groups the space in the space directory.</div>
+        <div className="faint small" style={{ marginTop: 4 }}>{tr('Groups the space in the space directory.')}</div>
       </div>
       <div className="field">
-        <label>New pages start from</label>
+        <label>{tr('New pages start from')}</label>
         <select className="select" style={{ maxWidth: 360 }} value={defaultTemplate} onChange={(e) => setDefaultTemplate(e.target.value)}>
-          <option value="">A blank page</option>
+          <option value="">{tr('A blank page')}</option>
           {templates.data?.map((t) => <option key={t.id} value={t.id}>{t.name}</option>)}
         </select>
       </div>
       <div className="field">
-        <label>Key</label>
+        <label>{tr('Key')}</label>
         <input className="input" value={key} maxLength={32} onChange={(e) => setKey(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ''))} />
-        {key !== space.key && <div className="faint small">Pages keep their links: URLs with {space.key} redirect to {key || '…'}.</div>}
+        {key !== space.key && <div className="faint small">{tr('Pages keep their links: URLs with {key} redirect to {value}.', { key: space.key, value: key || '…' })}</div>}
       </div>
-      <button className="btn btn-primary" onClick={save}>Save</button>
+      <button className="btn btn-primary" onClick={save}>{tr('Save')}</button>
       <Shortcuts space={space} />
       <SpaceLookCard space={space} />
       <div className="card" style={{ marginTop: 28 }}>
-        <b>Templates</b>
-        <p className="muted small" style={{ margin: '4px 0 10px' }}>This space’s own templates, offered next to the built-in ones and those for every space.</p>
+        <b>{tr('Templates')}</b>
+        <p className="muted small" style={{ margin: '4px 0 10px' }}>{tr('This space’s own templates, offered next to the built-in ones and those for every space.')}</p>
         <TemplateList spaceKey={space.key} />
       </div>
       {!space.personalOwnerId && <SpaceOwner space={space} />}
       {!space.personalOwnerId && <CopySpace space={space} />}
       <div className="card danger-zone" style={{ marginTop: 28 }}>
-        <b>Archive this space</b>
-        <p className="muted small" style={{ margin: '4px 0 10px' }}>Archived spaces are read-only and leave search and the space list. Workspace admins can restore them under Admin → Spaces.</p>
+        <b>{tr('Archive this space')}</b>
+        <p className="muted small" style={{ margin: '4px 0 10px' }}>{tr('Archived spaces are read-only and leave search and the space list. Workspace admins can restore them under Admin → Spaces.')}</p>
         <button
           className="btn"
           onClick={async () => {
-            if (!confirm(`Archive “${space.name}”?`)) return
+            if (!confirm(tr('Archive “{name}”?', { name: space.name }))) return
             await api.del(`/spaces/${space.key}`)
             qc.invalidateQueries({ queryKey: ['spaces'] })
             location.href = '/spaces'
           }}
-        >
-          Archive space
-        </button>
+        >{tr('Archive space')}</button>
       </div>
     </div>
   )
@@ -211,30 +210,28 @@ function Shortcuts({ space }: { space: Space }) {
       qc.invalidateQueries({ queryKey: ['space'] })
       qc.invalidateQueries({ queryKey: ['spaces'] })
       setRows(null)
-      toast('Shortcuts saved')
+      toast(tr('Shortcuts saved'))
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not save')
+      toast(e instanceof Error ? e.message : tr('Could not save'))
     }
   }
   return (
     <div className="card" style={{ marginTop: 28 }}>
-      <b>Sidebar shortcuts</b>
-      <p className="muted small" style={{ margin: '4px 0 10px' }}>
-        Links under the space name in the sidebar: a web address (https://…) or a path in this wiki (/pages/…, /labels/…). The page menu can add the current page.
-      </p>
+      <b>{tr('Sidebar shortcuts')}</b>
+      <p className="muted small" style={{ margin: '4px 0 10px' }}>{tr('Links under the space name in the sidebar: a web address (https://…) or a path in this wiki (/pages/…, /labels/…). The page menu can add the current page.')}</p>
       {list.map((r, i) => (
         <div key={i} className="row" style={{ gap: 6, marginBottom: 6 }}>
-          <input className="input" style={{ flex: '1 1 140px' }} aria-label={`Title of shortcut ${i + 1}`} placeholder="Title" maxLength={80} value={r.title} onChange={(e) => set(i, 'title', e.target.value)} />
-          <input className="input" style={{ flex: '2 1 200px' }} aria-label={`Link of shortcut ${i + 1}`} placeholder="https://… or /pages/…" value={r.url} onChange={(e) => set(i, 'url', e.target.value)} />
-          <button className="icon-btn" title="Remove" aria-label={`Remove shortcut ${i + 1}`} onClick={() => setRows(list.filter((_, j) => j !== i))}>
+          <input className="input" style={{ flex: '1 1 140px' }} aria-label={tr('Title of shortcut {value}', { value: i + 1 })} placeholder={tr('Title')} maxLength={80} value={r.title} onChange={(e) => set(i, 'title', e.target.value)} />
+          <input className="input" style={{ flex: '2 1 200px' }} aria-label={tr('Link of shortcut {value}', { value: i + 1 })} placeholder={tr('https://… or /pages/…')} value={r.url} onChange={(e) => set(i, 'url', e.target.value)} />
+          <button className="icon-btn" title={tr('Remove')} aria-label={tr('Remove shortcut {value}', { value: i + 1 })} onClick={() => setRows(list.filter((_, j) => j !== i))}>
             <X size={14} />
           </button>
         </div>
       ))}
       <div className="row" style={{ gap: 6 }}>
-        {list.length < 20 && <button className="btn btn-sm" onClick={() => setRows([...list, { title: '', url: '' }])}>Add shortcut</button>}
+        {list.length < 20 && <button className="btn btn-sm" onClick={() => setRows([...list, { title: '', url: '' }])}>{tr('Add shortcut')}</button>}
         <span className="spacer" />
-        <button className="btn btn-primary btn-sm" disabled={!rows} onClick={save}>Save</button>
+        <button className="btn btn-primary btn-sm" disabled={!rows} onClick={save}>{tr('Save')}</button>
       </div>
     </div>
   )
@@ -256,23 +253,21 @@ function SpaceLookCard({ space }: { space: Space }) {
       setColor(null)
       toast(message)
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not save')
+      toast(e instanceof Error ? e.message : tr('Could not save'))
     }
   }
   return (
     <div className="card" style={{ marginTop: 28 }}>
-      <b>Look</b>
-      <p className="muted small" style={{ margin: '4px 0 10px' }}>An accent colour for buttons, links and highlights while people are in this space; without one, the workspace’s.</p>
+      <b>{tr('Look')}</b>
+      <p className="muted small" style={{ margin: '4px 0 10px' }}>{tr('An accent colour for buttons, links and highlights while people are in this space; without one, the workspace’s.')}</p>
       <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
-        <input type="color" aria-label="Pick a colour" value={valid ? shown : '#4f46e5'} onChange={(e) => setColor(e.target.value)} style={{ width: 40, height: 32, padding: 2, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg)' }} />
-        <input className="input" aria-label="Accent colour" style={{ maxWidth: 120, fontFamily: 'var(--mono)' }} placeholder="Workspace’s" maxLength={7} value={shown} onChange={(e) => setColor(e.target.value)} />
-        <button className="btn btn-sm" disabled={!valid || shown.toLowerCase() === (look.accentColor ?? '')} onClick={() => save({ ...look, accentColor: shown }, 'Colour saved')}>Save</button>
-        {look.accentColor && <button className="btn btn-sm" onClick={() => save({ ...look, accentColor: '' }, 'Back to the workspace colour')}>Use the workspace colour</button>}
+        <input type="color" aria-label={tr('Pick a colour')} value={valid ? shown : '#4f46e5'} onChange={(e) => setColor(e.target.value)} style={{ width: 40, height: 32, padding: 2, border: '1px solid var(--border)', borderRadius: 6, background: 'var(--bg)' }} />
+        <input className="input" aria-label={tr('Accent colour')} style={{ maxWidth: 120, fontFamily: 'var(--mono)' }} placeholder={tr('Workspace’s')} maxLength={7} value={shown} onChange={(e) => setColor(e.target.value)} />
+        <button className="btn btn-sm" disabled={!valid || shown.toLowerCase() === (look.accentColor ?? '')} onClick={() => save({ ...look, accentColor: shown }, tr('Colour saved'))}>{tr('Save')}</button>
+        {look.accentColor && <button className="btn btn-sm" onClick={() => save({ ...look, accentColor: '' }, tr('Back to the workspace colour'))}>{tr('Use the workspace colour')}</button>}
       </div>
       <label className="row" style={{ gap: 8, marginTop: 12 }}>
-        <input type="checkbox" checked={!look.hideBlog} onChange={(e) => save({ ...look, hideBlog: !e.target.checked }, e.target.checked ? 'The blog is back in the sidebar' : 'The blog is hidden from the sidebar')} />
-        Show the blog in the sidebar
-      </label>
+        <input type="checkbox" checked={!look.hideBlog} onChange={(e) => save({ ...look, hideBlog: !e.target.checked }, e.target.checked ? tr('The blog is back in the sidebar') : tr('The blog is hidden from the sidebar'))} />{tr('Show the blog in the sidebar')}</label>
     </div>
   )
 }
@@ -293,40 +288,37 @@ function CopySpace({ space }: { space: Space }) {
     try {
       const r = await api.post<{ key: string; pages: number; truncated: boolean }>(`/spaces/${space.key}/copy`, { key, name, includeAttachments: attachments, includePermissions: people })
       qc.invalidateQueries({ queryKey: ['spaces'] })
-      toast(r.truncated ? `Copied the first ${r.pages} pages` : `Copied ${r.pages} pages`)
+      toast(r.truncated ? tr('Copied the first {pages} pages', { pages: r.pages }) : tr('Copied {pages} pages', { pages: r.pages }))
       nav(`/spaces/${r.key}`)
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not copy the space')
+      toast(e instanceof Error ? e.message : tr('Could not copy the space'))
     } finally {
       setBusy(false)
     }
   }
   return (
     <div className="card" style={{ marginTop: 28 }}>
-      <b>Copy this space</b>
-      <p className="muted small" style={{ margin: '4px 0 10px' }}>
-        A new space with the published pages you can see (not drafts or archived pages), their labels, properties and restrictions, and this space's settings and
-        templates. Links between the pages point at the copies.
-      </p>
+      <b>{tr('Copy this space')}</b>
+      <p className="muted small" style={{ margin: '4px 0 10px' }}>{tr('A new space with the published pages you can see (not drafts or archived pages), their labels, properties and restrictions, and this space\'s settings and templates. Links between the pages point at the copies.')}</p>
       {!open ? (
-        <button className="btn btn-sm" onClick={() => setOpen(true)}>Copy space…</button>
+        <button className="btn btn-sm" onClick={() => setOpen(true)}>{tr('Copy space…')}</button>
       ) : (
         <>
           <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
             <div className="field" style={{ flex: '1 1 220px', marginBottom: 8 }}>
-              <label htmlFor="copy-name">Name</label>
+              <label htmlFor="copy-name">{tr('Name')}</label>
               <input id="copy-name" className="input" value={name} onChange={(e) => setName(e.target.value)} />
             </div>
             <div className="field" style={{ flex: '0 1 160px', marginBottom: 8 }}>
-              <label htmlFor="copy-key">Key</label>
+              <label htmlFor="copy-key">{tr('Key')}</label>
               <input id="copy-key" className="input" value={key} maxLength={32} onChange={(e) => setKey(e.target.value.toUpperCase().replace(/[^A-Z0-9_-]/g, ''))} />
             </div>
           </div>
-          <label className="row small"><input type="checkbox" checked={attachments} onChange={(e) => setAttachments(e.target.checked)} /> With attachments</label>
-          <label className="row small"><input type="checkbox" checked={people} onChange={(e) => setPeople(e.target.checked)} /> With the people and groups of this space</label>
+          <label className="row small"><input type="checkbox" checked={attachments} onChange={(e) => setAttachments(e.target.checked)} />{' '}{tr('With attachments')}</label>
+          <label className="row small"><input type="checkbox" checked={people} onChange={(e) => setPeople(e.target.checked)} />{' '}{tr('With the people and groups of this space')}</label>
           <div className="row" style={{ gap: 6, marginTop: 10 }}>
-            <button className="btn btn-primary btn-sm" disabled={busy || !name.trim() || !key} onClick={run}>{busy ? <Spinner /> : null} Copy</button>
-            <button className="btn btn-sm" onClick={() => setOpen(false)}>Cancel</button>
+            <button className="btn btn-primary btn-sm" disabled={busy || !name.trim() || !key} onClick={run}>{busy ? <Spinner /> : null}{' '}{tr('Copy')}</button>
+            <button className="btn btn-sm" onClick={() => setOpen(false)}>{tr('Cancel')}</button>
           </div>
         </>
       )}
@@ -346,33 +338,31 @@ function SpaceOwner({ space }: { space: Space }) {
     enabled: picking && q.trim().length > 0,
   })
   const pick = async (u: { id: string; name: string }) => {
-    if (!confirm(`Make ${u.name} the owner of “${space.name}”? They become a space admin; your own role stays as it is.`)) return
+    if (!confirm(tr('Make {name} the owner of “{name2}”? They become a space admin; your own role stays as it is.', { name: u.name, name2: space.name }))) return
     try {
       await api.put(`/spaces/${space.key}/owner`, { userId: u.id })
       qc.invalidateQueries({ queryKey: ['space'] })
       setPicking(false)
       setQ('')
-      toast(`${u.name} owns this space now`)
+      toast(tr('{name} owns this space now', { name: u.name }))
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not change the owner')
+      toast(e instanceof Error ? e.message : tr('Could not change the owner'))
     }
   }
   return (
     <div className="card" style={{ marginTop: 28 }}>
-      <b>Owner</b>
-      <p className="muted small" style={{ margin: '4px 0 10px' }}>
-        The person responsible for this space and the first contact for questions about it. The owner is always a space admin.
-      </p>
+      <b>{tr('Owner')}</b>
+      <p className="muted small" style={{ margin: '4px 0 10px' }}>{tr('The person responsible for this space and the first contact for questions about it. The owner is always a space admin.')}</p>
       <div className="row" style={{ gap: 8 }}>
-        {space.ownerId && space.ownerName ? <Link to={`/people/${space.ownerId}`}>{space.ownerName}</Link> : <span className="faint">Nobody</span>}
+        {space.ownerId && space.ownerName ? <Link to={`/people/${space.ownerId}`}>{space.ownerName}</Link> : <span className="faint">{tr('Nobody')}</span>}
         <span className="spacer" />
-        {!picking && <button className="btn btn-sm" onClick={() => setPicking(true)}>Change owner…</button>}
+        {!picking && <button className="btn btn-sm" onClick={() => setPicking(true)}>{tr('Change owner…')}</button>}
       </div>
       {picking && (
         <div style={{ marginTop: 10 }}>
           <div className="row" style={{ gap: 6 }}>
-            <input className="input" autoFocus placeholder="Search people" aria-label="New owner" value={q} onChange={(e) => setQ(e.target.value)} />
-            <button className="btn btn-sm" onClick={() => { setPicking(false); setQ('') }}>Cancel</button>
+            <input className="input" autoFocus placeholder={tr('Search people')} aria-label={tr('New owner')} value={q} onChange={(e) => setQ(e.target.value)} />
+            <button className="btn btn-sm" onClick={() => { setPicking(false); setQ('') }}>{tr('Cancel')}</button>
           </div>
           <div className="list-plain" role="listbox" style={{ marginTop: 4 }}>
             {(users.data ?? []).filter((u) => u.id !== space.ownerId && u.role !== 'guest').slice(0, 8).map((u) => (
@@ -416,9 +406,9 @@ function Permissions({ space }: { space: Space }) {
     try {
       await api.put(`/spaces/${space.key}/permissions`, { defaultRole, defaultDenied, anonymousAccess: anon, grants })
       qc.invalidateQueries()
-      toast('Permissions saved')
+      toast(tr('Permissions saved'))
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed')
+      setError(e instanceof Error ? e.message : tr('Failed'))
     }
   }
   const add = () => {
@@ -434,29 +424,28 @@ function Permissions({ space }: { space: Space }) {
   return (
     <div style={{ maxWidth: 720 }}>
       <div className="field">
-        <label htmlFor="default-role">All workspace members (except guests)</label>
+        <label htmlFor="default-role">{tr('All workspace members (except guests)')}</label>
         <div className="row" style={{ gap: 12 }}>
           <select id="default-role" className="select" value={defaultRole} onChange={(e) => setDefaultRole(e.target.value)} style={{ maxWidth: 320 }}>
-            <option value="none">No access</option>
+            <option value="none">{tr('No access')}</option>
             {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
           </select>
           {defaultRole !== 'none' && <PermissionSummary role={defaultRole} denied={defaultDenied} catalog={catalog} open={expanded === 'default'} onToggle={() => toggle('default')} />}
         </div>
         {expanded === 'default' && defaultRole !== 'admin' && defaultRole !== 'none' && (
-          <PermissionChecks role={defaultRole} denied={defaultDenied} catalog={catalog} onChange={setDefaultDenied} label="all workspace members" />
+          <PermissionChecks role={defaultRole} denied={defaultDenied} catalog={catalog} onChange={setDefaultDenied} label={tr('all workspace members')} />
         )}
       </div>
       <label className="row" style={{ marginBottom: 18 }}>
-        <input type="checkbox" checked={anon} onChange={(e) => setAnon(e.target.checked)} /> Anyone on the internet can view this space (anonymous access)
-      </label>
-      <h3>People and groups</h3>
+        <input type="checkbox" checked={anon} onChange={(e) => setAnon(e.target.checked)} />{' '}{tr('Anyone on the internet can view this space (anonymous access)')}</label>
+      <h3>{tr('People and groups')}</h3>
       <div className="row" style={{ marginBottom: 10 }}>
         <select className="select" value={pick} onChange={(e) => setPick(e.target.value)} style={{ maxWidth: 360 }}>
-          <option value="">Add a person or group…</option>
-          {groups.data?.map((g) => <option key={g.id} value={`group:${g.id}`}>{g.name} (group)</option>)}
+          <option value="">{tr('Add a person or group…')}</option>
+          {groups.data?.map((g) => <option key={g.id} value={`group:${g.id}`}>{tr('{name} (group)', { name: g.name })}</option>)}
           {users.data?.map((u) => <option key={u.id} value={`user:${u.id}`}>{u.name}</option>)}
         </select>
-        <button className="btn" onClick={add} disabled={!pick}>Add</button>
+        <button className="btn" onClick={add} disabled={!pick}>{tr('Add')}</button>
       </div>
       <table className="list">
         <tbody>
@@ -468,7 +457,7 @@ function Permissions({ space }: { space: Space }) {
                 <tr>
                   <td className="row">{g.subjectType === 'group' && <Users size={15} />} {name}</td>
                   <td style={{ width: 170 }}>
-                    <select className="select" aria-label={`Role of ${name}`} value={g.role} onChange={(e) => setGrants(grants.map((x, j) => (j === i ? { ...x, role: e.target.value } : x)))}>
+                    <select className="select" aria-label={tr('Role of {name}', { name })} value={g.role} onChange={(e) => setGrants(grants.map((x, j) => (j === i ? { ...x, role: e.target.value } : x)))}>
                       {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
                     </select>
                   </td>
@@ -476,7 +465,7 @@ function Permissions({ space }: { space: Space }) {
                     <PermissionSummary role={g.role} denied={g.denied ?? []} catalog={catalog} open={expanded === id} onToggle={() => toggle(id)} />
                   </td>
                   <td style={{ width: 40 }}>
-                    <button className="icon-btn" aria-label={`Remove ${name}`} onClick={() => setGrants(grants.filter((_, j) => j !== i))}><X size={14} /></button>
+                    <button className="icon-btn" aria-label={tr('Remove {name}', { name })} onClick={() => setGrants(grants.filter((_, j) => j !== i))}><X size={14} /></button>
                   </td>
                 </tr>
                 {expanded === id && g.role !== 'admin' && (
@@ -492,7 +481,7 @@ function Permissions({ space }: { space: Space }) {
         </tbody>
       </table>
       {error && <p className="error-text">{error}</p>}
-      <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={save}>Save permissions</button>
+      <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={save}>{tr('Save permissions')}</button>
     </div>
   )
 }
@@ -506,14 +495,14 @@ function ArchivedList({ space }: { space: Space }) {
   })
   return (
     <div>
-      <p className="muted" style={{ marginTop: 0 }}>Archived pages are read-only and hidden from the page tree and search. Their links keep working.</p>
-      {list.data?.length === 0 && <div className="empty"><Archive size={28} /><br />No archived pages.</div>}
+      <p className="muted" style={{ marginTop: 0 }}>{tr('Archived pages are read-only and hidden from the page tree and search. Their links keep working.')}</p>
+      {list.data?.length === 0 && <div className="empty"><Archive size={28} /><br />{tr('No archived pages.')}</div>}
       <table className="list">
         <tbody>
           {list.data?.map((t) => (
             <tr key={t.id}>
-              <td><Link to={`/pages/${t.id}`}><b>{t.title}</b></Link>{t.descendants > 0 && <span className="faint small"> and {t.descendants} page{t.descendants === 1 ? '' : 's'} under it</span>}</td>
-              <td className="faint small">Archived {formatDate(t.archivedAt)} by {t.archivedBy ?? 'someone'}</td>
+              <td><Link to={`/pages/${t.id}`}><b>{t.title}</b></Link>{t.descendants > 0 && <span className="faint small">{' '}{tr('and {descendants} page', { descendants: t.descendants })}{t.descendants === 1 ? '' : tr('s')}{' '}{tr('under it')}</span>}</td>
+              <td className="faint small">{tr('Archived {date} by', { date: formatDate(t.archivedAt) })}{' '}{t.archivedBy ?? tr('someone')}</td>
               <td style={{ width: 120 }}>
                 {t.canRestore && (
                   <button
@@ -523,11 +512,10 @@ function ArchivedList({ space }: { space: Space }) {
                       qc.invalidateQueries({ queryKey: ['archived', space.key] })
                       qc.invalidateQueries({ queryKey: ['tree'] })
                       qc.invalidateQueries({ queryKey: ['page', t.id] })
-                      toast('Restored from the archive')
+                      toast(tr('Restored from the archive'))
                     }}
                   >
-                    <RotateCcw size={13} /> Restore
-                  </button>
+                    <RotateCcw size={13} />{' '}{tr('Restore')}</button>
                 )}
               </td>
             </tr>
@@ -545,41 +533,41 @@ function TrashList({ space }: { space: Space }) {
   const isAdmin = space.role === 'admin'
   const refresh = () => qc.invalidateQueries({ queryKey: ['trash', space.key] })
   const purge = async (id: string, title: string) => {
-    if (!confirm(`Delete “${title}” for good? Its history, comments, attachments and the trashed pages below it go too. This can't be undone.`)) return
+    if (!confirm(tr('Delete “{title}” for good? Its history, comments, attachments and the trashed pages below it go too. This can\'t be undone.', { title }))) return
     try {
       const r = await api.post<{ purged: number }>(`/pages/${id}/purge`)
       refresh()
-      toast(r.purged > 1 ? `Deleted ${r.purged} pages for good` : 'Deleted for good')
+      toast(r.purged > 1 ? tr('Deleted {purged} pages for good', { purged: r.purged }) : tr('Deleted for good'))
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not delete')
+      toast(e instanceof Error ? e.message : tr('Could not delete'))
     }
   }
   const empty = async () => {
-    if (!confirm(`Delete everything in the trash of ${space.name} for good? This can't be undone.`)) return
+    if (!confirm(tr('Delete everything in the trash of {name} for good? This can\'t be undone.', { name: space.name }))) return
     try {
       const r = await api.post<{ purged: number; kept: number }>(`/spaces/${space.key}/trash/empty`)
       refresh()
-      toast(`Deleted ${r.purged} page${r.purged === 1 ? '' : 's'} for good${r.kept ? ` · ${r.kept} restricted ones you can't see stay` : ''}`)
+      toast(r.kept ? tr('Deleted {count} pages for good · {kept} restricted ones you can’t see stay', { count: r.purged, kept: r.kept }) : tr('Deleted {count} pages for good', { count: r.purged }))
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not empty the trash')
+      toast(e instanceof Error ? e.message : tr('Could not empty the trash'))
     }
   }
   return (
     <div>
       {isAdmin && !!trash.data?.length && (
         <div className="row" style={{ marginBottom: 12 }}>
-          <span className="faint small">Restore pages, or delete them for good.</span>
+          <span className="faint small">{tr('Restore pages, or delete them for good.')}</span>
           <span className="spacer" />
-          <button className="btn btn-danger" onClick={empty}><Trash2 size={14} /> Empty trash</button>
+          <button className="btn btn-danger" onClick={empty}><Trash2 size={14} />{' '}{tr('Empty trash')}</button>
         </div>
       )}
-      {trash.data?.length === 0 && <div className="empty"><Trash2 size={28} /><br />Trash is empty.</div>}
+      {trash.data?.length === 0 && <div className="empty"><Trash2 size={28} /><br />{tr('Trash is empty.')}</div>}
       <table className="list">
         <tbody>
           {trash.data?.map((t) => (
             <tr key={t.id}>
               <td><b>{t.title}</b></td>
-              <td className="faint small">Deleted {formatDate(t.deletedAt)} by {t.deletedByName ?? 'someone'}</td>
+              <td className="faint small">{tr('Deleted {date} by', { date: formatDate(t.deletedAt) })}{' '}{t.deletedByName ?? tr('someone')}</td>
               <td style={{ width: isAdmin ? 250 : 120 }}>
                 <div className="row" style={{ gap: 6, justifyContent: 'flex-end' }}>
                   <button
@@ -588,15 +576,12 @@ function TrashList({ space }: { space: Space }) {
                       await api.post(`/pages/${t.id}/restore`)
                       qc.invalidateQueries({ queryKey: ['trash', space.key] })
                       qc.invalidateQueries({ queryKey: ['tree', space.key] })
-                      toast('Restored')
+                      toast(tr('Restored'))
                     }}
                   >
-                    <RotateCcw size={13} /> Restore
-                  </button>
+                    <RotateCcw size={13} />{' '}{tr('Restore')}</button>
                   {isAdmin && (
-                    <button className="btn btn-sm btn-danger" onClick={() => purge(t.id, t.title)}>
-                      Delete forever
-                    </button>
+                    <button className="btn btn-sm btn-danger" onClick={() => purge(t.id, t.title)}>{tr('Delete forever')}</button>
                   )}
                 </div>
               </td>

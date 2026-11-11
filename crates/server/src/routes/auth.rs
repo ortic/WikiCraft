@@ -172,15 +172,16 @@ pub async fn me(
         }
         None => None,
     };
-    // the reader's own time zone (profile) wins over the workspace's
-    let time_zone: Option<String> = match &user {
-        Some(u) => sqlx::query_scalar("SELECT timezone FROM users WHERE id = $1").bind(u.id).fetch_optional(&state.db).await?.flatten(),
-        None => None,
+    // the reader's own time zone and language (profile) win over the workspace's
+    let (time_zone, language): (Option<String>, Option<String>) = match &user {
+        Some(u) => sqlx::query_as("SELECT timezone, language FROM users WHERE id = $1").bind(u.id).fetch_optional(&state.db).await?.unwrap_or_default(),
+        None => (None, None),
     };
     Ok(Json(json!({
         "user": user,
         "workspace": workspace,
         "timeZone": time_zone,
+        "language": language,
         // the workspace requires two-factor authentication and this person hasn't set it up
         "mustSetUpTwoFactor": enroll.is_some(),
     })))

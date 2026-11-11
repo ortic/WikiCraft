@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -39,17 +40,17 @@ export default function AdminSpaces() {
       refresh()
       toast(msg)
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Failed')
+      toast(e instanceof Error ? e.message : t('Failed'))
     }
   }
   if (spaces.isLoading) return <Spinner />
   return (
     <div>
       <NewSpaceDefaults />
-      <p className="muted" style={{ marginTop: 0 }}>Archived spaces are read-only and hidden from search and the space list. Only archived spaces can be deleted, and deleting is permanent.</p>
+      <p className="muted" style={{ marginTop: 0 }}>{t('Archived spaces are read-only and hidden from search and the space list. Only archived spaces can be deleted, and deleting is permanent.')}</p>
       <table className="list">
         <thead>
-          <tr><th>Space</th><th>Owner</th><th>Pages</th><th>Attachments</th><th>Last updated</th><th>Access</th><th /></tr>
+          <tr><th>{t('Space')}</th><th>{t('Owner')}</th><th>{t('Pages')}</th><th>{t('Attachments')}</th><th>{t('Last updated')}</th><th>{t('Access')}</th><th /></tr>
         </thead>
         <tbody>
           {spaces.data?.map((s) => (
@@ -59,29 +60,29 @@ export default function AdminSpaces() {
                   <SpaceIcon space={s} size={22} />
                   <Link to={`/spaces/${s.key}`}>{s.name}</Link>
                   <span className="faint small">{s.key}</span>
-                  {s.archivedAt && <span className="badge">archived {formatDate(s.archivedAt)}</span>}
-                  {s.personal && <span className="badge">personal</span>}
+                  {s.archivedAt && <span className="badge">{t('archived {date}', { date: formatDate(s.archivedAt) })}</span>}
+                  {s.personal && <span className="badge">{t('personal')}</span>}
                 </span>
               </td>
               <td className="small">
-                {s.ownerId && s.ownerName ? <Link to={`/people/${s.ownerId}`}>{s.ownerName}</Link> : <span className="faint">nobody</span>}
+                {s.ownerId && s.ownerName ? <Link to={`/people/${s.ownerId}`}>{s.ownerName}</Link> : <span className="faint">{t('nobody')}</span>}
                 {!s.personal && !s.archivedAt && (!s.ownerId || !s.ownerActive) && (
-                  <> <Link className="badge" to={`/spaces/${s.key}/settings?tab=details`} title="The owner has no active account: pick a new one in the space settings">needs an owner</Link></>
+                  <> <Link className="badge" to={`/spaces/${s.key}/settings?tab=details`} title={t('The owner has no active account: pick a new one in the space settings')}>{t('needs an owner')}</Link></>
                 )}
               </td>
               <td>{s.pages}</td>
               <td className="small">{s.attachments} · {formatBytes(s.storageBytes)}</td>
               <td className="faint small">{formatDate(s.lastUpdated)}</td>
-              <td className="small">{s.anonymousAccess ? 'public' : s.defaultRole === 'none' ? 'invited only' : `members: ${s.defaultRole}`}</td>
+              <td className="small">{s.anonymousAccess ? t('public') : s.defaultRole === 'none' ? t('invited only') : t('members: {defaultRole}', { defaultRole: s.defaultRole })}</td>
               <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
                 {s.archivedAt ? (
                   <>
-                    <button className="btn small" onClick={() => act(() => api.post(`/admin/spaces/${s.key}/unarchive`), `${s.name} restored`)}><ArchiveRestore size={13} /> Restore</button>{' '}
+                    <button className="btn small" onClick={() => act(() => api.post(`/admin/spaces/${s.key}/unarchive`), `${s.name} restored`)}><ArchiveRestore size={13} />{' '}{t('Restore')}</button>{' '}
                     <button
                       className="btn btn-ghost small"
-                      title="Delete permanently"
+                      title={t('Delete permanently')}
                       onClick={() => {
-                        const typed = window.prompt(`This permanently deletes “${s.name}” with ${s.pages} pages and ${s.attachments} attachments. Type the space key (${s.key}) to confirm.`)
+                        const typed = window.prompt(t('This permanently deletes “{name}” with {pages} pages and {attachments} attachments. Type the space key ({key}) to confirm.', { name: s.name, pages: s.pages, attachments: s.attachments, key: s.key }))
                         if (typed) act(() => api.del(`/admin/spaces/${s.key}`, { confirm: typed }), `${s.name} deleted`)
                       }}
                     >
@@ -89,9 +90,8 @@ export default function AdminSpaces() {
                     </button>
                   </>
                 ) : (
-                  <button className="btn small" onClick={() => confirm(`Archive “${s.name}”? It becomes read-only and leaves search.`) && act(() => api.del(`/spaces/${s.key}`), `${s.name} archived`)}>
-                    <Archive size={13} /> Archive
-                  </button>
+                  <button className="btn small" onClick={() => confirm(t('Archive “{name}”? It becomes read-only and leaves search.', { name: s.name })) && act(() => api.del(`/spaces/${s.key}`), `${s.name} archived`)}>
+                    <Archive size={13} />{' '}{t('Archive')}</button>
                 )}
               </td>
             </tr>
@@ -128,16 +128,16 @@ function NewSpaceDefaults() {
       setGrants(settings.data.newSpaces.grants)
     }
   }, [settings.data, dirty])
-  const nameOf = (g: DefaultGrant) => (g.subjectType === 'group' ? groups.data?.find((x) => x.id === g.subjectId)?.name : users.data?.find((x) => x.id === g.subjectId)?.name) ?? 'Unknown'
+  const nameOf = (g: DefaultGrant) => (g.subjectType === 'group' ? groups.data?.find((x) => x.id === g.subjectId)?.name : users.data?.find((x) => x.id === g.subjectId)?.name) ?? t('Unknown')
   const save = async () => {
     try {
       await api.put('/admin/settings', { newSpaces: { defaultRole: role, grants } })
       setDirty(false)
       qc.invalidateQueries({ queryKey: ['admin-settings'] })
       qc.invalidateQueries({ queryKey: ['features'] })
-      toast('Saved: new spaces start like this')
+      toast(t('Saved: new spaces start like this'))
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not save')
+      toast(e instanceof Error ? e.message : t('Could not save'))
     }
   }
   const add = () => {
@@ -150,25 +150,25 @@ function NewSpaceDefaults() {
   if (!settings.data) return null
   return (
     <div className="card" style={{ maxWidth: 720, marginBottom: 20 }}>
-      <h3 style={{ marginTop: 0 }}>New spaces</h3>
-      <p className="muted small" style={{ marginTop: 0 }}>How spaces start out. Whoever creates a space becomes its admin and can change all of this afterwards.</p>
+      <h3 style={{ marginTop: 0 }}>{t('New spaces')}</h3>
+      <p className="muted small" style={{ marginTop: 0 }}>{t('How spaces start out. Whoever creates a space becomes its admin and can change all of this afterwards.')}</p>
       <div className="field">
-        <label htmlFor="ns-role">Everyone signed in (except guests)</label>
+        <label htmlFor="ns-role">{t('Everyone signed in (except guests)')}</label>
         <select id="ns-role" className="select" style={{ maxWidth: 260 }} value={role} onChange={(e) => { setRole(e.target.value); setDirty(true) }}>
-          <option value="none">No access</option>
+          <option value="none">{t('No access')}</option>
           {ROLES.filter((r) => r !== 'admin').map((r) => <option key={r} value={r}>{r}</option>)}
         </select>
-        <p className="faint small" style={{ margin: '4px 0 0' }}>Preselected when someone creates a space; they can still pick another.</p>
+        <p className="faint small" style={{ margin: '4px 0 0' }}>{t('Preselected when someone creates a space; they can still pick another.')}</p>
       </div>
       <div className="field" style={{ marginBottom: 8 }}>
-        <label htmlFor="ns-pick">Added to every new space</label>
+        <label htmlFor="ns-pick">{t('Added to every new space')}</label>
         <div className="row" style={{ gap: 6 }}>
           <select id="ns-pick" className="select" style={{ maxWidth: 320 }} value={pick} onChange={(e) => setPick(e.target.value)}>
-            <option value="">Add a person or group…</option>
-            {groups.data?.map((g) => <option key={g.id} value={`group:${g.id}`}>{g.name} (group)</option>)}
+            <option value="">{t('Add a person or group…')}</option>
+            {groups.data?.map((g) => <option key={g.id} value={`group:${g.id}`}>{t('{name} (group)', { name: g.name })}</option>)}
             {users.data?.filter((u) => !u.status || u.status === 'active').map((u) => <option key={u.id} value={`user:${u.id}`}>{u.name}</option>)}
           </select>
-          <button className="btn" disabled={!pick} onClick={add}>Add</button>
+          <button className="btn" disabled={!pick} onClick={add}>{t('Add')}</button>
         </div>
       </div>
       {grants.length > 0 && (
@@ -178,19 +178,19 @@ function NewSpaceDefaults() {
               <tr key={g.subjectType + g.subjectId}>
                 <td className="row">{g.subjectType === 'group' && <Users size={15} />} {nameOf(g)}</td>
                 <td style={{ width: 170 }}>
-                  <select className="select" aria-label={`Role of ${nameOf(g)}`} value={g.role} onChange={(e) => { setGrants(grants.map((x, j) => (j === i ? { ...x, role: e.target.value } : x))); setDirty(true) }}>
+                  <select className="select" aria-label={t('Role of {nameOf}', { nameOf: nameOf(g) })} value={g.role} onChange={(e) => { setGrants(grants.map((x, j) => (j === i ? { ...x, role: e.target.value } : x))); setDirty(true) }}>
                     {ROLES.map((r) => <option key={r} value={r}>{r}</option>)}
                   </select>
                 </td>
                 <td style={{ width: 40 }}>
-                  <button className="icon-btn" aria-label={`Remove ${nameOf(g)}`} onClick={() => { setGrants(grants.filter((_, j) => j !== i)); setDirty(true) }}><X size={14} /></button>
+                  <button className="icon-btn" aria-label={t('Remove {nameOf}', { nameOf: nameOf(g) })} onClick={() => { setGrants(grants.filter((_, j) => j !== i)); setDirty(true) }}><X size={14} /></button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       )}
-      <button className="btn btn-primary btn-sm" style={{ marginTop: 10 }} disabled={!dirty} onClick={save}>Save</button>
+      <button className="btn btn-primary btn-sm" style={{ marginTop: 10 }} disabled={!dirty} onClick={save}>{t('Save')}</button>
     </div>
   )
 }

@@ -1,3 +1,4 @@
+import { t as tr } from '../i18n'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
@@ -8,9 +9,9 @@ import { Spinner } from '../ui'
 type Task = { pageId: string; idx: number; text: string; done: boolean; due: string | null; pageTitle: string; spaceKey: string; spaceName: string }
 
 const STATUSES = [
-  ['open', 'Open'],
-  ['done', 'Done'],
-  ['all', 'All'],
+  ['open', tr('Open')],
+  ['done', tr('Done')],
+  ['all', tr('All')],
 ] as const
 
 function dueLabel(due: string) {
@@ -36,8 +37,7 @@ export default function TasksPage() {
   return (
     <div className="content-pad">
       <h1 className="row">
-        <ListChecks size={22} /> My tasks
-      </h1>
+        <ListChecks size={22} />{' '}{tr('My tasks')}</h1>
       <div className="tabs">
         {STATUSES.map(([k, label]) => (
           <button key={k} className={`tab${status === k ? ' active' : ''}`} onClick={() => setStatus(k)}>
@@ -56,8 +56,8 @@ export default function TasksPage() {
               const due = t.due ? dueLabel(t.due) : null
               return (
                 <li key={t.idx} className={t.done ? 'done' : ''}>
-                  <input type="checkbox" checked={t.done} disabled={toggle.isPending} onChange={() => toggle.mutate(t)} aria-label={`Mark "${t.text}" ${t.done ? 'open' : 'done'}`} />
-                  <span className="task-text">{t.text || <em className="faint">(empty task)</em>}</span>
+                  <input type="checkbox" checked={t.done} disabled={toggle.isPending} onChange={() => toggle.mutate(t)} aria-label={t.done ? tr('Mark “{text}” open', { text: t.text }) : tr('Mark “{text}” done', { text: t.text })} />
+                  <span className="task-text">{t.text || <em className="faint">{tr('(empty task)')}</em>}</span>
                   {due && (
                     <span className={`due${due.overdue && !t.done ? ' overdue' : ''}${due.today ? ' today' : ''}`}>
                       <CalendarDays size={12} /> {due.text}
@@ -70,7 +70,7 @@ export default function TasksPage() {
         </section>
       ))}
       {tasks.data?.length === 0 && (
-        <div className="empty">{status === 'open' ? 'Nothing assigned to you. A task shows up here when a task item mentions you (@name); add a date to give it a due date.' : 'No tasks.'}</div>
+        <div className="empty">{status === 'open' ? tr('Nothing assigned to you. A task shows up here when a task item mentions you (@name); add a date to give it a due date.') : tr('No tasks.')}</div>
       )}
     </div>
   )

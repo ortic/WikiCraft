@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Paperclip, Upload, Trash2, X, FileText, Image as ImageIcon, History, RotateCcw, Tag } from 'lucide-react'
@@ -21,9 +22,9 @@ export default function AttachmentsPanel({ page, onClose }: { page: Page; onClos
       Array.from(files).forEach((f) => form.append('file', f, f.name))
       await api.upload(`/pages/${page.id}/attachments`, form)
       qc.invalidateQueries({ queryKey: ['attachments', page.id] })
-      toast(`${files.length} file(s) uploaded`)
+      toast(t('{count} files uploaded', { count: files.length }))
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Upload failed')
+      toast(e instanceof Error ? e.message : t('Upload failed'))
     } finally {
       setBusy(false)
     }
@@ -31,7 +32,7 @@ export default function AttachmentsPanel({ page, onClose }: { page: Page; onClos
   return (
     <aside className="side-panel" onDragOver={(e) => e.preventDefault()} onDrop={(e) => { e.preventDefault(); if (canAdd) upload(e.dataTransfer.files) }}>
       <h3>
-        <Paperclip size={16} /> Attachments <span className="spacer" />
+        <Paperclip size={16} />{' '}{t('Attachments')}{' '}<span className="spacer" />
         <button className="icon-btn" onClick={onClose}>
           <X size={16} />
         </button>
@@ -40,7 +41,7 @@ export default function AttachmentsPanel({ page, onClose }: { page: Page; onClos
         <>
           <input ref={input} type="file" multiple hidden onChange={(e) => upload(e.target.files)} />
           <button className="btn" style={{ width: '100%', justifyContent: 'center', marginBottom: 12 }} disabled={busy} onClick={() => input.current?.click()}>
-            <Upload size={15} /> {busy ? 'Uploading…' : 'Upload files (or drop here)'}
+            <Upload size={15} /> {busy ? t('Uploading…') : t('Upload files (or drop here)')}
           </button>
         </>
       )}
@@ -55,10 +56,10 @@ export default function AttachmentsPanel({ page, onClose }: { page: Page; onClos
               {formatBytes(a.size)} ·{' '}
               {a.version > 1 ? (
                 <button type="button" className="link-btn" aria-expanded={history === a.id} onClick={() => setHistory(history === a.id ? null : a.id)}>
-                  <History size={11} /> v{a.version}
+                  <History size={11} />{' '}{t('v{version}', { version: a.version })}
                 </button>
               ) : (
-                <>v{a.version}</>
+                <>{t('v{version}', { version: a.version })}</>
               )}{' '}
               · {formatDate(a.createdAt)}
             </div>
@@ -68,9 +69,9 @@ export default function AttachmentsPanel({ page, onClose }: { page: Page; onClos
           {page.access.edit && (can(page.access, 'attachment.delete') || can(page.access, 'delete.own')) && (
             <button
               className="icon-btn"
-              title="Delete"
+              title={t('Delete')}
               onClick={async () => {
-                if (!confirm(`Delete ${a.filename}?`)) return
+                if (!confirm(t('Delete {filename}?', { filename: a.filename }))) return
                 await api.del(`/attachments/${a.id}`)
                 qc.invalidateQueries({ queryKey: ['attachments', page.id] })
               }}
@@ -80,7 +81,7 @@ export default function AttachmentsPanel({ page, onClose }: { page: Page; onClos
           )}
         </div>
       ))}
-      {list.data?.length === 0 && <div className="empty">No attachments.</div>}
+      {list.data?.length === 0 && <div className="empty">{t('No attachments.')}</div>}
     </aside>
   )
 }
@@ -102,8 +103,7 @@ function VersionList({ attachmentId, current, canEdit, onRestored }: { attachmen
     <ul className="attachment-versions">
       {versions.data?.map((v) => (
         <li key={v.version} className="row small">
-          <a href={v.version === current ? `/api/attachments/${attachmentId}/content` : `/api/attachments/${attachmentId}/versions/${v.version}/content`} target="_blank" rel="noreferrer">
-            v{v.version}
+          <a href={v.version === current ? `/api/attachments/${attachmentId}/content` : `/api/attachments/${attachmentId}/versions/${v.version}/content`} target="_blank" rel="noreferrer">{t('v{version}', { version: v.version })}
           </a>
           <span className="faint">
             {formatBytes(v.size)} · {formatDate(v.createdAt)}
@@ -111,26 +111,25 @@ function VersionList({ attachmentId, current, canEdit, onRestored }: { attachmen
           </span>
           <span className="spacer" />
           {v.version === current ? (
-            <span className="badge">current</span>
+            <span className="badge">{t('current')}</span>
           ) : (
             canEdit && (
               <button
                 type="button"
                 className="link-btn"
-                title="Make this version the current one (as a new version)"
+                title={t('Make this version the current one (as a new version)')}
                 onClick={async () => {
                   try {
                     const r = await api.post<{ version: number }>(`/attachments/${attachmentId}/versions/${v.version}/restore`)
                     qc.invalidateQueries({ queryKey: ['attachment-versions', attachmentId] })
                     onRestored()
-                    toast(`v${v.version} is current again (as v${r.version})`)
+                    toast(t('v{version} is current again (as v{version2})', { version: v.version, version2: r.version }))
                   } catch (e) {
-                    toast(e instanceof Error ? e.message : 'Could not restore it')
+                    toast(e instanceof Error ? e.message : t('Could not restore it'))
                   }
                 }}
               >
-                <RotateCcw size={11} /> Make current
-              </button>
+                <RotateCcw size={11} />{' '}{t('Make current')}</button>
             )
           )}
         </li>
@@ -151,7 +150,7 @@ function FileLabels({ attachment, canEdit, onSaved }: { attachment: Attachment; 
       setEditing(false)
       onSaved()
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not save the labels')
+      toast(e instanceof Error ? e.message : t('Could not save the labels'))
     }
   }
   if (editing)
@@ -160,8 +159,8 @@ function FileLabels({ attachment, canEdit, onSaved }: { attachment: Attachment; 
         <input
           className="input"
           style={{ height: 26, fontSize: 12 }}
-          aria-label={`Labels of ${attachment.filename}`}
-          placeholder="label, another"
+          aria-label={t('Labels of {filename}', { filename: attachment.filename })}
+          placeholder={t('label, another')}
           value={value}
           autoFocus
           onChange={(e) => setValue(e.target.value)}
@@ -170,7 +169,7 @@ function FileLabels({ attachment, canEdit, onSaved }: { attachment: Attachment; 
             if (e.key === 'Escape') setEditing(false)
           }}
         />
-        <button className="btn btn-sm" onClick={save}>Save</button>
+        <button className="btn btn-sm" onClick={save}>{t('Save')}</button>
       </div>
     )
   if (!labels.length && !canEdit) return null
@@ -180,8 +179,8 @@ function FileLabels({ attachment, canEdit, onSaved }: { attachment: Attachment; 
         <Link key={l} to={`/labels/${encodeURIComponent(l)}`} className="label-chip">{l}</Link>
       ))}
       {canEdit && (
-        <button type="button" className="link-btn small" aria-label={`Edit the labels of ${attachment.filename}`} onClick={() => { setValue(labels.join(', ')); setEditing(true) }}>
-          <Tag size={11} /> {labels.length ? 'Edit' : 'Add labels'}
+        <button type="button" className="link-btn small" aria-label={t('Edit the labels of {filename}', { filename: attachment.filename })} onClick={() => { setValue(labels.join(', ')); setEditing(true) }}>
+          <Tag size={11} /> {labels.length ? t('Edit') : t('Add labels')}
         </button>
       )}
     </div>

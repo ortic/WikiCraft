@@ -1,3 +1,4 @@
+import { t as tr } from '../i18n'
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -77,8 +78,8 @@ export default function SearchPalette({ onClose, actions = [] }: { onClose: () =
       <div className="modal palette">
         <input
           autoFocus
-          placeholder="Search pages, or type > for actions…"
-          aria-label="Search pages and actions"
+          placeholder={tr('Search pages, or type > for actions…')}
+          aria-label={tr('Search pages and actions')}
           value={q}
           onChange={(e) => setQ(e.target.value)}
           onKeyDown={onKey}
@@ -86,7 +87,7 @@ export default function SearchPalette({ onClose, actions = [] }: { onClose: () =
         <div className="palette-results">
           {items.map((it, i) => {
             const header =
-              i === 0 && it.kind === 'action' ? 'Actions' : it.kind === 'page' && (i === 0 || items[i - 1].kind === 'action') ? (debounced ? 'Pages' : 'Recently viewed') : null
+              i === 0 && it.kind === 'action' ? tr('Actions') : it.kind === 'page' && (i === 0 || items[i - 1].kind === 'action') ? (debounced ? tr('Pages') : tr('Recently viewed')) : null
             return (
               <div key={it.kind === 'page' ? it.id : `a-${it.action.id}`}>
                 {header && <div className="menu-group">{header}</div>}
@@ -114,12 +115,10 @@ export default function SearchPalette({ onClose, actions = [] }: { onClose: () =
               </div>
             )
           })}
-          {actionsOnly && items.length === 0 && <div className="empty">No action matches “{term}”.</div>}
-          {debounced && !actionsOnly && results.isFetched && pages.length === 0 && <div className="empty">No pages match “{debounced}”.</div>}
+          {actionsOnly && items.length === 0 && <div className="empty">{tr('No action matches “{term}”.', { term })}</div>}
+          {debounced && !actionsOnly && results.isFetched && pages.length === 0 && <div className="empty">{tr('No pages match “{debounced}”.', { debounced })}</div>}
           {debounced && !actionsOnly && (
-            <a className="result faint small" onClick={() => { onClose(); nav(`/search?q=${encodeURIComponent(debounced)}`) }}>
-              See all results for “{debounced}” →
-            </a>
+            <a className="result faint small" onClick={() => { onClose(); nav(`/search?q=${encodeURIComponent(debounced)}`) }}>{tr('See all results for “{debounced}” →', { debounced })}</a>
           )}
         </div>
       </div>

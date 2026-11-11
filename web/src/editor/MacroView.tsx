@@ -2,6 +2,7 @@
 // recently updated, page properties report, task report, attachments and page tree. Other
 // macros keep the placeholder view.
 
+import { t as tr } from '../i18n'
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
@@ -62,7 +63,7 @@ function Header({ icon, title, detail }: { icon: React.ReactNode; title: string;
 
 function Empty({ q, text }: { q: { isLoading: boolean; error: unknown }; text: string }) {
   if (q.isLoading) return <div className="spinner" />
-  if (q.error) return <div className="faint small">Could not load: {q.error instanceof Error ? q.error.message : 'error'}</div>
+  if (q.error) return <div className="faint small">{tr('Could not load:')}{' '}{q.error instanceof Error ? q.error.message : tr('error')}</div>
   return <div className="faint small">{text}</div>
 }
 
@@ -91,13 +92,13 @@ function PageList({ params, page, mode }: { params: Params; page: Page | undefin
     <>
       <Header
         icon={mode === 'recent' ? <Clock size={13} /> : <Tag size={13} />}
-        title={mode === 'recent' ? 'Recently updated' : 'Content by label'}
+        title={mode === 'recent' ? tr('Recently updated') : tr('Content by label')}
         detail={cql ? cql : [spec.labels.length ? `labels: ${spec.labels.join(spec.all ? ' and ' : ', ')}` : '', spaces.length ? `in ${spaces.join(', ')}` : ''].filter(Boolean).join(' ')}
       />
       {!enabled ? (
-        <div className="faint small">No labels in this macro.</div>
+        <div className="faint small">{tr('No labels in this macro.')}</div>
       ) : rows.length === 0 ? (
-        <Empty q={q} text="No pages found." />
+        <Empty q={q} text={tr('No pages found.')} />
       ) : (
         <ul className="macro-list">
           {rows.map((r) => (
@@ -105,7 +106,7 @@ function PageList({ params, page, mode }: { params: Params; page: Page | undefin
               <FileText size={14} className="faint" />
               <Link to={`/pages/${r.id}`}>{r.title}</Link>
               {showSpace && <span className="faint small">{r.spaceName}</span>}
-              {mode === 'recent' && <span className="faint small">updated {formatDate(r.updatedAt)}{r.updatedByName ? ` by ${r.updatedByName}` : ''}</span>}
+              {mode === 'recent' && <span className="faint small">{tr('updated {date}', { date: formatDate(r.updatedAt) })}{r.updatedByName ? ' ' + tr('by {updatedByName}', { updatedByName: r.updatedByName }) + '' : ''}</span>}
               {showLabels && r.labels.length > 0 && (
                 <span className="macro-labels">
                   {r.labels.map((l) => (
@@ -143,25 +144,25 @@ function PropertiesReport({ params, page, onParams }: { params: Params; page: Pa
   return (
     <>
       <div className="row" style={{ gap: 6 }}>
-        <Header icon={<Table2 size={13} />} title="Page properties report" detail={detail || undefined} />
+        <Header icon={<Table2 size={13} />} title={tr('Page properties report')} detail={detail || undefined} />
         <span className="spacer" />
         {onParams && (
-          <button className="icon-btn" title="Filter and columns" aria-expanded={editing} onClick={() => setEditing(!editing)}>
+          <button className="icon-btn" title={tr('Filter and columns')} aria-expanded={editing} onClick={() => setEditing(!editing)}>
             <SlidersHorizontal size={14} />
           </button>
         )}
       </div>
       {editing && onParams && <ReportFilter params={params} onSave={(p) => { onParams(p); setEditing(false) }} />}
       {!enabled ? (
-        <div className="faint small">No label, space or filter in this report.</div>
+        <div className="faint small">{tr('No label, space or filter in this report.')}</div>
       ) : rows.length === 0 ? (
-        <Empty q={q} text={spec.labels.length ? 'No pages with page properties and this label.' : 'No pages with matching properties.'} />
+        <Empty q={q} text={spec.labels.length ? tr('No pages with page properties and this label.') : tr('No pages with matching properties.')} />
       ) : (
         <div className="macro-table-wrap">
           <table className="macro-table">
             <thead>
               <tr>
-                <th>{params.firstcolumn || 'Title'}</th>
+                <th>{params.firstcolumn || tr('Title')}</th>
                 {columns.map((c) => (
                   <th key={c}>{c}</th>
                 ))}
@@ -200,23 +201,22 @@ function ReportFilter({ params, onSave }: { params: Params; onSave: (p: Params) 
   return (
     <div className="report-filter" onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); save() } }}>
       <label className="field">
-        <span>Pages with these labels <span className="faint">(optional, comma-separated)</span></span>
-        <input className="input" value={labels} onChange={(e) => setLabels(e.target.value)} placeholder="project, active" />
+        <span>{tr('Pages with these labels')}{' '}<span className="faint">{tr('(optional, comma-separated)')}</span></span>
+        <input className="input" value={labels} onChange={(e) => setLabels(e.target.value)} placeholder={tr('project, active')} />
       </label>
       <label className="field">
-        <span>Where</span>
-        <input className="input" value={where} onChange={(e) => setWhere(e.target.value)} placeholder="Status = Done; Effort >= 3; Owner ~ Ann" />
-        <span className="faint small">Conditions on properties, separated by semicolons: = equal, != not equal, ~ contains, &lt; &gt; &lt;= &gt;= for numbers and dates (YYYY-MM-DD).</span>
+        <span>{tr('Where')}</span>
+        <input className="input" value={where} onChange={(e) => setWhere(e.target.value)} placeholder={tr('Status = Done; Effort >= 3; Owner ~ Ann')} />
+        <span className="faint small">{tr('Conditions on properties, separated by semicolons: = equal, != not equal, ~ contains, < > <= >= for numbers and dates (YYYY-MM-DD).')}</span>
       </label>
       <label className="field">
-        <span>Columns <span className="faint">(optional, comma-separated property names)</span></span>
-        <input className="input" value={headings} onChange={(e) => setHeadings(e.target.value)} placeholder="Status, Owner, Due" />
+        <span>{tr('Columns')}{' '}<span className="faint">{tr('(optional, comma-separated property names)')}</span></span>
+        <input className="input" value={headings} onChange={(e) => setHeadings(e.target.value)} placeholder={tr('Status, Owner, Due')} />
       </label>
       <label className="row small" style={{ gap: 6 }}>
-        <input type="checkbox" checked={allSpaces} onChange={(e) => setAllSpaces(e.target.checked)} /> All spaces (not only this one)
-      </label>
+        <input type="checkbox" checked={allSpaces} onChange={(e) => setAllSpaces(e.target.checked)} />{' '}{tr('All spaces (not only this one)')}</label>
       <div className="row" style={{ gap: 6, marginTop: 8 }}>
-        <button className="btn btn-primary btn-sm" onClick={save}>Apply</button>
+        <button className="btn btn-primary btn-sm" onClick={save}>{tr('Apply')}</button>
       </div>
     </div>
   )
@@ -257,27 +257,27 @@ function TasksReport({ params, page, onParams }: { params: Params; page: Page | 
   return (
     <>
       <div className="row" style={{ gap: 6 }}>
-        <Header icon={<CheckSquare size={13} />} title="Task report" detail={detail} />
+        <Header icon={<CheckSquare size={13} />} title={tr('Task report')} detail={detail} />
         <span className="spacer" />
         {onParams && (
-          <button className="icon-btn" title="Filter tasks" aria-expanded={editing} onClick={() => setEditing(!editing)}>
+          <button className="icon-btn" title={tr('Filter tasks')} aria-expanded={editing} onClick={() => setEditing(!editing)}>
             <SlidersHorizontal size={14} />
           </button>
         )}
       </div>
       {editing && onParams && <TaskFilter params={params} status={status} onSave={(p) => { onParams(p); setEditing(false) }} />}
       {rows.length === 0 ? (
-        <Empty q={q} text="No tasks." />
+        <Empty q={q} text={tr('No tasks.')} />
       ) : (
         <div className="macro-table-wrap">
           <table className="macro-table">
             <thead>
-              <tr><th style={{ width: 28 }} /><th>Task</th><th>Assignee</th><th>Due</th><th>Page</th></tr>
+              <tr><th style={{ width: 28 }} /><th>{tr('Task')}</th><th>{tr('Assignee')}</th><th>{tr('Due')}</th><th>{tr('Page')}</th></tr>
             </thead>
             <tbody>
               {rows.map((t) => (
                 <tr key={`${t.pageId}-${t.idx}`}>
-                  <td><input type="checkbox" checked={t.done} readOnly aria-label={t.done ? 'done' : 'open'} /></td>
+                  <td><input type="checkbox" checked={t.done} readOnly aria-label={t.done ? tr('done') : tr('open')} /></td>
                   <td>{t.text}</td>
                   <td>{t.assigneeName ?? <span className="faint">—</span>}</td>
                   <td>{t.due ?? ''}</td>
@@ -310,25 +310,24 @@ function TaskFilter({ params, status, onSave }: { params: Params; status: string
   return (
     <div className="report-filter">
       <label className="field">
-        <span>Tasks</span>
+        <span>{tr('Tasks')}</span>
         <select className="select" value={st} onChange={(e) => setSt(e.target.value)}>
-          <option value="open">Open</option>
-          <option value="done">Completed</option>
-          <option value="all">All</option>
+          <option value="open">{tr('Open')}</option>
+          <option value="done">{tr('Completed')}</option>
+          <option value="all">{tr('All')}</option>
         </select>
       </label>
       <label className="row small" style={{ gap: 6 }}>
-        <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} /> Only tasks assigned to the reader
-      </label>
+        <input type="checkbox" checked={mine} onChange={(e) => setMine(e.target.checked)} />{' '}{tr('Only tasks assigned to the reader')}</label>
       <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
-        <label className="field"><span>Due from</span><input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
-        <label className="field"><span>Due until</span><input className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
+        <label className="field"><span>{tr('Due from')}</span><input className="input" type="date" value={from} onChange={(e) => setFrom(e.target.value)} /></label>
+        <label className="field"><span>{tr('Due until')}</span><input className="input" type="date" value={to} onChange={(e) => setTo(e.target.value)} /></label>
       </div>
       <label className="field">
-        <span>Pages with these labels <span className="faint">(optional)</span></span>
-        <input className="input" value={labels} onChange={(e) => setLabels(e.target.value)} placeholder="sprint-12, team-a" />
+        <span>{tr('Pages with these labels')}{' '}<span className="faint">{tr('(optional)')}</span></span>
+        <input className="input" value={labels} onChange={(e) => setLabels(e.target.value)} placeholder={tr('sprint-12, team-a')} />
       </label>
-      <div className="row"><button className="btn btn-primary btn-sm" onClick={save}>Apply</button></div>
+      <div className="row"><button className="btn btn-primary btn-sm" onClick={save}>{tr('Apply')}</button></div>
     </div>
   )
 }
@@ -355,19 +354,19 @@ function DecisionsReport({ params, page }: { params: Params; page: Page | undefi
   const rows = q.data ?? []
   return (
     <>
-      <Header icon={<Milestone size={13} />} title="Decision log" detail={[spaces.length ? `in ${spaces.join(', ')}` : '', spec.labels.length ? `labels: ${spec.labels.join(', ')}` : ''].filter(Boolean).join(' ')} />
+      <Header icon={<Milestone size={13} />} title={tr('Decision log')} detail={[spaces.length ? `in ${spaces.join(', ')}` : '', spec.labels.length ? `labels: ${spec.labels.join(', ')}` : ''].filter(Boolean).join(' ')} />
       {rows.length === 0 ? (
-        <Empty q={q} text="No decisions recorded yet. Add one with /decision on any page." />
+        <Empty q={q} text={tr('No decisions recorded yet. Add one with /decision on any page.')} />
       ) : (
         <div className="macro-table-wrap">
           <table className="macro-table">
             <thead>
-              <tr><th>Decision</th><th>Page</th><th>Updated</th></tr>
+              <tr><th>{tr('Decision')}</th><th>{tr('Page')}</th><th>{tr('Updated')}</th></tr>
             </thead>
             <tbody>
               {rows.map((d, i) => (
                 <tr key={`${d.pageId}-${i}`}>
-                  <td>{d.text}{!d.decided && <span className="badge badge-warning" style={{ marginLeft: 6 }}>open</span>}</td>
+                  <td>{d.text}{!d.decided && <span className="badge badge-warning" style={{ marginLeft: 6 }}>{tr('open')}</span>}</td>
                   <td><Link to={`/pages/${d.pageId}`}>{d.pageTitle}</Link></td>
                   <td className="faint">{formatDate(d.updatedAt)}</td>
                 </tr>
@@ -393,9 +392,9 @@ function AttachmentsList({ params, pageId }: { params: Params; pageId: string })
   if ((params.sortOrder ?? '').toLowerCase() === 'ascending' && by !== 'name') rows.reverse()
   return (
     <>
-      <Header icon={<Paperclip size={13} />} title="Attachments" detail={params.patterns ? params.patterns : undefined} />
+      <Header icon={<Paperclip size={13} />} title={tr('Attachments')} detail={params.patterns ? params.patterns : undefined} />
       {rows.length === 0 ? (
-        <Empty q={q} text="No attachments on this page." />
+        <Empty q={q} text={tr('No attachments on this page.')} />
       ) : (
         <ul className="macro-list">
           {rows.map((a) => (
@@ -403,7 +402,7 @@ function AttachmentsList({ params, pageId }: { params: Params; pageId: string })
               <Paperclip size={14} className="faint" />
               <a href={`/api/attachments/${a.id}/content`} target="_blank" rel="noopener noreferrer">{a.filename}</a>
               <span className="faint small">{formatBytes(a.size)} · {formatDate(a.createdAt)}{a.createdByName ? ` · ${a.createdByName}` : ''}</span>
-              <a className="icon-btn" title="Download" href={`/api/attachments/${a.id}/content`} download={a.filename}><Download size={14} /></a>
+              <a className="icon-btn" title={tr('Download')} href={`/api/attachments/${a.id}/content`} download={a.filename}><Download size={14} /></a>
             </li>
           ))}
         </ul>
@@ -445,8 +444,8 @@ function PageTree({ params, page }: { params: Params; page: Page | undefined }) 
   }
   return (
     <>
-      <Header icon={<ListTree size={13} />} title="Page tree" />
-      {nodes.length === 0 ? <Empty q={q} text="No pages." /> : <div className="macro-tree">{render(rootId ?? '', 0) ?? <div className="faint small">No child pages.</div>}</div>}
+      <Header icon={<ListTree size={13} />} title={tr('Page tree')} />
+      {nodes.length === 0 ? <Empty q={q} text={tr('No pages.')} /> : <div className="macro-tree">{render(rootId ?? '', 0) ?? <div className="faint small">{tr('No child pages.')}</div>}</div>}
     </>
   )
 }
@@ -466,8 +465,8 @@ function LiveSearch({ params, page }: { params: Params; page?: Page }) {
   return (
     <form className="macro-search" onSubmit={go} role="search">
       <Search size={15} />
-      <input className="input" placeholder={params.placeholder || (space ? `Search ${space}` : 'Search the wiki')} aria-label="Search" value={q} onChange={(e) => setQ(e.target.value)} />
-      <button type="submit" className="btn btn-sm">Search</button>
+      <input className="input" placeholder={params.placeholder || (space ? tr('Search {space}', { space }) : tr('Search the wiki'))} aria-label={tr('Search')} value={q} onChange={(e) => setQ(e.target.value)} />
+      <button type="submit" className="btn btn-sm">{tr('Search')}</button>
     </form>
   )
 }
@@ -489,7 +488,7 @@ function CreateFromTemplate({ params, page }: { params: Params; page?: Page }) {
       qc.invalidateQueries({ queryKey: ['tree', page.spaceKey] })
       nav(`/pages/${r.id}?new=1`)
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not create the page')
+      toast(e instanceof Error ? e.message : tr('Could not create the page'))
     } finally {
       setBusy(false)
     }
@@ -497,7 +496,7 @@ function CreateFromTemplate({ params, page }: { params: Params; page?: Page }) {
   return (
     <div className="macro-create">
       <button type="button" className="btn btn-primary btn-sm" disabled={busy} onClick={create}>
-        <FilePlus2 size={14} /> {params.buttonLabel || 'Create a page'}
+        <FilePlus2 size={14} /> {params.buttonLabel || tr('Create a page')}
       </button>
       {picking && <TemplatePicker spaceKey={page.spaceKey} parentId={page.id} onClose={() => setPicking(false)} />}
     </div>

@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useEffect, useState } from 'react'
 import { Link, NavLink, Outlet, useLocation, useMatch, useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -78,63 +79,63 @@ export default function Layout() {
   const paletteActions: PaletteAction[] = [
     ...(canCreate
       ? [
-          { id: 'create-page', label: 'Create page', hint: `in ${current!.name}`, keywords: 'new add template', icon: <Plus size={14} />, run: () => setCreatePage(true) },
+          { id: 'create-page', label: t('Create page'), hint: t('in {name}', { name: current!.name }), keywords: t('new add template'), icon: <Plus size={14} />, run: () => setCreatePage(true) },
           {
             id: 'create-folder',
-            label: 'Create folder',
-            hint: `in ${current!.name}`,
-            keywords: 'new add',
+            label: t('Create folder'),
+            hint: t('in {name}', { name: current!.name }),
+            keywords: t('new add'),
             icon: <FolderPlus size={14} />,
             run: async () => {
-              const r = await api.post<{ id: string }>('/pages', { spaceKey: current!.key, kind: 'folder', title: 'New folder' })
+              const r = await api.post<{ id: string }>('/pages', { spaceKey: current!.key, kind: 'folder', title: t('New folder') })
               qc.invalidateQueries({ queryKey: ['tree', current!.key] })
               nav(`/pages/${r.id}?new=1`)
             },
           },
         ]
       : []),
-    ...(user && user.role !== 'guest' ? [{ id: 'create-space', label: 'Create space', keywords: 'new add', icon: <LayoutGrid size={14} />, run: () => setCreateSpace(true) }] : []),
-    { id: 'home', label: 'Go to Home', keywords: 'dashboard recent', icon: <HomeIcon size={14} />, run: () => nav('/') },
-    { id: 'spaces', label: 'Go to Spaces', keywords: 'directory all', icon: <LayoutGrid size={14} />, run: () => nav('/spaces') },
-    { id: 'people', label: 'Go to People', keywords: 'directory colleagues team profile', icon: <Users size={14} />, run: () => nav('/people') },
-    ...(user ? [{ id: 'tasks', label: 'Go to My tasks', keywords: 'todo assigned', icon: <ListChecks size={14} />, run: () => nav('/tasks') }] : []),
+    ...(user && user.role !== 'guest' ? [{ id: 'create-space', label: t('Create space'), keywords: t('new add'), icon: <LayoutGrid size={14} />, run: () => setCreateSpace(true) }] : []),
+    { id: 'home', label: t('Go to Home'), keywords: t('dashboard recent'), icon: <HomeIcon size={14} />, run: () => nav('/') },
+    { id: 'spaces', label: t('Go to Spaces'), keywords: t('directory all'), icon: <LayoutGrid size={14} />, run: () => nav('/spaces') },
+    { id: 'people', label: t('Go to People'), keywords: t('directory colleagues team profile'), icon: <Users size={14} />, run: () => nav('/people') },
+    ...(user ? [{ id: 'tasks', label: t('Go to My tasks'), keywords: t('todo assigned'), icon: <ListChecks size={14} />, run: () => nav('/tasks') }] : []),
     ...(current
       ? [
-          { id: 'space-blog', label: 'Open the blog', hint: current.name, keywords: 'news posts', icon: <Newspaper size={14} />, run: () => nav(`/spaces/${current.key}/blog`) },
+          { id: 'space-blog', label: t('Open the blog'), hint: current.name, keywords: t('news posts'), icon: <Newspaper size={14} />, run: () => nav(`/spaces/${current.key}/blog`) },
           ...(current.role === 'admin' || current.role === 'editor'
-            ? [{ id: 'space-trash', label: 'Open the trash', hint: current.name, keywords: 'deleted restore', icon: <Trash2 size={14} />, run: () => nav(`/spaces/${current.key}/settings?tab=trash`) }]
+            ? [{ id: 'space-trash', label: t('Open the trash'), hint: current.name, keywords: t('deleted restore'), icon: <Trash2 size={14} />, run: () => nav(`/spaces/${current.key}/settings?tab=trash`) }]
             : []),
           ...(current.role === 'admin'
-            ? [{ id: 'space-settings', label: 'Space settings', hint: current.name, keywords: 'permissions details', icon: <Settings size={14} />, run: () => nav(`/spaces/${current.key}/settings`) }]
+            ? [{ id: 'space-settings', label: t('Space settings'), hint: current.name, keywords: t('permissions details'), icon: <Settings size={14} />, run: () => nav(`/spaces/${current.key}/settings`) }]
             : []),
         ]
       : []),
-    ...(user ? [{ id: 'profile', label: 'Profile and settings', keywords: 'account password api token two-factor notifications', icon: <UserCog size={14} />, run: () => nav('/settings') }] : []),
-    ...(isAdmin ? [{ id: 'admin', label: 'Administration', keywords: 'admin users groups import audit', icon: <Shield size={14} />, run: () => nav('/admin') }] : []),
-    { id: 'theme', label: 'Toggle dark mode', keywords: 'theme light dark', icon: <Moon size={14} />, run: toggleTheme },
-    { id: 'shortcuts', label: 'Keyboard shortcuts', keywords: 'keys help', icon: <Keyboard size={14} />, run: () => window.dispatchEvent(new Event('wikicraft:shortcuts')) },
+    ...(user ? [{ id: 'profile', label: t('Profile and settings'), keywords: t('account password api token two-factor notifications'), icon: <UserCog size={14} />, run: () => nav('/settings') }] : []),
+    ...(isAdmin ? [{ id: 'admin', label: t('Administration'), keywords: t('admin users groups import audit'), icon: <Shield size={14} />, run: () => nav('/admin') }] : []),
+    { id: 'theme', label: t('Toggle dark mode'), keywords: t('theme light dark'), icon: <Moon size={14} />, run: toggleTheme },
+    { id: 'shortcuts', label: t('Keyboard shortcuts'), keywords: t('keys help'), icon: <Keyboard size={14} />, run: () => window.dispatchEvent(new Event('wikicraft:shortcuts')) },
   ]
 
   return (
     <div className={`shell ${mobileOpen ? 'sidebar-open' : ''}`}>
       <header className="topbar">
-        <button className="icon-btn mobile-only" onClick={() => setMobileOpen((o) => !o)} aria-label="Menu">
+        <button className="icon-btn mobile-only" onClick={() => setMobileOpen((o) => !o)} aria-label={t('Menu')}>
           <Menu size={18} />
         </button>
         <Link to="/" className="logo-link" style={{ textDecoration: 'none' }}>
           <Logo />
         </Link>
         <button className="search-trigger" onClick={() => setSearch(true)}>
-          <Search size={15} /> <span className="search-label">Search pages…</span> <span className="spacer" /> <span className="kbd">Ctrl K</span>
+          <Search size={15} /> <span className="search-label">{t('Search pages…')}</span> <span className="spacer" /> <span className="kbd">{t('Ctrl K')}</span>
         </button>
         <span className="spacer" />
         {canCreate && (
-          <button className="btn btn-primary create-btn" onClick={() => setCreatePage(true)} aria-label="Create">
-            <Plus size={15} /> <span className="create-label">Create</span>
+          <button className="btn btn-primary create-btn" onClick={() => setCreatePage(true)} aria-label={t('Create')}>
+            <Plus size={15} /> <span className="create-label">{t('Create')}</span>
           </button>
         )}
         {user && <NotificationsMenu />}
-        <button className="icon-btn" onClick={toggleTheme} title="Toggle dark mode">
+        <button className="icon-btn" onClick={toggleTheme} title={t('Toggle dark mode')}>
           <Moon size={16} />
         </button>
         {user ? (
@@ -159,72 +160,58 @@ export default function Layout() {
                       nav(`/spaces/${encodeURIComponent(s.key)}`)
                     }}
                   >
-                    <Star size={15} /> Personal space
-                  </div>
+                    <Star size={15} />{' '}{t('Personal space')}</div>
                 )}
                 <div className="menu-item" onClick={() => { setUserMenu(false); nav('/settings') }}>
-                  <UserCog size={15} /> Profile, API tokens & AI
-                </div>
+                  <UserCog size={15} />{' '}{t('Profile, API tokens & AI')}</div>
                 {(user.role === 'owner' || user.role === 'admin') && (
                   <div className="menu-item" onClick={() => { setUserMenu(false); nav('/admin') }}>
-                    <Shield size={15} /> Administration
-                  </div>
+                    <Shield size={15} />{' '}{t('Administration')}</div>
                 )}
                 <div className="menu-item" onClick={logout}>
-                  <LogOut size={15} /> Log out
-                </div>
+                  <LogOut size={15} />{' '}{t('Log out')}</div>
               </div>
             )}
           </div>
         ) : (
-          <Link className="btn" to="/login">
-            Log in
-          </Link>
+          <Link className="btn" to="/login">{t('Log in')}</Link>
         )}
       </header>
 
       <aside className="sidebar">
         <NavLink to="/" end className="nav-item">
-          <HomeIcon size={16} /> Home
-        </NavLink>
+          <HomeIcon size={16} />{' '}{t('Home')}</NavLink>
         <NavLink to="/spaces" end className="nav-item">
-          <LayoutGrid size={16} /> Spaces
-        </NavLink>
+          <LayoutGrid size={16} />{' '}{t('Spaces')}</NavLink>
         {user && (
           <NavLink to="/tasks" className="nav-item">
-            <ListChecks size={16} /> My tasks
-          </NavLink>
+            <ListChecks size={16} />{' '}{t('My tasks')}</NavLink>
         )}
         {user && user.role !== 'guest' && (
           <NavLink to="/people" className="nav-item">
-            <Users size={16} /> People
-          </NavLink>
+            <Users size={16} />{' '}{t('People')}</NavLink>
         )}
         {user && (user.role === 'owner' || user.role === 'admin') && (
           <NavLink to="/admin" className="nav-item">
-            <Shield size={16} /> Admin
-          </NavLink>
+            <Shield size={16} />{' '}{t('Admin')}</NavLink>
         )}
 
         {current ? (
           <>
-            <div className="sidebar-section" style={{ marginTop: 18 }}>
-              Space
-            </div>
+            <div className="sidebar-section" style={{ marginTop: 18 }}>{t('Space')}</div>
             <Link to={`/spaces/${current.key}`} className="space-switch" style={{ color: 'var(--text)', textDecoration: 'none' }}>
               <SpaceIcon space={current} />
               <div style={{ minWidth: 0 }}>
                 <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{current.name}</div>
-                <div className="faint small">{current.pageCount} pages</div>
+                <div className="faint small">{t('{pageCount} pages', { pageCount: current.pageCount })}</div>
               </div>
             </Link>
             {!current.look?.hideBlog && (
               <NavLink to={`/spaces/${current.key}/blog`} className="nav-item" style={{ marginTop: 4 }}>
-                <Newspaper size={15} /> Blog
-              </NavLink>
+                <Newspaper size={15} />{' '}{t('Blog')}</NavLink>
             )}
             {!!current.shortcuts?.length && (
-              <nav aria-label="Space shortcuts" className="space-shortcuts">
+              <nav aria-label={t('Space shortcuts')} className="space-shortcuts">
                 {current.shortcuts.map((s, i) =>
                   s.url.startsWith('/') ? (
                     <NavLink key={i} to={s.url} end className="nav-item">
@@ -241,18 +228,15 @@ export default function Layout() {
             <SpaceTree space={current} />
             {current.role === 'admin' && (
               <NavLink to={`/spaces/${current.key}/settings`} className={({ isActive }) => `nav-item${isActive && !['trash', 'export'].includes(new URLSearchParams(loc.search).get('tab') ?? '') ? ' active' : ''}`} style={{ marginTop: 8 }}>
-                <Settings size={15} /> Space settings
-              </NavLink>
+                <Settings size={15} />{' '}{t('Space settings')}</NavLink>
             )}
             {(current.role === 'admin' || current.role === 'editor') && (
               <NavLink to={`/spaces/${current.key}/settings?tab=trash`} className={({ isActive }) => `nav-item${isActive && (new URLSearchParams(loc.search).get('tab') ?? '') === 'trash' ? ' active' : ''}`}>
-                <Trash2 size={15} /> Trash
-              </NavLink>
+                <Trash2 size={15} />{' '}{t('Trash')}</NavLink>
             )}
             {current.role !== 'admin' && can(current, 'export') && (
               <NavLink to={`/spaces/${current.key}/settings?tab=export`} className={({ isActive }) => `nav-item${isActive && (new URLSearchParams(loc.search).get('tab') ?? '') === 'export' ? ' active' : ''}`}>
-                <Download size={15} /> Export
-              </NavLink>
+                <Download size={15} />{' '}{t('Export')}</NavLink>
             )}
           </>
         ) : (
@@ -260,8 +244,7 @@ export default function Layout() {
             {!!favorites.data?.length && (
               <>
                 <div className="sidebar-section">
-                  <Star size={12} style={{ marginRight: 4 }} /> Starred
-                </div>
+                  <Star size={12} style={{ marginRight: 4 }} />{' '}{t('Starred')}</div>
                 {favorites.data.slice(0, 10).map((f) => (
                   <NavLink key={f.id} to={`/pages/${f.id}`} className="nav-item">
                     <Star size={14} /> {f.title}
@@ -269,10 +252,9 @@ export default function Layout() {
                 ))}
               </>
             )}
-            <div className="sidebar-section">
-              Spaces <span className="spacer" />
+            <div className="sidebar-section">{t('Spaces')}{' '}<span className="spacer" />
               {user && user.role !== 'guest' && (
-                <button className="icon-btn" style={{ width: 22, height: 22 }} title="Create space" onClick={() => setCreateSpace(true)}>
+                <button className="icon-btn" style={{ width: 22, height: 22 }} title={t('Create space')} onClick={() => setCreateSpace(true)}>
                   <Plus size={14} />
                 </button>
               )}
@@ -282,7 +264,7 @@ export default function Layout() {
               .map((s) => (
                 <NavLink key={s.id} to={`/spaces/${s.key}`} className="nav-item">
                   <SpaceIcon space={s} size={20} /> <span className="nav-item-text">{s.name}</span>
-                  {s.starred && <Star size={12} className="nav-star" fill="currentColor" aria-label="starred" />}
+                  {s.starred && <Star size={12} className="nav-star" fill="currentColor" aria-label={t('starred')} />}
                 </NavLink>
               ))}
           </>
@@ -330,8 +312,8 @@ function AnnouncementBanner() {
       </span>
       <button
         className="icon-btn"
-        title="Dismiss"
-        aria-label="Dismiss announcement"
+        title={t('Dismiss')}
+        aria-label={t('Dismiss announcement')}
         onClick={() => {
           try {
             localStorage.setItem(DISMISSED, a.id)

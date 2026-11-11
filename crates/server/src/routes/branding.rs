@@ -39,6 +39,20 @@ pub struct WorkspaceUpdate {
     date_format: Option<String>,
     /// IANA name used for people without their own time zone; "" = their browser's
     time_zone: Option<String>,
+    /// interface language for people without their own (one of [`LANGUAGES`]); "" = their browser's
+    default_language: Option<String>,
+}
+
+/// The languages the interface is available in.
+pub const LANGUAGES: &[&str] = &["en", "de", "fr", "es", "pt", "it", "nl", "pl", "ja", "zh", "ko", "ar", "he"];
+
+/// A supported language code, `Ok(None)` for "" (the browser decides).
+pub fn clean_language(s: &str) -> ApiResult<Option<String>> {
+    let s = s.trim().to_ascii_lowercase();
+    if s.is_empty() {
+        return Ok(None);
+    }
+    if LANGUAGES.contains(&s.as_str()) { Ok(Some(s)) } else { Err(ApiError::bad(format!("language must be one of {}", LANGUAGES.join(", ")))) }
 }
 
 /// How dates are written: the reader's browser locale, or a fixed pattern.
@@ -84,6 +98,9 @@ pub async fn rename(State(state): State<AppState>, CurrentUser(admin): CurrentUs
         }
         changed.insert("timeZone".into(), json!(tz));
     }
+    if let Some(l) = &req.default_language {
+        changed.insert("defaultLanguage".into(), json!(clean_language(l)?.unwrap_or_default()));
+    }
     if !changed.is_empty() {
         sqlx::query("UPDATE workspaces SET settings = settings || $2 WHERE id = $1").bind(ws).bind(Value::Object(changed.clone())).execute(&state.db).await?;
         audit::log(&state, ws, Some(admin.id), "workspace.settings", None, None, Value::Object(changed)).await;
@@ -115,15 +132,18 @@ pub async fn date_format(state: &AppState, ws: Uuid) -> ApiResult<String> {
 }
 
 /// The workspace's look and date conventions as the client applies them (`accentColor`,
-/// `dateFormat`, `timeZone`; unset ones are null).
+/// `dateFormat`, `timeZone`, `defaultLanguage`; unset ones are null).
 pub async fn look(state: &AppState, ws: Uuid) -> ApiResult<serde_json::Map<String, Value>> {
-    let (color, format, tz): (Option<String>, Option<String>, Option<String>) =
-        sqlx::query_as("SELECT NULLIF(settings->>'accentColor', ''), settings->>'dateFormat', NULLIF(settings->>'timeZone', '') FROM workspaces WHERE id = $1")
-            .bind(ws)
-            .fetch_optional(&state.db)
-            .await?
-            .unwrap_or_default();
+    let (color, format, tz, lang): (Option<String>, Option<String>, Option<String>, Option<String>) = sqlx::query_as(
+        "SELECT NULLIF(settings->>'accentColor', ''), settings->>'dateFormat', NULLIF(settings->>'timeZone', ''), NULLIF(settings->>'defaultLanguage', '')
+         FROM workspaces WHERE id = $1",
+    )
+    .bind(ws)
+    .fetch_optional(&state.db)
+    .await?
+    .unwrap_or_default();
     let mut out = serde_json::Map::new();
+    out.insert("defaultLanguage".into(), json!(lang));
     out.insert("accentColor".into(), json!(color));
     out.insert("dateFormat".into(), json!(format.unwrap_or_else(|| "auto".into())));
     out.insert("timeZone".into(), json!(tz));

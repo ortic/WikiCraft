@@ -1,3 +1,4 @@
+import { t as tr } from '../i18n'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { useEditor, EditorContent, ReactNodeViewRenderer, type Editor as TEditor } from '@tiptap/react'
@@ -192,7 +193,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
     const proto = location.protocol === 'https:' ? 'wss' : 'ws'
     return new WebsocketProvider(`${proto}://${location.host}/api/pages/${pageId}`, 'collab', ydoc, { disableBc: true, maxBackoffTime: 5000 })
   }, [pageId, ydoc])
-  const me = useMemo(() => ({ name: user?.name ?? 'Guest', color: userColor(user?.id ?? 'guest') }), [user])
+  const me = useMemo(() => ({ name: user?.name ?? tr('Guest'), color: userColor(user?.id ?? 'guest') }), [user])
 
   const upload = async (editor: TEditor, files: File[], asImage: boolean) => {
     if (!files.length) return
@@ -221,7 +222,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
         TaskList,
         TaskItem.configure({ nested: true }),
         ImageExt,
-        Placeholder.configure({ placeholder: ({ node }) => (node.type.name === 'heading' ? 'Heading' : "Type '/' for commands, '@' to mention someone") }),
+        Placeholder.configure({ placeholder: ({ node }) => (node.type.name === 'heading' ? tr('Heading') : tr('Type \'/\' for commands, \'@\' to mention someone')) }),
         CharacterCount,
         TextStyle,
         Color,
@@ -263,7 +264,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
       ],
       editorProps: {
         // the editable area is a role=textbox: give it a name for screen readers
-        attributes: { 'aria-label': 'Page content' },
+        attributes: { 'aria-label': tr('Page content') },
         handlePaste: (_view, event) => {
           const files = Array.from(event.clipboardData?.files ?? [])
           if (files.length && editorRef.current) {
@@ -389,8 +390,8 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
   const copyBlockLink = (blockId: string) => {
     const url = `${location.origin}/pages/${pageId}${blockHash(blockId)}`
     navigator.clipboard.writeText(url).then(
-      () => toast('Link to this block copied'),
-      () => window.prompt('Link to this block', url),
+      () => toast(tr('Link to this block copied')),
+      () => window.prompt(tr('Link to this block'), url),
     )
   }
   const [handleNode, setHandleNode] = useState<PMNode | null>(null)
@@ -437,7 +438,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
   const setLink = () => {
     if (!editor) return
     const prev = editor.getAttributes('link').href as string | undefined
-    const url = window.prompt('Link URL', prev ?? 'https://')
+    const url = window.prompt(tr('Link URL'), prev ?? 'https://')
     if (url === null) return
     if (url === '') editor.chain().focus().extendMarkRange('link').unsetLink().run()
     else editor.chain().focus().extendMarkRange('link').setLink({ href: url }).run()
@@ -457,7 +458,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
       {find && editor && <FindBar key={`${find.replace}-${find.initial}`} editor={editor} withReplace={find.replace} initial={find.initial} onClose={() => setFind(null)} />}
       {!synced && (
         <div className="row faint" style={{ padding: '12px 0' }}>
-          <div className="spinner" /> {status === 'disconnected' ? 'Reconnecting…' : 'Loading document…'}
+          <div className="spinner" /> {status === 'disconnected' ? tr('Reconnecting…') : tr('Loading document…')}
         </div>
       )}
       {editor && (
@@ -465,22 +466,22 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
           <div className="bubble">
             {editor.isEditable && (
               <>
-                <button className={`icon-btn ${editor.isActive('bold') ? 'active' : ''}`} title="Bold (Ctrl+B)" onClick={() => editor.chain().focus().toggleBold().run()}><Bold size={15} /></button>
-                <button className={`icon-btn ${editor.isActive('italic') ? 'active' : ''}`} title="Italic (Ctrl+I)" onClick={() => editor.chain().focus().toggleItalic().run()}><Italic size={15} /></button>
-                <button className={`icon-btn ${editor.isActive('underline') ? 'active' : ''}`} title="Underline (Ctrl+U)" onClick={() => editor.chain().focus().toggleUnderline().run()}><Underline size={15} /></button>
-                <button className={`icon-btn ${editor.isActive('strike') ? 'active' : ''}`} title="Strikethrough" onClick={() => editor.chain().focus().toggleStrike().run()}><Strikethrough size={15} /></button>
-                <button className={`icon-btn ${editor.isActive('code') ? 'active' : ''}`} title="Inline code" onClick={() => editor.chain().focus().toggleCode().run()}><Code size={15} /></button>
-                <button className={`icon-btn ${editor.isActive('highlight') ? 'active' : ''}`} title="Highlight" onClick={() => editor.chain().focus().toggleHighlight().run()}><Highlighter size={15} /></button>
+                <button className={`icon-btn ${editor.isActive('bold') ? 'active' : ''}`} title={tr('Bold (Ctrl+B)')} onClick={() => editor.chain().focus().toggleBold().run()}><Bold size={15} /></button>
+                <button className={`icon-btn ${editor.isActive('italic') ? 'active' : ''}`} title={tr('Italic (Ctrl+I)')} onClick={() => editor.chain().focus().toggleItalic().run()}><Italic size={15} /></button>
+                <button className={`icon-btn ${editor.isActive('underline') ? 'active' : ''}`} title={tr('Underline (Ctrl+U)')} onClick={() => editor.chain().focus().toggleUnderline().run()}><Underline size={15} /></button>
+                <button className={`icon-btn ${editor.isActive('strike') ? 'active' : ''}`} title={tr('Strikethrough')} onClick={() => editor.chain().focus().toggleStrike().run()}><Strikethrough size={15} /></button>
+                <button className={`icon-btn ${editor.isActive('code') ? 'active' : ''}`} title={tr('Inline code')} onClick={() => editor.chain().focus().toggleCode().run()}><Code size={15} /></button>
+                <button className={`icon-btn ${editor.isActive('highlight') ? 'active' : ''}`} title={tr('Highlight')} onClick={() => editor.chain().focus().toggleHighlight().run()}><Highlighter size={15} /></button>
                 <TextStyleMenu editor={editor} />
                 <span className="sep" />
-                <button className={`icon-btn ${editor.isActive('heading', { level: 2 }) ? 'active' : ''}`} title="Heading" onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}><Heading2 size={15} /></button>
-                <button className={`icon-btn ${editor.isActive('bulletList') ? 'active' : ''}`} title="Bullet list" onClick={() => editor.chain().focus().toggleBulletList().run()}><List size={15} /></button>
-                <button className={`icon-btn ${editor.isActive('link') ? 'active' : ''}`} title="Link" onClick={setLink}><LinkIcon size={15} /></button>
+                <button className={`icon-btn ${editor.isActive('heading', { level: 2 }) ? 'active' : ''}`} title={tr('Heading')} onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}><Heading2 size={15} /></button>
+                <button className={`icon-btn ${editor.isActive('bulletList') ? 'active' : ''}`} title={tr('Bullet list')} onClick={() => editor.chain().focus().toggleBulletList().run()}><List size={15} /></button>
+                <button className={`icon-btn ${editor.isActive('link') ? 'active' : ''}`} title={tr('Link')} onClick={setLink}><LinkIcon size={15} /></button>
                 <span className="sep" />
               </>
             )}
             {onRequestComment && (
-              <button className="icon-btn" title="Comment" onClick={addComment}><MessageSquarePlus size={15} /></button>
+              <button className="icon-btn" title={tr('Comment')} onClick={addComment}><MessageSquarePlus size={15} /></button>
             )}
           </div>
         </BubbleMenu>
@@ -493,8 +494,8 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
             <button
               type="button"
               className="block-link"
-              title="Copy link to this block"
-              aria-label="Copy link to this block"
+              title={tr('Copy link to this block')}
+              aria-label={tr('Copy link to this block')}
               draggable={false}
               onMouseDown={(e) => e.stopPropagation()}
               onClick={(e) => {
@@ -515,8 +516,8 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
           type="button"
           className="block-link block-link-float"
           style={{ top: hoverBlock.top, left: hoverBlock.left }}
-          title="Copy link to this block"
-          aria-label="Copy link to this block"
+          title={tr('Copy link to this block')}
+          aria-label={tr('Copy link to this block')}
           onClick={(e) => {
             e.stopPropagation()
             copyBlockLink(hoverBlock.id)
@@ -565,11 +566,11 @@ export function PresenceAvatars({ users }: { users: Presence[] }) {
   return (
     <div className="presence" title={users.map((u) => u.name).join(', ')}>
       {users.slice(0, 5).map((u) => (
-        <button key={u.clientId} type="button" className="avatar presence-avatar" style={{ background: u.color }} title={`${u.name}: jump to their cursor`} onClick={() => jump(u)}>
+        <button key={u.clientId} type="button" className="avatar presence-avatar" style={{ background: u.color }} title={tr('{name}: jump to their cursor', { name: u.name })} onClick={() => jump(u)}>
           {initials(u.name)}
         </button>
       ))}
-      {missing && <span className="presence-hint faint small">{missing} isn't editing right now</span>}
+      {missing && <span className="presence-hint faint small">{tr('{missing} isn\'t editing right now', { missing })}</span>}
     </div>
   )
 }

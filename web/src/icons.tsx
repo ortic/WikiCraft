@@ -1,6 +1,7 @@
 // WikiCraft's own SVG icon set. The drawings live in crates/doc-model/assets/icons.json so the
 // server (exports, e-mails) renders exactly the same icons. Emoji are never used as icons.
 
+import { t } from './i18n'
 import set from '../../crates/doc-model/assets/icons.json'
 
 type Group = 'callout' | 'symbols' | 'ui'
@@ -78,7 +79,7 @@ export function SymbolPicker({ value, onChange }: { value: string | null; onChan
         {Object.entries(SYMBOL_COLORS).map(([k, c]) => (
           <button key={k} type="button" className={`swatch${k === color ? ' selected' : ''}`} style={{ background: c }} aria-label={k} onClick={() => onChange(`${cur?.name ?? 'book'}:${k}`)} />
         ))}
-        <button type="button" className="btn btn-ghost small" onClick={() => onChange(null)}>No icon</button>
+        <button type="button" className="btn btn-ghost small" onClick={() => onChange(null)}>{t('No icon')}</button>
       </div>
       <div className="symbol-grid">
         {SYMBOLS.map((name) => (

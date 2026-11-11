@@ -1,3 +1,4 @@
+import { t as tr } from '../i18n'
 import { useState } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -44,20 +45,18 @@ function ActivityFeed() {
   const following = useQuery({ queryKey: ['following'], queryFn: () => api.get<{ id: string; name: string }[]>('/me/following'), enabled: scope === 'following' })
   const q = useQuery({ queryKey: ['activity', scope], queryFn: () => api.get<ActivityEvent[]>(`/activity?scope=${scope}&limit=40`) })
   const verb = (e: ActivityEvent) =>
-    e.kind === 'created' ? 'created' : e.kind === 'commented' ? 'commented on' : e.count > 1 ? `edited (${e.count} versions)` : 'edited'
+    e.kind === 'created' ? 'created' : e.kind === 'commented' ? 'commented on' : e.count > 1 ? tr('edited ({count} versions)', { count: e.count }) : 'edited'
   const Icon = ({ kind }: { kind: ActivityEvent['kind'] }) =>
     kind === 'created' ? <FilePlus2 size={13} /> : kind === 'commented' ? <MessageSquare size={13} /> : <PencilLine size={13} />
   return (
     <div>
       <div className="chips" style={{ margin: '4px 0 12px' }}>
-        <button className={`chip${scope === 'all' ? ' active' : ''}`} onClick={() => setScope('all')}>Everything</button>
-        <button className={`chip${scope === 'watching' ? ' active' : ''}`} onClick={() => setScope('watching')}>Pages and spaces I watch</button>
-        <button className={`chip${scope === 'following' ? ' active' : ''}`} onClick={() => setScope('following')}>People I follow</button>
+        <button className={`chip${scope === 'all' ? ' active' : ''}`} onClick={() => setScope('all')}>{tr('Everything')}</button>
+        <button className={`chip${scope === 'watching' ? ' active' : ''}`} onClick={() => setScope('watching')}>{tr('Pages and spaces I watch')}</button>
+        <button className={`chip${scope === 'following' ? ' active' : ''}`} onClick={() => setScope('following')}>{tr('People I follow')}</button>
       </div>
       {scope === 'following' && !!following.data?.length && (
-        <div className="row faint small" style={{ gap: 6, flexWrap: 'wrap', margin: '-4px 0 12px' }}>
-          Following
-          {following.data.map((f) => (
+        <div className="row faint small" style={{ gap: 6, flexWrap: 'wrap', margin: '-4px 0 12px' }}>{tr('Following')}{following.data.map((f) => (
             <Link key={f.id} to={`/people/${f.id}`} className="row" style={{ gap: 4 }}>
               <Avatar name={f.name} id={f.id} size={18} /> {f.name}
             </Link>
@@ -69,12 +68,12 @@ function ActivityFeed() {
       ) : !q.data.length ? (
         <div className="empty">
           {scope === 'watching'
-            ? 'Watch pages or spaces to follow their changes here.'
+            ? tr('Watch pages or spaces to follow their changes here.')
             : scope === 'following'
               ? following.data?.length
-                ? 'The people you follow haven’t changed anything you can see lately.'
-                : <>Follow people from their profile (<Link to="/people">People</Link>) to see what they write here.</>
-              : 'Nothing has happened yet.'}
+                ? tr('The people you follow haven’t changed anything you can see lately.')
+                : <>{tr('Follow people from their profile (')}<Link to="/people">{tr('People')}</Link>{tr(') to see what they write here.')}</>
+              : tr('Nothing has happened yet.')}
         </div>
       ) : (
         <ul className="activity">
@@ -83,7 +82,7 @@ function ActivityFeed() {
               <Avatar name={e.actorName ?? '?'} id={e.actorId ?? undefined} size={28} />
               <div className="activity-body">
                 <div>
-                  <b>{e.actorName ?? 'Someone'}</b> <span className="activity-verb"><Icon kind={e.kind} /> {verb(e)}</span>{' '}
+                  <b>{e.actorName ?? tr('Someone')}</b> <span className="activity-verb"><Icon kind={e.kind} /> {verb(e)}</span>{' '}
                   <Link to={`/pages/${e.pageId}`}>{e.pageTitle}</Link>
                 </div>
                 {e.detail && <div className="activity-detail">{e.detail}</div>}
@@ -119,34 +118,33 @@ export default function Home() {
   const today = new Date().toISOString().slice(0, 10)
   return (
     <div className="content-pad">
-      <h1 style={{ margin: '4px 0 2px' }}>{name ? `Good to see you, ${name}` : me.data?.workspace?.name}</h1>
+      <h1 style={{ margin: '4px 0 2px' }}>{name ? tr('Good to see you, {name}', { name }) : me.data?.workspace?.name}</h1>
       <p className="muted" style={{ marginTop: 0 }}>{me.data?.workspace?.name}</p>
 
       {!!tasks.data?.length && (
         <div className="card home-tasks">
           <div className="row">
-            <ListChecks size={16} /> <b>Your open tasks</b>
+            <ListChecks size={16} /> <b>{tr('Your open tasks')}</b>
             <span className="faint small">{tasks.data.length}</span>
             <span className="spacer" />
-            <Link to="/tasks" className="small">All tasks</Link>
+            <Link to="/tasks" className="small">{tr('All tasks')}</Link>
           </div>
           {tasks.data.slice(0, 5).map((t) => (
             <Link key={`${t.pageId}-${t.idx}`} to={`/pages/${t.pageId}`} className="home-task">
-              <span className="home-task-text">{t.text || 'Untitled task'}</span>
+              <span className="home-task-text">{t.text || tr('Untitled task')}</span>
               <span className="faint small">{t.pageTitle}</span>
-              {t.due && <span className={`badge ${t.due < today ? 'badge-danger' : t.due === today ? 'badge-warning' : ''}`}>{t.due < today ? 'overdue ' : 'due '}{t.due}</span>}
+              {t.due && <span className={`badge ${t.due < today ? 'badge-danger' : t.due === today ? 'badge-warning' : ''}`}>{t.due < today ? '' + tr('overdue') + ' ' : '' + tr('due') + ' '}{t.due}</span>}
             </Link>
           ))}
         </div>
       )}
 
       <div className="row" style={{ marginTop: 28 }}>
-        <h3 style={{ margin: 0 }}>Spaces</h3>
+        <h3 style={{ margin: 0 }}>{tr('Spaces')}</h3>
         <span className="spacer" />
         {me.data?.user && me.data.user.role !== 'guest' && (
           <button className="btn btn-sm" onClick={() => setCreate(true)}>
-            <Plus size={14} /> New space
-          </button>
+            <Plus size={14} />{' '}{tr('New space')}</button>
         )}
       </div>
       <div className="grid-cards" style={{ marginTop: 12 }}>
@@ -156,53 +154,44 @@ export default function Home() {
             <div style={{ minWidth: 0 }}>
               <div style={{ fontWeight: 600 }}>{s.name}</div>
               <div className="faint small">
-                {s.key} · {s.pageCount} pages
-              </div>
+                {tr('{key} · {pageCount} pages', { key: s.key, pageCount: s.pageCount })}</div>
             </div>
           </Link>
         ))}
-        {spaces.data?.length === 0 && <div className="empty">No spaces yet — create the first one or import from Confluence in Admin.</div>}
+        {spaces.data?.length === 0 && <div className="empty">{tr('No spaces yet — create the first one or import from Confluence in Admin.')}</div>}
       </div>
 
       {me.data?.user && (
         <>
           <div className="tabs" style={{ marginTop: 32 }}>
-            <button className={`tab ${tab === 'viewed' ? 'active' : ''}`} onClick={() => setTab('viewed')}>
-              Recently viewed
-            </button>
-            <button className={`tab ${tab === 'updated' ? 'active' : ''}`} onClick={() => setTab('updated')}>
-              Recently updated
-            </button>
+            <button className={`tab ${tab === 'viewed' ? 'active' : ''}`} onClick={() => setTab('viewed')}>{tr('Recently viewed')}</button>
+            <button className={`tab ${tab === 'updated' ? 'active' : ''}`} onClick={() => setTab('updated')}>{tr('Recently updated')}</button>
             <button className={`tab ${tab === 'activity' ? 'active' : ''}`} onClick={() => setTab('activity')}>
-              <Activity size={13} /> Activity
-            </button>
+              <Activity size={13} />{' '}{tr('Activity')}</button>
             <button className={`tab ${tab === 'popular' ? 'active' : ''}`} onClick={() => setTab('popular')}>
-              <TrendingUp size={13} /> Popular
-            </button>
+              <TrendingUp size={13} />{' '}{tr('Popular')}</button>
             <button className={`tab ${tab === 'starred' ? 'active' : ''}`} onClick={() => setTab('starred')}>
-              <Star size={13} /> Starred
-            </button>
+              <Star size={13} />{' '}{tr('Starred')}</button>
             {!!drafts.data?.length && (
               <button className={`tab ${tab === 'drafts' ? 'active' : ''}`} onClick={() => setTab('drafts')}>
-                <PencilLine size={13} /> Drafts ({drafts.data.length})
-              </button>
+                <PencilLine size={13} />{' '}{tr('Drafts ({length})', { length: drafts.data.length })}</button>
             )}
           </div>
-          {tab === 'viewed' && <PageList items={recent.data?.viewed} empty="Pages you visit show up here." timeLabel={(p) => formatDate(p.at)} />}
-          {tab === 'updated' && <PageList items={recent.data?.updated} empty="Nothing updated yet." timeLabel={(p) => `${p.updatedByName ?? ''} · ${formatDate(p.updatedAt)}`} />}
+          {tab === 'viewed' && <PageList items={recent.data?.viewed} empty={tr('Pages you visit show up here.')} timeLabel={(p) => formatDate(p.at)} />}
+          {tab === 'updated' && <PageList items={recent.data?.updated} empty={tr('Nothing updated yet.')} timeLabel={(p) => `${p.updatedByName ?? ''} · ${formatDate(p.updatedAt)}`} />}
           {tab === 'activity' && <ActivityFeed />}
           {tab === 'popular' && (
             <PageList
               items={popular.data}
-              empty="Pages people read most in the last 30 days show up here."
+              empty={tr('Pages people read most in the last 30 days show up here.')}
               timeLabel={(p) => {
                 const x = p as PageListItem & { viewers: number; views: number }
                 return `${x.viewers} ${x.viewers === 1 ? 'reader' : 'readers'} · ${x.views} views`
               }}
             />
           )}
-          {tab === 'starred' && <PageList items={favs.data} empty="Star pages to find them quickly." timeLabel={(p) => formatDate(p.updatedAt)} />}
-          {tab === 'drafts' && <PageList items={drafts.data} empty="No unpublished drafts." timeLabel={(p) => (p.publishAt ? `publishes ${formatDateTime(p.publishAt)}` : `edited ${formatDate(p.updatedAt)}`)} />}
+          {tab === 'starred' && <PageList items={favs.data} empty={tr('Star pages to find them quickly.')} timeLabel={(p) => formatDate(p.updatedAt)} />}
+          {tab === 'drafts' && <PageList items={drafts.data} empty={tr('No unpublished drafts.')} timeLabel={(p) => (p.publishAt ? `publishes ${formatDateTime(p.publishAt)}` : `edited ${formatDate(p.updatedAt)}`)} />}
         </>
       )}
       {create && <CreateSpaceDialog onClose={() => setCreate(false)} />}

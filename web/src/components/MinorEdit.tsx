@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { BellOff } from 'lucide-react'
 import { api } from '../api'
@@ -14,7 +15,7 @@ export default function MinorEditToggle({ pageId }: { pageId: string }) {
     try {
       qc.setQueryData(['minor-edit', pageId], await api.put<{ minor: boolean }>(`/pages/${pageId}/minor-edit`, { minor: !minor }))
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not change that')
+      toast(e instanceof Error ? e.message : t('Could not change that'))
     }
   }
   return (
@@ -22,10 +23,10 @@ export default function MinorEditToggle({ pageId }: { pageId: string }) {
       type="button"
       className={`badge minor-toggle${minor ? ' on' : ''}`}
       aria-pressed={minor}
-      title={minor ? 'Your changes are minor: watchers aren’t notified about them. Click to notify them again.' : 'Mark your changes as minor: watchers aren’t notified'}
+      title={minor ? t('Your changes are minor: watchers aren’t notified about them. Click to notify them again.') : t('Mark your changes as minor: watchers aren’t notified')}
       onClick={toggle}
     >
-      <BellOff size={12} /> {minor ? 'Minor change: no notifications' : 'Minor change'}
+      <BellOff size={12} /> {minor ? t('Minor change: no notifications') : t('Minor change')}
     </button>
   )
 }

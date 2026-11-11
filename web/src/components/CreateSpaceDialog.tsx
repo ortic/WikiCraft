@@ -1,3 +1,4 @@
+import { t as tr } from '../i18n'
 import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -37,34 +38,30 @@ export default function CreateSpaceDialog({ onClose }: { onClose: () => void }) 
       onClose()
       nav(`/spaces/${s.key}`)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed')
+      setError(e instanceof Error ? e.message : tr('Failed'))
     } finally {
       setBusy(false)
     }
   }
   return (
     <Modal
-      title="Create a space"
+      title={tr('Create a space')}
       width={620}
       onClose={onClose}
       footer={
         <>
-          <button className="btn" onClick={onClose}>
-            Cancel
-          </button>
-          <button className="btn btn-primary" disabled={!name.trim() || !derived || busy} onClick={submit}>
-            Create space
-          </button>
+          <button className="btn" onClick={onClose}>{tr('Cancel')}</button>
+          <button className="btn btn-primary" disabled={!name.trim() || !derived || busy} onClick={submit}>{tr('Create space')}</button>
         </>
       }
     >
       <div className="field">
-        <label>Start with</label>
+        <label>{tr('Start with')}</label>
         <div className="space-templates">
           <button type="button" className={`space-template ${template === '' ? 'selected' : ''}`} onClick={() => setTemplate('')}>
             <FilePlus2 size={18} />
-            <b>Blank space</b>
-            <span className="faint small">Just a home page.</span>
+            <b>{tr('Blank space')}</b>
+            <span className="faint small">{tr('Just a home page.')}</span>
           </button>
           {templates.data?.map((t) => (
             <button type="button" key={t.id} className={`space-template ${template === t.id ? 'selected' : ''}`} onClick={() => setTemplate(t.id)} title={t.pages.join(', ')}>
@@ -76,25 +73,25 @@ export default function CreateSpaceDialog({ onClose }: { onClose: () => void }) 
         </div>
       </div>
       <div className="field">
-        <label>Name</label>
-        <input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="e.g. Engineering" />
+        <label>{tr('Name')}</label>
+        <input className="input" autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder={tr('e.g. Engineering')} />
       </div>
       <div className="field">
-        <label>Key</label>
-        <input className="input" value={derived} onChange={(e) => { setKeyTouched(true); setKey(e.target.value.toUpperCase()) }} placeholder="ENG" />
-        <span className="faint small">Short identifier used in links. Letters, digits, _ and -.</span>
+        <label>{tr('Key')}</label>
+        <input className="input" value={derived} onChange={(e) => { setKeyTouched(true); setKey(e.target.value.toUpperCase()) }} placeholder={tr('ENG')} />
+        <span className="faint small">{tr('Short identifier used in links. Letters, digits, _ and -.')}</span>
       </div>
       <div className="field">
-        <label>Description</label>
+        <label>{tr('Description')}</label>
         <textarea className="textarea" value={description} onChange={(e) => setDescription(e.target.value)} />
       </div>
       <div className="field">
-        <label>Access for all members</label>
+        <label>{tr('Access for all members')}</label>
         <select className="select" value={access} onChange={(e) => setAccess(e.target.value)}>
-          <option value="editor">Everyone can edit</option>
-          <option value="commenter">Everyone can view and comment</option>
-          <option value="viewer">Everyone can view</option>
-          <option value="none">Private — only people I add</option>
+          <option value="editor">{tr('Everyone can edit')}</option>
+          <option value="commenter">{tr('Everyone can view and comment')}</option>
+          <option value="viewer">{tr('Everyone can view')}</option>
+          <option value="none">{tr('Private — only people I add')}</option>
         </select>
       </div>
       {error && <div className="error-text">{error}</div>}

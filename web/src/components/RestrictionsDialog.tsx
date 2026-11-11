@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Lock, Users, X } from 'lucide-react'
@@ -65,41 +66,34 @@ export default function RestrictionsDialog({ page, onClose }: { page: Page; onCl
       qc.invalidateQueries({ queryKey: ['tree', page.spaceKey] })
       onClose()
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Failed')
+      setError(e instanceof Error ? e.message : t('Failed'))
     }
   }
   return (
     <Modal
       title={
         <span className="row">
-          <Lock size={16} /> Restrictions
-        </span>
+          <Lock size={16} />{' '}{t('Restrictions')}</span>
       }
       onClose={onClose}
       footer={
         manage ? (
           <>
-            <button className="btn" onClick={onClose}>
-              Cancel
-            </button>
-            <button className="btn btn-primary" onClick={save}>
-              Apply
-            </button>
+            <button className="btn" onClick={onClose}>{t('Cancel')}</button>
+            <button className="btn btn-primary" onClick={save}>{t('Apply')}</button>
           </>
         ) : undefined
       }
     >
       {data.data?.inheritedFrom.length ? (
-        <div className="card small" style={{ marginBottom: 12 }}>
-          Also restricted through: {data.data.inheritedFrom.map((p) => p.title).join(', ')} (view restrictions are inherited).
-        </div>
+        <div className="card small" style={{ marginBottom: 12 }}>{t('Also restricted through:')}{' '}{data.data.inheritedFrom.map((p) => p.title).join(', ')}{' '}{t('(view restrictions are inherited).')}</div>
       ) : null}
       <div className="field">
-        <label>Who can see and edit this page?</label>
+        <label>{t('Who can see and edit this page?')}</label>
         <select className="select" value={mode} disabled={!manage} onChange={(e) => changeMode(e.target.value as typeof mode)}>
-          <option value="none">Anyone with space access can view and edit</option>
-          <option value="edit">Anyone can view, only specific people can edit</option>
-          <option value="view">Only specific people can view and edit</option>
+          <option value="none">{t('Anyone with space access can view and edit')}</option>
+          <option value="edit">{t('Anyone can view, only specific people can edit')}</option>
+          <option value="view">{t('Only specific people can view and edit')}</option>
         </select>
       </div>
       {mode !== 'none' && (
@@ -107,17 +101,15 @@ export default function RestrictionsDialog({ page, onClose }: { page: Page; onCl
           {manage && (
             <div className="row" style={{ marginBottom: 10 }}>
               <select className="select" value={pick} onChange={(e) => setPick(e.target.value)}>
-                <option value="">Add a person or group…</option>
+                <option value="">{t('Add a person or group…')}</option>
                 {subjects.map((s) => (
                   <option key={s.type + s.id} value={s.type + ':' + s.id}>
                     {s.name}
-                    {s.type === 'group' ? ' (group)' : ''}
+                    {s.type === 'group' ? ' ' + t('(group)') + '' : ''}
                   </option>
                 ))}
               </select>
-              <button className="btn" onClick={add} disabled={!pick}>
-                Add
-              </button>
+              <button className="btn" onClick={add} disabled={!pick}>{t('Add')}</button>
             </div>
           )}
           {people.map((p) => (
@@ -125,7 +117,7 @@ export default function RestrictionsDialog({ page, onClose }: { page: Page; onCl
               {p.subjectType === 'group' ? <Users size={15} /> : null}
               <span>{nameOf(p)}</span>
               <span className="spacer" />
-              <span className="faint small">{mode === 'view' ? 'Can view & edit' : 'Can edit'}</span>
+              <span className="faint small">{mode === 'view' ? t('Can view & edit') : t('Can edit')}</span>
               {manage && (
                 <button className="icon-btn" onClick={() => setEntries((es) => es.filter((e) => e.subjectId !== p.subjectId))}>
                   <X size={14} />

@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Check, Minus, SearchCheck, X } from 'lucide-react'
@@ -20,19 +21,19 @@ export default function AccessCheck({ pageId, people }: { pageId: string; people
   )
   return (
     <div className="access-check">
-      <h4 className="row" style={{ margin: '0 0 8px' }}><SearchCheck size={15} /> Check someone's access</h4>
+      <h4 className="row" style={{ margin: '0 0 8px' }}><SearchCheck size={15} />{' '}{t('Check someone\'s access')}</h4>
       <select className="select" value={who} onChange={(e) => setWho(e.target.value)}>
-        <option value="">Choose a person…</option>
-        <option value="anonymous">Anonymous visitor (not signed in)</option>
+        <option value="">{t('Choose a person…')}</option>
+        <option value="anonymous">{t('Anonymous visitor (not signed in)')}</option>
         {people.map((p) => <option key={p.id} value={p.id}>{p.name}</option>)}
       </select>
-      {who && (q.isLoading ? <Spinner /> : q.error ? <p className="error-text">{q.error instanceof Error ? q.error.message : 'Failed'}</p> : q.data && (
+      {who && (q.isLoading ? <Spinner /> : q.error ? <p className="error-text">{q.error instanceof Error ? q.error.message : t('Failed')}</p> : q.data && (
         <>
           <div className="row" style={{ margin: '10px 0', flexWrap: 'wrap', gap: 6 }}>
-            {verdict('View', q.data.access.view)}
-            {verdict('Comment', q.data.access.comment)}
-            {verdict('Edit', q.data.access.edit)}
-            {verdict('Manage', q.data.access.admin)}
+            {verdict(t('View'), q.data.access.view)}
+            {verdict(t('Comment'), q.data.access.comment)}
+            {verdict(t('Edit'), q.data.access.edit)}
+            {verdict(t('Manage'), q.data.access.admin)}
           </div>
           <ol className="access-steps">
             {q.data.steps.map((s, i) => (

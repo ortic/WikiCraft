@@ -1,14 +1,15 @@
+import { t } from '../i18n'
 import { useEffect, useState } from 'react'
 import { Modal } from '../ui'
 
 const mod = typeof navigator !== 'undefined' && /Mac|iPhone|iPad/.test(navigator.platform) ? '⌘' : 'Ctrl'
 
 const GROUPS: [string, [string, string][]][] = [
-  ['General', [[`${mod} K`, 'Search pages'], [`${mod} F`, 'Find in page'], [`${mod} H`, 'Find and replace (editing)'], [`${mod} /`, 'Keyboard shortcuts'], ['Esc', 'Close dialogs and menus']]],
-  ['Formatting', [[`${mod} B`, 'Bold'], [`${mod} I`, 'Italic'], [`${mod} U`, 'Underline'], [`${mod} Shift X`, 'Strikethrough'], [`${mod} E`, 'Inline code'], [`${mod} Shift H`, 'Highlight']]],
-  ['Blocks', [['/', 'Insert anything (slash menu)'], ['# ', 'Heading (## and ### for smaller)'], ['- or * ', 'Bullet list'], ['1. ', 'Numbered list'], ['[] ', 'Task list'], ['> ', 'Quote'], ['```', 'Code block'], ['---', 'Divider'], [`Tab at the start / ${mod} ]`, 'Indent a paragraph'], [`Shift Tab / ${mod} [`, 'Outdent']]],
-  ['Linking', [['[[', 'Link to a page (or create one)'], ['@', 'Mention someone or link a page'], [':tick', 'Insert an emoticon'], [`${mod} Z / ${mod} Shift Z`, 'Undo / redo']]],
-  ['Tables', [['Tab / Shift Tab', 'Next / previous cell'], ['Toolbar above the table', 'Rows, columns, headers, merge, colour']]],
+  [t('General'), [[`${mod} K`, t('Search pages')], [`${mod} F`, t('Find in page')], [`${mod} H`, t('Find and replace (editing)')], [`${mod} /`, t('Keyboard shortcuts')], ['Esc', t('Close dialogs and menus')]]],
+  [t('Formatting'), [[`${mod} B`, t('Bold')], [`${mod} I`, t('Italic')], [`${mod} U`, t('Underline')], [`${mod} Shift X`, t('Strikethrough')], [`${mod} E`, t('Inline code')], [`${mod} Shift H`, t('Highlight')]]],
+  [t('Blocks'), [['/', t('Insert anything (slash menu)')], ['# ', t('Heading (## and ### for smaller)')], ['- or * ', t('Bullet list')], ['1. ', t('Numbered list')], ['[] ', t('Task list')], ['> ', t('Quote')], ['```', t('Code block')], ['---', t('Divider')], [`Tab at the start / ${mod} ]`, t('Indent a paragraph')], [`Shift Tab / ${mod} [`, t('Outdent')]]],
+  [t('Linking'), [['[[', t('Link to a page (or create one)')], ['@', t('Mention someone or link a page')], [':tick', t('Insert an emoticon')], [`${mod} Z / ${mod} Shift Z`, t('Undo / redo')]]],
+  [t('Tables'), [['Tab / Shift Tab', t('Next / previous cell')], [t('Toolbar above the table'), t('Rows, columns, headers, merge, colour')]]],
 ]
 
 /** Opens with Ctrl/⌘ + / anywhere in the app. */
@@ -31,7 +32,7 @@ export default function ShortcutsDialog() {
   }, [])
   if (!open) return null
   return (
-    <Modal title="Keyboard shortcuts" onClose={() => setOpen(false)} width={720}>
+    <Modal title={t('Keyboard shortcuts')} onClose={() => setOpen(false)} width={720}>
       <div className="shortcuts">
         {GROUPS.map(([group, rows]) => (
           <section key={group}>

@@ -1,5 +1,6 @@
 // The drawing editor (Excalidraw), loaded only when someone opens a drawing.
 
+import { t } from '../i18n'
 import { useEffect, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Excalidraw, convertToExcalidrawElements, exportToBlob, serializeAsJSON } from '@excalidraw/excalidraw'
@@ -11,7 +12,7 @@ import '@excalidraw/excalidraw/index.css'
 export default function DrawingEditor({
   initial,
   image,
-  title = 'Drawing',
+  title = t('Drawing'),
   dark,
   onSave,
   onClose,
@@ -85,19 +86,19 @@ export default function DrawingEditor({
         : null
       await onSave(scene, png)
     } catch (e) {
-      setError(e instanceof Error ? e.message : 'Could not save the drawing')
+      setError(e instanceof Error ? e.message : t('Could not save the drawing'))
       setBusy(false)
     }
   }
   // rendered outside the page editor, so its keys and focus don't reach the document
   return createPortal(
-    <div className="drawing-modal" role="dialog" aria-modal aria-label="Drawing" onKeyDown={(e) => e.stopPropagation()}>
+    <div className="drawing-modal" role="dialog" aria-modal aria-label={t('Drawing')} onKeyDown={(e) => e.stopPropagation()}>
       <div className="drawing-bar">
         <b>{title}</b>
         {error && <span className="error-text small">{error}</span>}
         <span className="spacer" />
-        <button className="btn" onClick={onClose} disabled={busy}>Cancel</button>
-        <button className="btn btn-primary" onClick={save} disabled={busy || !api}>{busy ? 'Saving…' : 'Save'}</button>
+        <button className="btn" onClick={onClose} disabled={busy}>{t('Cancel')}</button>
+        <button className="btn btn-primary" onClick={save} disabled={busy || !api}>{busy ? t('Saving…') : t('Save')}</button>
       </div>
       <div className="drawing-canvas">
         <Excalidraw autoFocus excalidrawAPI={setApi} initialData={initialData} theme={dark ? 'dark' : 'light'} UIOptions={{ canvasActions: { loadScene: false, saveToActiveFile: false, export: false } }} />

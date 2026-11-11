@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useState, type FormEvent } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Building2, KeyRound } from 'lucide-react'
@@ -19,7 +20,7 @@ export function Setup() {
       await qc.invalidateQueries()
       location.href = '/'
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Setup failed')
+      setError(err instanceof Error ? err.message : t('Setup failed'))
       setBusy(false)
     }
   }
@@ -27,28 +28,26 @@ export function Setup() {
     <div className="auth">
       <form className="auth-card" onSubmit={submit}>
         <Logo />
-        <h1>Welcome to WikiCraft</h1>
-        <p className="muted" style={{ marginTop: 0 }}>Create your workspace and the first admin account.</p>
+        <h1>{t('Welcome to WikiCraft')}</h1>
+        <p className="muted" style={{ marginTop: 0 }}>{t('Create your workspace and the first admin account.')}</p>
         <div className="field">
-          <label htmlFor="setup-workspace">Workspace name</label>
-          <input id="setup-workspace" className="input" required value={form.workspaceName} onChange={set('workspaceName')} placeholder="Acme Inc." autoFocus />
+          <label htmlFor="setup-workspace">{t('Workspace name')}</label>
+          <input id="setup-workspace" className="input" required value={form.workspaceName} onChange={set('workspaceName')} placeholder={t('Acme Inc.')} autoFocus />
         </div>
         <div className="field">
-          <label htmlFor="setup-name">Your name</label>
+          <label htmlFor="setup-name">{t('Your name')}</label>
           <input id="setup-name" className="input" required value={form.name} onChange={set('name')} />
         </div>
         <div className="field">
-          <label htmlFor="setup-email">E-mail</label>
+          <label htmlFor="setup-email">{t('E-mail')}</label>
           <input id="setup-email" className="input" type="email" required value={form.email} onChange={set('email')} />
         </div>
         <div className="field">
-          <label htmlFor="setup-password">Password</label>
+          <label htmlFor="setup-password">{t('Password')}</label>
           <input id="setup-password" className="input" type="password" required minLength={8} value={form.password} onChange={set('password')} />
         </div>
         {error && <p className="error-text">{error}</p>}
-        <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', height: 38 }} disabled={busy}>
-          Create workspace
-        </button>
+        <button className="btn btn-primary" style={{ width: '100%', justifyContent: 'center', height: 38 }} disabled={busy}>{t('Create workspace')}</button>
       </form>
     </div>
   )
@@ -110,7 +109,7 @@ export function Login() {
       }
       location.href = safeNext(next)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Login failed')
+      setError(err instanceof Error ? err.message : t('Login failed'))
       setBusy(false)
     }
   }
@@ -120,16 +119,16 @@ export function Login() {
       <div className="auth">
         <form className="auth-card" onSubmit={submit}>
           <Logo />
-          <h1>Two-factor sign-in</h1>
-          <p className="muted" style={{ marginTop: 0 }}>Enter the 6-digit code from your authenticator app, or one of your recovery codes.</p>
+          <h1>{t('Two-factor sign-in')}</h1>
+          <p className="muted" style={{ marginTop: 0 }}>{t('Enter the 6-digit code from your authenticator app, or one of your recovery codes.')}</p>
           <div className="field">
-            <label htmlFor="login-code">Code</label>
+            <label htmlFor="login-code">{t('Code')}</label>
             <input id="login-code" className="input otp-input" inputMode="numeric" autoComplete="one-time-code" required value={code} onChange={(e) => setCode(e.target.value)} autoFocus placeholder="123 456" />
           </div>
           {error && <p className="error-text">{error}</p>}
-          <button className="btn btn-primary" style={wide} disabled={busy}>Verify</button>
+          <button className="btn btn-primary" style={wide} disabled={busy}>{t('Verify')}</button>
           <p className="small" style={{ textAlign: 'center', marginBottom: 0 }}>
-            <a href="/login" onClick={(e) => { e.preventDefault(); setMfaToken(null); setCode(''); setError(null) }}>Use a different account</a>
+            <a href="/login" onClick={(e) => { e.preventDefault(); setMfaToken(null); setCode(''); setError(null) }}>{t('Use a different account')}</a>
           </p>
         </form>
       </div>
@@ -138,31 +137,31 @@ export function Login() {
     <div className="auth">
       <form className="auth-card" onSubmit={submit}>
         <Logo />
-        <h1>Log in</h1>
-        <p className="muted" style={{ marginTop: 0 }}>Welcome back.</p>
+        <h1>{t('Log in')}</h1>
+        <p className="muted" style={{ marginTop: 0 }}>{t('Welcome back.')}</p>
         {redirects.length > 0 && (
           <>
             <div className="sso-buttons">
               {redirects.map((p) => (
                 <a key={p.id} className="btn" style={wide} href={`${p.loginUrl}?next=${encodeURIComponent(next)}`}>
-                  <ProviderIcon p={p} /> Continue with {p.name}
+                  <ProviderIcon p={p} />{' '}{t('Continue with {name}', { name: p.name })}
                 </a>
               ))}
             </div>
-            {showForm && <div className="faint small" style={{ textAlign: 'center', margin: '14px 0' }}>{directory.length > 0 ? `or with your ${directory.length === 1 ? directory[0].name : 'directory'} account` : 'or with your password'}</div>}
+            {showForm && <div className="faint small" style={{ textAlign: 'center', margin: '14px 0' }}>{directory.length > 0 ? (directory.length === 1 ? t('or with your {name} account', { name: directory[0].name }) : t('or with your directory account')) : t('or with your password')}</div>}
           </>
         )}
         {showForm && (
           <>
             <div className="field">
-              <label htmlFor="login-email">{directory.length > 0 ? 'E-mail or username' : 'E-mail'}</label>
+              <label htmlFor="login-email">{directory.length > 0 ? t('E-mail or username') : t('E-mail')}</label>
               <input id="login-email" className="input" type={directory.length > 0 ? 'text' : 'email'} autoComplete="username" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
             </div>
             <div className="field">
               <div className="row">
-                <label htmlFor="login-password">Password</label>
+                <label htmlFor="login-password">{t('Password')}</label>
                 {info.data?.passwordReset && (
-                  <a className="small" style={{ marginLeft: 'auto', fontWeight: 400 }} href="/forgot-password">Forgot password?</a>
+                  <a className="small" style={{ marginLeft: 'auto', fontWeight: 400 }} href="/forgot-password">{t('Forgot password?')}</a>
                 )}
               </div>
               <input id="login-password" className="input" type="password" autoComplete="current-password" required value={password} onChange={(e) => setPassword(e.target.value)} />
@@ -171,13 +170,10 @@ export function Login() {
         )}
         {error && <p className="error-text">{error}</p>}
         {showForm && (
-          <button className="btn btn-primary" style={wide} disabled={busy}>
-            Log in
-          </button>
+          <button className="btn btn-primary" style={wide} disabled={busy}>{t('Log in')}</button>
         )}
         {signup.data?.enabled && (
-          <p className="small" style={{ textAlign: 'center', marginBottom: 0 }}>
-            New here? <a href="/signup">Create an account</a>
+          <p className="small" style={{ textAlign: 'center', marginBottom: 0 }}>{t('New here?')}{' '}<a href="/signup">{t('Create an account')}</a>
           </p>
         )}
       </form>
@@ -206,7 +202,7 @@ export function Signup() {
       await api.post('/auth/signup', { email })
       setSent(true)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong')
+      setError(err instanceof Error ? err.message : t('Something went wrong'))
     } finally {
       setBusy(false)
     }
@@ -216,25 +212,23 @@ export function Signup() {
     <div className="auth">
       <form className="auth-card" onSubmit={submit}>
         <Logo />
-        <h1>Create an account</h1>
+        <h1>{t('Create an account')}</h1>
         {info.data && !info.data.enabled ? (
-          <p className="muted">Accounts are by invitation. Ask an admin of this wiki to invite you.</p>
+          <p className="muted">{t('Accounts are by invitation. Ask an admin of this wiki to invite you.')}</p>
         ) : sent ? (
-          <p className="muted">We sent a confirmation link to <b>{email}</b>. Open it to choose your name and password. It's valid for 48 hours.</p>
+          <p className="muted">{t('We sent a confirmation link to')}{' '}<b>{email}</b>{t('. Open it to choose your name and password. It\'s valid for 48 hours.')}</p>
         ) : (
           <>
-            <p className="muted" style={{ marginTop: 0 }}>
-              Use your work e-mail{domains.length ? ` (${domains.map((d) => '@' + d).join(', ')})` : ''}. We'll send you a link to confirm it.
-            </p>
+            <p className="muted" style={{ marginTop: 0 }}>{t('Use your work e-mail')}{domains.length ? ` (${domains.map((d) => '@' + d).join(', ')})` : ''}{t('. We\'ll send you a link to confirm it.')}</p>
             <div className="field">
-              <label htmlFor="auth-email">E-mail</label>
+              <label htmlFor="auth-email">{t('E-mail')}</label>
               <input id="auth-email" className="input" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
             </div>
             {error && <p className="error-text">{error}</p>}
-            <button className="btn btn-primary" style={wideBtn} disabled={busy}>Send confirmation link</button>
+            <button className="btn btn-primary" style={wideBtn} disabled={busy}>{t('Send confirmation link')}</button>
           </>
         )}
-        <p className="small" style={{ textAlign: 'center', marginBottom: 0 }}><a href="/login">Back to log in</a></p>
+        <p className="small" style={{ textAlign: 'center', marginBottom: 0 }}><a href="/login">{t('Back to log in')}</a></p>
       </form>
     </div>
   )
@@ -254,7 +248,7 @@ export function ForgotPassword() {
       await api.post('/auth/forgot', { email })
       setSent(true)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong')
+      setError(err instanceof Error ? err.message : t('Something went wrong'))
     } finally {
       setBusy(false)
     }
@@ -263,21 +257,21 @@ export function ForgotPassword() {
     <div className="auth">
       <form className="auth-card" onSubmit={submit}>
         <Logo />
-        <h1>Reset your password</h1>
+        <h1>{t('Reset your password')}</h1>
         {sent ? (
-          <p className="muted">If an account with a password exists for <b>{email}</b>, we've sent a link to choose a new one. It's valid for one hour.</p>
+          <p className="muted">{t('If an account with a password exists for')}{' '}<b>{email}</b>{t(', we\'ve sent a link to choose a new one. It\'s valid for one hour.')}</p>
         ) : (
           <>
-            <p className="muted" style={{ marginTop: 0 }}>Enter your e-mail and we'll send you a link to choose a new password.</p>
+            <p className="muted" style={{ marginTop: 0 }}>{t('Enter your e-mail and we\'ll send you a link to choose a new password.')}</p>
             <div className="field">
-              <label htmlFor="auth-email">E-mail</label>
+              <label htmlFor="auth-email">{t('E-mail')}</label>
               <input id="auth-email" className="input" type="email" autoComplete="email" required value={email} onChange={(e) => setEmail(e.target.value)} autoFocus />
             </div>
             {error && <p className="error-text">{error}</p>}
-            <button className="btn btn-primary" style={wideBtn} disabled={busy}>Send reset link</button>
+            <button className="btn btn-primary" style={wideBtn} disabled={busy}>{t('Send reset link')}</button>
           </>
         )}
-        <p className="small" style={{ textAlign: 'center', marginBottom: 0 }}><a href="/login">Back to log in</a></p>
+        <p className="small" style={{ textAlign: 'center', marginBottom: 0 }}><a href="/login">{t('Back to log in')}</a></p>
       </form>
     </div>
   )
@@ -291,14 +285,14 @@ export function ResetPassword() {
   const [busy, setBusy] = useState(false)
   const submit = async (e: FormEvent) => {
     e.preventDefault()
-    if (password !== confirm) return setError("The passwords don't match")
+    if (password !== confirm) return setError(t('The passwords don\'t match'))
     setBusy(true)
     setError(null)
     try {
       const r = await api.post<{ mfaRequired?: boolean }>('/auth/reset', { token: tokenParam(), password })
       location.href = r.mfaRequired ? '/login?mfa=1' : '/'
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong')
+      setError(err instanceof Error ? err.message : t('Something went wrong'))
       setBusy(false)
     }
   }
@@ -306,18 +300,18 @@ export function ResetPassword() {
     <div className="auth">
       <form className="auth-card" onSubmit={submit}>
         <Logo />
-        <h1>Choose a new password</h1>
-        <p className="muted" style={{ marginTop: 0 }}>You'll be signed out everywhere else.</p>
+        <h1>{t('Choose a new password')}</h1>
+        <p className="muted" style={{ marginTop: 0 }}>{t('You\'ll be signed out everywhere else.')}</p>
         <div className="field">
-          <label htmlFor="reset-password">New password</label>
+          <label htmlFor="reset-password">{t('New password')}</label>
           <input id="reset-password" className="input" type="password" autoComplete="new-password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} autoFocus />
         </div>
         <div className="field">
-          <label htmlFor="reset-confirm">Repeat password</label>
+          <label htmlFor="reset-confirm">{t('Repeat password')}</label>
           <input id="reset-confirm" className="input" type="password" autoComplete="new-password" minLength={8} required value={confirm} onChange={(e) => setConfirm(e.target.value)} />
         </div>
         {error && <p className="error-text">{error}</p>}
-        <button className="btn btn-primary" style={wideBtn} disabled={busy}>Save and sign in</button>
+        <button className="btn btn-primary" style={wideBtn} disabled={busy}>{t('Save and sign in')}</button>
       </form>
     </div>
   )
@@ -339,7 +333,7 @@ export function AcceptInvite() {
       await api.post('/auth/accept-invite', { token: tokenParam(), name: name ?? info.data?.name ?? '', password })
       location.href = '/'
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong')
+      setError(err instanceof Error ? err.message : t('Something went wrong'))
       setBusy(false)
     }
   }
@@ -350,35 +344,35 @@ export function AcceptInvite() {
         <Logo />
         {info.error ? (
           <>
-            <h1>Invitation not valid</h1>
-            <p className="muted">{info.error instanceof Error ? info.error.message : 'This link is invalid or has expired.'} Ask an administrator for a new invitation.</p>
-            <p className="small"><a href="/login">Go to log in</a></p>
+            <h1>{t('Invitation not valid')}</h1>
+            <p className="muted">{info.error instanceof Error ? info.error.message : t('This link is invalid or has expired.')}{' '}{t('Ask an administrator for a new invitation.')}</p>
+            <p className="small"><a href="/login">{t('Go to log in')}</a></p>
           </>
         ) : !info.data ? (
           <Spinner />
         ) : (
           <>
-            <h1>Join {info.data.workspace}</h1>
-            <p className="muted" style={{ marginTop: 0 }}>{info.data.signup ? 'Your address is confirmed: ' : 'You were invited as '}<b>{info.data.email}</b>.</p>
+            <h1>{t('Join {workspace}', { workspace: info.data.workspace })}</h1>
+            <p className="muted" style={{ marginTop: 0 }}>{info.data.signup ? '' + t('Your address is confirmed:') + ' ' : '' + t('You were invited as') + ' '}<b>{info.data.email}</b>.</p>
             {redirects.length > 0 && (
               <div className="sso-buttons" style={{ marginBottom: 14 }}>
                 {redirects.map((p) => (
-                  <a key={p.id} className="btn" style={wideBtn} href={`${p.loginUrl}?next=%2F`}><ProviderIcon p={p} /> Continue with {p.name}</a>
+                  <a key={p.id} className="btn" style={wideBtn} href={`${p.loginUrl}?next=%2F`}><ProviderIcon p={p} />{' '}{t('Continue with {name}', { name: p.name })}</a>
                 ))}
               </div>
             )}
             {info.data.passwordLogin && (
               <>
                 <div className="field">
-                  <label htmlFor="invite-name">Your name</label>
+                  <label htmlFor="invite-name">{t('Your name')}</label>
                   <input id="invite-name" className="input" required value={name ?? info.data.name} onChange={(e) => setName(e.target.value)} autoFocus />
                 </div>
                 <div className="field">
-                  <label htmlFor="invite-password">Choose a password</label>
+                  <label htmlFor="invite-password">{t('Choose a password')}</label>
                   <input id="invite-password" className="input" type="password" autoComplete="new-password" minLength={8} required value={password} onChange={(e) => setPassword(e.target.value)} />
                 </div>
                 {error && <p className="error-text">{error}</p>}
-                <button className="btn btn-primary" style={wideBtn} disabled={busy}>Create my account</button>
+                <button className="btn btn-primary" style={wideBtn} disabled={busy}>{t('Create my account')}</button>
               </>
             )}
           </>

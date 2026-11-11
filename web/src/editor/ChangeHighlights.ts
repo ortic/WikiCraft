@@ -1,6 +1,7 @@
 // Tints the blocks that changed since the reader's last visit (block ids from the server's
 // `changedSince.blocks`). Set them with `setChangeHighlights(editor, ids)`; an empty list clears.
 
+import { t } from '../i18n'
 import { Extension, type Editor } from '@tiptap/core'
 import { Plugin, PluginKey } from '@tiptap/pm/state'
 import { Decoration, DecorationSet } from '@tiptap/pm/view'
@@ -20,7 +21,7 @@ function decorate(doc: PMNode, ids: Set<string>): DecorationSet {
   doc.descendants((node, pos) => {
     const id = node.attrs?.[BLOCK_ID_ATTR] as string | undefined
     if (id && ids.has(id)) {
-      decos.push(Decoration.node(pos, pos + node.nodeSize, { class: 'changed-block', title: 'Changed since your last visit' }))
+      decos.push(Decoration.node(pos, pos + node.nodeSize, { class: 'changed-block', title: t('Changed since your last visit') }))
       return false
     }
     return true

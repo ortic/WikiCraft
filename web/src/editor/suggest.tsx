@@ -1,5 +1,6 @@
 // Slash-command menu and @mention suggestions.
 
+import { t } from '../i18n'
 import { Extension, type Editor, type Range } from '@tiptap/core'
 import { ReactRenderer } from '@tiptap/react'
 import Suggestion, { type SuggestionOptions, type SuggestionProps, type SuggestionKeyDownProps } from '@tiptap/suggestion'
@@ -50,7 +51,7 @@ const SuggestionList = forwardRef<ListHandle, { items: MenuItem[]; command: (i: 
   useEffect(() => {
     document.querySelector('.menu .menu-item.selected')?.scrollIntoView({ block: 'nearest' })
   }, [sel])
-  if (!items.length) return <div className="menu"><div className="menu-item faint">No results</div></div>
+  if (!items.length) return <div className="menu"><div className="menu-item faint">{t('No results')}</div></div>
   let lastGroup: string | undefined
   return (
     <div className="menu">
@@ -125,58 +126,58 @@ const ic = (C: typeof Info) => <C size={16} />
 
 export function slashItems(onImage: (editor: Editor) => void, onAttachment: (editor: Editor) => void): MenuItem[] {
   return [
-    { group: 'Basic', title: 'Heading 1', icon: ic(Heading1), keywords: 'h1 title', command: (e, r) => e.chain().focus().deleteRange(r).setNode('heading', { level: 1 }).run() },
-    { group: 'Basic', title: 'Heading 2', icon: ic(Heading2), keywords: 'h2', command: (e, r) => e.chain().focus().deleteRange(r).setNode('heading', { level: 2 }).run() },
-    { group: 'Basic', title: 'Heading 3', icon: ic(Heading3), keywords: 'h3', command: (e, r) => e.chain().focus().deleteRange(r).setNode('heading', { level: 3 }).run() },
-    { group: 'Basic', title: 'Bullet list', icon: ic(List), keywords: 'ul unordered', command: (e, r) => e.chain().focus().deleteRange(r).toggleBulletList().run() },
-    { group: 'Basic', title: 'Numbered list', icon: ic(ListOrdered), keywords: 'ol ordered', command: (e, r) => e.chain().focus().deleteRange(r).toggleOrderedList().run() },
-    { group: 'Basic', title: 'Task list', description: 'Checklist with assignees and dates', icon: ic(ListChecks), keywords: 'todo checkbox action', command: (e, r) => e.chain().focus().deleteRange(r).toggleTaskList().run() },
-    { group: 'Basic', title: 'Quote', icon: ic(Quote), keywords: 'blockquote', command: (e, r) => e.chain().focus().deleteRange(r).toggleBlockquote().run() },
-    { group: 'Basic', title: 'Code block', icon: ic(Code2), keywords: 'snippet pre', command: (e, r) => e.chain().focus().deleteRange(r).toggleCodeBlock().run() },
-    { group: 'Media', title: 'Drawing', description: 'Sketch a diagram or whiteboard (Excalidraw)', icon: ic(PenTool), keywords: 'excalidraw whiteboard sketch draw diagram', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'drawing' }).run() },
-    { group: 'Media', title: 'Draw.io diagram', description: 'Flowcharts, architecture and network diagrams (draw.io)', icon: ic(Workflow), keywords: 'drawio diagrams.net flowchart uml architecture network', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'drawing', attrs: { kind: 'drawio' } }).run() },
-    { group: 'Media', title: 'Diagram (Mermaid)', description: 'Flowcharts, sequence diagrams, Gantt…', icon: ic(Columns2), keywords: 'mermaid flowchart sequence chart', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'codeBlock', attrs: { language: 'mermaid' }, content: [{ type: 'text', text: 'flowchart LR\n  A[Idea] --> B{Review}\n  B -->|approved| C[Ship it]\n  B -->|changes| A' }] }).run() },
-    { group: 'Basic', title: 'Divider', icon: ic(Minus), keywords: 'hr rule', command: (e, r) => e.chain().focus().deleteRange(r).setHorizontalRule().run() },
-    { group: 'Basic', title: 'Table', icon: ic(Table), keywords: 'grid', command: (e, r) => e.chain().focus().deleteRange(r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
-    { group: 'Panels', title: 'Info panel', icon: ic(Info), keywords: 'callout note', command: (e, r) => e.chain().focus().deleteRange(r).wrapIn('callout', { type: 'info' }).run() },
-    { group: 'Panels', title: 'Note panel', icon: ic(StickyNote), keywords: 'callout', command: (e, r) => e.chain().focus().deleteRange(r).wrapIn('callout', { type: 'note' }).run() },
-    { group: 'Panels', title: 'Success panel', icon: ic(CheckCircle2), keywords: 'callout tip', command: (e, r) => e.chain().focus().deleteRange(r).wrapIn('callout', { type: 'success' }).run() },
-    { group: 'Panels', title: 'Warning panel', icon: ic(AlertTriangle), keywords: 'callout caution', command: (e, r) => e.chain().focus().deleteRange(r).wrapIn('callout', { type: 'warning' }).run() },
-    { group: 'Panels', title: 'Error panel', icon: ic(XCircle), keywords: 'callout danger', command: (e, r) => e.chain().focus().deleteRange(r).wrapIn('callout', { type: 'error' }).run() },
-    { group: 'Panels', title: 'Expand', description: 'Collapsible section', icon: ic(ChevronRight), keywords: 'details toggle collapse', command: (e, r) => e.chain().focus().deleteRange(r).setDetails().run() },
-    { group: 'Panels', title: 'Two columns', icon: ic(Columns2), keywords: 'layout section', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'columns', content: [{ type: 'column', content: [{ type: 'paragraph' }] }, { type: 'column', content: [{ type: 'paragraph' }] }] }).run() },
-    { group: 'Panels', title: 'Three columns', icon: ic(Columns3), keywords: 'layout section 3', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'columns', attrs: { layout: 'three_equal' }, content: [{ type: 'column', content: [{ type: 'paragraph' }] }, { type: 'column', content: [{ type: 'paragraph' }] }, { type: 'column', content: [{ type: 'paragraph' }] }] }).run() },
-    { group: 'Panels', title: 'Sidebar on the left', icon: ic(PanelLeft), keywords: 'layout section columns narrow', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'columns', attrs: { layout: 'two_left_sidebar' }, content: [{ type: 'column', content: [{ type: 'paragraph' }] }, { type: 'column', content: [{ type: 'paragraph' }] }] }).run() },
-    { group: 'Panels', title: 'Sidebar on the right', icon: ic(PanelRight), keywords: 'layout section columns narrow', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'columns', attrs: { layout: 'two_right_sidebar' }, content: [{ type: 'column', content: [{ type: 'paragraph' }] }, { type: 'column', content: [{ type: 'paragraph' }] }] }).run() },
-    { group: 'Media', title: 'Image', description: 'Upload an image', icon: ic(ImageIcon), keywords: 'picture photo', command: (e, r) => { e.chain().focus().deleteRange(r).run(); onImage(e) } },
+    { group: t('Basic'), title: t('Heading 1'), icon: ic(Heading1), keywords: t('h1 title'), command: (e, r) => e.chain().focus().deleteRange(r).setNode('heading', { level: 1 }).run() },
+    { group: t('Basic'), title: t('Heading 2'), icon: ic(Heading2), keywords: t('h2'), command: (e, r) => e.chain().focus().deleteRange(r).setNode('heading', { level: 2 }).run() },
+    { group: t('Basic'), title: t('Heading 3'), icon: ic(Heading3), keywords: t('h3'), command: (e, r) => e.chain().focus().deleteRange(r).setNode('heading', { level: 3 }).run() },
+    { group: t('Basic'), title: t('Bullet list'), icon: ic(List), keywords: t('ul unordered'), command: (e, r) => e.chain().focus().deleteRange(r).toggleBulletList().run() },
+    { group: t('Basic'), title: t('Numbered list'), icon: ic(ListOrdered), keywords: t('ol ordered'), command: (e, r) => e.chain().focus().deleteRange(r).toggleOrderedList().run() },
+    { group: t('Basic'), title: t('Task list'), description: t('Checklist with assignees and dates'), icon: ic(ListChecks), keywords: t('todo checkbox action'), command: (e, r) => e.chain().focus().deleteRange(r).toggleTaskList().run() },
+    { group: t('Basic'), title: t('Quote'), icon: ic(Quote), keywords: t('blockquote'), command: (e, r) => e.chain().focus().deleteRange(r).toggleBlockquote().run() },
+    { group: t('Basic'), title: t('Code block'), icon: ic(Code2), keywords: t('snippet pre'), command: (e, r) => e.chain().focus().deleteRange(r).toggleCodeBlock().run() },
+    { group: t('Media'), title: t('Drawing'), description: t('Sketch a diagram or whiteboard (Excalidraw)'), icon: ic(PenTool), keywords: t('excalidraw whiteboard sketch draw diagram'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'drawing' }).run() },
+    { group: t('Media'), title: t('Draw.io diagram'), description: t('Flowcharts, architecture and network diagrams (draw.io)'), icon: ic(Workflow), keywords: t('drawio diagrams.net flowchart uml architecture network'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'drawing', attrs: { kind: 'drawio' } }).run() },
+    { group: t('Media'), title: t('Diagram (Mermaid)'), description: t('Flowcharts, sequence diagrams, Gantt…'), icon: ic(Columns2), keywords: t('mermaid flowchart sequence chart'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'codeBlock', attrs: { language: 'mermaid' }, content: [{ type: 'text', text: t('flowchart LR\n  A[Idea] --> B{Review}\n  B -->|approved| C[Ship it]\n  B -->|changes| A') }] }).run() },
+    { group: t('Basic'), title: t('Divider'), icon: ic(Minus), keywords: t('hr rule'), command: (e, r) => e.chain().focus().deleteRange(r).setHorizontalRule().run() },
+    { group: t('Basic'), title: t('Table'), icon: ic(Table), keywords: t('grid'), command: (e, r) => e.chain().focus().deleteRange(r).insertTable({ rows: 3, cols: 3, withHeaderRow: true }).run() },
+    { group: t('Panels'), title: t('Info panel'), icon: ic(Info), keywords: t('callout note'), command: (e, r) => e.chain().focus().deleteRange(r).wrapIn('callout', { type: 'info' }).run() },
+    { group: t('Panels'), title: t('Note panel'), icon: ic(StickyNote), keywords: t('callout'), command: (e, r) => e.chain().focus().deleteRange(r).wrapIn('callout', { type: 'note' }).run() },
+    { group: t('Panels'), title: t('Success panel'), icon: ic(CheckCircle2), keywords: t('callout tip'), command: (e, r) => e.chain().focus().deleteRange(r).wrapIn('callout', { type: 'success' }).run() },
+    { group: t('Panels'), title: t('Warning panel'), icon: ic(AlertTriangle), keywords: t('callout caution'), command: (e, r) => e.chain().focus().deleteRange(r).wrapIn('callout', { type: 'warning' }).run() },
+    { group: t('Panels'), title: t('Error panel'), icon: ic(XCircle), keywords: t('callout danger'), command: (e, r) => e.chain().focus().deleteRange(r).wrapIn('callout', { type: 'error' }).run() },
+    { group: t('Panels'), title: t('Expand'), description: t('Collapsible section'), icon: ic(ChevronRight), keywords: t('details toggle collapse'), command: (e, r) => e.chain().focus().deleteRange(r).setDetails().run() },
+    { group: t('Panels'), title: t('Two columns'), icon: ic(Columns2), keywords: t('layout section'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'columns', content: [{ type: 'column', content: [{ type: 'paragraph' }] }, { type: 'column', content: [{ type: 'paragraph' }] }] }).run() },
+    { group: t('Panels'), title: t('Three columns'), icon: ic(Columns3), keywords: t('layout section 3'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'columns', attrs: { layout: 'three_equal' }, content: [{ type: 'column', content: [{ type: 'paragraph' }] }, { type: 'column', content: [{ type: 'paragraph' }] }, { type: 'column', content: [{ type: 'paragraph' }] }] }).run() },
+    { group: t('Panels'), title: t('Sidebar on the left'), icon: ic(PanelLeft), keywords: t('layout section columns narrow'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'columns', attrs: { layout: 'two_left_sidebar' }, content: [{ type: 'column', content: [{ type: 'paragraph' }] }, { type: 'column', content: [{ type: 'paragraph' }] }] }).run() },
+    { group: t('Panels'), title: t('Sidebar on the right'), icon: ic(PanelRight), keywords: t('layout section columns narrow'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'columns', attrs: { layout: 'two_right_sidebar' }, content: [{ type: 'column', content: [{ type: 'paragraph' }] }, { type: 'column', content: [{ type: 'paragraph' }] }] }).run() },
+    { group: t('Media'), title: t('Image'), description: t('Upload an image'), icon: ic(ImageIcon), keywords: t('picture photo'), command: (e, r) => { e.chain().focus().deleteRange(r).run(); onImage(e) } },
     {
-      group: 'Media',
-      title: 'Image from link',
-      description: 'Show an image by its URL',
+      group: t('Media'),
+      title: t('Image from link'),
+      description: t('Show an image by its URL'),
       icon: ic(Link2),
-      keywords: 'picture url external',
+      keywords: t('picture url external'),
       command: (e, r) => {
-        const url = window.prompt('Image URL (https://…)')
+        const url = window.prompt(t('Image URL (https://…)'))
         e.chain().focus().deleteRange(r).run()
         if (url && /^https?:\/\//i.test(url.trim())) e.chain().focus().setImage({ src: url.trim() }).run()
       },
     },
-    { group: 'Media', title: 'File', description: 'Upload a file with preview', icon: ic(Paperclip), keywords: 'attachment pdf upload', command: (e, r) => { e.chain().focus().deleteRange(r).run(); onAttachment(e) } },
-    { group: 'Media', title: 'Embed or link preview', description: 'YouTube, Loom, Figma, Miro… or a preview card for any page', icon: ic(Link2), keywords: 'iframe video smart link card unfurl preview', command: (e, r) => { const url = window.prompt('URL to embed'); if (url) e.chain().focus().deleteRange(r).insertContent({ type: 'embed', attrs: { url } }).run() } },
+    { group: t('Media'), title: t('File'), description: t('Upload a file with preview'), icon: ic(Paperclip), keywords: t('attachment pdf upload'), command: (e, r) => { e.chain().focus().deleteRange(r).run(); onAttachment(e) } },
+    { group: t('Media'), title: t('Embed or link preview'), description: t('YouTube, Loom, Figma, Miro… or a preview card for any page'), icon: ic(Link2), keywords: t('iframe video smart link card unfurl preview'), command: (e, r) => { const url = window.prompt(t('URL to embed')); if (url) e.chain().focus().deleteRange(r).insertContent({ type: 'embed', attrs: { url } }).run() } },
     // blocks without text of their own get a paragraph after them: typing goes on below the block
     // instead of replacing it
-    { group: 'Macros', title: 'Table of contents', icon: ic(Hash), keywords: 'toc headings', command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'toc' }, { type: 'paragraph' }]).run() },
-    { group: 'Macros', title: 'Child pages', icon: ic(ListTree), keywords: 'children tree', command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'childPages', attrs: { depth: 1 } }, { type: 'paragraph' }]).run() },
-    { group: 'Macros', title: 'Status', icon: ic(Tag), keywords: 'lozenge label', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'status', attrs: { text: 'IN PROGRESS', color: 'blue' } }).run() },
-    { group: 'Macros', title: 'Decision', description: 'Record a decision (shows up in decision logs)', icon: ic(Milestone), keywords: 'decided adr choice', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'decisionList', content: [{ type: 'decisionItem', attrs: { state: 'DECIDED' }, content: [{ type: 'paragraph' }] }] }).run() },
-    { group: 'Macros', title: 'Decision log', description: 'Decisions recorded in this space', icon: ic(Milestone), keywords: 'decisions report decisionreport', command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'macro', attrs: { name: 'decisionreport', params: {} } }, { type: 'paragraph' }]).run() },
-    { group: 'Macros', title: 'Properties report', description: 'Pages in this space and their properties, as a table', icon: ic(Table2), keywords: 'page properties report detailssummary query table database', command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'macro', attrs: { name: 'detailssummary', params: { spaces: '@self' } } }, { type: 'paragraph' }]).run() },
-    { group: 'Macros', title: 'Task report', description: 'Open tasks in this space', icon: ic(ListChecks), keywords: 'tasks report todo', command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'macro', attrs: { name: 'tasks-report-macro', params: {} } }, { type: 'paragraph' }]).run() },
-    { group: 'Macros', title: 'Search box', description: 'Search this space (or the wiki) from the page', icon: ic(Search), keywords: 'livesearch search find', command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'macro', attrs: { name: 'livesearch', params: { spaceKey: '@self' } } }, { type: 'paragraph' }]).run() },
-    { group: 'Macros', title: 'Create-page button', description: 'A button that creates a page below this one, from a template', icon: ic(FilePlus2), keywords: 'create from template button new page', command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'macro', attrs: { name: 'create-from-template', params: {} } }, { type: 'paragraph' }]).run() },
-    { group: 'Macros', title: 'Instructions', description: 'Hint for authors, hidden from readers', icon: ic(MessageSquareDashed), keywords: 'placeholder instructional text template hint', command: (e, r) => { const text = window.prompt('Instructions for whoever fills in this page (readers never see them)', 'Describe the goal here'); if (text?.trim()) e.chain().focus().deleteRange(r).insertContent({ type: 'instructionalText', attrs: { text: text.trim() } }).run() } },
-    { group: 'Macros', title: 'Date', icon: ic(CalendarDays), keywords: 'today time', command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'date', attrs: { date: new Date().toISOString().slice(0, 10) } }).run() },
-    { group: 'Macros', title: 'Math', description: 'LaTeX formula', icon: ic(Sigma), keywords: 'latex katex equation', command: (e, r) => { const latex = window.prompt('LaTeX', 'E = mc^2'); if (latex) e.chain().focus().deleteRange(r).insertContent({ type: 'blockMath', attrs: { latex } }).run() } },
+    { group: t('Macros'), title: t('Table of contents'), icon: ic(Hash), keywords: t('toc headings'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'toc' }, { type: 'paragraph' }]).run() },
+    { group: t('Macros'), title: t('Child pages'), icon: ic(ListTree), keywords: t('children tree'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'childPages', attrs: { depth: 1 } }, { type: 'paragraph' }]).run() },
+    { group: t('Macros'), title: t('Status'), icon: ic(Tag), keywords: t('lozenge label'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'status', attrs: { text: t('IN PROGRESS'), color: 'blue' } }).run() },
+    { group: t('Macros'), title: t('Decision'), description: t('Record a decision (shows up in decision logs)'), icon: ic(Milestone), keywords: t('decided adr choice'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'decisionList', content: [{ type: 'decisionItem', attrs: { state: 'DECIDED' }, content: [{ type: 'paragraph' }] }] }).run() },
+    { group: t('Macros'), title: t('Decision log'), description: t('Decisions recorded in this space'), icon: ic(Milestone), keywords: t('decisions report decisionreport'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'macro', attrs: { name: 'decisionreport', params: {} } }, { type: 'paragraph' }]).run() },
+    { group: t('Macros'), title: t('Properties report'), description: t('Pages in this space and their properties, as a table'), icon: ic(Table2), keywords: t('page properties report detailssummary query table database'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'macro', attrs: { name: 'detailssummary', params: { spaces: '@self' } } }, { type: 'paragraph' }]).run() },
+    { group: t('Macros'), title: t('Task report'), description: t('Open tasks in this space'), icon: ic(ListChecks), keywords: t('tasks report todo'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'macro', attrs: { name: 'tasks-report-macro', params: {} } }, { type: 'paragraph' }]).run() },
+    { group: t('Macros'), title: t('Search box'), description: t('Search this space (or the wiki) from the page'), icon: ic(Search), keywords: t('livesearch search find'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'macro', attrs: { name: 'livesearch', params: { spaceKey: '@self' } } }, { type: 'paragraph' }]).run() },
+    { group: t('Macros'), title: t('Create-page button'), description: t('A button that creates a page below this one, from a template'), icon: ic(FilePlus2), keywords: t('create from template button new page'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'macro', attrs: { name: 'create-from-template', params: {} } }, { type: 'paragraph' }]).run() },
+    { group: t('Macros'), title: t('Instructions'), description: t('Hint for authors, hidden from readers'), icon: ic(MessageSquareDashed), keywords: t('placeholder instructional text template hint'), command: (e, r) => { const text = window.prompt(t('Instructions for whoever fills in this page (readers never see them)'), t('Describe the goal here')); if (text?.trim()) e.chain().focus().deleteRange(r).insertContent({ type: 'instructionalText', attrs: { text: text.trim() } }).run() } },
+    { group: t('Macros'), title: t('Date'), icon: ic(CalendarDays), keywords: t('today time'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'date', attrs: { date: new Date().toISOString().slice(0, 10) } }).run() },
+    { group: t('Macros'), title: t('Math'), description: t('LaTeX formula'), icon: ic(Sigma), keywords: t('latex katex equation'), command: (e, r) => { const latex = window.prompt(t('LaTeX'), 'E = mc^2'); if (latex) e.chain().focus().deleteRange(r).insertContent({ type: 'blockMath', attrs: { latex } }).run() } },
   ]
 }
 
@@ -227,14 +228,14 @@ export const mentionSuggestion: Omit<SuggestionOptions<MenuItem>, 'editor'> = {
     ])
     const people: MenuItem[] = users.slice(0, pages.length ? 5 : 8).map((u) => ({
       title: u.name,
-      group: pages.length ? 'People' : undefined,
+      group: pages.length ? t('People') : undefined,
       icon: <UserRound size={16} />,
       command: (editor: Editor, range: Range) => editor.chain().focus().deleteRange(range).insertContent([{ type: 'mention', attrs: { id: u.id, label: u.name } }, { type: 'text', text: ' ' }]).run(),
     }))
     const linked: MenuItem[] = pages.slice(0, 5).map((h) => ({
       title: h.title,
       description: h.spaceName,
-      group: 'Pages',
+      group: t('Pages'),
       icon: <FileText size={16} />,
       command: (editor: Editor, range: Range) =>
         editor
@@ -283,9 +284,9 @@ export const PageLinkSuggest = Extension.create<{ pageId: string }>({
               .filter((h) => h.text.toLowerCase().includes(term))
               .slice(0, 10)
               .map((h) => ({
-                title: h.text || 'Untitled heading',
+                title: h.text || t('Untitled heading'),
                 description: `#${h.id}`,
-                group: 'Headings on this page',
+                group: t('Headings on this page'),
                 icon: <Hash size={16} />,
                 command: (ed: Editor, range: Range) => link(ed, range, `#${h.id}`, h.text),
               }))
@@ -303,7 +304,7 @@ export const PageLinkSuggest = Extension.create<{ pageId: string }>({
             .map((h) => ({
               title: h.title,
               description: h.spaceName,
-              group: q ? 'Pages' : 'Recently viewed',
+              group: q ? t('Pages') : t('Recently viewed'),
               icon: <FileText size={16} />,
               command: (editor, range) => insertLink(editor, range, h.pageId, h.title),
             }))
@@ -313,8 +314,8 @@ export const PageLinkSuggest = Extension.create<{ pageId: string }>({
             for (const f of files.filter((f) => f.filename.toLowerCase().includes(q.toLowerCase())).slice(0, 4)) {
               items.push({
                 title: f.filename,
-                description: 'Attachment on this page',
-                group: 'Attachments',
+                description: t('Attachment on this page'),
+                group: t('Attachments'),
                 icon: <Paperclip size={16} />,
                 command: (ed: Editor, range: Range) => link(ed, range, `/api/attachments/${f.id}/content`, f.filename),
               })
@@ -322,18 +323,18 @@ export const PageLinkSuggest = Extension.create<{ pageId: string }>({
           }
           if (!q) {
             items.push({
-              title: 'Link to a heading…',
-              description: 'Type # and the heading',
-              group: 'Tip',
+              title: t('Link to a heading…'),
+              description: t('Type # and the heading'),
+              group: t('Tip'),
               icon: <Hash size={16} />,
               command: (ed: Editor, range: Range) => ed.chain().focus().insertContentAt(range, '[[#').run(),
             })
           }
           if (q && !hits.some((h) => h.title.toLowerCase() === q.toLowerCase())) {
             items.push({
-              title: `Create “${q}”`,
-              description: 'New child page of this page',
-              group: 'New',
+              title: t('Create “{q}”', { q }),
+              description: t('New child page of this page'),
+              group: t('New'),
               icon: <FilePlus2 size={16} />,
               command: async (editor, range) => {
                 const page = await api.get<{ spaceKey: string }>(`/pages/${pageId}`)

@@ -1,15 +1,16 @@
 // Page status (Confluence's "Rough draft / In progress / Ready for review" lozenge): shown next to
 // the page meta; editors click it (or "Set status…" in the page menu) to change it.
 
+import { t } from '../i18n'
 import { useState } from 'react'
 import { useQueryClient } from '@tanstack/react-query'
 import { Check, X } from 'lucide-react'
 import { api } from '../api'
 
 export const PAGE_STATUSES: { value: string; color: string }[] = [
-  { value: 'Rough draft', color: 'grey' },
-  { value: 'In progress', color: 'blue' },
-  { value: 'Ready for review', color: 'yellow' },
+  { value: t('Rough draft'), color: 'grey' },
+  { value: t('In progress'), color: 'blue' },
+  { value: t('Ready for review'), color: 'yellow' },
 ]
 
 const colorOf = (s: string) => PAGE_STATUSES.find((x) => x.value.toLowerCase() === s.toLowerCase())?.color ?? 'purple'
@@ -39,7 +40,7 @@ export function PageStatus({ pageId, status, canEdit, open, onOpenChange }: Prop
           className="status-lozenge page-status-btn"
           data-color={colorOf(status)}
           disabled={!canEdit}
-          title={canEdit ? 'Change the page status' : 'Page status'}
+          title={canEdit ? t('Change the page status') : t('Page status')}
           aria-haspopup={canEdit ? 'menu' : undefined}
           aria-expanded={canEdit ? open : undefined}
           onClick={() => canEdit && onOpenChange(!open)}
@@ -47,11 +48,11 @@ export function PageStatus({ pageId, status, canEdit, open, onOpenChange }: Prop
           {status}
         </button>
       ) : (
-        <span className="faint small">Status:</span>
+        <span className="faint small">{t('Status:')}</span>
       )}
       {open && canEdit && (
         <div className="dropdown menu page-status-menu" role="menu" onMouseLeave={() => onOpenChange(false)}>
-          <div className="menu-label">Page status</div>
+          <div className="menu-label">{t('Page status')}</div>
           {PAGE_STATUSES.map((s) => (
             <div key={s.value} className="menu-item" role="menuitemradio" aria-checked={status === s.value} onClick={() => set(s.value)}>
               <span className="status-lozenge" data-color={s.color}>{s.value}</span>
@@ -66,14 +67,13 @@ export function PageStatus({ pageId, status, canEdit, open, onOpenChange }: Prop
               if (custom.trim()) set(custom.trim().slice(0, 40))
             }}
           >
-            <input className="input" placeholder="Custom status" aria-label="Custom status" maxLength={40} value={custom} onChange={(e) => setCustom(e.target.value)} />
+            <input className="input" placeholder={t('Custom status')} aria-label={t('Custom status')} maxLength={40} value={custom} onChange={(e) => setCustom(e.target.value)} />
           </form>
           {status && (
             <>
               <div className="menu-sep" />
               <div className="menu-item" role="menuitem" onClick={() => set('')}>
-                <X size={14} /> Remove status
-              </div>
+                <X size={14} />{' '}{t('Remove status')}</div>
             </>
           )}
         </div>

@@ -1,3 +1,4 @@
+import { t as tr } from '../i18n'
 import { useEffect, useMemo, useRef, useState, type ComponentType } from 'react'
 import { Link } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -6,13 +7,13 @@ import { api, formatDateOnly, type Page, type PageProperty, type PropertyType, t
 import { Avatar, useToast } from '../ui'
 
 export const PROPERTY_TYPES: { type: PropertyType; label: string; icon: ComponentType<{ size?: number; className?: string }> }[] = [
-  { type: 'text', label: 'Text', icon: AlignLeft },
-  { type: 'select', label: 'Select', icon: CircleDot },
-  { type: 'number', label: 'Number', icon: Hash },
-  { type: 'date', label: 'Date', icon: Calendar },
-  { type: 'user', label: 'Person', icon: User },
-  { type: 'url', label: 'Web address', icon: Link2 },
-  { type: 'page', label: 'Page', icon: FileText },
+  { type: 'text', label: tr('Text'), icon: AlignLeft },
+  { type: 'select', label: tr('Select'), icon: CircleDot },
+  { type: 'number', label: tr('Number'), icon: Hash },
+  { type: 'date', label: tr('Date'), icon: Calendar },
+  { type: 'user', label: tr('Person'), icon: User },
+  { type: 'url', label: tr('Web address'), icon: Link2 },
+  { type: 'page', label: tr('Page'), icon: FileText },
 ]
 
 const typeInfo = (t: PropertyType) => PROPERTY_TYPES.find((x) => x.type === t) ?? PROPERTY_TYPES[0]
@@ -46,7 +47,7 @@ function shortUrl(u: string) {
 /** A property's value, read-only. */
 export function PropertyValue({ prop }: { prop: Pick<PageProperty, 'type' | 'value' | 'label'> }) {
   const v = prop.value
-  if (v === null || v === undefined || v === '') return <span className="faint">Empty</span>
+  if (v === null || v === undefined || v === '') return <span className="faint">{tr('Empty')}</span>
   switch (prop.type) {
     case 'select':
       return <span className="prop-chip" data-tone={tone(String(v))}>{String(v)}</span>
@@ -61,7 +62,7 @@ export function PropertyValue({ prop }: { prop: Pick<PageProperty, 'type' | 'val
           <Avatar name={prop.label} id={String(v)} size={18} /> {prop.label}
         </Link>
       ) : (
-        <span className="faint">Unknown person</span>
+        <span className="faint">{tr('Unknown person')}</span>
       )
     case 'url':
       return (
@@ -75,7 +76,7 @@ export function PropertyValue({ prop }: { prop: Pick<PageProperty, 'type' | 'val
           <FileText size={13} /> {prop.label}
         </Link>
       ) : (
-        <span className="faint">A page you can't open</span>
+        <span className="faint">{tr('A page you can\'t open')}</span>
       )
     default:
       return <span className="prop-text">{String(v)}</span>
@@ -115,14 +116,14 @@ export function PageProperties({ page, canEdit, adding, onAddingDone }: { page: 
       setEditing(null)
       return true
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not save the property')
+      toast(e instanceof Error ? e.message : tr('Could not save the property'))
       return false
     }
   }
   const asDrafts = (): Draft[] => props.map((p) => ({ key: p.key, type: p.type, value: p.value, label: p.label }))
 
   return (
-    <div className="page-props" role="table" aria-label="Page properties">
+    <div className="page-props" role="table" aria-label={tr('Page properties')}>
       {props.map((pr, i) =>
         editing === i ? (
           <PropertyEditor
@@ -138,7 +139,7 @@ export function PageProperties({ page, canEdit, adding, onAddingDone }: { page: 
           <div className="page-prop" role="row" key={pr.key}>
             <div className="page-prop-key" role="rowheader">
               {canEdit ? (
-                <button className="page-prop-key-btn" title="Change this property" onClick={() => setEditing(i)}>
+                <button className="page-prop-key-btn" title={tr('Change this property')} onClick={() => setEditing(i)}>
                   <PropIcon type={pr.type} /> <span>{pr.key}</span>
                 </button>
               ) : (
@@ -149,7 +150,7 @@ export function PageProperties({ page, canEdit, adding, onAddingDone }: { page: 
             </div>
             <div className="page-prop-value" role="cell">
               {canEdit && (pr.value === null || pr.value === '') ? (
-                <button className="btn btn-ghost btn-sm faint" onClick={() => setEditing(i)}>Add a value</button>
+                <button className="btn btn-ghost btn-sm faint" onClick={() => setEditing(i)}>{tr('Add a value')}</button>
               ) : (
                 <PropertyValue prop={pr} />
               )}
@@ -168,8 +169,7 @@ export function PageProperties({ page, canEdit, adding, onAddingDone }: { page: 
       {canEdit && editing === null && (
         <div>
           <button className="btn btn-ghost btn-sm" onClick={() => setEditing('new')}>
-            <Plus size={13} /> Add property
-          </button>
+            <Plus size={13} />{' '}{tr('Add property')}</button>
         </div>
       )}
     </div>
@@ -243,8 +243,8 @@ function PropertyEditor({
           ref={keyRef}
           className="input"
           style={{ flex: '1 1 160px' }}
-          placeholder="Property name"
-          aria-label="Property name"
+          placeholder={tr('Property name')}
+          aria-label={tr('Property name')}
           maxLength={100}
           list={listId}
           value={key}
@@ -253,22 +253,21 @@ function PropertyEditor({
         <datalist id={listId}>
           {uses.filter((u) => !taken.includes(u.key.toLowerCase())).map((u) => <option key={u.key} value={u.key} />)}
         </datalist>
-        <select className="select" style={{ width: 150 }} aria-label="Property type" value={type} onChange={(e) => changeType(e.target.value as PropertyType)}>
+        <select className="select" style={{ width: 150 }} aria-label={tr('Property type')} value={type} onChange={(e) => changeType(e.target.value as PropertyType)}>
           {PROPERTY_TYPES.map((t) => <option key={t.type} value={t.type}>{t.label}</option>)}
         </select>
       </div>
       <div style={{ marginTop: 6 }}>
         <ValueInput type={type} value={value} label={label} suggestions={use?.values ?? []} onChange={(v, l) => { setValue(v); setLabel(l ?? null) }} />
       </div>
-      {duplicate && <div className="small" style={{ color: 'var(--danger)', marginTop: 4 }}>This page already has a property with that name.</div>}
+      {duplicate && <div className="small" style={{ color: 'var(--danger)', marginTop: 4 }}>{tr('This page already has a property with that name.')}</div>}
       <div className="row" style={{ gap: 6, marginTop: 8 }}>
-        <button className="btn btn-primary btn-sm" disabled={!key.trim() || duplicate || busy} onClick={submit}>Save</button>
-        <button className="btn btn-sm" onClick={onCancel}>Cancel</button>
+        <button className="btn btn-primary btn-sm" disabled={!key.trim() || duplicate || busy} onClick={submit}>{tr('Save')}</button>
+        <button className="btn btn-sm" onClick={onCancel}>{tr('Cancel')}</button>
         <span className="spacer" />
         {onRemove && (
           <button className="btn btn-ghost btn-sm" onClick={onRemove}>
-            <Trash2 size={13} /> Remove
-          </button>
+            <Trash2 size={13} />{' '}{tr('Remove')}</button>
         )}
       </div>
     </div>
@@ -292,15 +291,15 @@ function ValueInput({
   const str = value === null ? '' : String(value)
   switch (type) {
     case 'number':
-      return <input className="input" type="number" step="any" aria-label="Value" value={str} onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)} />
+      return <input className="input" type="number" step="any" aria-label={tr('Value')} value={str} onChange={(e) => onChange(e.target.value === '' ? null : e.target.value)} />
     case 'date':
-      return <input className="input" type="date" aria-label="Value" style={{ width: 180 }} value={str} onChange={(e) => onChange(e.target.value || null)} />
+      return <input className="input" type="date" aria-label={tr('Value')} style={{ width: 180 }} value={str} onChange={(e) => onChange(e.target.value || null)} />
     case 'url':
-      return <input className="input" type="url" aria-label="Value" placeholder="https://" value={str} onChange={(e) => onChange(e.target.value)} />
+      return <input className="input" type="url" aria-label={tr('Value')} placeholder={tr('https://')} value={str} onChange={(e) => onChange(e.target.value)} />
     case 'select':
       return (
         <>
-          <input className="input" aria-label="Value" placeholder="Pick or type a value" list={listId} maxLength={200} value={str} onChange={(e) => onChange(e.target.value)} />
+          <input className="input" aria-label={tr('Value')} placeholder={tr('Pick or type a value')} list={listId} maxLength={200} value={str} onChange={(e) => onChange(e.target.value)} />
           <datalist id={listId}>{suggestions.map((s) => <option key={s} value={s} />)}</datalist>
           {suggestions.length > 0 && (
             <div className="row" style={{ gap: 4, flexWrap: 'wrap', marginTop: 6 }}>
@@ -316,7 +315,7 @@ function ValueInput({
     case 'page':
       return <Picker kind="page" value={str} label={label} onChange={onChange} />
     default:
-      return <textarea className="input" rows={2} aria-label="Value" maxLength={5000} value={str} onChange={(e) => onChange(e.target.value)} />
+      return <textarea className="input" rows={2} aria-label={tr('Value')} maxLength={5000} value={str} onChange={(e) => onChange(e.target.value)} />
   }
 }
 
@@ -335,7 +334,7 @@ function Picker({ kind, value, label, onChange }: { kind: 'user' | 'page'; value
     return (
       <div className="row" style={{ gap: 6 }}>
         <PropertyValue prop={{ type: kind, value, label }} />
-        <button type="button" className="icon-btn" title={kind === 'user' ? 'Pick someone else' : 'Pick another page'} onClick={() => onChange(null, null)}>
+        <button type="button" className="icon-btn" title={kind === 'user' ? tr('Pick someone else') : tr('Pick another page')} onClick={() => onChange(null, null)}>
           <X size={13} />
         </button>
       </div>
@@ -345,8 +344,8 @@ function Picker({ kind, value, label, onChange }: { kind: 'user' | 'page'; value
     <div>
       <input
         className="input"
-        aria-label={kind === 'user' ? 'Search people' : 'Search pages'}
-        placeholder={kind === 'user' ? 'Search people' : 'Search pages by title or text'}
+        aria-label={kind === 'user' ? tr('Search people') : tr('Search pages')}
+        placeholder={kind === 'user' ? tr('Search people') : tr('Search pages by title or text')}
         value={q}
         onChange={(e) => setQ(e.target.value)}
       />

@@ -1,5 +1,6 @@
 // Code block with language picker and live Mermaid/diagram preview.
 
+import { t as tr } from '../i18n'
 import { useEffect, useId, useState } from 'react'
 import CodeBlockLowlight from '@tiptap/extension-code-block-lowlight'
 import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react'
@@ -35,7 +36,7 @@ function MermaidPreview({ code }: { code: string }) {
           setError(null)
         }
       } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message.split('\n')[0] : 'Invalid diagram')
+        if (!cancelled) setError(e instanceof Error ? e.message.split('\n')[0] : tr('Invalid diagram'))
       }
     }, 300)
     return () => {
@@ -45,7 +46,7 @@ function MermaidPreview({ code }: { code: string }) {
   }, [code, id])
   return (
     <div className="diagram-preview" contentEditable={false}>
-      {error ? <div className="error-text small">Diagram error: {error}</div> : svg ? <div dangerouslySetInnerHTML={{ __html: svg }} /> : <div className="spinner" />}
+      {error ? <div className="error-text small">{tr('Diagram error: {error}', { error })}</div> : svg ? <div dangerouslySetInnerHTML={{ __html: svg }} /> : <div className="spinner" />}
     </div>
   )
 }
@@ -71,10 +72,10 @@ function CodeBlockView({ node, updateAttributes, editor }: ReactNodeViewProps) {
     <NodeViewWrapper className="code-block">
       <div className="code-toolbar" contentEditable={false}>
         {editable ? (
-          <select value={language} onChange={(e) => updateAttributes({ language: e.target.value || null })} aria-label="Code language">
+          <select value={language} onChange={(e) => updateAttributes({ language: e.target.value || null })} aria-label={tr('Code language')}>
             {LANGUAGES.map((l) => (
               <option key={l} value={l}>
-                {l || 'auto'}
+                {l || tr('auto')}
               </option>
             ))}
           </select>
@@ -83,16 +84,14 @@ function CodeBlockView({ node, updateAttributes, editor }: ReactNodeViewProps) {
         )}
         {editable && !isDiagram && (
           <>
-            <button className={lineNumbers ? 'on' : ''} title="Line numbers" aria-pressed={lineNumbers} onClick={() => updateAttributes({ lineNumbers: !lineNumbers })}>
+            <button className={lineNumbers ? 'on' : ''} title={tr('Line numbers')} aria-pressed={lineNumbers} onClick={() => updateAttributes({ lineNumbers: !lineNumbers })}>
               1 2 3
             </button>
-            <button className={wrap ? 'on' : ''} title="Wrap long lines" aria-pressed={wrap} onClick={() => updateAttributes({ wrap: !wrap })}>
-              Wrap
-            </button>
+            <button className={wrap ? 'on' : ''} title={tr('Wrap long lines')} aria-pressed={wrap} onClick={() => updateAttributes({ wrap: !wrap })}>{tr('Wrap')}</button>
           </>
         )}
         <button className="copy-code" onClick={copy}>
-          {copied ? 'Copied' : 'Copy'}
+          {copied ? tr('Copied') : tr('Copy')}
         </button>
       </div>
       <pre className={`${lineNumbers ? 'with-lines' : ''} ${wrap ? 'wrap' : ''}`}>

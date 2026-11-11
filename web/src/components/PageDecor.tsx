@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useRef, useState } from 'react'
 import { ImagePlus, Link2, Smile, Trash2, Upload } from 'lucide-react'
 import { api, type Attachment, type Page } from '../api'
@@ -28,7 +29,7 @@ export function PageDecor({ page, canEdit, onChange }: { page: Page; canEdit: bo
       await api.patch(`/pages/${page.id}`, body)
       onChange()
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Failed')
+      toast(e instanceof Error ? e.message : t('Failed'))
     }
   }
   const upload = async (f: File) => {
@@ -45,7 +46,7 @@ export function PageDecor({ page, canEdit, onChange }: { page: Page; canEdit: bo
         <div className="page-cover" style={coverStyle(page.cover)}>
           {canEdit && (
             <div className="cover-actions">
-              <button className="btn small" onClick={() => setMenu(menu === 'cover' ? null : 'cover')}>Change cover</button>
+              <button className="btn small" onClick={() => setMenu(menu === 'cover' ? null : 'cover')}>{t('Change cover')}</button>
               <button className="btn small" onClick={() => save({ cover: '' })}><Trash2 size={13} /></button>
             </div>
           )}
@@ -53,14 +54,14 @@ export function PageDecor({ page, canEdit, onChange }: { page: Page; canEdit: bo
       )}
       <div className={`page-decor${page.cover ? ' with-cover' : ''}`}>
         {icon && (
-          <button className="page-icon-btn" disabled={!canEdit} onClick={() => setMenu(menu === 'icon' ? null : 'icon')} title={canEdit ? 'Change icon' : undefined}>
+          <button className="page-icon-btn" disabled={!canEdit} onClick={() => setMenu(menu === 'icon' ? null : 'icon')} title={canEdit ? t('Change icon') : undefined}>
             <SymbolTile value={icon} size={56} />
           </button>
         )}
         {canEdit && (
           <div className="decor-actions">
-            {!icon && <button className="btn btn-ghost small" onClick={() => setMenu(menu === 'icon' ? null : 'icon')}><Smile size={14} /> Add icon</button>}
-            {!page.cover && <button className="btn btn-ghost small" onClick={() => setMenu(menu === 'cover' ? null : 'cover')}><ImagePlus size={14} /> Add cover</button>}
+            {!icon && <button className="btn btn-ghost small" onClick={() => setMenu(menu === 'icon' ? null : 'icon')}><Smile size={14} />{' '}{t('Add icon')}</button>}
+            {!page.cover && <button className="btn btn-ghost small" onClick={() => setMenu(menu === 'cover' ? null : 'cover')}><ImagePlus size={14} />{' '}{t('Add cover')}</button>}
           </div>
         )}
         {menu && <div className="decor-backdrop" onMouseDown={() => setMenu(null)} />}
@@ -69,7 +70,7 @@ export function PageDecor({ page, canEdit, onChange }: { page: Page; canEdit: bo
             <SymbolPicker value={icon} onChange={(v) => save({ icon: v ?? '' })} />
             <div className="row" style={{ marginTop: 10 }}>
               <span className="spacer" />
-              <button className="btn btn-ghost small" onClick={() => setMenu(null)}>Done</button>
+              <button className="btn btn-ghost small" onClick={() => setMenu(null)}>{t('Done')}</button>
             </div>
           </div>
         )}
@@ -82,13 +83,13 @@ export function PageDecor({ page, canEdit, onChange }: { page: Page; canEdit: bo
             </div>
             <input ref={file} type="file" accept="image/png,image/jpeg,image/webp,image/gif" hidden onChange={(e) => e.target.files?.[0] && upload(e.target.files[0])} />
             <div className="row" style={{ marginTop: 10 }}>
-              <button className="btn small" onClick={() => file.current?.click()}><Upload size={13} /> Upload image</button>
+              <button className="btn small" onClick={() => file.current?.click()}><Upload size={13} />{' '}{t('Upload image')}</button>
               <button className="btn small" onClick={() => {
-                const url = window.prompt('Image URL (https://…)')
+                const url = window.prompt(t('Image URL (https://…)'))
                 if (url) { save({ cover: url.trim() }); setMenu(null) }
-              }}><Link2 size={13} /> Image link</button>
+              }}><Link2 size={13} />{' '}{t('Image link')}</button>
               <span className="spacer" />
-              <button className="btn btn-ghost small" onClick={() => setMenu(null)}>Close</button>
+              <button className="btn btn-ghost small" onClick={() => setMenu(null)}>{t('Close')}</button>
             </div>
           </div>
         )}

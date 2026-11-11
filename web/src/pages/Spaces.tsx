@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useState } from 'react'
 import { Link, Navigate, useParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -39,53 +40,51 @@ export default function SpacesPage() {
   // grouped by category (uncategorised last) when there are categories and none is picked
   const groups: [string | null, Space[]][] =
     categories.length && category === null
-      ? [...categories.map((c): [string | null, Space[]] => [c, list.filter((s) => s.category === c)]), ['Other', list.filter((s) => !s.category)]]
+      ? [...categories.map((c): [string | null, Space[]] => [c, list.filter((s) => s.category === c)]), [t('Other'), list.filter((s) => !s.category)]]
       : [[null, list]]
   return (
     <div className="content-pad">
       <div className="row">
-        <h1 style={{ margin: 0 }}>Spaces</h1>
+        <h1 style={{ margin: 0 }}>{t('Spaces')}</h1>
         <span className="spacer" />
         {me.data?.user && me.data.user.role !== 'guest' && (
           <button className="btn btn-primary" onClick={() => setCreate(true)}>
-            <Plus size={15} /> Create space
-          </button>
+            <Plus size={15} />{' '}{t('Create space')}</button>
         )}
       </div>
-      <input className="input" style={{ margin: '18px 0 10px', maxWidth: 360 }} placeholder="Filter spaces" value={q} onChange={(e) => setQ(e.target.value)} />
+      <input className="input" style={{ margin: '18px 0 10px', maxWidth: 360 }} placeholder={t('Filter spaces')} value={q} onChange={(e) => setQ(e.target.value)} />
       {signedIn && (
-        <div className="chips" style={{ marginBottom: 8 }} role="group" aria-label="Kind of space">
+        <div className="chips" style={{ marginBottom: 8 }} role="group" aria-label={t('Kind of space')}>
           {(['all', 'team', ...(anyPersonal ? ['personal'] : []), 'archived'] as const).map((k) => (
             <button key={k} className={`chip${kind === k ? ' active' : ''}`} aria-pressed={kind === k} onClick={() => setKind(k as typeof kind)}>
-              {k === 'all' ? 'All spaces' : k === 'team' ? 'Team spaces' : k === 'personal' ? 'Personal spaces' : 'Archived'}
+              {k === 'all' ? t('All spaces') : k === 'team' ? t('Team spaces') : k === 'personal' ? t('Personal spaces') : t('Archived')}
             </button>
           ))}
         </div>
       )}
-      {kind === 'archived' && archived.data?.length === 0 && <div className="empty">No archived spaces you can read.</div>}
+      {kind === 'archived' && archived.data?.length === 0 && <div className="empty">{t('No archived spaces you can read.')}</div>}
       {(categories.length > 0 || anyStarred) && (
         <div className="chips" style={{ marginBottom: 14 }}>
           {anyStarred && (
             <button className={`chip${starredOnly ? ' active' : ''}`} aria-pressed={starredOnly} onClick={() => setStarredOnly((v) => !v)}>
-              <Star size={12} style={{ verticalAlign: -1 }} /> Starred
-            </button>
+              <Star size={12} style={{ verticalAlign: -1 }} />{' '}{t('Starred')}</button>
           )}
-          {categories.length > 0 && <button className={`chip${category === null ? ' active' : ''}`} onClick={() => setCategory(null)}>All</button>}
+          {categories.length > 0 && <button className={`chip${category === null ? ' active' : ''}`} onClick={() => setCategory(null)}>{t('All')}</button>}
           {categories.map((c) => (
             <button key={c} className={`chip${category === c ? ' active' : ''}`} onClick={() => setCategory(category === c ? null : c)}>{c}</button>
           ))}
           {categories.length > 0 && all.some((s) => !s.category) && (
-            <button className={`chip${category === '' ? ' active' : ''}`} onClick={() => setCategory(category === '' ? null : '')}>Other</button>
+            <button className={`chip${category === '' ? ' active' : ''}`} onClick={() => setCategory(category === '' ? null : '')}>{t('Other')}</button>
           )}
         </div>
       )}
       <table className="list">
         <thead>
           <tr>
-            <th>Space</th>
-            <th>Key</th>
-            <th>Pages</th>
-            <th>Your role</th>
+            <th>{t('Space')}</th>
+            <th>{t('Key')}</th>
+            <th>{t('Pages')}</th>
+            <th>{t('Your role')}</th>
           </tr>
         </thead>
         {groups.filter(([, rows]) => rows.length).map(([title, rows]) => (
@@ -102,14 +101,14 @@ export default function SpacesPage() {
                   <Link to={`/spaces/${s.key}`} className="row" style={{ color: 'var(--text)' }}>
                     <SpaceIcon space={s} /> <b>{s.name}</b>
                   </Link>
-                  {s.archivedAt && <span className="badge">archived {formatDate(s.archivedAt)}</span>}
-                  {s.personalOwnerId && kind !== 'personal' && <span className="badge">personal</span>}
+                  {s.archivedAt && <span className="badge">{t('archived {date}', { date: formatDate(s.archivedAt) })}</span>}
+                  {s.personalOwnerId && kind !== 'personal' && <span className="badge">{t('personal')}</span>}
                   {signedIn && !s.archivedAt && (
                     <button
                       type="button"
                       className={`icon-btn star-toggle${s.starred ? ' on' : ''}`}
-                      title={s.starred ? 'Unstar' : 'Star this space'}
-                      aria-label={s.starred ? `Unstar ${s.name}` : `Star ${s.name}`}
+                      title={s.starred ? t('Unstar') : t('Star this space')}
+                      aria-label={s.starred ? t('Unstar {name}', { name: s.name }) : t('Star {name}', { name: s.name })}
                       aria-pressed={!!s.starred}
                       onClick={() => toggleStar(s)}
                     >
@@ -139,5 +138,5 @@ export function SpaceHome() {
   if (space.isLoading) return <div className="content-pad"><Spinner /></div>
   if (space.error) return <div className="content-pad"><ErrorBox error={space.error} /></div>
   if (space.data?.homePageId) return <Navigate to={`/pages/${space.data.homePageId}`} replace />
-  return <div className="content-pad empty">This space has no home page yet.</div>
+  return <div className="content-pad empty">{t('This space has no home page yet.')}</div>
 }

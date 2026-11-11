@@ -1,4 +1,5 @@
 // Typed client for the WikiCraft REST API.
+import { locale as uiLocale, t } from './i18n'
 
 export class ApiError extends Error {
   status: number
@@ -39,7 +40,7 @@ function checkFiles(form: FormData, path: string) {
   if (!maxFileMb || !/\/attachments$/.test(path)) return
   for (const v of form.values()) {
     if (v instanceof File && v.size > maxFileMb * 1024 * 1024) {
-      throw new ApiError(400, 'bad_request', `${v.name} is larger than ${maxFileMb} MB, the largest file this wiki takes`)
+      throw new ApiError(400, 'bad_request', t('{name} is larger than {max} MB, the largest file this wiki takes', { name: v.name, max: maxFileMb }))
     }
   }
 }
@@ -82,9 +83,13 @@ export interface Me {
     dateFormat?: string
     /** IANA name for people without their own time zone */
     timeZone?: string | null
+    /** interface language for people without their own; null = the browser's */
+    defaultLanguage?: string | null
   } | null
   /** the signed-in person's own time zone (profile) */
   timeZone?: string | null
+  /** the signed-in person's interface language (profile); null = the workspace default */
+  language?: string | null
   /** the workspace requires two-factor authentication and it isn't set up yet */
   mustSetUpTwoFactor?: boolean
 }
@@ -346,8 +351,9 @@ export function displayTimeZone(): string | undefined {
 export function formatDay(d: Date, opts: { zoned?: boolean; omitYear?: boolean } = {}): string {
   const tz = opts.zoned === false ? 'UTC' : timeZone
   if (dateFormat === 'auto' || dateFormat === 'd mmm yyyy') {
-    const locale = dateFormat === 'auto' ? undefined : 'en-GB'
-    return d.toLocaleDateString(locale, { timeZone: tz, year: opts.omitYear ? undefined : 'numeric', month: 'short', day: 'numeric' })
+    // the interface language writes the month (`5 Mar 2026`, `5. März 2026`)
+    const tag = dateFormat === 'auto' ? undefined : uiLocale() === 'en' ? 'en-GB' : uiLocale()
+    return d.toLocaleDateString(tag ?? uiLocale(), { timeZone: tz, year: opts.omitYear ? undefined : 'numeric', month: 'short', day: 'numeric' })
   }
   const parts = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: tz, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(d).map((p) => [p.type, p.value]))
   return dateFormat.replace('yyyy', parts.year).replace('mm', parts.month).replace('dd', parts.day)
@@ -363,7 +369,7 @@ export function formatDateOnly(value: string, opts: { omitYear?: boolean } = {})
 /** Day and time, e.g. for scheduled publishing. */
 export function formatDateTime(iso: string | Date): string {
   const d = typeof iso === 'string' ? new Date(iso) : iso
-  return `${formatDay(d)}, ${d.toLocaleTimeString(undefined, { timeZone, hour: '2-digit', minute: '2-digit' })}`
+  return `${formatDay(d)}, ${d.toLocaleTimeString(uiLocale(), { timeZone, hour: '2-digit', minute: '2-digit' })}`
 }
 
 export function formatDate(iso: string | null | undefined): string {
@@ -372,10 +378,11 @@ export function formatDate(iso: string | null | undefined): string {
   const diff = (Date.now() - d.getTime()) / 1000
   // future dates (due dates, expiries) are always absolute
   if (diff < -60) return formatDay(d)
-  if (diff < 60) return 'just now'
-  if (diff < 3600) return `${Math.floor(diff / 60)} min ago`
-  if (diff < 86400) return `${Math.floor(diff / 3600)} h ago`
-  if (diff < 86400 * 7) return `${Math.floor(diff / 86400)} d ago`
+  const rel = new Intl.RelativeTimeFormat(uiLocale(), { numeric: 'auto', style: 'short' })
+  if (diff < 60) return rel.format(0, 'second')
+  if (diff < 3600) return rel.format(-Math.floor(diff / 60), 'minute')
+  if (diff < 86400) return rel.format(-Math.floor(diff / 3600), 'hour')
+  if (diff < 86400 * 7) return rel.format(-Math.floor(diff / 86400), 'day')
   return formatDay(d)
 }
 

@@ -177,6 +177,8 @@ pub struct ProfileUpdate {
     location: Option<String>,
     timezone: Option<String>,
     bio: Option<String>,
+    /// interface language (one of `branding::LANGUAGES`); "" = the workspace's default
+    language: Option<String>,
 }
 
 /// A field of the profile: trimmed, empty = cleared, at most `max` characters.
@@ -204,7 +206,13 @@ pub async fn update_mine(State(state): State<AppState>, CurrentUser(user): Curre
             return Err(ApiError::bad("timezone must be an IANA time zone name such as Europe/Zurich"));
         }
     }
-    for (column, value) in [("job_title", job_title), ("department", department), ("location", location), ("timezone", timezone), ("bio", bio)] {
+    let language = match &req.language {
+        Some(l) => Some(crate::routes::branding::clean_language(l)?),
+        None => None,
+    };
+    for (column, value) in
+        [("job_title", job_title), ("department", department), ("location", location), ("timezone", timezone), ("bio", bio), ("language", language)]
+    {
         if let Some(v) = value {
             sqlx::query(sqlx::AssertSqlSafe(format!("UPDATE users SET {column} = $2 WHERE id = $1"))).bind(user.id).bind(v).execute(&state.db).await?;
         }

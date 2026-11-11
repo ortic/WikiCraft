@@ -1,3 +1,4 @@
+import { t as tr } from './i18n'
 import { createContext, useContext, useEffect, useState, type ReactNode } from 'react'
 import { SymbolTile, parseSymbol } from './icons'
 import { useQuery } from '@tanstack/react-query'
@@ -95,7 +96,7 @@ export function Modal({ title, onClose, children, footer, width }: { title: Reac
         <div className="modal-header">
           {title}
           <span className="spacer" />
-          <button className="icon-btn" onClick={onClose} aria-label="Close">
+          <button className="icon-btn" onClick={onClose} aria-label={tr('Close')}>
             <X size={16} />
           </button>
         </div>

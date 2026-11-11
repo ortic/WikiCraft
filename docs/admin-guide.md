@@ -63,7 +63,9 @@ else is configured afterwards:
   highlights (adjusted per theme so text stays readable), how dates are written (each reader's
   language, or a fixed pattern such as `DD.MM.YYYY`, also in exported report tables) and the
   default time zone for people who haven't set their own (it also decides when due-task
-  reminders go out).
+  reminders go out), and the default interface language for people who haven't chosen their own
+  (otherwise their browser's language decides). The interface is available in English, German and
+  French; see [Translating WikiCraft](translating.md) to complete another language.
 - *Administration → Overview → Attachments*: the largest file people may upload (up to the
   server's `WIKICRAFT_MAX_UPLOAD_MB`), blocked file types or a list of the only allowed ones, and
   storage limits per space and for the whole wiki (all versions of a file count; deleting

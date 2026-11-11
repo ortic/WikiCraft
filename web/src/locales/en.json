@@ -1,0 +1,54 @@
+{
+ "({count} versions).": {
+  "one": "({count} version).",
+  "other": "({count} versions)."
+ },
+ "{count} changes": {
+  "one": "{count} change",
+  "other": "{count} changes"
+ },
+ "{count} files uploaded": {
+  "one": "{count} file uploaded",
+  "other": "{count} files uploaded"
+ },
+ "{count} pages": {
+  "one": "{count} page",
+  "other": "{count} pages"
+ },
+ "{count} people": {
+  "one": "{count} person",
+  "other": "{count} people"
+ },
+ "{count} people · see who": {
+  "one": "{count} person · see who",
+  "other": "{count} people · see who"
+ },
+ "{count} results": {
+  "one": "{count} result",
+  "other": "{count} results"
+ },
+ "also sees {count} restricted pages above it": {
+  "one": "also sees {count} restricted page above it",
+  "other": "also sees {count} restricted pages above it"
+ },
+ "Deleted {count} pages for good": {
+  "one": "Deleted {count} page for good",
+  "other": "Deleted {count} pages for good"
+ },
+ "Deleted {count} pages for good · {kept} restricted ones you can’t see stay": {
+  "one": "Deleted {count} page for good · {kept} restricted ones you can’t see stay",
+  "other": "Deleted {count} pages for good · {kept} restricted ones you can’t see stay"
+ },
+ "Include the {count} child pages and everything below": {
+  "one": "Include the child page and everything below",
+  "other": "Include the {count} child pages and everything below"
+ },
+ "Viewed by {count} people": {
+  "one": "Viewed by {count} person",
+  "other": "Viewed by {count} people"
+ },
+ "edited ({count} versions)": {
+  "one": "edited ({count} version)",
+  "other": "edited ({count} versions)"
+ }
+}

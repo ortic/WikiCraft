@@ -2,6 +2,7 @@
 // formatting boundaries within a paragraph) and a floating bar (Ctrl+F, Ctrl+H to replace).
 // Replacing goes through normal transactions, so it is collaborative and undoable.
 
+import { t } from '../i18n'
 import { useEffect, useReducer, useRef, useState } from 'react'
 import { Extension, type Editor } from '@tiptap/core'
 import { Plugin, PluginKey, TextSelection } from '@tiptap/pm/state'
@@ -175,20 +176,20 @@ export function FindBar({ editor, withReplace, initial, onClose }: { editor: Edi
   return (
     <div className="find-bar" role="search" onKeyDown={onKey}>
       <div className="row" style={{ gap: 6 }}>
-        <input ref={input} data-role="find" className="input" placeholder="Find in page" value={query} onChange={(e) => setQuery(e.target.value)} aria-label="Find" />
-        <span className="faint small find-count">{query ? (total ? `${st.current + 1} of ${total}` : 'No results') : ''}</span>
-        <button className={`icon-btn ${caseSensitive ? 'active' : ''}`} title="Match case" aria-pressed={caseSensitive} onClick={() => setCaseSensitive(!caseSensitive)}>
-          <span style={{ fontSize: 12, fontWeight: 700 }}>Aa</span>
+        <input ref={input} data-role="find" className="input" placeholder={t('Find in page')} value={query} onChange={(e) => setQuery(e.target.value)} aria-label={t('Find')} />
+        <span className="faint small find-count">{query ? (total ? t('{value} of {total}', { value: st.current + 1, total }) : t('No results')) : ''}</span>
+        <button className={`icon-btn ${caseSensitive ? 'active' : ''}`} title={t('Match case')} aria-pressed={caseSensitive} onClick={() => setCaseSensitive(!caseSensitive)}>
+          <span style={{ fontSize: 12, fontWeight: 700 }}>{t('Aa')}</span>
         </button>
-        <button className="icon-btn" title="Previous (Shift+Enter)" disabled={!total} onClick={() => go(-1)}><ChevronUp size={16} /></button>
-        <button className="icon-btn" title="Next (Enter)" disabled={!total} onClick={() => go(1)}><ChevronDown size={16} /></button>
-        <button className="icon-btn" title="Close (Esc)" onClick={close}><X size={16} /></button>
+        <button className="icon-btn" title={t('Previous (Shift+Enter)')} disabled={!total} onClick={() => go(-1)}><ChevronUp size={16} /></button>
+        <button className="icon-btn" title={t('Next (Enter)')} disabled={!total} onClick={() => go(1)}><ChevronDown size={16} /></button>
+        <button className="icon-btn" title={t('Close (Esc)')} onClick={close}><X size={16} /></button>
       </div>
       {withReplace && editable && (
         <div className="row" style={{ gap: 6, marginTop: 6 }}>
-          <input data-role="replace" className="input" placeholder="Replace with" value={replacement} onChange={(e) => setReplacement(e.target.value)} aria-label="Replace with" />
-          <button className="btn btn-sm" disabled={!total} onClick={replaceOne}><Replace size={14} /> Replace</button>
-          <button className="btn btn-sm" disabled={!total} onClick={replaceAll}>All</button>
+          <input data-role="replace" className="input" placeholder={t('Replace with')} value={replacement} onChange={(e) => setReplacement(e.target.value)} aria-label={t('Replace with')} />
+          <button className="btn btn-sm" disabled={!total} onClick={replaceOne}><Replace size={14} />{' '}{t('Replace')}</button>
+          <button className="btn btn-sm" disabled={!total} onClick={replaceAll}>{t('All')}</button>
         </div>
       )}
     </div>

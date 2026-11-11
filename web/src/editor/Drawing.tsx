@@ -3,6 +3,7 @@
 // exports show. Diagrams imported from Confluence point at their diagram file (`source`) until
 // first saved here.
 
+import { t as tr } from '../i18n'
 import { Suspense, lazy, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { Node, mergeAttributes } from '@tiptap/core'
@@ -40,7 +41,7 @@ function DrawingView({ node, updateAttributes, editor, extension, selected }: Re
   const canEdit = editable && (!drawio || !!drawioUrl)
   const title = (node.attrs.title as string | null) ?? null
   const save = async (scene: string, png: Blob | null) => {
-    if (scene.length > MAX_SCENE) throw new Error('This drawing is too large to save (pasted images take a lot of space).')
+    if (scene.length > MAX_SCENE) throw new Error(tr('This drawing is too large to save (pasted images take a lot of space).'))
     let src: string | null = null
     if (png) {
       // one attachment per drawing; saving again adds a version of it
@@ -61,19 +62,19 @@ function DrawingView({ node, updateAttributes, editor, extension, selected }: Re
   return (
     <NodeViewWrapper className={`drawing-block${selected ? ' is-selected' : ''}`} contentEditable={false}>
       {preview ? (
-        <img src={preview} alt={title ?? (drawio ? 'Diagram' : 'Drawing')} className="drawing-preview" draggable={false} onClick={() => (canEdit ? setOpen(true) : setZoom(true))} />
+        <img src={preview} alt={title ?? (drawio ? tr('Diagram') : tr('Drawing'))} className="drawing-preview" draggable={false} onClick={() => (canEdit ? setOpen(true) : setZoom(true))} />
       ) : (
         <button type="button" className="drawing-empty" onClick={() => canEdit && setOpen(true)} disabled={!canEdit}>
-          <Icon size={20} /> {canEdit ? `Empty ${label}: click to ${drawio ? 'edit in draw.io' : 'draw'}` : drawio && editable ? 'draw.io diagrams are turned off on this wiki' : `Empty ${label}`}
+          <Icon size={20} /> {canEdit ? (drawio ? tr('Empty {label}: click to edit in draw.io', { label }) : tr('Empty {label}: click to draw', { label })) : drawio && editable ? tr('draw.io diagrams are turned off on this wiki') : tr('Empty {label}', { label })}
         </button>
       )}
       {canEdit && preview && (
         <button type="button" className="btn btn-sm drawing-edit" onClick={() => setOpen(true)}>
-          <Icon size={13} /> Edit {label}
+          <Icon size={13} />{' '}{tr('Edit {label}', { label })}
         </button>
       )}
       {error && <div className="error-text small">{error}</div>}
-      {zoom && preview && <Lightbox src={preview} alt={title ?? 'Drawing'} caption={null} onClose={() => setZoom(false)} />}
+      {zoom && preview && <Lightbox src={preview} alt={title ?? tr('Drawing')} caption={null} onClose={() => setZoom(false)} />}
       {open && (
         <Suspense fallback={createPortal(<div className="drawing-modal drawing-loading"><div className="spinner" /></div>, document.body)}>
           {drawio && drawioUrl ? (

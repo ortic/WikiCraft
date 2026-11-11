@@ -1052,7 +1052,7 @@ paths:
     get:
       tags:
       - Account
-      summary: Current user and workspace
+      summary: Current user and workspace (with its look and date conventions), the person's own time zone and interface language
       operationId: get_me
       responses:
         '200':
@@ -1071,6 +1071,19 @@ paths:
                     properties:
                       id: *id002
                       name: *id001
+                      defaultLanguage:
+                        type:
+                        - string
+                        - 'null'
+                  timeZone:
+                    type:
+                    - string
+                    - 'null'
+                  language:
+                    type:
+                    - string
+                    - 'null'
+                    description: interface language (null = the workspace default, else the browser's)
         4XX:
           description: Error
           content:
@@ -1624,6 +1637,10 @@ paths:
                   type: string
                   description: IANA name, e.g. Europe/Zurich
                 bio: *id001
+                language:
+                  type: string
+                  description: 'interface language: en, de, fr, es, pt, it, nl, pl, ja, zh, ko, ar, he; "" = the workspace
+                    default'
       responses:
         '200':
           description: OK
@@ -6005,7 +6022,8 @@ paths:
       tags:
       - Admin
       summary: 'Rename the workspace and set its look: accent colour (#rrggbb, "" = built-in), date format (auto, yyyy-mm-dd,
-        dd.mm.yyyy, dd/mm/yyyy, mm/dd/yyyy, d mmm yyyy) and default time zone (IANA, "" = the reader''s browser)'
+        dd.mm.yyyy, dd/mm/yyyy, mm/dd/yyyy, d mmm yyyy), default time zone (IANA, "" = the reader''s browser) and default
+        interface language ("" = the reader''s browser)'
       operationId: put_admin_workspace
       requestBody:
         required: true
@@ -6018,6 +6036,7 @@ paths:
                 accentColor: *id001
                 dateFormat: *id001
                 timeZone: *id001
+                defaultLanguage: *id001
       responses:
         '200':
           description: OK

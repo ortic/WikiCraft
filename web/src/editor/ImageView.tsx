@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { Suspense, lazy, useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { NodeViewWrapper, type ReactNodeViewProps } from '@tiptap/react'
@@ -34,11 +35,11 @@ export function Lightbox({ src, alt, caption, onClose }: { src: string; alt: str
     }
   }, [onClose])
   return createPortal(
-    <div className="lightbox" role="dialog" aria-modal aria-label={alt || caption || 'Image'} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+    <div className="lightbox" role="dialog" aria-modal aria-label={alt || caption || t('Image')} onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div className="lightbox-bar">
-        <a className="icon-btn" href={src} target="_blank" rel="noopener noreferrer" title="Open original"><ExternalLink size={17} /></a>
-        <a className="icon-btn" href={src} download title="Download"><Download size={17} /></a>
-        <button className="icon-btn" title="Close (Esc)" onClick={onClose}><X size={18} /></button>
+        <a className="icon-btn" href={src} target="_blank" rel="noopener noreferrer" title={t('Open original')}><ExternalLink size={17} /></a>
+        <a className="icon-btn" href={src} download title={t('Download')}><Download size={17} /></a>
+        <button className="icon-btn" title={t('Close (Esc)')} onClick={onClose}><X size={18} /></button>
       </div>
       <figure className="lightbox-figure" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
         <img src={src} alt={alt ?? ''} />
@@ -101,7 +102,7 @@ export function ImageView({ node, updateAttributes, deleteNode, selected, editor
   }
 
   const editAlt = () => {
-    const v = window.prompt('Alternative text (describes the image for screen readers and search)', alt ?? '')
+    const v = window.prompt(t('Alternative text (describes the image for screen readers and search)'), alt ?? '')
     if (v !== null) update({ alt: v.trim() || null })
   }
 
@@ -130,7 +131,7 @@ export function ImageView({ node, updateAttributes, deleteNode, selected, editor
             <DrawingEditor
               initial={null}
               image={src}
-              title="Annotate image"
+              title={t('Annotate image')}
               dark={document.documentElement.dataset.theme === 'dark'}
               onSave={saveAnnotated}
               onClose={() => setAnnotate(false)}
@@ -140,26 +141,26 @@ export function ImageView({ node, updateAttributes, deleteNode, selected, editor
         {editable && selected && (
           <>
             <span className="image-toolbar" contentEditable={false}>
-              {btn('Align left', align === 'left', () => update({ align: 'left' }), <AlignLeft size={15} />)}
-              {btn('Center', align === 'center', () => update({ align: 'center' }), <AlignCenter size={15} />)}
-              {btn('Align right', align === 'right', () => update({ align: 'right' }), <AlignRight size={15} />)}
-              {btn('Float left, text wraps around', align === 'wrap-left', () => update({ align: 'wrap-left' }), <WrapText size={15} />)}
-              {btn('Float right, text wraps around', align === 'wrap-right', () => update({ align: 'wrap-right' }), <WrapText size={15} style={{ transform: 'scaleX(-1)' }} />)}
+              {btn(t('Align left'), align === 'left', () => update({ align: 'left' }), <AlignLeft size={15} />)}
+              {btn(t('Center'), align === 'center', () => update({ align: 'center' }), <AlignCenter size={15} />)}
+              {btn(t('Align right'), align === 'right', () => update({ align: 'right' }), <AlignRight size={15} />)}
+              {btn(t('Float left, text wraps around'), align === 'wrap-left', () => update({ align: 'wrap-left' }), <WrapText size={15} />)}
+              {btn(t('Float right, text wraps around'), align === 'wrap-right', () => update({ align: 'wrap-right' }), <WrapText size={15} style={{ transform: 'scaleX(-1)' }} />)}
               <span className="sep" />
-              {btn('Caption', !!caption || captionOpen, () => setCaptionOpen(true), <Captions size={15} />)}
-              {btn(border ? 'Remove border' : 'Border', !!border, () => update({ border: border ? null : true }), <Square size={15} />)}
-              {btn(alt ? `Alt text: ${alt}` : 'Add alt text', !!alt, editAlt, <Type size={15} />)}
-              {btn('Original size', false, () => update({ width: null }), <Maximize2 size={15} />)}
-              {btn('View larger (double-click)', false, () => setZoom(true), <ZoomIn size={15} />)}
-              {pageId && sameOriginAttachment(src) && btn('Annotate: draw arrows, boxes and text on the image', false, () => {
+              {btn(t('Caption'), !!caption || captionOpen, () => setCaptionOpen(true), <Captions size={15} />)}
+              {btn(border ? t('Remove border') : t('Border'), !!border, () => update({ border: border ? null : true }), <Square size={15} />)}
+              {btn(alt ? t('Alt text: {alt}', { alt }) : t('Add alt text'), !!alt, editAlt, <Type size={15} />)}
+              {btn(t('Original size'), false, () => update({ width: null }), <Maximize2 size={15} />)}
+              {btn(t('View larger (double-click)'), false, () => setZoom(true), <ZoomIn size={15} />)}
+              {pageId && sameOriginAttachment(src) && btn(t('Annotate: draw arrows, boxes and text on the image'), false, () => {
                 ;(document.activeElement as HTMLElement | null)?.blur?.()
                 setAnnotate(true)
               }, <PenTool size={15} />)}
               <span className="sep" />
-              {btn('Delete image', false, () => deleteNode(), <Trash2 size={15} />)}
+              {btn(t('Delete image'), false, () => deleteNode(), <Trash2 size={15} />)}
             </span>
-            <span className="image-resize" contentEditable={false} onPointerDown={startResize} title="Drag to resize" />
-            {shown ? <span className="image-size" contentEditable={false}>{shown}px</span> : null}
+            <span className="image-resize" contentEditable={false} onPointerDown={startResize} title={t('Drag to resize')} />
+            {shown ? <span className="image-size" contentEditable={false}>{t('{shown}px', { shown })}</span> : null}
           </>
         )}
       </span>
@@ -167,7 +168,7 @@ export function ImageView({ node, updateAttributes, deleteNode, selected, editor
         <input
           className="image-caption-input"
           value={caption ?? ''}
-          placeholder="Write a caption…"
+          placeholder={t('Write a caption…')}
           autoFocus={captionOpen && !caption}
           onChange={(e) => updateAttributes({ caption: e.target.value || null })}
           onBlur={() => setCaptionOpen(false)}

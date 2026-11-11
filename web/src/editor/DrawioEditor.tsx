@@ -2,6 +2,7 @@
 // frame. It talks to the page only through postMessage (draw.io's JSON embed protocol): the
 // diagram is handed over and comes back as XML plus a PNG preview; nothing is uploaded by draw.io.
 
+import { t } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 
@@ -71,10 +72,10 @@ export default function DrawioEditor({
         if (!p) return
         try {
           await onSave(p.xml, dataUrlToBlob(msg.data))
-          post({ action: 'status', message: 'Saved', modified: false })
+          post({ action: 'status', message: t('Saved'), modified: false })
           if (p.exit) onClose()
         } catch (err) {
-          post({ action: 'dialog', title: 'Not saved', message: err instanceof Error ? err.message : 'The diagram could not be saved.', button: 'OK' })
+          post({ action: 'dialog', title: t('Not saved'), message: err instanceof Error ? err.message : t('The diagram could not be saved.'), button: 'OK' })
         }
       } else if (msg.event === 'exit') {
         onClose()
@@ -85,11 +86,11 @@ export default function DrawioEditor({
   }, [origin, initial, source, title, onSave, onClose])
   const params = new URLSearchParams({ embed: '1', proto: 'json', spin: '1', saveAndExit: '1', noExitBtn: '0', libraries: '1', ui: dark ? 'dark' : 'kennedy', lang: (navigator.language || 'en').slice(0, 2) })
   return createPortal(
-    <div className="drawing-modal drawio-modal" role="dialog" aria-label={title ? `Diagram: ${title}` : 'Diagram'}>
-      {!loaded && <div className="drawio-loading"><div className="spinner" /> Loading draw.io…</div>}
+    <div className="drawing-modal drawio-modal" role="dialog" aria-label={title ? t('Diagram: {title}', { title }) : t('Diagram')}>
+      {!loaded && <div className="drawio-loading"><div className="spinner" />{' '}{t('Loading draw.io…')}</div>}
       <iframe
         ref={frame}
-        title="draw.io diagram editor"
+        title={t('draw.io diagram editor')}
         src={`${url}/?${params}`}
         sandbox="allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox allow-downloads allow-modals allow-forms"
       />

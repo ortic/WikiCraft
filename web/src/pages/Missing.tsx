@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useEffect } from 'react'
 import { useNavigate, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -28,8 +29,8 @@ export default function Missing() {
   return (
     <div className="content-pad" style={{ textAlign: 'center', paddingTop: 80 }}>
       <FilePlus2 size={44} className="faint" />
-      <h2>{title ? `“${title}” doesn't exist yet` : 'Page not found'}</h2>
-      <p className="muted">{source ? 'This link points to a Confluence page that was not part of any import.' : space ? `There is no page with this title in ${space}.` : ''}</p>
+      <h2>{title ? t('“{title}” doesn\'t exist yet', { title }) : t('Page not found')}</h2>
+      <p className="muted">{source ? t('This link points to a Confluence page that was not part of any import.') : space ? t('There is no page with this title in {space}.', { space }) : ''}</p>
       {canCreate && (
         <button
           className="btn btn-primary"
@@ -38,9 +39,7 @@ export default function Missing() {
             qc.invalidateQueries({ queryKey: ['tree'] })
             nav(`/pages/${r.id}`, { replace: true })
           }}
-        >
-          Create “{title}”
-        </button>
+        >{t('Create “{title}”', { title })}</button>
       )}
     </div>
   )

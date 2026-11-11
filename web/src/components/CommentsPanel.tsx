@@ -1,3 +1,4 @@
+import { t as tr } from '../i18n'
 import { useEffect, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { CheckCircle2, RotateCcw, Trash2, X, MessageSquare, ThumbsUp, Pencil, ImagePlus } from 'lucide-react'
@@ -126,7 +127,7 @@ function Composer({ pageId, placeholder, onSubmit, autoFocus, onCancel, initial,
           return before + token + t.slice(at)
         })
       } catch (e) {
-        toast(e instanceof Error ? e.message : 'Could not add the image')
+        toast(e instanceof Error ? e.message : tr('Could not add the image'))
       } finally {
         setUploading((n) => n - 1)
       }
@@ -219,18 +220,16 @@ function Composer({ pageId, placeholder, onSubmit, autoFocus, onCancel, initial,
       )}
       <div className="row" style={{ marginTop: 6 }}>
         <input ref={fileRef} type="file" accept="image/png,image/jpeg,image/gif,image/webp" multiple hidden onChange={(e) => { const f = Array.from(e.target.files ?? []); e.target.value = ''; void addImages(f) }} />
-        <button type="button" className="icon-btn" title="Add an image (or paste one)" aria-label="Add an image" onClick={() => fileRef.current?.click()}>
+        <button type="button" className="icon-btn" title={tr('Add an image (or paste one)')} aria-label={tr('Add an image')} onClick={() => fileRef.current?.click()}>
           <ImagePlus size={15} />
         </button>
-        <span className="faint small">{uploading ? 'Uploading image…' : 'Markdown · @ to mention · Ctrl+Enter to send'}</span>
+        <span className="faint small">{uploading ? tr('Uploading image…') : tr('Markdown · @ to mention · Ctrl+Enter to send')}</span>
         <span className="spacer" />
         {onCancel && (
-          <button className="btn btn-sm" onClick={onCancel}>
-            Cancel
-          </button>
+          <button className="btn btn-sm" onClick={onCancel}>{tr('Cancel')}</button>
         )}
         <button className="btn btn-primary btn-sm" disabled={busy || uploading > 0 || !text.trim()} onClick={submit}>
-          {submitLabel ?? 'Comment'}
+          {submitLabel ?? tr('Comment')}
         </button>
       </div>
     </div>
@@ -274,14 +273,14 @@ export default function CommentsPanel({ page, focus, pending, onPendingDone, onC
       <div key={c.id} id={`comment-${c.id}`} className={isReply ? 'reply' : `comment ${focus === c.id ? 'focused' : ''} ${c.resolvedAt ? 'resolved' : ''}`}>
         <div className="c-head">
           <Avatar name={c.authorName ?? '?'} id={c.authorId ?? undefined} size={22} />
-          <b style={{ fontSize: 13 }}>{c.authorName ?? 'Unknown'}</b>
+          <b style={{ fontSize: 13 }}>{c.authorName ?? tr('Unknown')}</b>
           <span className="faint small">{formatDate(c.createdAt)}</span>
           <span className="spacer" />
           {!isReply && page.access.comment && (
             <button
               className="icon-btn"
               style={{ width: 24, height: 24 }}
-              title={c.resolvedAt ? 'Reopen' : 'Resolve'}
+              title={c.resolvedAt ? tr('Reopen') : tr('Resolve')}
               onClick={async () => {
                 await api.patch(`/comments/${c.id}`, { resolved: !c.resolvedAt })
                 refresh()
@@ -291,7 +290,7 @@ export default function CommentsPanel({ page, focus, pending, onPendingDone, onC
             </button>
           )}
           {mine && page.access.comment && (
-            <button className="icon-btn" style={{ width: 24, height: 24 }} title="Edit" onClick={() => setEditing(editing === c.id ? null : c.id)}>
+            <button className="icon-btn" style={{ width: 24, height: 24 }} title={tr('Edit')} onClick={() => setEditing(editing === c.id ? null : c.id)}>
               <Pencil size={13} />
             </button>
           )}
@@ -299,9 +298,9 @@ export default function CommentsPanel({ page, focus, pending, onPendingDone, onC
             <button
               className="icon-btn"
               style={{ width: 24, height: 24 }}
-              title="Delete"
+              title={tr('Delete')}
               onClick={async () => {
-                if (confirm('Delete this comment?')) {
+                if (confirm(tr('Delete this comment?'))) {
                   await api.del(`/comments/${c.id}`)
                   refresh()
                 }
@@ -315,7 +314,7 @@ export default function CommentsPanel({ page, focus, pending, onPendingDone, onC
         {editing === c.id ? (
           <Composer
             pageId={page.id}
-            placeholder="Edit your comment"
+            placeholder={tr('Edit your comment')}
             autoFocus
             initial={toMarkdown(c.content)}
             submitLabel="Save"
@@ -329,14 +328,14 @@ export default function CommentsPanel({ page, focus, pending, onPendingDone, onC
         ) : (
           <div className="c-body">
             <RenderDoc node={c.content} />
-            {c.updatedAt && Date.parse(c.updatedAt) - Date.parse(c.createdAt) > 5000 && <span className="faint small"> (edited)</span>}
+            {c.updatedAt && Date.parse(c.updatedAt) - Date.parse(c.createdAt) > 5000 && <span className="faint small">{' '}{tr('(edited)')}</span>}
           </div>
         )}
         <div className="c-foot">
           {me.data?.user ? (
             <button
               className={`like-btn${c.liked ? ' liked' : ''}`}
-              title={c.liked ? 'Unlike' : 'Like'}
+              title={c.liked ? tr('Unlike') : tr('Like')}
               onClick={async () => {
                 await (c.liked ? api.del(`/comments/${c.id}/like`) : api.put(`/comments/${c.id}/like`))
                 refresh()
@@ -348,19 +347,17 @@ export default function CommentsPanel({ page, focus, pending, onPendingDone, onC
             <span className="faint small"><ThumbsUp size={12} /> {c.likeCount}</span>
           ) : null}
         </div>
-        {c.resolvedAt && !isReply && <div className="faint small">Resolved by {c.resolvedByName ?? 'someone'}</div>}
+        {c.resolvedAt && !isReply && <div className="faint small">{tr('Resolved by')}{' '}{c.resolvedByName ?? tr('someone')}</div>}
         {!isReply && (
           <>
             {replies(c.id).map((r) => item(r, true))}
             {page.access.comment &&
               (replyTo === c.id ? (
                 <div className="reply">
-                  <Composer pageId={page.id} placeholder="Reply…" autoFocus onCancel={() => setReplyTo(null)} onSubmit={async (t) => { await post(t, { parentId: c.id }); setReplyTo(null) }} />
+                  <Composer pageId={page.id} placeholder={tr('Reply…')} autoFocus onCancel={() => setReplyTo(null)} onSubmit={async (t) => { await post(t, { parentId: c.id }); setReplyTo(null) }} />
                 </div>
               ) : (
-                <button className="btn btn-ghost btn-sm" style={{ marginTop: 6 }} onClick={() => setReplyTo(c.id)}>
-                  Reply
-                </button>
+                <button className="btn btn-ghost btn-sm" style={{ marginTop: 6 }} onClick={() => setReplyTo(c.id)}>{tr('Reply')}</button>
               ))}
           </>
         )}
@@ -371,7 +368,7 @@ export default function CommentsPanel({ page, focus, pending, onPendingDone, onC
   return (
     <aside className="side-panel">
       <h3>
-        <MessageSquare size={16} /> Comments <span className="spacer" />
+        <MessageSquare size={16} />{' '}{tr('Comments')}{' '}<span className="spacer" />
         <button className="icon-btn" onClick={onClose}>
           <X size={16} />
         </button>
@@ -381,7 +378,7 @@ export default function CommentsPanel({ page, focus, pending, onPendingDone, onC
           <div className="c-quote">{pending.text}</div>
           <Composer
             pageId={page.id}
-            placeholder="Add an inline comment…"
+            placeholder={tr('Add an inline comment…')}
             autoFocus
             onCancel={onPendingDone}
             onSubmit={async (t) => {
@@ -394,16 +391,16 @@ export default function CommentsPanel({ page, focus, pending, onPendingDone, onC
       )}
       {page.access.comment && !pending && (
         <div style={{ marginBottom: 14 }}>
-          <Composer pageId={page.id} placeholder="Add a comment…" onSubmit={async (t) => { await post(t) }} />
+          <Composer pageId={page.id} placeholder={tr('Add a comment…')} onSubmit={async (t) => { await post(t) }} />
         </div>
       )}
       {roots.length > 0 && (
-        <div className="comment-filter" role="radiogroup" aria-label="Show comments">
+        <div className="comment-filter" role="radiogroup" aria-label={tr('Show comments')}>
           {([
-            ['open', `Open (${roots.length - resolvedCount})`],
-            ['resolved', `Resolved (${resolvedCount})`],
-            ...(myId ? [['mine', 'Mine']] : []),
-            ['all', 'All'],
+            ['open', tr('Open ({value})', { value: roots.length - resolvedCount })],
+            ['resolved', tr('Resolved ({resolvedCount})', { resolvedCount })],
+            ...(myId ? [['mine', tr('Mine')]] : []),
+            ['all', tr('All')],
           ] as [typeof filter, string][]).map(([k, label]) => (
             <button key={k} type="button" role="radio" aria-checked={filter === k} className={`chip ${filter === k ? 'active' : ''}`} onClick={() => setFilter(k)}>
               {label}
@@ -412,9 +409,9 @@ export default function CommentsPanel({ page, focus, pending, onPendingDone, onC
         </div>
       )}
       {visible.map((c) => item(c))}
-      {comments.data && roots.length === 0 && <div className="empty">No comments yet.</div>}
+      {comments.data && roots.length === 0 && <div className="empty">{tr('No comments yet.')}</div>}
       {comments.data && roots.length > 0 && visible.length === 0 && (
-        <div className="empty">{filter === 'open' ? 'All comments are resolved.' : filter === 'resolved' ? 'Nothing resolved yet.' : 'No comments here.'}</div>
+        <div className="empty">{filter === 'open' ? tr('All comments are resolved.') : filter === 'resolved' ? tr('Nothing resolved yet.') : tr('No comments here.')}</div>
       )}
     </aside>
   )

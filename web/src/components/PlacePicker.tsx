@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useQuery } from '@tanstack/react-query'
 import { api, can, type Space, type TreeNode } from '../api'
 
@@ -35,7 +36,7 @@ export default function PlacePicker({
   return (
     <>
       <div className="field">
-        <label htmlFor={`${idPrefix}-space`}>Space</label>
+        <label htmlFor={`${idPrefix}-space`}>{t('Space')}</label>
         <select id={`${idPrefix}-space`} className="select" value={spaceKey} onChange={(e) => onChange(e.target.value, null)}>
           {writable.map((s) => (
             <option key={s.key} value={s.key}>
@@ -45,9 +46,9 @@ export default function PlacePicker({
         </select>
       </div>
       <div className="field">
-        <label htmlFor={`${idPrefix}-parent`}>Below</label>
+        <label htmlFor={`${idPrefix}-parent`}>{t('Below')}</label>
         <select id={`${idPrefix}-parent`} className="select" value={parentId ?? ''} onChange={(e) => onChange(spaceKey, e.target.value || null)}>
-          <option value="">Top level of the space</option>
+          <option value="">{t('Top level of the space')}</option>
           {options.map((o) => (
             <option key={o.id} value={o.id}>
               {'  '.repeat(o.depth)}

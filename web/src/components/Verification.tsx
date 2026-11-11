@@ -1,6 +1,7 @@
 // Page verification: the badge under the title, the "verify" dialog for editors and the
 // "request review" dialog for everyone.
 
+import { t } from '../i18n'
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { BadgeCheck, BadgeAlert, CheckCircle2, Lock } from 'lucide-react'
@@ -27,26 +28,25 @@ export function VerificationBadge({ pageId, onClick }: { pageId: string; onClick
   const by = v.verifiedBy?.name ?? 'someone'
   if (v.status === 'expired') {
     return (
-      <button type="button" className="badge badge-warning verify-badge" onClick={onClick} title={`Verified by ${by} · ${formatDate(v.verifiedAt)} · expired ${formatDate(v.expiresAt)}`}>
-        <BadgeAlert size={13} /> Verification expired
-      </button>
+      <button type="button" className="badge badge-warning verify-badge" onClick={onClick} title={t('Verified by {by} · {date} · expired {date2}', { by, date: formatDate(v.verifiedAt), date2: formatDate(v.expiresAt) })}>
+        <BadgeAlert size={13} />{' '}{t('Verification expired')}</button>
     )
   }
-  const until = v.expiresAt ? ` · valid until ${formatDate(v.expiresAt)}` : ''
-  const tip = `Verified by ${by} · ${formatDate(v.verifiedAt)}${until}${v.note ? ` · ${v.note}` : ''}${v.editedSince ? ' · edited since' : ''}`
+  const until = v.expiresAt ? ' ' + t('· valid until {value}', { value: formatDate(v.expiresAt) }) + '' : ''
+  const tip = `Verified by ${by} · ${formatDate(v.verifiedAt)}${until}${v.note ? ` · ${v.note}` : ''}${v.editedSince ? ' ' + t('· edited since') + '' : ''}`
   return (
     <button type="button" className={`badge verify-badge ${v.editedSince ? 'badge-warning' : 'badge-success'}`} onClick={onClick} title={tip}>
-      <BadgeCheck size={13} /> Verified{v.editedSince ? ', edited since' : ''}
+      <BadgeCheck size={13} />{' '}{t('Verified')}{v.editedSince ? t(', edited since') : ''}
     </button>
   )
 }
 
 const DURATIONS: [string, number | null][] = [
-  ['30 days', 30],
-  ['90 days', 90],
-  ['6 months', 182],
-  ['1 year', 365],
-  ['No expiry', null],
+  [t('30 days'), 30],
+  [t('90 days'), 90],
+  [t('6 months'), 182],
+  [t('1 year'), 365],
+  [t('No expiry'), null],
 ]
 
 export function VerifyDialog({ pageId, onClose }: { pageId: string; onClose: () => void }) {
@@ -64,46 +64,43 @@ export function VerifyDialog({ pageId, onClose }: { pageId: string; onClose: () 
     setBusy(true)
     try {
       await api.put(`/pages/${pageId}/verification`, { days, note: note || undefined })
-      toast('Page verified')
+      toast(t('Page verified'))
       done()
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not verify')
+      toast(e instanceof Error ? e.message : t('Could not verify'))
     } finally {
       setBusy(false)
     }
   }
   const remove = async () => {
     await api.del(`/pages/${pageId}/verification`)
-    toast('Verification removed')
+    toast(t('Verification removed'))
     done()
   }
   return (
     <Modal
-      title="Verify this page"
+      title={t('Verify this page')}
       onClose={onClose}
       width={460}
       footer={
         <>
           {current && current.status !== 'none' && (
-            <button className="btn btn-danger" onClick={remove}>Remove verification</button>
+            <button className="btn btn-danger" onClick={remove}>{t('Remove verification')}</button>
           )}
           <span className="spacer" />
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" disabled={busy} onClick={verify}>{busy ? <Spinner /> : <BadgeCheck size={15} />} Verify</button>
+          <button className="btn" onClick={onClose}>{t('Cancel')}</button>
+          <button className="btn btn-primary" disabled={busy} onClick={verify}>{busy ? <Spinner /> : <BadgeCheck size={15} />}{' '}{t('Verify')}</button>
         </>
       }
     >
-      <p className="muted" style={{ marginTop: 0 }}>
-        Confirm that the content is accurate. Readers see a verified badge; when it expires, the page is flagged for review.
-      </p>
+      <p className="muted" style={{ marginTop: 0 }}>{t('Confirm that the content is accurate. Readers see a verified badge; when it expires, the page is flagged for review.')}</p>
       {current && current.status !== 'none' && (
-        <p className="small faint">
-          Currently {current.status === 'expired' ? 'expired' : 'verified'} by {current.verifiedBy?.name ?? 'someone'} ({formatDate(current.verifiedAt)})
-          {current.expiresAt ? ` (until ${formatDate(current.expiresAt)})` : ''}.
+        <p className="small faint">{t('Currently')}{' '}{current.status === 'expired' ? t('expired') : t('verified')}{' '}{t('by')}{' '}{current.verifiedBy?.name ?? t('someone')} ({formatDate(current.verifiedAt)})
+          {current.expiresAt ? ' ' + t('(until {date})', { date: formatDate(current.expiresAt) }) + '' : ''}.
         </p>
       )}
       <div className="field">
-        <label>Valid for</label>
+        <label>{t('Valid for')}</label>
         <div className="row" style={{ flexWrap: 'wrap', gap: 6 }}>
           {DURATIONS.map(([label, d]) => (
             <button key={label} type="button" className={`btn btn-sm ${days === d ? 'btn-primary' : ''}`} onClick={() => setDays(d)}>{label}</button>
@@ -111,8 +108,8 @@ export function VerifyDialog({ pageId, onClose }: { pageId: string; onClose: () 
         </div>
       </div>
       <div className="field">
-        <label>Note (optional)</label>
-        <input className="input" value={note} maxLength={500} placeholder="e.g. Checked against the 2027 policy" onChange={(e) => setNote(e.target.value)} />
+        <label>{t('Note (optional)')}</label>
+        <input className="input" value={note} maxLength={500} placeholder={t('e.g. Checked against the 2027 policy')} onChange={(e) => setNote(e.target.value)} />
       </div>
     </Modal>
   )
@@ -132,36 +129,36 @@ export function RequestReviewDialog({ pageId, onClose }: { pageId: string; onClo
     if (!who) return
     try {
       await api.post(`/pages/${pageId}/verification/request`, { userId: who.id, note: note || undefined })
-      toast(`Asked ${who.name} to review this page`)
+      toast(t('Asked {name} to review this page', { name: who.name }))
       onClose()
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not send the request')
+      toast(e instanceof Error ? e.message : t('Could not send the request'))
     }
   }
   return (
     <Modal
-      title="Request a review"
+      title={t('Request a review')}
       onClose={onClose}
       width={460}
       footer={
         <>
           <span className="spacer" />
-          <button className="btn" onClick={onClose}>Cancel</button>
-          <button className="btn btn-primary" disabled={!who} onClick={send}>Send request</button>
+          <button className="btn" onClick={onClose}>{t('Cancel')}</button>
+          <button className="btn btn-primary" disabled={!who} onClick={send}>{t('Send request')}</button>
         </>
       }
     >
-      <p className="muted" style={{ marginTop: 0 }}>Ask someone who can edit this page to check it and verify it.</p>
+      <p className="muted" style={{ marginTop: 0 }}>{t('Ask someone who can edit this page to check it and verify it.')}</p>
       <div className="field">
-        <label>Reviewer</label>
+        <label>{t('Reviewer')}</label>
         {who ? (
           <div className="row">
             <span className="badge badge-accent">{who.name}</span>
-            <button className="btn btn-sm" onClick={() => setWho(null)}>Change</button>
+            <button className="btn btn-sm" onClick={() => setWho(null)}>{t('Change')}</button>
           </div>
         ) : (
           <>
-            <input className="input" autoFocus placeholder="Search people" value={query} onChange={(e) => setQuery(e.target.value)} />
+            <input className="input" autoFocus placeholder={t('Search people')} value={query} onChange={(e) => setQuery(e.target.value)} />
             {(users.data ?? []).slice(0, 6).map((u) => (
               <div key={u.id} className="menu-item" onClick={() => setWho(u)}>{u.name}</div>
             ))}
@@ -169,8 +166,8 @@ export function RequestReviewDialog({ pageId, onClose }: { pageId: string; onClo
         )}
       </div>
       <div className="field">
-        <label>Message (optional)</label>
-        <input className="input" value={note} maxLength={500} placeholder="What should be checked?" onChange={(e) => setNote(e.target.value)} />
+        <label>{t('Message (optional)')}</label>
+        <input className="input" value={note} maxLength={500} placeholder={t('What should be checked?')} onChange={(e) => setNote(e.target.value)} />
       </div>
     </Modal>
   )
@@ -186,21 +183,21 @@ export function NoAccess({ pageId, signedIn }: { pageId: string; signedIn: boole
       await api.post(`/pages/${pageId}/access-request`, { message: message || undefined })
       setSent(true)
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not send the request')
+      toast(e instanceof Error ? e.message : t('Could not send the request'))
     }
   }
   return (
     <div className="card no-access">
       <Lock size={28} className="faint" />
-      <h2>This page isn’t available to you</h2>
-      <p className="muted">It may have been deleted or moved, or it is restricted to certain people.</p>
+      <h2>{t('This page isn’t available to you')}</h2>
+      <p className="muted">{t('It may have been deleted or moved, or it is restricted to certain people.')}</p>
       {signedIn &&
         (sent ? (
-          <p><CheckCircle2 size={15} color="var(--success)" style={{ verticalAlign: -2 }} /> Request sent. The page’s admins will let you know.</p>
+          <p><CheckCircle2 size={15} color="var(--success)" style={{ verticalAlign: -2 }} />{' '}{t('Request sent. The page’s admins will let you know.')}</p>
         ) : (
           <div className="no-access-form">
-            <input className="input" placeholder="Why do you need access? (optional)" value={message} maxLength={500} onChange={(e) => setMessage(e.target.value)} />
-            <button className="btn btn-primary" onClick={send}>Request access</button>
+            <input className="input" placeholder={t('Why do you need access? (optional)')} value={message} maxLength={500} onChange={(e) => setMessage(e.target.value)} />
+            <button className="btn btn-primary" onClick={send}>{t('Request access')}</button>
           </div>
         ))}
     </div>
@@ -217,18 +214,16 @@ export function OwnerDialog({ pageId, current, onClose }: { pageId: string; curr
     try {
       await api.put(`/pages/${pageId}/owner`, { userId: u.id })
       qc.invalidateQueries({ queryKey: ['page', pageId] })
-      toast(`${u.name} owns this page now`)
+      toast(t('{name} owns this page now', { name: u.name }))
       onClose()
     } catch (e) {
-      toast(e instanceof Error ? e.message : 'Could not change the owner')
+      toast(e instanceof Error ? e.message : t('Could not change the owner'))
     }
   }
   return (
-    <Modal title="Change the page owner" onClose={onClose} width={440}>
-      <p className="muted" style={{ marginTop: 0 }}>
-        The owner is the person responsible for keeping this page current{current ? ` (now ${current})` : ''}. Pick someone who can edit it.
-      </p>
-      <input className="input" autoFocus placeholder="Search people" value={query} onChange={(e) => setQuery(e.target.value)} />
+    <Modal title={t('Change the page owner')} onClose={onClose} width={440}>
+      <p className="muted" style={{ marginTop: 0 }}>{t('The owner is the person responsible for keeping this page current')}{current ? ' ' + t('(now {current})', { current }) + '' : ''}{t('. Pick someone who can edit it.')}</p>
+      <input className="input" autoFocus placeholder={t('Search people')} value={query} onChange={(e) => setQuery(e.target.value)} />
       {(users.data ?? []).slice(0, 8).map((u) => (
         <div key={u.id} className="menu-item" onClick={() => pick(u)}>{u.name}</div>
       ))}

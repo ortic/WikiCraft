@@ -1,3 +1,4 @@
+import { t } from '../i18n'
 import { useEffect, useState } from 'react'
 import { Link, useNavigate, useParams } from 'react-router-dom'
 import { useQuery } from '@tanstack/react-query'
@@ -41,7 +42,7 @@ export default function PublicPageView() {
         await api.post(`/public/${token}/unlock`, { password })
         await q.refetch()
       } catch (err) {
-        setUnlockError(err instanceof Error ? err.message : 'That didn\'t work')
+        setUnlockError(err instanceof Error ? err.message : t('That didn\'t work'))
       } finally {
         setUnlocking(false)
       }
@@ -50,14 +51,14 @@ export default function PublicPageView() {
       <div className="auth">
         <form className="auth-card" onSubmit={unlock}>
           <Logo />
-          <h1>This page is protected</h1>
-          <p className="muted">Enter the password you got with the link.</p>
+          <h1>{t('This page is protected')}</h1>
+          <p className="muted">{t('Enter the password you got with the link.')}</p>
           <div className="field">
-            <label htmlFor="share-password">Password</label>
+            <label htmlFor="share-password">{t('Password')}</label>
             <input id="share-password" className="input" type="password" autoFocus autoComplete="off" value={password} onChange={(e) => setPassword(e.target.value)} />
           </div>
           {unlockError && <p className="error-text" role="alert">{unlockError}</p>}
-          <button className="btn btn-primary" type="submit" disabled={unlocking || !password}>{unlocking ? <Spinner /> : null} Open</button>
+          <button className="btn btn-primary" type="submit" disabled={unlocking || !password}>{unlocking ? <Spinner /> : null}{' '}{t('Open')}</button>
         </form>
       </div>
     )
@@ -67,8 +68,8 @@ export default function PublicPageView() {
       <div className="auth">
         <div className="auth-card">
           <Logo />
-          <h1>Link not available</h1>
-          <p className="muted">This link doesn't exist, has expired or was turned off. Ask the person who shared it for a new one.</p>
+          <h1>{t('Link not available')}</h1>
+          <p className="muted">{t('This link doesn\'t exist, has expired or was turned off. Ask the person who shared it for a new one.')}</p>
         </div>
       </div>
     )
@@ -106,14 +107,14 @@ export default function PublicPageView() {
         <Logo />
         <span className="faint small">{p.spaceName}</span>
         <span className="spacer" />
-        {p.tree.length > 1 && <button className="btn btn-ghost small public-nav-toggle" onClick={() => setNavOpen((o) => !o)}>Pages</button>}
-        <span className="badge">Shared publicly · read-only</span>
+        {p.tree.length > 1 && <button className="btn btn-ghost small public-nav-toggle" onClick={() => setNavOpen((o) => !o)}>{t('Pages')}</button>}
+        <span className="badge">{t('Shared publicly · read-only')}</span>
       </header>
       <div className="public-body">
         {p.tree.length > 1 && <nav className={`public-nav${navOpen ? ' open' : ''}`}>{renderTree('', 0)}</nav>}
         <main className="public-main">
           <h1>{p.title}</h1>
-          <p className="faint small">Updated {formatDate(p.updatedAt)}{p.updatedByName ? ` by ${p.updatedByName}` : ''}</p>
+          <p className="faint small">{t('Updated {date}', { date: formatDate(p.updatedAt) })}{p.updatedByName ? ' ' + t('by {updatedByName}', { updatedByName: p.updatedByName }) + '' : ''}</p>
           <article className="ProseMirror public-article" onClick={onClick} dangerouslySetInnerHTML={{ __html: p.html }} />
         </main>
       </div>

@@ -1,3 +1,4 @@
+import { t as tr } from '../i18n'
 import { useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
@@ -134,19 +135,18 @@ export default function History() {
   const shown = unchanged ? lines : lines.filter((l) => l.op !== '=')
 
   const restore = async () => {
-    if (sel == null || !confirm(`Restore version ${sel}? The current content becomes a new version.`)) return
+    if (sel == null || !confirm(tr('Restore version {sel}? The current content becomes a new version.', { sel }))) return
     await api.post(`/pages/${id}/versions/${sel}/restore`)
     qc.invalidateQueries({ queryKey: ['page', id] })
     qc.invalidateQueries({ queryKey: ['versions', id] })
-    toast(`Version ${sel} restored`)
+    toast(tr('Version {sel} restored', { sel }))
     nav(`/pages/${id}`)
   }
   return (
     <div className="content-pad">
       <Link to={`/pages/${id}`} className="row muted" style={{ marginBottom: 12 }}>
-        <ArrowLeft size={15} /> Back to page
-      </Link>
-      <h1 style={{ marginTop: 0 }}>History · {page.data?.title}</h1>
+        <ArrowLeft size={15} />{' '}{tr('Back to page')}</Link>
+      <h1 style={{ marginTop: 0 }}>{tr('History · {title}', { title: page.data?.title })}</h1>
       <div className="history-grid">
         <div className="card" style={{ padding: 6, maxHeight: '75vh', overflowY: 'auto' }}>
           {versions.isLoading && <Spinner />}
@@ -155,45 +155,40 @@ export default function History() {
               <Avatar name={v.createdByName ?? '?'} id={v.createdBy ?? undefined} size={24} />
               <div style={{ minWidth: 0 }}>
                 <div>
-                  <b>v{v.version}</b> <span className="faint small">{formatDate(v.createdAt)}</span>
-                  {v.minor && <span className="badge" title="Watchers weren't notified about this version">minor</span>}
+                  <b>{tr('v{version}', { version: v.version })}</b> <span className="faint small">{formatDate(v.createdAt)}</span>
+                  {v.minor && <span className="badge" title={tr('Watchers weren\'t notified about this version')}>{tr('minor')}</span>}
                 </div>
-                <div className="mi-desc">{v.createdByName ?? 'Unknown'}{v.message ? ` — ${v.message}` : ''}</div>
+                <div className="mi-desc">{v.createdByName ?? tr('Unknown')}{v.message ? ` — ${v.message}` : ''}</div>
               </div>
             </div>
           ))}
         </div>
         <div className="card">
           <div className="row" style={{ marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
-            <b>Version {sel}</b>
-            <label className="row small" style={{ gap: 6 }}>
-              compared with
-              <select className="select" style={{ width: 'auto' }} aria-label="Compare with version" value={prevVersion ?? ''} onChange={(e) => setBase(e.target.value ? Number(e.target.value) : null)}>
-                {!prevVersion && <option value="">nothing (first version)</option>}
+            <b>{tr('Version {sel}', { sel })}</b>
+            <label className="row small" style={{ gap: 6 }}>{tr('compared with')}<select className="select" style={{ width: 'auto' }} aria-label={tr('Compare with version')} value={prevVersion ?? ''} onChange={(e) => setBase(e.target.value ? Number(e.target.value) : null)}>
+                {!prevVersion && <option value="">{tr('nothing (first version)')}</option>}
                 {versions.data?.filter((v) => v.version !== sel).map((v) => (
-                  <option key={v.version} value={v.version}>
-                    v{v.version} · {formatDate(v.createdAt)}{sinceMode && v.version === since ? ' (your last visit)' : ''}
+                  <option key={v.version} value={v.version}>{tr('v{version} · {date}', { version: v.version, date: formatDate(v.createdAt) })}{sinceMode && v.version === since ? ' ' + tr('(your last visit)') + '' : ''}
                   </option>
                 ))}
               </select>
             </label>
-            <span className="faint small">{changes} {changes === 1 ? 'change' : 'changes'}</span>
+            <span className="faint small">{tr('{count} changes', { count: changes })}</span>
             <span className="spacer" />
-            <div className="seg" role="group" aria-label="Show the comparison">
-              <button className={`btn btn-sm${view === 'inline' ? ' active' : ''}`} aria-pressed={view === 'inline'} onClick={() => setView('inline')}>Inline</button>
-              <button className={`btn btn-sm${view === 'split' ? ' active' : ''}`} aria-pressed={view === 'split'} onClick={() => setView('split')}>Side by side</button>
+            <div className="seg" role="group" aria-label={tr('Show the comparison')}>
+              <button className={`btn btn-sm${view === 'inline' ? ' active' : ''}`} aria-pressed={view === 'inline'} onClick={() => setView('inline')}>{tr('Inline')}</button>
+              <button className={`btn btn-sm${view === 'split' ? ' active' : ''}`} aria-pressed={view === 'split'} onClick={() => setView('split')}>{tr('Side by side')}</button>
             </div>
-            <label className="row small"><input type="checkbox" checked={unchanged} onChange={(e) => setUnchanged(e.target.checked)} /> Show unchanged</label>
+            <label className="row small"><input type="checkbox" checked={unchanged} onChange={(e) => setUnchanged(e.target.checked)} />{' '}{tr('Show unchanged')}</label>
             {page.data?.access.edit && sel !== versions.data?.[0]?.version && (
               <button className="btn" onClick={restore}>
-                <RotateCcw size={14} /> Restore this version
-              </button>
+                <RotateCcw size={14} />{' '}{tr('Restore this version')}</button>
             )}
           </div>
           {cur.isLoading && <Spinner />}
           {cur.data && cur.data.title !== prev.data?.title && prev.data && (
-            <p className="small">
-              Title: <span className="diff-old">{prev.data.title}</span> → <span className="diff-new">{cur.data.title}</span>
+            <p className="small">{tr('Title:')}{' '}<span className="diff-old">{prev.data.title}</span> → <span className="diff-new">{cur.data.title}</span>
             </p>
           )}
           {view === 'inline' ? (
@@ -201,12 +196,12 @@ export default function History() {
               {shown.map((l, i) =>
                 l.op === '~' ? (
                   <div key={i} className="diff-line changed">
-                    <span className="diff-mark" aria-label="changed">~</span>
+                    <span className="diff-mark" aria-label={tr('changed')}>~</span>
                     <Words words={l.words} />
                   </div>
                 ) : (
                   <div key={i} className={`diff-line${l.op === '-' ? ' removed diff-old' : l.op === '+' ? ' added diff-new' : ''}`}>
-                    <span className="diff-mark" aria-label={l.op === '-' ? 'removed' : l.op === '+' ? 'added' : undefined}>{l.op === '=' ? ' ' : l.op}</span>
+                    <span className="diff-mark" aria-label={l.op === '-' ? tr('removed') : l.op === '+' ? tr('added') : undefined}>{l.op === '=' ? ' ' : l.op}</span>
                     {l.text || ' '}
                   </div>
                 ),
@@ -214,8 +209,8 @@ export default function History() {
             </div>
           ) : (
             <div className="diff-split">
-              <div className="diff-split-head faint small">v{prevVersion ?? '–'}</div>
-              <div className="diff-split-head faint small">v{sel}</div>
+              <div className="diff-split-head faint small">{tr('v{value}', { value: prevVersion ?? '–' })}</div>
+              <div className="diff-split-head faint small">{tr('v{sel}', { sel })}</div>
               {shown.map((l, i) =>
                 l.op === '~' ? (
                   [
@@ -231,7 +226,7 @@ export default function History() {
               )}
             </div>
           )}
-          {!unchanged && lines.length > shown.length && <p className="faint small">{lines.length - shown.length} unchanged lines hidden.</p>}
+          {!unchanged && lines.length > shown.length && <p className="faint small">{tr('{value} unchanged lines hidden.', { value: lines.length - shown.length })}</p>}
         </div>
       </div>
     </div>

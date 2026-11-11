@@ -1,6 +1,7 @@
 // Custom Tiptap nodes/marks. Names and attributes mirror crates/doc-model (server schema),
 // so documents imported from Confluence or written via the API load without loss.
 
+import { t as tr } from '../i18n'
 import { useState } from 'react'
 import { Mark, Node, mergeAttributes } from '@tiptap/core'
 import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react'
@@ -26,7 +27,7 @@ function CalloutView({ node, updateAttributes, editor }: ReactNodeViewProps) {
         className="callout-icon"
         contentEditable={false}
         onClick={() => editable && setOpen((o) => !o)}
-        title={editable ? 'Panel type and icon' : undefined}
+        title={editable ? tr('Panel type and icon') : undefined}
         style={{ cursor: editable ? 'pointer' : 'default', ...(custom ? { color: SYMBOL_COLORS[custom.color] } : {}) }}
       >
         {custom ? <LineIcon group="symbols" name={custom.name} size={20} /> : <LineIcon group="callout" name={type} size={20} />}
@@ -40,12 +41,10 @@ function CalloutView({ node, updateAttributes, editor }: ReactNodeViewProps) {
               </button>
             ))}
           </div>
-          <div className="faint small" style={{ margin: '8px 0 4px' }}>Icon</div>
+          <div className="faint small" style={{ margin: '8px 0 4px' }}>{tr('Icon')}</div>
           <SymbolPicker value={(node.attrs.icon as string | null) ?? null} onChange={(v) => updateAttributes({ icon: v, emoji: null })} />
           {custom && (
-            <button type="button" className="btn btn-sm" style={{ marginTop: 6 }} onClick={() => updateAttributes({ icon: null })}>
-              Use the panel's own icon
-            </button>
+            <button type="button" className="btn btn-sm" style={{ marginTop: 6 }} onClick={() => updateAttributes({ icon: null })}>{tr('Use the panel\'s own icon')}</button>
           )}
         </div>
       )}
@@ -76,14 +75,14 @@ export const Callout = Node.create({
 function StatusView({ node, updateAttributes, editor }: ReactNodeViewProps) {
   const edit = () => {
     if (!editor.isEditable) return
-    const text = window.prompt('Status text', node.attrs.text as string)
+    const text = window.prompt(tr('Status text'), node.attrs.text as string)
     if (text === null) return
-    const color = window.prompt('Color (grey, blue, green, yellow, red, purple)', node.attrs.color as string) ?? node.attrs.color
+    const color = window.prompt(tr('Color (grey, blue, green, yellow, red, purple)'), node.attrs.color as string) ?? node.attrs.color
     updateAttributes({ text, color })
   }
   return (
     <NodeViewWrapper as="span" className="status-lozenge" data-color={node.attrs.color} onClick={edit}>
-      {(node.attrs.text as string) || 'STATUS'}
+      {(node.attrs.text as string) || tr('STATUS')}
     </NodeViewWrapper>
   )
 }
@@ -147,7 +146,7 @@ export const InstructionalText = Node.create({
     return [{ tag: 'span[data-type="instructional-text"]', getAttrs: (el) => ({ text: (el as HTMLElement).textContent ?? '' }) }]
   },
   renderHTML({ node, HTMLAttributes }) {
-    return ['span', mergeAttributes(HTMLAttributes, { 'data-type': 'instructional-text', class: 'instructional-text', title: 'Instructions: click and type to replace' }), node.attrs.text as string]
+    return ['span', mergeAttributes(HTMLAttributes, { 'data-type': 'instructional-text', class: 'instructional-text', title: tr('Instructions: click and type to replace') }), node.attrs.text as string]
   },
 })
 
@@ -156,7 +155,7 @@ function DateView({ node, updateAttributes, editor }: ReactNodeViewProps) {
   const label = formatDateOnly(raw)
   const edit = () => {
     if (!editor.isEditable) return
-    const v = window.prompt('Date (YYYY-MM-DD)', raw.slice(0, 10))
+    const v = window.prompt(tr('Date (YYYY-MM-DD)'), raw.slice(0, 10))
     if (v) updateAttributes({ date: v })
   }
   return (
@@ -199,12 +198,11 @@ function AttachmentView({ node }: ReactNodeViewProps) {
         </div>
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={{ fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>{name}</div>
-          <div className="small faint">{node.attrs.missing ? 'File was not included in the import' : 'Attachment'}</div>
+          <div className="small faint">{node.attrs.missing ? tr('File was not included in the import') : tr('Attachment')}</div>
         </div>
         {href && (
           <a className="btn btn-sm" href={href} target="_blank" rel="noreferrer">
-            <Download size={14} /> Open
-          </a>
+            <Download size={14} />{' '}{tr('Open')}</a>
         )}
       </div>
       {href && isImage && <img src={href} alt={name} style={{ marginTop: 10, maxHeight: 360 }} />}
@@ -272,15 +270,14 @@ function EmbedView({ node }: ReactNodeViewProps) {
       {frame ? (
         <>
           <div className="block-label">
-            <Link2 size={13} /> Embed
-          </div>
+            <Link2 size={13} />{' '}{tr('Embed')}</div>
           <iframe className="embed-frame" src={frame} title={url} sandbox="allow-scripts allow-same-origin allow-popups allow-presentation" allowFullScreen />
           <a href={url} target="_blank" rel="noreferrer noopener">{url}</a>
         </>
       ) : (
         <a className="link-card" href={url} target="_blank" rel="noreferrer noopener">
           <span className="link-card-site faint small">
-            <Link2 size={12} /> {p?.siteName || host || 'Link'}
+            <Link2 size={12} /> {p?.siteName || host || tr('Link')}
           </span>
           <span className="link-card-title">{p?.title || url}</span>
           {p?.description && <span className="link-card-desc faint small">{p.description}</span>}
@@ -326,45 +323,36 @@ function TocView({ editor, node, updateAttributes }: ReactNodeViewProps) {
     const dom = editor.view.nodeDOM(pos) as HTMLElement | null
     dom?.scrollIntoView({ behavior: 'smooth', block: 'start' })
   }
-  const label = (i: TocEntry) => `${i.number ? `${i.number} ` : ''}${i.text || 'Untitled heading'}`
+  const label = (i: TocEntry) => `${i.number ? `${i.number} ` : ''}${i.text || tr('Untitled heading')}`
   const flat = attrs.style === 'flat'
   const levels = [1, 2, 3, 4, 5, 6]
   return (
     <NodeViewWrapper className={`block-card toc-list${flat ? ' toc-flat' : ''}`} contentEditable={false}>
       <div className="block-label">
-        <Hash size={13} /> Table of contents
-        {editable && (
-          <button type="button" className="icon-btn toc-settings-btn" title="Table of contents settings" aria-label="Table of contents settings" aria-expanded={settings} onClick={() => setSettings((v) => !v)}>
+        <Hash size={13} />{' '}{tr('Table of contents')}{editable && (
+          <button type="button" className="icon-btn toc-settings-btn" title={tr('Table of contents settings')} aria-label={tr('Table of contents settings')} aria-expanded={settings} onClick={() => setSettings((v) => !v)}>
             <Settings2 size={13} />
           </button>
         )}
       </div>
       {editable && settings && (
         <div className="toc-settings">
-          <label>
-            Levels
-            <select className="select" value={attrs.minLevel ?? 1} onChange={(e) => updateAttributes({ minLevel: Number(e.target.value) === 1 ? null : Number(e.target.value) })} aria-label="Highest heading level">
-              {levels.map((l) => <option key={l} value={l}>H{l}</option>)}
-            </select>
-            to
-            <select className="select" value={attrs.maxLevel ?? 6} onChange={(e) => updateAttributes({ maxLevel: Number(e.target.value) === 6 ? null : Number(e.target.value) })} aria-label="Lowest heading level">
-              {levels.map((l) => <option key={l} value={l}>H{l}</option>)}
+          <label>{tr('Levels')}<select className="select" value={attrs.minLevel ?? 1} onChange={(e) => updateAttributes({ minLevel: Number(e.target.value) === 1 ? null : Number(e.target.value) })} aria-label={tr('Highest heading level')}>
+              {levels.map((l) => <option key={l} value={l}>{tr('H{l}', { l })}</option>)}
+            </select>{tr('to')}<select className="select" value={attrs.maxLevel ?? 6} onChange={(e) => updateAttributes({ maxLevel: Number(e.target.value) === 6 ? null : Number(e.target.value) })} aria-label={tr('Lowest heading level')}>
+              {levels.map((l) => <option key={l} value={l}>{tr('H{l}', { l })}</option>)}
             </select>
           </label>
           <label>
-            <input type="checkbox" checked={!!attrs.numbered} onChange={(e) => updateAttributes({ numbered: e.target.checked || null })} /> Numbered
-          </label>
+            <input type="checkbox" checked={!!attrs.numbered} onChange={(e) => updateAttributes({ numbered: e.target.checked || null })} />{' '}{tr('Numbered')}</label>
           <label>
-            <input type="checkbox" checked={flat} onChange={(e) => updateAttributes({ style: e.target.checked ? 'flat' : null })} /> On one line
-          </label>
-          <label className="toc-exclude">
-            Leave out headings matching
-            <input className="input" defaultValue={attrs.exclude ?? ''} placeholder="e.g. ^Appendix" onBlur={(e) => updateAttributes({ exclude: e.target.value.trim() || null })} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
+            <input type="checkbox" checked={flat} onChange={(e) => updateAttributes({ style: e.target.checked ? 'flat' : null })} />{' '}{tr('On one line')}</label>
+          <label className="toc-exclude">{tr('Leave out headings matching')}<input className="input" defaultValue={attrs.exclude ?? ''} placeholder={tr('e.g. ^Appendix')} onBlur={(e) => updateAttributes({ exclude: e.target.value.trim() || null })} onKeyDown={(e) => e.key === 'Enter' && (e.target as HTMLInputElement).blur()} />
           </label>
         </div>
       )}
       {items.length === 0 ? (
-        <div className="faint small">Add headings to populate the table of contents.</div>
+        <div className="faint small">{tr('Add headings to populate the table of contents.')}</div>
       ) : flat ? (
         <div className="toc-flat-line">
           {items.map((i, idx) => (
@@ -476,15 +464,14 @@ function ChildPagesView({ extension, node }: ReactNodeViewProps) {
   return (
     <NodeViewWrapper className="block-card" contentEditable={false}>
       <div className="block-label">
-        <ListTree size={13} /> Child pages
-      </div>
+        <ListTree size={13} />{' '}{tr('Child pages')}</div>
       {node.attrs.search && (
-        <input className="input input-sm child-search" placeholder="Search these pages" aria-label="Search these pages" value={filter} onChange={(e) => setFilter(e.target.value)} />
+        <input className="input input-sm child-search" placeholder={tr('Search these pages')} aria-label={tr('Search these pages')} value={filter} onChange={(e) => setFilter(e.target.value)} />
       )}
       {q.isLoading ? (
         <div className="spinner" />
       ) : rows.length === 0 ? (
-        <div className="faint small">No child pages yet.</div>
+        <div className="faint small">{tr('No child pages yet.')}</div>
       ) : needle ? (
         matches.length ? (
           <ul>
@@ -495,7 +482,7 @@ function ChildPagesView({ extension, node }: ReactNodeViewProps) {
             ))}
           </ul>
         ) : (
-          <div className="faint small">No page matches.</div>
+          <div className="faint small">{tr('No page matches.')}</div>
         )
       ) : (
         render(pageId, 0)
@@ -543,10 +530,10 @@ function IncludeView({ node }: ReactNodeViewProps) {
   return (
     <NodeViewWrapper className="block-card" contentEditable={false}>
       <div className="block-label">
-        <FileText size={13} /> {node.attrs.excerpt ? 'Excerpt from' : 'Included page'}{' '}
+        <FileText size={13} /> {node.attrs.excerpt ? tr('Excerpt from') : tr('Included page')}{' '}
         {pageId ? <Link to={`/pages/${pageId}`}>{q.data?.title ?? (node.attrs.title as string)}</Link> : <span>{node.attrs.title as string}</span>}
       </div>
-      {q.data ? <div style={{ whiteSpace: 'pre-wrap' }}>{plainExcerpt(q.data.content)}</div> : q.isError ? <div className="faint small">Page not available.</div> : null}
+      {q.data ? <div style={{ whiteSpace: 'pre-wrap' }}>{plainExcerpt(q.data.content)}</div> : q.isError ? <div className="faint small">{tr('Page not available.')}</div> : null}
     </NodeViewWrapper>
   )
 }
@@ -581,7 +568,7 @@ export const Anchor = Node.create({
     return [{ tag: 'a[data-type="anchor"]' }]
   },
   renderHTML({ HTMLAttributes }) {
-    return ['a', { 'data-type': 'anchor', id: slugify(HTMLAttributes.name || ''), class: 'anchor-dot', title: `Anchor: ${HTMLAttributes.name}` }]
+    return ['a', { 'data-type': 'anchor', id: slugify(HTMLAttributes.name || ''), class: 'anchor-dot', title: tr('Anchor: {name}', { name: HTMLAttributes.name }) }]
   },
 })
 
@@ -665,7 +652,7 @@ function MacroView({ node, extension, editor, updateAttributes }: ReactNodeViewP
   return (
     <NodeViewWrapper className="macro-box">
       <div className="block-label" contentEditable={false}>
-        <Puzzle size={13} /> Confluence macro: {node.attrs.name as string}
+        <Puzzle size={13} />{' '}{tr('Confluence macro: {name}', { name: node.attrs.name as string })}
         {entries.length > 0 && (
           <span className="faint" style={{ textTransform: 'none', fontWeight: 400 }}>
             {' '}

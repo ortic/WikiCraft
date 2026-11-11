@@ -1126,7 +1126,7 @@ async fn workspace_look_and_dates() {
     }
     let (st, w) = app.put(&owner, "/admin/workspace", json!({"accentColor": " #0E7C66 ", "dateFormat": "dd.mm.yyyy", "timeZone": "Europe/Zurich"})).await;
     assert_eq!(st, 200);
-    assert_eq!(w, json!({"name": "Acme", "accentColor": "#0e7c66", "dateFormat": "dd.mm.yyyy", "timeZone": "Europe/Zurich"}));
+    assert_eq!(w, json!({"name": "Acme", "accentColor": "#0e7c66", "dateFormat": "dd.mm.yyyy", "timeZone": "Europe/Zurich", "defaultLanguage": null}));
     let (_, me) = app.get(&bob, "/me").await;
     assert_eq!((me["workspace"]["accentColor"].as_str(), me["workspace"]["timeZone"].as_str()), (Some("#0e7c66"), Some("Europe/Zurich")));
     // a person's own time zone is reported next to the workspace's
@@ -1416,4 +1416,28 @@ async fn uploads_are_scanned_for_viruses() {
     open.post(&o3, "/spaces", json!({"key": "AV", "name": "Scanned"})).await;
     let (_, p3) = open.post(&o3, "/pages", json!({"spaceKey": "AV", "title": "Files"})).await;
     assert_eq!(upload(&open, &o3, p3["id"].as_str().unwrap(), "notes.txt", b"hello").await.unwrap().status(), 201);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn interface_language() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, _) = app.user(&owner, "lena@acme.test", "member").await;
+    let (_, me) = app.get(&member, "/me").await;
+    assert_eq!(me["language"], Value::Null, "nobody chose one yet");
+    assert_eq!(me["workspace"]["defaultLanguage"], Value::Null);
+    // the workspace default (admins) …
+    assert_eq!(app.put(&member, "/admin/workspace", json!({"defaultLanguage": "de"})).await.0, 403);
+    let (st, ws) = app.put(&owner, "/admin/workspace", json!({"defaultLanguage": "DE"})).await;
+    assert_eq!(st, 200, "{ws}");
+    assert_eq!(ws["defaultLanguage"], "de");
+    assert_eq!(app.put(&owner, "/admin/workspace", json!({"defaultLanguage": "tlh"})).await.0, 400);
+    assert_eq!(app.get(&member, "/me").await.1["workspace"]["defaultLanguage"], "de");
+    // … and the person's own choice, which an empty value clears
+    assert_eq!(app.put(&member, "/me/profile", json!({"language": "fr"})).await.0, 200);
+    assert_eq!(app.get(&member, "/me").await.1["language"], "fr");
+    assert_eq!(app.put(&member, "/me/profile", json!({"language": "xx"})).await.0, 400);
+    assert_eq!(app.put(&member, "/me/profile", json!({"language": ""})).await.0, 200);
+    assert_eq!(app.get(&member, "/me").await.1["language"], Value::Null);
+    assert_eq!(app.put(&owner, "/admin/workspace", json!({"defaultLanguage": ""})).await.1["defaultLanguage"], Value::Null);
 }
