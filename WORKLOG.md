@@ -144,6 +144,11 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   filters (assignees incl. me and imported Confluence user keys, due range); page exports audited; Admin → System;
   ClamAV scanning (clamd INSTREAM; uploads, imports, restores; fail-closed unless WIKICRAFT_CLAMAV_FAIL_OPEN; tested
   with a stand-in clamd only); Word import split by heading; numbered table rows.
+- 2026-11-11 (evening): link graph (`page_links`, `crate::links`): links, included pages, page-link properties and
+  child-page listings per page, refreshed with the search index (like the RAG passages) and backfilled at startup
+  (`retrieval_state.linker` version). "Linked from" below pages (incl. `/missing?…` red links that now resolve),
+  a warning before trashing a linked page, and Space settings → Links (broken links: trashed / deleted / missing /
+  not imported; orphaned pages). Verified in Chromium against a seeded workspace.
 
 ## Security review 4 (independent review agent, 2026-11-10 ~03:40 UTC: link previews, banner, switches, decision log, branding) — status
 No critical or high findings. All five fixed in `9f0b9a9`:

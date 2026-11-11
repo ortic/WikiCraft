@@ -3,8 +3,8 @@ import { Fragment, useEffect, useState } from 'react'
 import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useCanonicalSpaceKey } from '../useCanonicalKey'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Archive, Trash2, RotateCcw, Users, X } from 'lucide-react'
-import { api, can, formatDate, type Perm, type Shortcut, type Space, type SpaceLook, spaceRoleName } from '../api'
+import { Archive, Trash2, RotateCcw, Users, X, Unlink, Link2 } from 'lucide-react'
+import { api, can, formatDate, type LinkReport, type Perm, type Shortcut, type Space, type SpaceLook, spaceRoleName } from '../api'
 import { SymbolPicker } from '../icons'
 import ExportPanel from '../components/ExportPanel'
 import { ErrorBox, SpaceIcon, Spinner, useFeatures, useToast } from '../ui'
@@ -103,12 +103,14 @@ export default function SpaceSettings() {
             <button className={`tab ${tab === 'permissions' ? 'active' : ''}`} onClick={() => setParams({ tab: 'permissions' })}>{tr('Permissions')}</button>
           </>
         )}
+        <button className={`tab ${tab === 'links' ? 'active' : ''}`} onClick={() => setParams({ tab: 'links' })}>{tr('Links')}</button>
         <button className={`tab ${tab === 'archived' ? 'active' : ''}`} onClick={() => setParams({ tab: 'archived' })}>{tr('Archived')}</button>
         <button className={`tab ${tab === 'trash' ? 'active' : ''}`} onClick={() => setParams({ tab: 'trash' })}>{tr('Trash')}</button>
         {exports && <button className={`tab ${tab === 'export' ? 'active' : ''}`} onClick={() => setParams({ tab: 'export' })}>{tr('Export')}</button>}
       </div>
       {tab === 'details' && s.role === 'admin' && <Details space={s} />}
       {tab === 'permissions' && s.role === 'admin' && <Permissions space={s} />}
+      {tab === 'links' && <LinkReportPanel space={s} />}
       {tab === 'archived' && <ArchivedList space={s} />}
       {tab === 'trash' && <TrashList space={s} />}
       {tab === 'export' && <ExportPanel space={s} />}
@@ -482,6 +484,70 @@ function Permissions({ space }: { space: Space }) {
       </table>
       {error && <p className="error-text">{error}</p>}
       <button className="btn btn-primary" style={{ marginTop: 16 }} onClick={save}>{tr('Save permissions')}</button>
+    </div>
+  )
+}
+
+/** Broken links in the space's pages, and the pages no other page links to. */
+function LinkReportPanel({ space }: { space: Space }) {
+  const report = useQuery({ queryKey: ['link-report', space.key], queryFn: () => api.get<LinkReport>(`/spaces/${space.key}/link-report`) })
+  if (report.isLoading) return <Spinner />
+  if (report.error) return <ErrorBox error={report.error} />
+  const r = report.data!
+  const problem = (b: LinkReport['brokenLinks'][number]) => {
+    switch (b.problem) {
+      case 'trashed':
+        return tr('The page is in the trash')
+      case 'deleted':
+        return tr('The page was deleted')
+      case 'missing':
+        return (
+          <Link to={`/missing?space=${encodeURIComponent(b.missingSpace ?? '')}&title=${encodeURIComponent(b.missingTitle ?? '')}`}>
+            {tr('There is no page “{title}” in {space}', { title: b.missingTitle ?? '', space: b.missingSpace ?? '' })}
+          </Link>
+        )
+      default:
+        return tr('The page was not part of any import ({source})', { source: b.missingSource ?? '' })
+    }
+  }
+  return (
+    <div>
+      {r.pending > 0 && <p className="muted small" style={{ marginTop: 0 }}>{tr('Still reading the links of {count} pages, so this report may be incomplete.', { count: r.pending })}</p>}
+      <h3 className="row" style={{ gap: 8 }}><Unlink size={16} />{tr('Broken links')}{r.brokenLinks.length > 0 && <span className="faint small">{r.brokenLinks.length}</span>}</h3>
+      <p className="muted" style={{ marginTop: 0 }}>{tr('Links in this space that lead to a page in the trash, a deleted page or a page that doesn’t exist.')}</p>
+      {r.brokenLinks.length === 0 ? (
+        <div className="empty">{tr('No broken links.')}</div>
+      ) : (
+        <table className="list">
+          <tbody>
+            {r.brokenLinks.map((b, i) => (
+              <tr key={`${b.pageId}-${i}`}>
+                <td><Link to={`/pages/${b.pageId}${b.blockId ? `#block-${b.blockId}` : ''}`}><b>{b.pageTitle || tr('Untitled')}</b></Link></td>
+                <td>{b.via === 'include' ? tr('Included page') : b.via === 'property' ? tr('Property “{name}”', { name: b.label }) : `“${b.label}”`}</td>
+                <td className="faint small">{problem(b)}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      <h3 className="row" style={{ gap: 8, marginTop: 32 }}><Link2 size={16} />{tr('Orphaned pages')}{r.orphans.length > 0 && <span className="faint small">{r.orphans.length}</span>}</h3>
+      <p className="muted" style={{ marginTop: 0 }}>{tr('Pages that no other page links to, includes or lists among its child pages. Readers find them only through the page tree or search.')}</p>
+      {r.orphans.length === 0 ? (
+        <div className="empty">{tr('No orphaned pages.')}</div>
+      ) : (
+        <table className="list">
+          <tbody>
+            {r.orphans.map((o) => (
+              <tr key={o.id}>
+                <td><Link to={`/pages/${o.id}`}><b>{o.title || tr('Untitled')}</b></Link></td>
+                <td className="faint small">{o.parentId ? (o.parentTitle ? tr('Under {title}', { title: o.parentTitle }) : tr('Under a page')) : tr('Top level')}</td>
+                <td className="faint small">{tr('Updated {date}', { date: formatDate(o.updatedAt) })}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      )}
+      {r.truncated && <p className="faint small">{tr('Only the first 1,000 of each are listed.')}</p>}
     </div>
   )
 }

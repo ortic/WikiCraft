@@ -204,6 +204,13 @@ browsable HTML site, a Markdown folder tree or a full backup.
 - **Status** (page menu → *Set status…*): rough draft, in progress, ready for review, or your own.
 - **Copy** or **move** a page (page menu), with the pages below it and its attachments, within the
   space or to another one.
+- **Linked from**, below a page, lists the pages that link to it, include it or refer to it in a
+  page-link property (only those you may open). Moving a page that others link to into the trash
+  asks first, since their links would stop working.
+- **Links report** (*Space settings → Links*): the space's **broken links** (to a page in the
+  trash, a deleted page, or a page that doesn't exist, such as a Confluence link to a page that
+  wasn't exported; follow it to create that page) and its **orphaned pages**, which no other page
+  links to, includes or lists among its child pages.
 
 ## Spaces
 

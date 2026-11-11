@@ -29,6 +29,8 @@ struct Inner {
     backend: Backend,
     db: PgPool,
     tx: mpsc::UnboundedSender<Uuid>,
+    /// to recognise absolute links into this wiki ([`crate::links`])
+    base_url: String,
 }
 
 enum Backend {
@@ -108,9 +110,10 @@ impl SearchIndex {
             other => anyhow::bail!("unknown search backend {other:?} (use tantivy or postgres)"),
         };
         let (tx, rx) = mpsc::unbounded_channel();
-        let s = SearchIndex { inner: Arc::new(Inner { backend, db: db.clone(), tx }) };
+        let s = SearchIndex { inner: Arc::new(Inner { backend, db: db.clone(), tx, base_url: config.base_url.clone() }) };
         tokio::spawn(s.clone().worker(rx, db.clone()));
         crate::retrieval::spawn_backfill(db.clone());
+        crate::links::spawn_backfill(db.clone(), config.base_url.clone());
         if matches!(s.inner.backend, Backend::Postgres) {
             // pages written while no indexer ran (fresh migration, crashed replica)
             let s2 = s.clone();
@@ -173,6 +176,10 @@ impl SearchIndex {
         // the passages for retrieval (RAG) follow the same changes
         if let Err(e) = crate::retrieval::rechunk(db, &ids).await {
             tracing::error!("cutting pages into passages failed: {e:#}");
+        }
+        // and so does the link graph
+        if let Err(e) = crate::links::relink(db, &ids, &self.inner.base_url).await {
+            tracing::error!("extracting page links failed: {e:#}");
         }
         indexed
     }

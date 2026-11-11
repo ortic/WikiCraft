@@ -192,6 +192,36 @@ export interface PmNode {
   marks?: { type: string; attrs?: Record<string, unknown> }[]
 }
 
+/** A page that links to another one (`GET /pages/{id}/backlinks`). */
+export interface Backlink {
+  id: string
+  title: string
+  icon: string | null
+  kind: string
+  spaceKey: string
+  spaceName: string
+  /** how it links */
+  via: 'link' | 'include' | 'property'
+}
+
+/** `GET /spaces/{key}/link-report` */
+export interface LinkReport {
+  brokenLinks: {
+    pageId: string
+    pageTitle: string
+    blockId: string | null
+    label: string
+    via: 'link' | 'include' | 'property'
+    problem: 'trashed' | 'deleted' | 'missing' | 'notImported'
+    missingSpace: string | null
+    missingTitle: string | null
+    missingSource: string | null
+  }[]
+  orphans: { id: string; title: string; icon: string | null; parentId: string | null; parentTitle: string | null; updatedAt: string }[]
+  truncated: boolean
+  pending: number
+}
+
 export interface Page {
   id: string
   spaceId: string

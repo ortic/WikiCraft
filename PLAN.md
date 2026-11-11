@@ -3,7 +3,7 @@
 > A self-hostable, fast, open knowledge base / team wiki with a **Rust backend**: aiming for Confluence-level
 > functionality, first-class Confluence migration, and a modern real-time editor.
 >
-> Status: in development (see WORKLOG.md) · Last updated: 2026-11-10
+> Status: in development (see WORKLOG.md) · Last updated: 2026-11-11
 
 ---
 
@@ -161,11 +161,11 @@
 - [x] **P0** `comment` (page / inline with anchor + thread + resolved state), `reaction` — reactions are likes (`page_likes`, `comment_likes`); the emoji `reactions` table is unused
 - [x] **P0** `user`, `group`, `group_member`, `identity` (external IdP links), `session`, `api_token`
 - [ ] **P0** `acl_entry` (subject: user/group/anonymous/guest/role × resource: workspace/space/node × permission × allow/deny × inherit) — partial: role-based grants instead of generic ACL rows: workspace roles, `space_permissions` (user/group → role), space default role and anonymous access, page view (inherited) / edit restrictions / no deny entries, no per-permission matrix
-- [ ] **P1** `label`, `node_label`, `page_property` (typed key/values), `link` (outgoing link graph for backlinks and broken-link reports) — partial: `page_property` (`page_properties`, typed, migration 0043)
-- [ ] **P1** `watch`, `notification`, `notification_preference`, `mention`
-- [ ] **P1** `template`, `blueprint`
-- [ ] **P1** `audit_event` (append-only, hash-chained for tamper evidence in P2)
-- [ ] **P1** `job`, `import_run`, `import_mapping` (source id → new id, for re-runs and link fixups)
+- [x] **P1** `label`, `node_label`, `page_property` (typed key/values), `link` (outgoing link graph for backlinks and broken-link reports) — `labels` (per page) + `attachment_labels`, `page_properties` (typed, migration 0043), `page_links` (migration 0054: one row per distinct target per page: links, included pages, page-link properties, pages that list their children; targets that didn't exist keep space + title or the source id; refreshed with the search index, backfilled at startup, `crate::links`)
+- [x] **P1** `watch`, `notification`, `notification_preference`, `mention` — `watches` / `space_watches` / `page_unwatched` (opt-outs), `notifications`, preferences and muting on the user, `page_mentions`
+- [x] **P1** `template`, `blueprint` — `templates` (workspace / space, defaults per space); blueprints are built in (code), not rows
+- [x] **P1** `audit_event` (append-only, hash-chained for tamper evidence in P2) — `audit_events`, append-only; no hash chain yet (P2)
+- [x] **P1** `job`, `import_run`, `import_mapping` (source id → new id, for re-runs and link fixups) — `jobs` (imports are jobs: progress, report, cancel, retry), `import_mappings` (with source / target versions for update imports)
 - [ ] **P2** `database`, `database_field`, `database_row` (JSONB values + typed indexes), `database_view`
 - [x] **P2** `embedding` (chunk, vector, node, version, acl fingerprint) — `page_chunks` (passages of pages and attachment text: heading path, start block, Markdown, content hash) + `chunk_vectors` (pgvector `halfvec`, HNSW, addressed by the hash, created for the configured model); no ACL fingerprint: permissions are checked at query time
 - [ ] **P0** Every row carries `workspace_id`; optional Postgres Row-Level Security as defense-in-depth (P2) — partial: top-level tables (users, groups, spaces, pages, attachments, jobs, audit_events, import_mappings, webhooks, templates) carry `workspace_id` / child tables (page_versions, comments, attachment_versions, labels, sessions, notifications, …) only via their parent; no RLS
@@ -233,6 +233,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** Archive page / subtree `C`
 - [x] **P1** Trash with restore and purge (per space; retention period) `C D X` — Delete forever per page and Empty trash (space admins), workspace retention period (`trashRetentionDays`, 0 = forever) applied every 10 minutes; purged pages take history, comments and attachments along, unused files are removed from storage
 - [x] **P1** Duplicate titles allowed (Cloud allows them; the importer must handle both) `C`
+- [x] **P1** Backlinks: "Linked from" below each page (links, included pages, page-link properties; only pages the reader may open; links made to the page before it existed count too); trashing a linked page warns first `C X O` — `GET /api/pages/{id}/backlinks`
 - [ ] **P2** Page tree lazy loading & virtualization (≥ 100k pages per space) `C X`
 - [ ] **P2** Hide pages from tree / navigation `X`
 - [ ] **P3** Knowledge-base / help-center mode: public portal, article feedback ("was this helpful?") `C (JSM KB)`
@@ -517,7 +518,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P2** Retention policies (delete or archive after N days, version pruning) `D(EE) C`
 - [ ] **P2** Legal hold (prevent deletion) `C`
 - [ ] **P2** Bulk operations: move, archive, delete, relabel, change owner, change restrictions `C`
-- [ ] **P2** Broken-link report and orphaned-page report per space `X`
+- [x] **P2** Broken-link report and orphaned-page report per space `X` — Space settings → Links (`GET /api/spaces/{key}/link-report`): links to trashed, deleted or non-existent pages (Confluence red links, pages that no import brought in) with their text and block; pages no other page links to, includes or lists as a child page (home page, drafts and archived pages left out); both limited to pages the reader may see
 
 ### 4.17 Analytics & insights
 - [x] **P1** Page views count and unique viewers ("who viewed", privacy-configurable) `C` — counts for everyone; who viewed and when for the page's editors once an admin turns on the viewer list (off by default)

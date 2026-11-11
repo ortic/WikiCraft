@@ -4,7 +4,8 @@ import { Link, useNavigate, useParams, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Share2, ThumbsUp, Star, MessageSquare, Paperclip, History as HistoryIcon, Lock, MoreHorizontal, Download, Copy, Trash2, ChevronRight, Maximize2, Tag, X, Eye, EyeOff, Printer, LayoutTemplate, FileText, BadgeCheck, UserCheck, Archive, RotateCcw, UserCog, CircleDot, FolderInput, ListPlus, Pin } from 'lucide-react'
 import { NoAccess, OwnerDialog, RequestReviewDialog, VerificationBadge, VerifyDialog } from '../components/Verification'
-import { ApiError, api, can, formatDate, type Page, type Space } from '../api'
+import { ApiError, api, can, formatDate, type Backlink, type Page, type Space } from '../api'
+import Backlinks from '../components/Backlinks'
 import { PageDecor } from '../components/PageDecor'
 import { ErrorBox, Modal, Spinner, useFeatures, useMe, useToast } from '../ui'
 import { SaveTemplateDialog } from '../components/TemplateManager'
@@ -129,7 +130,15 @@ export default function PageView() {
   }
   const trash = async () => {
     setMenu(false)
-    if (!confirm(tr('Move “{title}” and its child pages to the trash?', { title: p.title }))) return
+    // say so when other pages link here: their links would break
+    const linked = await qc
+      .fetchQuery({ queryKey: ['backlinks', p.id], queryFn: () => api.get<{ pages: Backlink[] }>(`/pages/${p.id}/backlinks`), staleTime: 30_000 })
+      .then((r) => r.pages.length)
+      .catch(() => 0)
+    const question = linked
+      ? tr('Move “{title}” and its child pages to the trash? {count} pages link to it, and their links will stop working.', { title: p.title, count: linked })
+      : tr('Move “{title}” and its child pages to the trash?', { title: p.title })
+    if (!confirm(question)) return
     await api.del(`/pages/${p.id}`)
     qc.invalidateQueries({ queryKey: ['tree', p.spaceKey] })
     toast(tr('Moved to trash'))
@@ -530,6 +539,7 @@ export default function PageView() {
                 </>
               ))}
           </div>
+          {p.kind !== 'folder' && <Backlinks pageId={p.id} spaceKey={p.spaceKey} />}
         </div>
       </div>
       {panel === 'comments' && (

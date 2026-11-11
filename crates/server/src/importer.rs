@@ -96,7 +96,7 @@ struct RewriteStats {
     inline_anchors: u64,
 }
 
-fn decode_component(s: &str) -> String {
+pub(crate) fn decode_component(s: &str) -> String {
     let b = s.as_bytes();
     let mut out = Vec::with_capacity(b.len());
     let mut i = 0;

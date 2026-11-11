@@ -2227,6 +2227,26 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /spaces/{key}/link-report:
+    get:
+      tags:
+      - Spaces
+      summary: Broken links and orphaned pages (pages no other page links to) in the space, among the pages the caller may see
+      operationId: get_spaces_key_link_report
+      parameters:
+      - name: key
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: 'brokenLinks: [{pageId, pageTitle, blockId, label, via (link | include | property), problem (trashed | deleted | missing | notImported), missingSpace, missingTitle, missingSource}], orphans: [{id, title, icon, parentId, parentTitle, updatedAt}], truncated, pending (pages whose links are not read yet)'
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /spaces/{key}/blog:
     get:
       tags:
@@ -2606,6 +2626,26 @@ paths:
                     spaceKey: *id001
                     spaceName: *id001
                     updatedAt: *id004
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /pages/{id}/backlinks:
+    get:
+      tags:
+      - Pages
+      summary: Pages that link to this page (links, included pages, page-link properties), among the pages the caller may see
+      operationId: get_pages_id_backlinks
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: 'pages: [{id, title, icon, kind, spaceKey, spaceName, via (link | include | property)}]'
         4XX:
           description: Error
           content:

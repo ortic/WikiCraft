@@ -14,6 +14,7 @@ pub mod imports;
 pub mod inspect;
 pub mod legacy;
 pub mod likes;
+pub mod links;
 pub mod notifications;
 pub mod openapi;
 pub mod pages;
@@ -109,6 +110,7 @@ pub fn router(state: AppState) -> Router {
         .route("/spaces/{key}/tree", get(spaces::tree))
         .route("/spaces/{key}/permissions", get(spaces::get_permissions).put(spaces::put_permissions))
         .route("/spaces/{key}/trash", get(spaces::trash))
+        .route("/spaces/{key}/link-report", get(links::report))
         .route("/spaces/{key}/trash/empty", post(spaces::empty_trash))
         .route("/spaces/{key}/blog", get(spaces::blog))
         .route("/spaces/{key}/properties", get(properties::space_keys))
@@ -122,6 +124,7 @@ pub fn router(state: AppState) -> Router {
         .route("/pages/{id}/restore", post(pages::restore))
         .route("/pages/{id}/purge", post(pages::purge))
         .route("/pages/{id}/viewers", get(pages::viewers))
+        .route("/pages/{id}/backlinks", get(links::backlinks))
         .route("/pages/{id}/publish", post(pages::publish))
         .route("/me/drafts", get(pages::my_drafts))
         .route("/pages/{id}/children", get(pages::children))

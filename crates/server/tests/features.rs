@@ -1441,3 +1441,89 @@ async fn interface_language() {
     assert_eq!(app.get(&member, "/me").await.1["language"], Value::Null);
     assert_eq!(app.put(&owner, "/admin/workspace", json!({"defaultLanguage": ""})).await.1["defaultLanguage"], Value::Null);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn link_graph_backlinks_and_link_report() {
+    let app = spawn().await;
+    let owner = app.setup().await;
+    let (member, _) = app.user(&owner, "lin@acme.test", "member").await;
+    let (_, sp) = app.post(&owner, "/spaces", json!({"key": "LNK", "name": "Links"})).await;
+    let home = sp["homePageId"].as_str().unwrap().to_string();
+    let mk = |t: &'static str, parent: Option<String>| {
+        let (app, owner) = (&app, &owner);
+        async move { app.post(owner, "/pages", json!({"spaceKey": "LNK", "title": t, "parentId": parent})).await.1["id"].as_str().unwrap().to_string() }
+    };
+    let target = mk("Target", None).await;
+    let linker = mk("Linker", None).await;
+    let gone = mk("Gone", None).await;
+    let secret = mk("Secret linker", None).await;
+    let lonely = mk("Lonely", None).await;
+    let parent = mk("Parent", None).await;
+    let child = mk("Child", Some(parent.clone())).await;
+    let md = format!(
+        "See [the target](/pages/{target}#block-x) and [it again]({}/pages/{target}), [a page to come](/missing?space=LNK&title=Later%20page), [gone](/pages/{gone}), [myself](/pages/{linker}).",
+        app.base
+    );
+    assert_eq!(app.put(&owner, &format!("/pages/{linker}/content"), json!({"markdown": md})).await.0, 200);
+    app.put(&owner, &format!("/pages/{secret}/content"), json!({"markdown": format!("[target](/pages/{target}) [lonely? no](/pages/{parent})")})).await;
+    let (_, me) = app.get(&owner, "/me").await;
+    let owner_id = me["user"]["id"].as_str().unwrap().to_string();
+    app.put(&owner, &format!("/pages/{secret}/restrictions"), json!({"restrictions": [{"kind": "view", "subjectType": "user", "subjectId": owner_id}]})).await;
+    let children = json!({"type": "doc", "content": [{"type": "childPages", "attrs": {"depth": 1}}]});
+    app.put(&owner, &format!("/pages/{parent}/content"), json!({"content": children})).await;
+    app.put(&owner, &format!("/pages/{home}/content"), json!({"markdown": format!("[target](/pages/{target})")})).await;
+    assert_eq!(app.delete(&owner, &format!("/pages/{gone}")).await, 204);
+
+    // the owner sees both linking pages, the member only the one they may open
+    let titles = |v: &Value, key: &str| -> Vec<String> { v[key].as_array().unwrap().iter().map(|r| r["title"].as_str().unwrap().to_string()).collect() };
+    let mine = app
+        .eventually(|| async {
+            let (_, b) = app.get(&owner, &format!("/pages/{target}/backlinks")).await;
+            (titles(&b, "pages").len() == 3).then_some(b)
+        })
+        .await;
+    assert_eq!(titles(&mine, "pages"), ["Linker", "Links", "Secret linker"], "{mine}");
+    assert_eq!(mine["pages"][0]["spaceKey"], "LNK");
+    assert_eq!(mine["pages"][0]["via"], "link");
+    let (_, theirs) = app.get(&member, &format!("/pages/{target}/backlinks")).await;
+    assert_eq!(titles(&theirs, "pages"), ["Linker", "Links"]);
+    assert_eq!(app.get(&member, &format!("/pages/{secret}/backlinks")).await.0, 404, "no backlinks of a page you can't open");
+    // a link to itself doesn't count
+    let (_, own) = app.get(&owner, &format!("/pages/{linker}/backlinks")).await;
+    assert_eq!(own["pages"], json!([]));
+
+    // broken links: the trashed page and the page that doesn't exist yet
+    let r = app
+        .eventually(|| async {
+            let (st, r) = app.get(&member, "/spaces/LNK/link-report").await;
+            assert_eq!(st, 200, "{r}");
+            (titles(&r, "orphans") == ["Linker", "Lonely"]).then_some(r)
+        })
+        .await;
+    let broken: Vec<(String, String, String)> = r["brokenLinks"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|b| (b["pageTitle"].as_str().unwrap().into(), b["label"].as_str().unwrap().into(), b["problem"].as_str().unwrap().into()))
+        .collect();
+    assert_eq!(broken, [("Linker".into(), "a page to come".into(), "missing".into()), ("Linker".into(), "gone".into(), "trashed".into())], "{r}");
+    assert_eq!(r["brokenLinks"][0]["missingTitle"], "Later page");
+    // orphans: nobody links to them (the home page and pages listed by their parent don't count);
+    // the secret page's link to Parent is a link all the same, but the member doesn't see the secret page
+    let (_, r_owner) = app.get(&owner, "/spaces/LNK/link-report").await;
+    assert_eq!(titles(&r_owner, "orphans"), ["Linker", "Lonely", "Secret linker"]);
+    let _ = (&lonely, &child);
+
+    // the page that was missing is created: the link now leads there
+    let later = mk("Later page", None).await;
+    let (_, b) = app.get(&member, &format!("/pages/{later}/backlinks")).await;
+    assert_eq!(titles(&b, "pages"), ["Linker"]);
+    let (_, r) = app.get(&member, "/spaces/LNK/link-report").await;
+    assert_eq!(r["brokenLinks"].as_array().unwrap().len(), 1, "{r}");
+    assert!(!titles(&r, "orphans").contains(&"Later page".to_string()));
+    // restoring the trashed page fixes the other one
+    app.post(&owner, &format!("/pages/{gone}/restore"), json!({})).await;
+    let (_, r) = app.get(&member, "/spaces/LNK/link-report").await;
+    assert_eq!(r["brokenLinks"], json!([]), "{r}");
+    app.eventually(|| async { (app.get(&member, "/spaces/LNK/link-report").await.1["pending"] == 0).then_some(()) }).await;
+}

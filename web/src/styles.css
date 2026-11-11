@@ -222,6 +222,9 @@ table.list tr:hover td { background: var(--bg-soft); }
 .presence .avatar { margin-inline-start: -6px; border: 2px solid var(--bg); }
 .labels { display: flex; gap: 6px; flex-wrap: wrap; align-items: center; margin-top: 40px; padding-top: 16px; border-top: 1px solid var(--border); }
 .label-chip { padding: 2px 9px; border-radius: 999px; background: var(--bg-hover); color: var(--text-soft); font-size: 12.5px; }
+.backlinks { display: flex; gap: 4px 12px; flex-wrap: wrap; align-items: center; margin-top: 12px; font-size: 13px; }
+.backlinks .backlink { color: var(--text-soft); text-decoration: none; border-bottom: 1px dotted var(--border-strong, var(--border)); }
+.backlinks .backlink:hover { color: var(--accent); border-bottom-color: currentColor; }
 .with-panel { display: grid; grid-template-columns: 1fr 360px; min-height: 100%; }
 .side-panel { border-inline-start: 1px solid var(--border); background: var(--bg-soft); padding: 14px; overflow-y: auto; position: sticky; top: 0; height: calc(100vh - 48px); }
 .side-panel h3 { margin: 0 0 12px; font-size: 15px; display: flex; align-items: center; gap: 8px; }
