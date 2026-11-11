@@ -326,4 +326,15 @@ limited per person (20 per 10 minutes).
 
 ## License
 
-AGPL-3.0-or-later (see PLAN.md §7 for the licensing decision still to be made).
+Licensed under either of
+
+- Apache License, Version 2.0 ([LICENSE-APACHE](LICENSE-APACHE))
+- MIT license ([LICENSE-MIT](LICENSE-MIT))
+
+at your option. Third-party components and their licenses are listed in
+[THIRD-PARTY-LICENSES.md](THIRD-PARTY-LICENSES.md) (`scripts/third-party-licenses.py`; the Docker
+image carries them in `/usr/share/doc/wikicraft`).
+
+Unless you explicitly state otherwise, any contribution intentionally submitted for inclusion in
+the work by you, as defined in the Apache-2.0 license, shall be dual licensed as above, without any
+additional terms or conditions.

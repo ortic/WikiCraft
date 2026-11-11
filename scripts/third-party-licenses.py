@@ -1,0 +1,174 @@
+#!/usr/bin/env python3
+"""Third-party components that ship in the WikiCraft binary and their licenses.
+
+    python3 scripts/third-party-licenses.py                 # writes THIRD-PARTY-LICENSES.md (the list)
+    python3 scripts/third-party-licenses.py --full out.txt  # also every license / notice text, for release bundles
+
+Rust crates come from `cargo metadata` (normal and build dependencies of the server, all
+features, Linux), web packages from `web/node_modules` (the app's dependencies, which the
+bundle embeds), fonts from crates/server/assets/fonts and typst-assets. Needs cargo and an
+installed web/node_modules.
+"""
+import json
+import os
+import subprocess
+import sys
+
+ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+LICENSE_FILES = ('license', 'licence', 'copying', 'notice', 'unlicense')
+
+
+def rust_packages():
+    out = subprocess.run(
+        ['cargo', 'metadata', '--format-version', '1', '--all-features', '--filter-platform', 'x86_64-unknown-linux-gnu'],
+        cwd=ROOT, check=True, capture_output=True, text=True,
+    ).stdout
+    meta = json.loads(out)
+    pkgs = {p['id']: p for p in meta['packages']}
+    nodes = {n['id']: n for n in meta['resolve']['nodes']}
+    root = next(p['id'] for p in meta['packages'] if p['name'] == 'wikicraft')
+    seen, stack = set(), [root]
+    while stack:
+        i = stack.pop()
+        if i in seen:
+            continue
+        seen.add(i)
+        for d in nodes[i]['deps']:
+            if any(k['kind'] in (None, 'build') for k in d['dep_kinds']):
+                stack.append(d['pkg'])
+    result = []
+    for i in seen:
+        p = pkgs[i]
+        if p['name'].startswith('wikicraft'):
+            continue
+        result.append({
+            'name': p['name'], 'version': p['version'], 'license': p.get('license') or 'see license file',
+            'url': p.get('repository') or p.get('homepage') or f"https://crates.io/crates/{p['name']}",
+            'dir': os.path.dirname(p['manifest_path']),
+        })
+    return sorted(result, key=lambda p: (p['name'].lower(), p['version']))
+
+
+def web_packages():
+    web = os.path.join(ROOT, 'web')
+    seen = {}
+
+    def find(name, start):
+        d = start
+        while True:
+            pj = os.path.join(d, 'node_modules', name, 'package.json')
+            if os.path.exists(pj):
+                return pj
+            up = os.path.dirname(d)
+            if up == d:
+                return None
+            d = up
+
+    def walk(name, start):
+        pj = find(name, start)
+        if not pj:
+            return
+        real = os.path.realpath(pj)
+        if real in seen:
+            return
+        j = json.load(open(pj, encoding='utf-8'))
+        lic = j.get('license')
+        if isinstance(lic, dict):
+            lic = lic.get('type')
+        if not lic and isinstance(j.get('licenses'), list):
+            lic = ' OR '.join(str(x.get('type', x)) if isinstance(x, dict) else str(x) for x in j['licenses'])
+        repo = j.get('repository')
+        if isinstance(repo, dict):
+            repo = repo.get('url')
+        seen[real] = {
+            'name': j.get('name', name), 'version': j.get('version', ''), 'license': lic or 'see license file',
+            'url': (repo or j.get('homepage') or f'https://www.npmjs.com/package/{name}').replace('git+', '').replace('git://', 'https://'),
+            'dir': os.path.dirname(pj),
+        }
+        for dep in {**j.get('dependencies', {}), **j.get('peerDependencies', {})}:
+            walk(dep, os.path.dirname(pj))
+
+    for dep in json.load(open(os.path.join(web, 'package.json')))['dependencies']:
+        walk(dep, web)
+    return sorted(seen.values(), key=lambda p: (p['name'].lower(), p['version']))
+
+
+FONTS = [
+    ('Noto Sans (built in for PDF export)', 'OFL-1.1', 'crates/server/assets/fonts/OFL-NotoSans.txt'),
+    ('Libertinus Serif, New Computer Modern, DejaVu Sans Mono (via typst-assets, PDF export)', 'OFL-1.1, GUST Font License, Bitstream Vera', 'the NOTICE file of the typst-assets crate'),
+]
+
+
+def table(rows):
+    lines = ['| Package | Version | License |', '|---|---|---|']
+    for p in rows:
+        lines.append(f"| [{p['name']}]({p['url']}) | {p['version']} | {p['license']} |")
+    return '\n'.join(lines)
+
+
+def license_texts(pkg):
+    texts = []
+    try:
+        names = sorted(os.listdir(pkg['dir']))
+    except OSError:
+        return texts
+    for f in names:
+        if f.lower().startswith(LICENSE_FILES) and os.path.isfile(os.path.join(pkg['dir'], f)):
+            try:
+                texts.append((f, open(os.path.join(pkg['dir'], f), encoding='utf-8', errors='replace').read().strip()))
+            except OSError:
+                pass
+    return texts
+
+
+def main():
+    rust, web = rust_packages(), web_packages()
+    doc = [
+        '# Third-party licenses',
+        '',
+        'WikiCraft is licensed under MIT OR Apache-2.0. The binary (and the web app it embeds) also contains',
+        'the components below, each under its own license. Generated by `scripts/third-party-licenses.py`;',
+        'its `--full` option writes every license and notice text, for release bundles.',
+        '',
+        f'## Fonts',
+        '',
+        '| Font | License | License text |',
+        '|---|---|---|',
+        *[f'| {n} | {l} | {t} |' for n, l, t in FONTS],
+        '',
+        f'## Rust crates ({len(rust)})',
+        '',
+        table(rust),
+        '',
+        f'## Web app packages ({len(web)})',
+        '',
+        table(web),
+        '',
+    ]
+    with open(os.path.join(ROOT, 'THIRD-PARTY-LICENSES.md'), 'w', encoding='utf-8') as f:
+        f.write('\n'.join(doc))
+    print(f'THIRD-PARTY-LICENSES.md: {len(rust)} crates, {len(web)} web packages')
+    if '--full' in sys.argv:
+        path = sys.argv[sys.argv.index('--full') + 1]
+        # identical texts are written once, with every package that uses them
+        groups = {}
+        missing = []
+        for p in rust + web:
+            texts = license_texts(p)
+            if not texts:
+                missing.append(p)
+            for _, text in texts:
+                groups.setdefault(text, []).append(f"{p['name']} {p['version']}")
+        with open(path, 'w', encoding='utf-8') as f:
+            f.write(open(os.path.join(ROOT, 'crates/server/assets/fonts/OFL-NotoSans.txt'), encoding='utf-8').read().strip() + '\n\n')
+            for text, users in groups.items():
+                f.write('=' * 78 + '\n' + 'Used by: ' + ', '.join(sorted(set(users))) + '\n' + '-' * 78 + '\n' + text + '\n\n')
+            if missing:
+                f.write('=' * 78 + '\nNo license file in the package; licensed as declared:\n')
+                for p in missing:
+                    f.write(f"  {p['name']} {p['version']}: {p['license']} ({p['url']})\n")
+        print(f'{path}: {len(groups)} distinct texts, {len(missing)} packages without a license file')
+
+
+if __name__ == '__main__':
+    main()

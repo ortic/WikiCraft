@@ -27,6 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates
     && useradd --system --uid 10001 --home /data wikicraft && mkdir -p /data/blobs /data/uploads /data/index && chown -R wikicraft /data
 COPY --from=server /wikicraft /usr/local/bin/wikicraft
 COPY --from=web /web/dist /srv/wikicraft/web
+COPY LICENSE-MIT LICENSE-APACHE THIRD-PARTY-LICENSES.md crates/server/assets/fonts/OFL-NotoSans.txt /usr/share/doc/wikicraft/
 USER wikicraft
 ENV WIKICRAFT_BIND=0.0.0.0:8787 \
     WIKICRAFT_DATA_DIR=/data \

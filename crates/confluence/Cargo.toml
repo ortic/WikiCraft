@@ -2,6 +2,8 @@
 name = "wikicraft-confluence"
 version = "0.1.0"
 edition = "2024"
+license.workspace = true
+rust-version.workspace = true
 
 [dependencies]
 base64 = "0.23.1"

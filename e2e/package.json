@@ -1,6 +1,7 @@
 {
   "name": "wikicraft-e2e",
   "private": true,
+  "license": "MIT OR Apache-2.0",
   "type": "module",
   "scripts": {
     "test": "playwright test"

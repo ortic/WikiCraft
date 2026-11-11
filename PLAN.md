@@ -807,8 +807,9 @@ the repo has no license), Hallo Welt's `migrate-confluence` (PHP), and AppFlowy 
 - [ ] Page tree concurrency: fractional indexing in Postgres (recommended) vs. CRDT tree
 - [ ] Search: tantivy embedded (default) + pluggable external engine; one index per workspace or a shared index with tenant filter
 - [ ] PDF engine: Typst (fast, Rust-native, layout differs from web) vs. headless Chromium (pixel-faithful, heavy)
-- [ ] License: AGPL-3.0 core + commercial EE (Docmost model) vs. Apache-2.0 + EE vs. BSL. Note: Docmost puts SSO,
-      page permissions and the Confluence importer in paid tiers, so offering them **free** is a differentiator
+- [x] License: **MIT OR Apache-2.0** (decided 2026-11-11; considered AGPL-3.0 + commercial EE as Docmost does, Apache-2.0 + EE, BSL).
+      All dependencies are permissive (THIRD-PARTY-LICENSES.md). Note: Docmost puts SSO, page permissions and the
+      Confluence importer in paid tiers, so offering them **free** is a differentiator
 - [ ] Frontend framework (React vs. Svelte vs. Vue) and component library
 - [ ] Plugin ABI: WASM component model vs. extism vs. out-of-process HTTP apps (Forge-like)
 - [ ] Hosted SaaS from day one, or self-hosted first (recommended: self-hosted first, to target Confluence DC EOL)
