@@ -5,6 +5,7 @@ pub mod app;
 pub mod audit;
 pub mod auth;
 pub mod authz;
+pub mod backup;
 pub mod blobs;
 pub mod cluster;
 pub mod collab;

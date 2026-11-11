@@ -1654,3 +1654,66 @@ async fn search_matches_word_forms_typos_accents_and_cjk() {
 fn urlencode(s: &str) -> String {
     s.bytes().map(|b| if b.is_ascii_alphanumeric() { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn backup_and_restore_the_whole_installation() {
+    let app = spawn().await;
+    let owner = app.setup().await;
+    app.post(&owner, "/spaces", json!({"key": "BAK", "name": "Backed up"})).await;
+    let (_, p) = app.post(&owner, "/pages", json!({"spaceKey": "BAK", "title": "Runbook", "markdown": "Restart the quasarbeacon service first."})).await;
+    let page = p["id"].as_str().unwrap().to_string();
+    app.patch(&owner, &format!("/pages/{page}"), json!({"title": "On-call runbook"})).await;
+    app.post(&owner, &format!("/pages/{page}/comments"), json!({"text": "Checked last week"})).await;
+    let pdf = b"%PDF-1.4 backup test file".to_vec();
+    let form = reqwest::multipart::Form::new().part("file", reqwest::multipart::Part::bytes(pdf.clone()).file_name("checklist.pdf"));
+    let att: Value = owner.post(app.url(&format!("/pages/{page}/attachments"))).multipart(form).send().await.unwrap().json().await.unwrap();
+    let att = att[0]["id"].as_str().unwrap().to_string();
+
+    let dir = tempfile::tempdir().unwrap();
+    let file = dir.path().join("wikicraft-backup.zip");
+    let m = wikicraft::backup::backup(&app.state.config, &file).await.unwrap();
+    assert_eq!(m.files, 1, "{m:?}");
+    assert!(m.missing_files.is_empty());
+    assert_eq!(m.tables.iter().find(|t| t.name == "pages").unwrap().rows, 2, "home page + runbook");
+    assert!(m.tables.iter().any(|t| t.name == "page_paths" && t.rows == 1), "the former address travels along");
+
+    // into a new database and a new file store
+    let mut target = app.state.config.clone();
+    target.database_url = common::empty_database().await;
+    let data = tempfile::tempdir().unwrap();
+    target.data_dir = data.path().to_path_buf();
+    let r = wikicraft::backup::restore(&target, &file).await.unwrap();
+    assert_eq!(r.rows, m.tables.iter().filter(|t| t.name != "_sqlx_migrations").map(|t| t.rows).sum::<i64>());
+    assert_eq!(r.files, 1);
+    let again = wikicraft::backup::restore(&target, &file).await.unwrap_err();
+    assert!(again.to_string().contains("isn't empty"), "{again}");
+
+    // the restored installation works: same people, pages, files, history and addresses
+    let restored = common::spawn_with(|c| {
+        c.database_url = target.database_url.clone();
+        c.data_dir = target.data_dir.clone();
+    })
+    .await;
+    let c = common::client();
+    let r = c.post(restored.url("/auth/login")).json(&json!({"email": "owner@acme.test", "password": "correct horse"})).send().await.unwrap();
+    assert_eq!(r.status(), 200);
+    let (st, p) = restored.get(&c, &format!("/pages/{page}")).await;
+    assert_eq!(st, 200);
+    assert_eq!(p["title"], "On-call runbook");
+    assert!(p["content"].to_string().contains("quasarbeacon"));
+    let bytes = c.get(restored.url(&format!("/attachments/{att}/content"))).send().await.unwrap().bytes().await.unwrap();
+    assert_eq!(bytes.as_ref(), pdf.as_slice());
+    let (_, comments) = restored.get(&c, &format!("/pages/{page}/comments")).await;
+    assert_eq!(comments.as_array().unwrap().len(), 1, "{comments}");
+    assert_eq!(restored.get(&c, "/resolve?space=BAK&slug=runbook").await.1["pageId"], page.as_str());
+    // the search index rebuilds itself from the restored pages
+    restored
+        .eventually(|| async {
+            let (_, h) = restored.get(&c, "/search?q=quasarbeacon").await;
+            (h.as_array().is_some_and(|a| a.len() == 1)).then_some(())
+        })
+        .await;
+    // new rows don't collide with restored ones (sequences continue)
+    let (st, _) = restored.post(&c, "/pages", json!({"spaceKey": "BAK", "title": "After the restore"})).await;
+    assert_eq!(st, 201);
+}

@@ -46,6 +46,12 @@ enum Command {
     },
     /// Rebuild the search index.
     Reindex,
+    /// Write a backup of the whole installation (database snapshot and stored files) to a zip file;
+    /// safe while the server runs.
+    Backup { file: PathBuf },
+    /// Restore a backup into an empty database and the configured file storage (also to move to
+    /// another server, or from local storage to S3).
+    Restore { file: PathBuf },
     /// Probe the running server's `/api/health` (for container HEALTHCHECKs); exits non-zero when unhealthy.
     Healthcheck,
 }
@@ -89,6 +95,33 @@ async fn main() -> anyhow::Result<()> {
         Command::Migrate => {
             AppState::new(cli.config).await?;
             println!("migrations applied");
+        }
+        Command::Backup { file } => {
+            let m = wikicraft::backup::backup(&cli.config, &file).await?;
+            let data: Vec<_> = m.tables.iter().filter(|t| t.name != "_sqlx_migrations").collect();
+            let rows: i64 = data.iter().map(|t| t.rows).sum();
+            println!(
+                "backup written to {}: {rows} rows in {} tables, {} files ({} MB), schema {}",
+                file.display(),
+                data.len(),
+                m.files,
+                m.file_bytes / 1_000_000,
+                m.schema
+            );
+            if !m.missing_files.is_empty() {
+                println!("warning: {} files the database refers to were missing from storage: {:?}", m.missing_files.len(), m.missing_files);
+            }
+        }
+        Command::Restore { file } => {
+            let r = wikicraft::backup::restore(&cli.config, &file).await?;
+            println!(
+                "restored the backup of {} (WikiCraft {}): {} rows, {} files{}; the search index is rebuilt at the next start",
+                r.manifest.created_at.format("%Y-%m-%d %H:%M UTC"),
+                r.manifest.version,
+                r.rows,
+                r.files,
+                if r.manifest.vector_dims.is_some() && !r.vectors { " (semantic-search vectors left out: no pgvector)" } else { "" }
+            );
         }
         Command::Reindex => {
             let state = AppState::new(cli.config).await?;

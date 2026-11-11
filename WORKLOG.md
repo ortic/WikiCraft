@@ -158,6 +158,10 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   typo tolerance for unknown words, prefix on the last word; `wikicraft-index.json` marks a complete index (format +
   language), so an index built differently (old installs, language change) is rebuilt in the background. Before, a
   recreated index stayed empty until someone pressed "Rebuild index".
+- Whole-installation backup / restore CLI (`crate::backup`): one zip with a snapshot of every table (binary COPY in
+  a repeatable-read transaction) and the stored files; restore into an empty database runs the backup's migrations,
+  loads without foreign keys (spaces ⇄ pages cycle), re-adds them, resets sequences, upgrades. Tested end to end
+  (restored copy served by a second app: login, pages, attachment bytes, comments, former addresses, search).
 
 ## Security review 4 (independent review agent, 2026-11-10 ~03:40 UTC: link previews, banner, switches, decision log, branding) — status
 No critical or high findings. All five fixed in `9f0b9a9`:

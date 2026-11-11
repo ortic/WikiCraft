@@ -41,6 +41,16 @@ async fn drop_stale_databases(admin: &sqlx::PgPool, now: u64) {
     }
 }
 
+/// A new, empty database (named like the test databases, so it is cleaned up the same way);
+/// returns its URL.
+pub async fn empty_database() -> String {
+    let now = std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_secs();
+    let db_name = format!("wikicraft_test_{now}_{}", uuid::Uuid::new_v4().simple());
+    let admin = sqlx::PgPool::connect(ADMIN_URL).await.expect("postgres reachable (docker container wikicraft-pg)");
+    sqlx::query(sqlx::AssertSqlSafe(format!("CREATE DATABASE {db_name}"))).execute(&admin).await.unwrap();
+    format!("postgres://wikicraft:wikicraft@127.0.0.1:55432/{db_name}")
+}
+
 pub async fn spawn() -> TestApp {
     spawn_with(|_| {}).await
 }

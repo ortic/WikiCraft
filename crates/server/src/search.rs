@@ -168,6 +168,11 @@ impl Tantivy {
 
 const META_FILE: &str = "wikicraft-index.json";
 
+/// Marks the local index as outdated (after a restore): it is rebuilt at the next start.
+pub fn forget_index(config: &crate::config::Config) {
+    let _ = std::fs::remove_file(config.index_dir().join(META_FILE));
+}
+
 /// The stemmer's language code for a setting or workspace language (`de`, `german`, …), `none`
 /// for languages without one.
 pub fn search_language(code: &str) -> String {

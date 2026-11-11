@@ -652,7 +652,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Zero-downtime-friendly migrations (expand/contract), automatic on start (opt-out)
 - [x] **P0** Health/readiness endpoints, structured JSON logs
 - [x] **P1** Helm chart / Kubernetes manifests; horizontal scaling docs
-- [ ] **P1** Backup & restore CLI (DB dump + blob sync, consistent point-in-time) + documented RPO/RTO `DC X`
+- [x] **P1** Backup & restore CLI (DB dump + blob sync, consistent point-in-time) + documented RPO/RTO `DC X` — `wikicraft backup <zip>`: every table via binary `COPY` in one repeatable-read read-only transaction (runs while people work) + the content-addressed files the snapshot refers to (local or S3), manifest with row counts; `wikicraft restore <zip>`: into an empty database (schema of the backup, foreign keys dropped while loading and checked again, sequences reset, then upgraded to this version) and the configured storage (also moves local → S3); pgvector vectors as text, left out when the target has no pgvector; the search index rebuilds itself. Admin guide: nightly backups vs. PITR + versioned bucket, restore time (`crate::backup`)
 - [~] **P1** Prometheus metrics, OpenTelemetry traces, Grafana dashboards (Prometheus only; no OTel/Grafana)
 - [~] **P1** Air-gapped install (offline bundle, no phone-home, telemetry opt-in only) `D DC` (no phone-home; no offline bundle)
 - [x] **P2** HA reference architecture (multi-node API/collab, Postgres HA, S3) `DC`

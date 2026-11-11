@@ -102,6 +102,34 @@ impl BlobStore {
         Ok(())
     }
 
+    /// Whether a content-addressed file is stored.
+    pub async fn has_blob(&self, key: &str) -> bool {
+        self.store.head(&Self::path(key)).await.is_ok()
+    }
+
+    /// Stores a content-addressed file read from `data`, in parts (restores: the key comes from a
+    /// backup, so it isn't computed again here). Returns the number of bytes.
+    pub async fn put_blob_from(&self, key: &str, mut data: impl std::io::Read) -> anyhow::Result<u64> {
+        if key.len() != 64 || !key.bytes().all(|b| b.is_ascii_hexdigit()) {
+            anyhow::bail!("not a content key: {key}");
+        }
+        let upload = self.store.put_multipart(&Self::path(key)).await?;
+        let mut w = object_store::WriteMultipart::new_with_chunk_size(upload, 8 << 20);
+        let mut buf = vec![0u8; 1 << 20];
+        let mut total = 0u64;
+        loop {
+            let n = data.read(&mut buf)?;
+            if n == 0 {
+                break;
+            }
+            w.wait_for_capacity(4).await?;
+            w.write(&buf[..n]);
+            total += n as u64;
+        }
+        w.finish().await?;
+        Ok(total)
+    }
+
     /// Removes a content-addressed file (see [`Self::put`]); the caller made sure nothing uses it.
     pub async fn delete_blob(&self, key: &str) -> anyhow::Result<()> {
         if key.len() < 4 || !key.bytes().all(|b| b.is_ascii_hexdigit()) {

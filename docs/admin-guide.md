@@ -173,7 +173,31 @@ Raise `StreamMaxLength` in `clamd.conf` to match `WIKICRAFT_MAX_UPLOAD_MB`.
 
 ## Backups
 
-Back up two things, at the same point in time if you can:
+**`wikicraft backup <file.zip>`** writes the whole installation into one file: a consistent
+snapshot of the database (taken in one read-only transaction, so it runs while people work) and
+every stored file it refers to, from local storage or S3. Run it with the same settings as the
+server (`WIKICRAFT_DATABASE_URL`, storage variables), e.g. nightly from cron or a Kubernetes
+CronJob, and copy the file off the machine:
+
+```sh
+wikicraft backup /backups/wikicraft-$(date +%F).zip
+```
+
+**`wikicraft restore <file.zip>`** loads a backup into an **empty** database and the configured
+storage, then upgrades it to the running version (a backup from an older WikiCraft restores into
+a newer one; restore into the same PostgreSQL major version or a newer one). It also moves an
+installation: to another server, from local storage to S3 (restore with the S3 settings), or to
+a managed database. Afterwards start WikiCraft; the search index rebuilds itself. Semantic-search
+vectors come along when the new database has pgvector; otherwise they are computed again.
+
+**How much you can lose, and how long it takes** (RPO / RTO): with nightly backups you lose at
+most a day of work. For less, use PostgreSQL's own point-in-time recovery (continuous WAL
+archiving, or your managed database's PITR) together with a versioned S3 bucket: then you can go
+back to any minute. A restore takes about as long as loading the database and copying the files
+(time it once with your own data to know your recovery time); the search index rebuild runs in
+the background while the wiki is already usable.
+
+Without the command, back up the same two things yourself, at the same point in time if you can:
 
 1. **PostgreSQL** (pages, history, comments, users, permissions, the live editing state):
    `pg_dump -Fc wikicraft > wikicraft-$(date +%F).dump`, or your managed database's snapshots /
@@ -181,10 +205,11 @@ Back up two things, at the same point in time if you can:
 2. **Attachments**: `WIKICRAFT_DATA_DIR/blobs` (local storage), or the S3 bucket (turn on
    versioning there).
 
-The search index (`WIKICRAFT_DATA_DIR/index`) doesn't need a backup: `wikicraft reindex`
-rebuilds it.
+The search index (`WIKICRAFT_DATA_DIR/index`) doesn't need a backup: it rebuilds itself when it is
+missing (or run `wikicraft reindex`). To restore such a backup: restore the database dump and the
+files, then start WikiCraft.
 
-To restore: restore the database dump and the blobs, start WikiCraft, run `wikicraft reindex`.
+Test your backups by restoring them somewhere now and then.
 
 **Space backups** are a second layer: *Space settings → Export → Backup* produces a zip with
 pages, history, comments, attachments and permissions, which *Administration → Import → Restore a
@@ -274,5 +299,7 @@ wikicraft migrate                                   # apply migrations and exit
 wikicraft analyze-confluence export.zip             # Confluence dry run (JSON report)
 wikicraft import-confluence export.zip --as-user admin@example.com [--space-key KEY] [--skip-history] [--skip-drafts] [--skip-trash] [--update [--overwrite-local-changes]]
 wikicraft reindex                                   # rebuild the search index
+wikicraft backup wikicraft.zip                      # database snapshot + files in one zip (while running)
+wikicraft restore wikicraft.zip                     # into an empty database and the configured storage
 wikicraft healthcheck                               # exit code reflects /api/health
 ```

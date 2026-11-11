@@ -156,6 +156,8 @@ wikicraft migrate                                  # apply migrations
 wikicraft analyze-confluence export.zip            # dry run: JSON report, nothing written
 wikicraft import-confluence export.zip --as-user admin@example.com [--space-key KEY] [--skip-history] [--skip-drafts] [--skip-trash] [--update [--overwrite-local-changes]]
 wikicraft reindex                                  # rebuild the search index
+wikicraft backup wikicraft.zip                     # whole installation: database snapshot + files
+wikicraft restore wikicraft.zip                    # into an empty database (also to move servers / to S3)
 wikicraft healthcheck                              # probe a running server's /api/health
 ```
 
