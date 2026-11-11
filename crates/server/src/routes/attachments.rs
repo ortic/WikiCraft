@@ -24,9 +24,80 @@ pub struct AttachmentRow {
     pub created_by_name: Option<String>,
     pub created_at: chrono::DateTime<chrono::Utc>,
     pub updated_at: chrono::DateTime<chrono::Utc>,
+    pub labels: Vec<String>,
 }
 
-const SELECT: &str = "SELECT a.id, a.page_id, a.filename, a.media_type, a.size, a.version, u.name AS created_by_name, a.created_at, a.updated_at FROM attachments a LEFT JOIN users u ON u.id = a.created_by";
+const SELECT: &str = "SELECT a.id, a.page_id, a.filename, a.media_type, a.size, a.version, u.name AS created_by_name, a.created_at, a.updated_at,
+        COALESCE((SELECT array_agg(l.name ORDER BY l.name) FROM attachment_labels l WHERE l.attachment_id = a.id), '{}') AS labels
+    FROM attachments a LEFT JOIN users u ON u.id = a.created_by";
+
+#[derive(serde::Deserialize)]
+pub struct LabelsBody {
+    labels: Vec<String>,
+}
+
+/// `PUT /attachments/{id}/labels {labels}` — replaces a file's labels (people who may edit its
+/// page; at most 20, normalised like page labels).
+pub async fn put_labels(
+    State(state): State<AppState>,
+    CurrentUser(user): CurrentUser,
+    Path(id): Path<Uuid>,
+    Json(req): Json<LabelsBody>,
+) -> ApiResult<Json<Vec<String>>> {
+    let page_id = page_of(&state, id).await?;
+    let p = Principal::load(&state, Some(user)).await?;
+    require_page(&state, &p, page_id, Need::Edit).await?;
+    let mut labels: Vec<String> = req.labels.iter().filter_map(|l| crate::routes::pages::normalize_label(l)).collect();
+    labels.sort();
+    labels.dedup();
+    if labels.len() > 20 {
+        return Err(ApiError::bad("at most 20 labels per file"));
+    }
+    let mut tx = state.db.begin().await?;
+    sqlx::query("DELETE FROM attachment_labels WHERE attachment_id = $1").bind(id).execute(&mut *tx).await?;
+    sqlx::query("INSERT INTO attachment_labels (attachment_id, name) SELECT $1, unnest($2::text[]) ON CONFLICT DO NOTHING")
+        .bind(id)
+        .bind(&labels)
+        .execute(&mut *tx)
+        .await?;
+    tx.commit().await?;
+    Ok(Json(labels))
+}
+
+#[derive(Serialize, sqlx::FromRow)]
+#[serde(rename_all = "camelCase")]
+pub struct LabelledFile {
+    id: Uuid,
+    filename: String,
+    media_type: String,
+    size: i64,
+    updated_at: chrono::DateTime<chrono::Utc>,
+    page_id: Uuid,
+    page_title: String,
+    space_id: Uuid,
+    space_key: String,
+    space_name: String,
+}
+
+/// `GET /labels/{name}/attachments` — files with the label, on pages the caller can see.
+pub async fn by_label(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path(name): Path<String>) -> ApiResult<Json<Vec<LabelledFile>>> {
+    let p = Principal::load(&state, user).await?;
+    let ws = crate::routes::spaces::workspace_of(&state, &p).await?;
+    let rows = sqlx::query_as::<_, LabelledFile>(
+        "SELECT a.id, a.filename, a.media_type, a.size, a.updated_at, p.id AS page_id, p.title AS page_title, p.space_id, s.key AS space_key, s.name AS space_name
+           FROM attachment_labels l JOIN attachments a ON a.id = l.attachment_id JOIN pages p ON p.id = a.page_id JOIN spaces s ON s.id = p.space_id
+          WHERE l.name = $1 AND a.workspace_id = $2 AND a.deleted_at IS NULL AND p.deleted_at IS NULL AND s.archived_at IS NULL
+          ORDER BY lower(a.filename) LIMIT 500",
+    )
+    .bind(name.to_lowercase())
+    .bind(ws)
+    .fetch_all(&state.db)
+    .await?;
+    let spaces = crate::routes::search::visible_spaces(&state, &p).await?;
+    let pairs: Vec<(Uuid, Uuid)> = rows.iter().map(|r| (r.page_id, r.space_id)).collect();
+    let visible = crate::routes::search::filter_visible(&state, &p, &spaces, &pairs).await?;
+    Ok(Json(rows.into_iter().filter(|r| visible.contains(&r.page_id)).collect()))
+}
 
 pub async fn list(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path(page_id): Path<Uuid>) -> ApiResult<Json<Vec<AttachmentRow>>> {
     let p = Principal::load(&state, user).await?;

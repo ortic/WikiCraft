@@ -243,6 +243,8 @@ export interface Attachment {
   version: number
   createdByName: string | null
   createdAt: string
+  /** labels on the file (its page lists them; the label page lists the file) */
+  labels?: string[]
 }
 
 export interface Version {

@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { Paperclip, Upload, Trash2, X, FileText, Image as ImageIcon, History, RotateCcw } from 'lucide-react'
+import { Paperclip, Upload, Trash2, X, FileText, Image as ImageIcon, History, RotateCcw, Tag } from 'lucide-react'
+import { Link } from 'react-router-dom'
 import { api, formatBytes, formatDate, type Attachment, type Page } from '../api'
 import { useToast } from '../ui'
 
@@ -60,6 +61,7 @@ export default function AttachmentsPanel({ page, onClose }: { page: Page; onClos
               )}{' '}
               · {formatDate(a.createdAt)}
             </div>
+            <FileLabels attachment={a} canEdit={page.access.edit} onSaved={() => qc.invalidateQueries({ queryKey: ['attachments', page.id] })} />
             {history === a.id && <VersionList attachmentId={a.id} current={a.version} canEdit={page.access.edit} onRestored={() => qc.invalidateQueries({ queryKey: ['attachments', page.id] })} />}
           </div>
           {page.access.edit && (
@@ -133,5 +135,54 @@ function VersionList({ attachmentId, current, canEdit, onRestored }: { attachmen
         </li>
       ))}
     </ul>
+  )
+}
+
+/** A file's labels as links to the label pages; editors change them inline (comma-separated). */
+function FileLabels({ attachment, canEdit, onSaved }: { attachment: Attachment; canEdit: boolean; onSaved: () => void }) {
+  const toast = useToast()
+  const [editing, setEditing] = useState(false)
+  const [value, setValue] = useState('')
+  const labels = attachment.labels ?? []
+  const save = async () => {
+    try {
+      await api.put(`/attachments/${attachment.id}/labels`, { labels: value.split(',').map((l) => l.trim()).filter(Boolean) })
+      setEditing(false)
+      onSaved()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : 'Could not save the labels')
+    }
+  }
+  if (editing)
+    return (
+      <div className="row" style={{ gap: 4, marginTop: 4 }}>
+        <input
+          className="input"
+          style={{ height: 26, fontSize: 12 }}
+          aria-label={`Labels of ${attachment.filename}`}
+          placeholder="label, another"
+          value={value}
+          autoFocus
+          onChange={(e) => setValue(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') void save()
+            if (e.key === 'Escape') setEditing(false)
+          }}
+        />
+        <button className="btn btn-sm" onClick={save}>Save</button>
+      </div>
+    )
+  if (!labels.length && !canEdit) return null
+  return (
+    <div className="row" style={{ gap: 4, flexWrap: 'wrap', marginTop: 3 }}>
+      {labels.map((l) => (
+        <Link key={l} to={`/labels/${encodeURIComponent(l)}`} className="label-chip">{l}</Link>
+      ))}
+      {canEdit && (
+        <button type="button" className="link-btn small" aria-label={`Edit the labels of ${attachment.filename}`} onClick={() => { setValue(labels.join(', ')); setEditing(true) }}>
+          <Tag size={11} /> {labels.length ? 'Edit' : 'Add labels'}
+        </button>
+      )}
+    </div>
   )
 }

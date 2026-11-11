@@ -1140,7 +1140,7 @@ pub async fn copy_tree(state: &AppState, opts: &TreeCopy<'_>, roots: Vec<(Uuid, 
         .bind(new)
         .execute(&state.db)
         .await?;
-        for ((_, filename, media_type, size, blob_key, text), (_, new_att)) in attachments.iter().zip(&renamed) {
+        for ((_, filename, media_type, size, blob_key, text), (old_att, new_att)) in attachments.iter().zip(&renamed) {
             sqlx::query(
                 "INSERT INTO attachments (id, workspace_id, page_id, filename, media_type, size, blob_key, version, text_content, created_by) VALUES ($1, $2, $3, $4, $5, $6, $7, 1, $8, $9)",
             )
@@ -1166,6 +1166,11 @@ pub async fn copy_tree(state: &AppState, opts: &TreeCopy<'_>, roots: Vec<(Uuid, 
             .bind(opts.actor)
             .execute(&state.db)
             .await?;
+            sqlx::query("INSERT INTO attachment_labels (attachment_id, name) SELECT $2, name FROM attachment_labels WHERE attachment_id = $1")
+                .bind(old_att)
+                .bind(new_att)
+                .execute(&state.db)
+                .await?;
         }
         // restrictions travel with the copy (copying must never widen access)
         sqlx::query("INSERT INTO page_restrictions (page_id, kind, subject_type, subject_id) SELECT $2, kind, subject_type, subject_id FROM page_restrictions WHERE page_id = $1")

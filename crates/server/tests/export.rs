@@ -64,6 +64,7 @@ async fn export_and_restore_a_space() {
     let form = reqwest::multipart::Form::new().part("file", reqwest::multipart::Part::bytes(png.clone()).file_name("diagram.png"));
     let rows: Value = owner.post(app.url(&format!("/pages/{setup}/attachments"))).multipart(form).send().await.unwrap().json().await.unwrap();
     let att = rows[0]["id"].as_str().unwrap().to_string();
+    app.put(&owner, &format!("/attachments/{att}/labels"), json!({"labels": ["architecture"]})).await;
     let (st, _) =
         app.put(&owner, &format!("/pages/{setup}/content"), json!({"markdown": format!("Install it.\n\n![diagram](/api/attachments/{att}/content)")})).await;
     assert_eq!(st, 200);
@@ -221,6 +222,8 @@ async fn export_and_restore_a_space() {
     assert!(!content.contains(&att), "image points at the restored attachment");
     let new_att = content.split("/api/attachments/").nth(1).unwrap().split('/').next().unwrap().to_string();
     let bytes = owner.get(app.url(&format!("/attachments/{new_att}/content"))).send().await.unwrap().bytes().await.unwrap();
+    let (_, labelled) = app.get(&owner, "/labels/architecture/attachments").await;
+    assert!(labelled.as_array().unwrap().iter().any(|f| f["id"] == new_att.as_str()), "file labels restored: {labelled}");
     assert_eq!(bytes.as_ref(), png.as_slice());
     let (_, sec) = app.get(&owner, &format!("/pages/{r_secret}")).await;
     assert!(sec["content"].to_string().contains(&format!("/pages/{r_setup}")), "include points at the restored page: {}", sec["content"]);

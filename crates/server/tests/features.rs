@@ -187,6 +187,30 @@ async fn popular_pages() {
     assert_eq!(theirs, json!([{"name": "runbook", "count": 2}, {"name": "release", "count": 1}]), "the restricted page's label stays hidden");
     let (_, none) = app.get(&member, "/labels?q=%25").await;
     assert_eq!(none.as_array().unwrap().len(), 2, "a % is no wildcard: {none}");
+
+    // labels on files: set by editors, on the label's page for those who see the page
+    let upload = |c: &reqwest::Client, page: &str, name: &str| {
+        let form = reqwest::multipart::Form::new().part("file", reqwest::multipart::Part::bytes(b"%PDF-1.4 x".to_vec()).file_name(name.to_string()));
+        c.post(app.url(&format!("/pages/{page}/attachments"))).multipart(form).send()
+    };
+    let a: serde_json::Value = upload(&owner, &hot, "runbook.pdf").await.unwrap().json().await.unwrap();
+    let a = a[0]["id"].as_str().unwrap().to_string();
+    let s: serde_json::Value = upload(&owner, &secret, "salaries.pdf").await.unwrap().json().await.unwrap();
+    let s = s[0]["id"].as_str().unwrap().to_string();
+    let (st, l) = app.put(&owner, &format!("/attachments/{a}/labels"), json!({"labels": ["Runbook", "pdf", "runbook", "on call"]})).await;
+    assert_eq!(st, 200, "{l}");
+    assert_eq!(l, json!(["on-call", "pdf", "runbook"]));
+    app.put(&owner, &format!("/attachments/{s}/labels"), json!({"labels": ["pdf"]})).await;
+    let (_, atts) = app.get(&member, &format!("/pages/{hot}/attachments")).await;
+    assert_eq!(atts[0]["labels"], json!(["on-call", "pdf", "runbook"]));
+    let (_, files) = app.get(&member, "/labels/pdf/attachments").await;
+    assert_eq!(files.as_array().unwrap().iter().map(|f| f["filename"].as_str().unwrap()).collect::<Vec<_>>(), vec!["runbook.pdf"], "{files}");
+    assert_eq!(files[0]["pageTitle"], "Hot page");
+    assert_eq!(app.get(&owner, "/labels/pdf/attachments").await.1.as_array().unwrap().len(), 2);
+    let (_, sugg) = app.get(&member, "/labels?q=pd").await;
+    assert_eq!(sugg, json!([{"name": "pdf", "count": 1}]), "file labels are suggested too");
+    let too_many: Vec<String> = (0..21).map(|i| format!("l{i}")).collect();
+    assert_eq!(app.put(&owner, &format!("/attachments/{a}/labels"), json!({ "labels": too_many })).await.0, 400);
 }
 
 #[tokio::test(flavor = "multi_thread")]

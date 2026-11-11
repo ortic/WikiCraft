@@ -227,6 +227,8 @@ op("/markdown", "post", "Pages", "Convert Markdown to document content (paste)",
 op("/unfurl", "get", "Pages", "Link preview of an external page (title, description, site name), fetched with SSRF protections and cached", query=[q("url", "http(s) URL")], res=resp(obj({"url": txt, "title": txt, "description": txt, "siteName": txt})))
 op("/labels", "get", "Discovery", "Label names for autocomplete: the most used ones starting with q, over pages the caller can see", res=resp(arr(obj({"name": txt, "count": num}))), query=[q("q", "prefix")])
 op("/labels/{name}", "get", "Discovery", "Pages with a label", res=resp(arr(S("PageListItem"))), public=True)
+op("/labels/{name}/attachments", "get", "Search", "Files with the label, on pages you can see", public=True)
+op("/attachments/{id}/labels", "put", "Attachments", "Replace a file's labels (people who may edit its page; at most 20)", req=body(obj({"labels": arr(txt)}, ["labels"])), res=resp(arr(txt)))
 op("/resolve", "get", "Discovery", "Find a page by space + title or by imported Confluence id", query=[q("space", "space key"), q("title", "page title"), q("source", "confluence:<id>")], public=True)
 op("/notifications", "get", "Notifications", "Notifications", res=resp(arr(S("Notification"))))
 op("/notifications/read", "post", "Notifications", "Mark notifications as read", req=body(obj({"ids": arr(uuid)})), res=NO)

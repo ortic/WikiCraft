@@ -4702,6 +4702,67 @@ paths:
       - {}
       - session: []
       - token: []
+  /labels/{name}/attachments:
+    get:
+      tags:
+      - Search
+      summary: Files with the label, on pages you can see
+      operationId: get_labels_name_attachments
+      parameters:
+      - name: name
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - {}
+      - session: []
+      - token: []
+  /attachments/{id}/labels:
+    put:
+      tags:
+      - Attachments
+      summary: Replace a file's labels (people who may edit its page; at most 20)
+      operationId: put_attachments_id_labels
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                labels:
+                  type: array
+                  items: *id001
+              required:
+              - labels
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /resolve:
     get:
       tags:

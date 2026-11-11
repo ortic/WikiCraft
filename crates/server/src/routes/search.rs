@@ -389,7 +389,11 @@ pub async fn suggest_labels(State(state): State<AppState>, MaybeUser(user): Mayb
     let prefix: String = q.q.unwrap_or_default().trim().to_lowercase().chars().filter(|c| !matches!(c, '%' | '_' | '\\')).take(60).collect();
     let rows: Vec<(String, Uuid, Uuid)> = sqlx::query_as(
         "SELECT l.name, p.id, p.space_id FROM labels l JOIN pages p ON p.id = l.page_id
-          WHERE p.workspace_id = $1 AND p.deleted_at IS NULL AND l.name LIKE $2 ORDER BY l.name LIMIT 3000",
+          WHERE p.workspace_id = $1 AND p.deleted_at IS NULL AND l.name LIKE $2
+         UNION ALL
+         SELECT al.name, p.id, p.space_id FROM attachment_labels al JOIN attachments a ON a.id = al.attachment_id JOIN pages p ON p.id = a.page_id
+          WHERE p.workspace_id = $1 AND p.deleted_at IS NULL AND a.deleted_at IS NULL AND al.name LIKE $2
+         ORDER BY 1 LIMIT 3000",
     )
     .bind(ws)
     .bind(format!("{prefix}%"))

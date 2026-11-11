@@ -166,6 +166,8 @@ pub fn router(state: AppState) -> Router {
         .route("/unfurl", get(unfurl::unfurl))
         .route("/labels", get(search::suggest_labels))
         .route("/labels/{name}", get(search::by_label))
+        .route("/labels/{name}/attachments", get(attachments::by_label))
+        .route("/attachments/{id}/labels", put(attachments::put_labels))
         .route("/pages/{id}/access/{who}", get(inspect::explain))
         .route("/pages/{id}/like", put(likes::like_page).delete(likes::unlike_page))
         .route("/pages/{id}/verification", get(verification::get).put(verification::verify).delete(verification::unverify))

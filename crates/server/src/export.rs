@@ -70,6 +70,7 @@ struct AttachmentRow {
     blob_key: Option<String>,
     created_at: chrono::DateTime<chrono::Utc>,
     created_by: Option<String>,
+    labels: Vec<String>,
 }
 
 struct Page {
@@ -164,6 +165,8 @@ pub struct BackupAttachment {
     pub created_by: Option<String>,
     /// path of the file inside the archive
     pub file: String,
+    #[serde(default)]
+    pub labels: Vec<String>,
 }
 
 #[derive(Serialize, Deserialize, sqlx::FromRow)]
@@ -242,7 +245,8 @@ pub async fn run_export(state: &AppState, job_id: Uuid, actor: Uuid, input: &Val
     }
     let mut props = crate::routes::properties::load_many(state, &p, &ids).await?;
     let attachments = sqlx::query_as::<_, AttachmentRow>(
-        "SELECT a.id, a.page_id, a.filename, a.media_type, a.size, a.blob_key, a.created_at, u.email AS created_by
+        "SELECT a.id, a.page_id, a.filename, a.media_type, a.size, a.blob_key, a.created_at, u.email AS created_by,
+                COALESCE((SELECT array_agg(l.name ORDER BY l.name) FROM attachment_labels l WHERE l.attachment_id = a.id), '{}') AS labels
          FROM attachments a LEFT JOIN users u ON u.id = a.created_by WHERE a.page_id = ANY($1) AND a.deleted_at IS NULL ORDER BY a.created_at",
     )
     .bind(&ids)
@@ -372,6 +376,7 @@ pub async fn run_export(state: &AppState, job_id: Uuid, actor: Uuid, input: &Val
                             created_at: a.created_at,
                             created_by: a.created_by.clone(),
                             file: att_files[&a.id].clone(),
+                            labels: a.labels.clone(),
                         })
                         .collect(),
                     comments,
@@ -971,6 +976,12 @@ pub async fn run_restore(state: &AppState, job_id: Uuid, actor: Uuid, archive: &
                 .await
                 .map_err(|e| anyhow::anyhow!("{e}"))?;
         att_ids.insert(a.id, new);
+        let labels: Vec<String> = a.labels.iter().filter_map(|l| crate::routes::pages::normalize_label(l)).take(20).collect();
+        sqlx::query("INSERT INTO attachment_labels (attachment_id, name) SELECT $1, unnest($2::text[]) ON CONFLICT DO NOTHING")
+            .bind(new)
+            .bind(&labels)
+            .execute(&state.db)
+            .await?;
         if i % 50 == 0 {
             progress(state, job_id, json!({"phase": "attachments", "done": i, "total": m.attachments.len()})).await?;
         }

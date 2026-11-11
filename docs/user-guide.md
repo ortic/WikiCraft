@@ -183,7 +183,8 @@ space as a browsable HTML site, a Markdown folder tree or a full backup.
 - **Archive** pages that are done but worth keeping; they leave the page tree and search but stay
   readable (Space settings → Archived).
 - **Labels** group pages across spaces (suggestions show the labels already in use); click a
-  label for all its pages.
+  label for all its pages. Files get labels too, in the attachments panel; the label's page lists
+  them under *Files*.
 - **Status** (page menu → *Set status…*): rough draft, in progress, ready for review, or your own.
 - **Copy** or **move** a page (page menu), with the pages below it and its attachments, within the
   space or to another one.

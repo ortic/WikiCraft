@@ -402,7 +402,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P2** AI-generated templates from a prompt `C`
 
 ### 4.9 Structured content: labels, properties, databases
-- [~] **P1** Labels/tags on pages, blog posts and attachments; label autocomplete; label pages (all content with label X) `C X O B` (pages and blog posts; autocomplete by usage over the pages you can see, `GET /labels?q=`; not on attachments)
+- [x] **P1** Labels/tags on pages, blog posts and attachments; label autocomplete; label pages (all content with label X) `C X O B` (pages and blog posts; files in the attachments panel (`PUT /attachments/{id}/labels`), listed on the label page under Files; autocomplete by usage over the pages and files you can see, `GET /labels?q=`; file labels survive page/space copies and backups)
 - [x] **P1** Page properties (typed key/value: text, number, date, user, select, URL, page link) shown in a properties panel `C X N` — panel above the body (page menu → Add property; names used in the space bring their type, select values are suggested); validated per type, searchable, copied with the page, in HTML/Markdown exports and backups; Markdown front matter keys become properties on import; `GET/PUT /api/pages/{id}/properties`, `GET /api/spaces/{key}/properties`. No history of property changes yet (P2 below)
 - [x] **P1** Properties report: query table across pages (filter by space, label, property) `C` — page properties plus Confluence properties tables; `where` conditions (`Status = Done; Effort >= 3`, `!=`, `~`, `<`…); `/properties` inserts one, editors set labels, columns and conditions in the block; people, pages and web addresses stay links (also in exports)
 - [ ] **P2** **Databases** `C D N X`
