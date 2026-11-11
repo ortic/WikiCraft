@@ -4,6 +4,7 @@ import { Link, NavLink, Navigate, Route, Routes } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Upload, FileSearch, CheckCircle2, XCircle, UserPlus, Users, Activity, Database, RefreshCw, Mail, Send, Globe, Megaphone, Building2, Ban, RotateCcw, Paperclip, Server, Palette } from 'lucide-react'
 import { api, formatBytes, formatDate, formatDay, type Job } from '../api'
+import { rememberUpload, uploadInParts, type UploadState } from '../upload'
 import { Avatar, Modal, Spinner, useMe, useToast, type Features } from '../ui'
 import AdminWebhooks from './AdminWebhooks'
 import AdminSpaces from './AdminSpaces'
@@ -991,6 +992,29 @@ function ImportAdmin() {
   const [update, setUpdate] = useState(false)
   const [overwrite, setOverwrite] = useState(false)
   const [jobId, setJobId] = useState<string | null>(null)
+  // the export goes up in parts as soon as it's chosen; the dry run and the import use that upload
+  const [upload, setUpload] = useState<UploadState | null>(null)
+  const [sent, setSent] = useState<number | null>(null)
+  const [uploadError, setUploadError] = useState<string | null>(null)
+  const uploading = useRef<AbortController | null>(null)
+  useEffect(() => () => uploading.current?.abort(), [])
+  const send = async (f: File) => {
+    uploading.current?.abort()
+    const ctl = new AbortController()
+    uploading.current = ctl
+    setUpload(null)
+    setUploadError(null)
+    setSent(0)
+    try {
+      const u = await uploadInParts(f, (received) => setSent(received), ctl.signal)
+      setUpload(u)
+    } catch (e) {
+      if (!ctl.signal.aborted) setUploadError(e instanceof Error ? e.message : tr('Upload failed'))
+    } finally {
+      if (uploading.current === ctl) uploading.current = null
+      setSent(null)
+    }
+  }
   const jobs = useQuery({ queryKey: ['jobs'], queryFn: () => api.get<Job[]>('/jobs'), refetchInterval: 5000 })
   const job = useQuery({ queryKey: ['job', jobId], queryFn: () => api.get<Job>(`/jobs/${jobId}`), enabled: !!jobId, refetchInterval: (q) => (q.state.data && ['succeeded', 'failed', 'cancelled'].includes(q.state.data.status) ? false : 1000) })
   useEffect(() => {
@@ -1000,13 +1024,11 @@ function ImportAdmin() {
   }, [job.data?.status, qc])
 
   const analyze = async () => {
-    if (!selected) return
+    if (!upload) return
     setBusy('analyze')
     setAnalysis(null)
     try {
-      const form = new FormData()
-      form.append('file', selected)
-      const a = await api.upload<any>('/imports/confluence/analyze', form)
+      const a = await api.post<any>(`/uploads/${upload.id}/analyze-confluence`)
       setAnalysis(a)
       setUpdate(!!a?.spaces?.some((s: any) => s.earlierImport))
     } catch (e) {
@@ -1016,13 +1038,15 @@ function ImportAdmin() {
     }
   }
   const start = async () => {
-    if (!selected) return
+    if (!selected || !upload) return
     setBusy('import')
     try {
-      const form = new FormData()
-      form.append('options', JSON.stringify({ spaceKey: update ? undefined : spaceKey || undefined, skipHistory, skipDrafts, skipTrash, update, overwriteLocalChanges: update && overwrite }))
-      form.append('file', selected)
-      const r = await api.upload<{ jobId: string }>('/imports/confluence', form)
+      const options = { spaceKey: update ? undefined : spaceKey || undefined, skipHistory, skipDrafts, skipTrash, update, overwriteLocalChanges: update && overwrite }
+      const r = await api.post<{ jobId: string }>(`/uploads/${upload.id}/import-confluence`, { options })
+      // the upload is used up
+      rememberUpload(selected, null)
+      setUpload(null)
+      setSelected(null)
       setJobId(r.jobId)
       qc.invalidateQueries({ queryKey: ['jobs'] })
     } catch (e) {
@@ -1037,13 +1061,43 @@ function ImportAdmin() {
       <div className="card" style={{ marginBottom: 18 }}>
         <h3 style={{ marginTop: 0 }}>{tr('Import from Confluence')}</h3>
         <p className="muted" style={{ marginTop: 0 }}>{tr('Upload a Confluence')}{' '}<b>{tr('space export')}</b>{' '}{tr('(.zip). Both the classic XML format (Server/Data Center, older Cloud) and the new Cloud CSV format are supported. Pages, hierarchy, history, attachments, comments (including inline comments), labels, restrictions and authors are imported; links and mentions are rewritten. Run an analysis first to see what will be imported.')}</p>
-        <input ref={file} type="file" accept=".zip" hidden onChange={(e) => { setSelected(e.target.files?.[0] ?? null); setAnalysis(null) }} />
+        <input
+          ref={file}
+          type="file"
+          accept=".zip"
+          hidden
+          onChange={(e) => {
+            const f = e.target.files?.[0] ?? null
+            setSelected(f)
+            setAnalysis(null)
+            if (f) send(f)
+            e.target.value = ''
+          }}
+        />
         <div className="row" style={{ flexWrap: 'wrap' }}>
           <button className="btn" onClick={() => file.current?.click()}><Upload size={15} /> {selected ? selected.name : tr('Choose export (.zip)')}</button>
           {selected && <span className="faint small">{formatBytes(selected.size)}</span>}
           <span className="spacer" />
-          <button className="btn" disabled={!selected || !!busy} onClick={analyze}>{busy === 'analyze' ? <Spinner /> : <FileSearch size={15} />}{' '}{tr('Analyze (dry run)')}</button>
+          <button className="btn" disabled={!upload || !!busy} onClick={analyze}>{busy === 'analyze' ? <Spinner /> : <FileSearch size={15} />}{' '}{tr('Analyze (dry run)')}</button>
         </div>
+        {selected && sent !== null && (
+          <div style={{ marginTop: 12 }}>
+            <div className="row small">
+              <span>{tr('Uploading: {sent} of {total}', { sent: formatBytes(sent), total: formatBytes(selected.size) })}</span>
+              <span className="spacer" />
+              <button className="btn btn-ghost btn-sm" onClick={() => uploading.current?.abort()}>{tr('Stop')}</button>
+            </div>
+            <div className="progress" style={{ marginTop: 6 }} role="progressbar" aria-valuemin={0} aria-valuemax={100} aria-valuenow={Math.round((sent / Math.max(1, selected.size)) * 100)}>
+              <div style={{ width: `${Math.round((sent / Math.max(1, selected.size)) * 100)}%` }} />
+            </div>
+          </div>
+        )}
+        {selected && sent === null && !upload && (
+          <div className="row small" style={{ marginTop: 12 }}>
+            {uploadError ? <span className="error-text">{uploadError}</span> : <span className="faint">{tr('The upload stopped.')}</span>}
+            <button className="btn btn-sm" onClick={() => send(selected)}>{tr('Continue the upload')}</button>
+          </div>
+        )}
         {selected && (
           <div className="row" style={{ marginTop: 14, flexWrap: 'wrap' }}>
             <input className="input" style={{ width: 200 }} placeholder={tr('Space key (optional)')} value={spaceKey} onChange={(e) => setSpaceKey(e.target.value.toUpperCase())} />
@@ -1051,7 +1105,7 @@ function ImportAdmin() {
             <label className="row small" title={tr('Unpublished pages otherwise become private drafts that only their author sees')}><input type="checkbox" checked={skipDrafts} onChange={(e) => setSkipDrafts(e.target.checked)} />{' '}{tr('Skip unpublished drafts')}</label>
             <label className="row small" title={tr('Pages in the Confluence trash otherwise go to the space trash, where admins can restore them')}><input type="checkbox" checked={skipTrash} onChange={(e) => setSkipTrash(e.target.checked)} />{' '}{tr('Skip trash')}</label>
             <span className="spacer" />
-            <button className="btn btn-primary" disabled={!!busy} onClick={start}>{busy === 'import' ? <Spinner /> : <Upload size={15} />} {update ? tr('Update import') : tr('Start import')}</button>
+            <button className="btn btn-primary" disabled={!!busy || !upload} onClick={start}>{busy === 'import' ? <Spinner /> : <Upload size={15} />} {update ? tr('Update import') : tr('Start import')}</button>
           </div>
         )}
         {selected && (

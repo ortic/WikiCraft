@@ -87,7 +87,11 @@ memory. Keep the zip on the WikiCraft server for very large exports and use the 
 Before writing anything, let WikiCraft read the export and tell you what it found:
 
 - **In the browser:** *Administration → Import → Import from Confluence*, pick the zip,
-  **Analyze**.
+  **Analyze**. The zip goes up once, in 8 MB parts: a dropped connection is retried, *Stop* and
+  *Continue the upload* pause it, and choosing the same file again after a reload carries on where
+  it stopped. The dry run and the import then use that upload (multi-GB exports aren't sent twice;
+  `WIKICRAFT_MAX_UPLOAD_MB` still caps the size). A reverse proxy in front needs to let 8 MB requests
+  through (nginx: `client_max_body_size 16m;`).
 - **On the server:** `wikicraft analyze-confluence export.zip > report.json`
 
 The report counts spaces, pages, versions, attachments, comments and users, and lists links that

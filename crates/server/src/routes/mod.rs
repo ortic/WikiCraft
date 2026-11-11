@@ -30,6 +30,7 @@ pub mod spaces;
 pub mod tasks;
 pub mod templates;
 pub mod unfurl;
+pub mod uploads;
 pub mod users;
 pub mod verification;
 pub mod webhooks;
@@ -218,6 +219,11 @@ pub fn router(state: AppState) -> Router {
         .route("/imports/confluence/analyze", post(imports::analyze_confluence).layer(DefaultBodyLimit::max(max_upload)))
         .route("/imports/markdown", post(imports::upload_markdown).layer(DefaultBodyLimit::max(max_upload)))
         .route("/imports/backup", post(exports::restore).layer(DefaultBodyLimit::max(max_upload)))
+        .route("/uploads", post(uploads::create))
+        .route("/uploads/{id}", get(uploads::get).delete(uploads::delete))
+        .route("/uploads/{id}/parts/{n}", put(uploads::put_part).layer(DefaultBodyLimit::max(uploads::PART_SIZE + (64 << 10))))
+        .route("/uploads/{id}/analyze-confluence", post(uploads::analyze_confluence))
+        .route("/uploads/{id}/import-confluence", post(uploads::import_confluence))
         .route("/jobs", get(imports::list_jobs))
         .route("/jobs/{id}", get(imports::get_job))
         .route("/jobs/{id}/cancel", post(imports::cancel_job))

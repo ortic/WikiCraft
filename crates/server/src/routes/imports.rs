@@ -113,6 +113,12 @@ pub async fn start_confluence_import(state: &AppState, user: &User, path: PathBu
 pub async fn analyze_confluence(State(state): State<AppState>, CurrentUser(user): CurrentUser, mut mp: Multipart) -> ApiResult<Json<Value>> {
     require_admin(&user)?;
     let (path, _, _) = receive_upload(&state, &mut mp).await?;
+    Ok(Json(analyze_file(&state, &user, path).await?))
+}
+
+/// The dry-run report of a Confluence export on disk (removed afterwards), with the spaces an
+/// earlier import brought in already.
+pub async fn analyze_file(state: &AppState, user: &User, path: PathBuf) -> ApiResult<Value> {
     let p = path.clone();
     let res = tokio::task::spawn_blocking(move || importer::analyze(&p)).await.map_err(|e| ApiError::Internal(e.into()))?;
     let _ = tokio::fs::remove_file(&path).await;
@@ -132,7 +138,7 @@ pub async fn analyze_confluence(State(state): State<AppState>, CurrentUser(user)
             s["earlierImport"] = earlier.map(|(id, key, name)| json!({"spaceId": id, "key": key, "name": name})).unwrap_or(Value::Null);
         }
     }
-    Ok(Json(report))
+    Ok(report)
 }
 
 pub async fn list_jobs(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Vec<JobRow>>> {

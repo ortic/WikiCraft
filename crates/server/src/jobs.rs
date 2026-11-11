@@ -69,6 +69,11 @@ pub fn spawn_worker(state: &AppState) {
                     Ok(n) => tracing::info!(pages = n, "purged pages past the trash retention period"),
                     Err(e) => tracing::warn!("trash retention failed: {e:#}"),
                 }
+                match crate::routes::uploads::remove_abandoned(&state).await {
+                    Ok(0) => {}
+                    Ok(n) => tracing::info!(uploads = n, "removed abandoned uploads"),
+                    Err(e) => tracing::warn!("removing abandoned uploads failed: {e:#}"),
+                }
             }
             match claim(&state).await {
                 Ok(Some(job)) => run(&state, job).await,

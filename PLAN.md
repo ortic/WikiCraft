@@ -544,7 +544,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [ ] **P2** MediaWiki XML dump `X`
 - [ ] **P2** XWiki XAR export
 - [ ] **P2** Docmost, Outline (JSON export), BookStack (API), Wiki.js (DB / git), DokuWiki, SharePoint pages, GitHub wiki, Quip `X(MediaWiki,Dokuwiki)`
-- [~] **P1** Import job UI: upload (resumable, multi-GB), dry-run analysis report, mapping (users, spaces, macros), progress, cancel, retry, final report with warnings per page (cancel and retry in Admin → Import; a retried import continues as an update import; no resumable upload or mapping)
+- [~] **P1** Import job UI: upload (resumable, multi-GB), dry-run analysis report, mapping (users, spaces, macros), progress, cancel, retry, final report with warnings per page (cancel and retry in Admin → Import; a retried import continues as an update import; uploads go up in 8 MB parts kept in file storage (`/api/uploads`, any replica takes the next part): retried on errors, stop / continue, resumed after a reload by choosing the same file, and the dry run and the import share one upload; no mapping step yet)
 - [~] **P1** Re-runnable & incremental imports (stable source-id mapping; update instead of duplicate) (Confluence: update imports, see §6.3; Notion / Word / HTML / Markdown imports still create new pages)
 
 ### 4.19 Export, print & publishing

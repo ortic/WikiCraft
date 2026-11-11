@@ -699,3 +699,84 @@ async fn personal_spaces_from_confluence() {
     let (s, _) = app.get(&bob, "/spaces/~BOB").await;
     assert_eq!(s, 200);
 }
+
+/// A multi-part upload: parts in order, a part sent twice, resuming, then the dry run and the
+/// import from the same upload.
+#[tokio::test(flavor = "multi_thread")]
+async fn import_from_an_upload_in_parts() {
+    let app = common::spawn().await;
+    let c = app.setup().await;
+    let (member, _) = app.user(&c, "mo@acme.test", "member").await;
+    // a 9 MB file that doesn't compress, so the export needs two parts
+    let mut seed = 0x2545_f491_u32;
+    let big: Vec<u8> = (0..9_000_000)
+        .map(|_| {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            seed as u8
+        })
+        .collect();
+    let zip = entities_zip_with(
+        &[
+            ("Space", "1", &[("key", "UPL"), ("name", "Uploaded"), ("homePage", "@Page:10")]),
+            ("Page", "10", &[("title", "Home"), ("contentStatus", "current"), ("space", "@Space:1"), ("version", "1")]),
+            ("BodyContent", "100", &[("content", "@Page:10"), ("body", "<p>Sent in parts</p>"), ("bodyType", "2")]),
+            (
+                "Attachment",
+                "50",
+                &[("title", "noise.bin"), ("containerContent", "@Page:10"), ("contentStatus", "current"), ("version", "1"), ("fileSize", "9000000")],
+            ),
+        ],
+        &[("attachments/10/50/1", &big)],
+    );
+    assert!(zip.len() > 8 << 20);
+
+    assert_eq!(app.post(&member, "/uploads", json!({"filename": "export.zip", "size": zip.len()})).await.0, 403);
+    let (st, up) = app.post(&c, "/uploads", json!({"filename": "export.zip", "size": zip.len()})).await;
+    assert_eq!(st, 201, "{up}");
+    let id = up["id"].as_str().unwrap().to_string();
+    let part = up["partSize"].as_u64().unwrap() as usize;
+    let put = |n: usize, bytes: Vec<u8>| {
+        let (c, app, id) = (&c, &app, &id);
+        async move {
+            let r = c.put(app.url(&format!("/uploads/{id}/parts/{n}"))).body(bytes).send().await.unwrap();
+            (r.status().as_u16(), r.json::<Value>().await.unwrap_or(Value::Null))
+        }
+    };
+    assert_eq!(put(1, zip[part..].to_vec()).await.0, 409, "parts come in order");
+    let (st, s) = put(0, zip[..part].to_vec()).await;
+    assert_eq!((st, s["parts"].as_i64(), s["complete"].as_bool()), (200, Some(1), Some(false)));
+    // the answer got lost and the part comes again: acknowledged, not stored twice
+    let (st, s) = put(0, zip[..part].to_vec()).await;
+    assert_eq!((st, s["parts"].as_i64()), (200, Some(1)));
+    assert_eq!(app.post(&c, &format!("/uploads/{id}/analyze-confluence"), json!({})).await.0, 409, "not finished yet");
+    assert_eq!(put(1, zip[part..zip.len() - 1].to_vec()).await.0, 400, "the last part must have the rest");
+    // after a reload the page asks how far it got
+    let (_, s) = app.get(&c, &format!("/uploads/{id}")).await;
+    assert_eq!(s["parts"], 1);
+    let (st, s) = put(1, zip[part..].to_vec()).await;
+    assert_eq!((st, s["complete"].as_bool()), (200, Some(true)), "{s}");
+
+    let (st, report) = app.post(&c, &format!("/uploads/{id}/analyze-confluence"), json!({})).await;
+    assert_eq!(st, 200, "{report}");
+    assert_eq!(report["spaces"][0]["key"], "UPL");
+    let (st, r) = app.post(&c, &format!("/uploads/{id}/import-confluence"), json!({"options": {"spaceKey": "PARTS"}})).await;
+    assert_eq!(st, 202, "{r}");
+    let job = r["jobId"].as_str().unwrap().to_string();
+    let result = app
+        .eventually(|| async {
+            let (_, j) = app.get(&c, &format!("/jobs/{job}")).await;
+            assert_ne!(j["status"], "failed", "{j}");
+            (j["status"] == "succeeded").then(|| j["result"].clone())
+        })
+        .await;
+    assert_eq!((result["created"]["pages"].as_i64(), result["created"]["attachments"].as_i64()), (Some(1), Some(1)), "{result}");
+    let (_, home) = app.get(&c, "/spaces/PARTS").await;
+    let (_, page) = app.get(&c, &format!("/pages/{}", home["homePageId"].as_str().unwrap())).await;
+    assert!(page["content"].to_string().contains("Sent in parts"));
+    let (_, atts) = app.get(&c, &format!("/pages/{}/attachments", home["homePageId"].as_str().unwrap())).await;
+    assert_eq!(atts[0]["size"], 9_000_000, "{atts}");
+    // used up
+    assert_eq!(app.get(&c, &format!("/uploads/{id}")).await.0, 404);
+}

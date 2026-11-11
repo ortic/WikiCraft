@@ -5811,6 +5811,151 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /uploads:
+    post:
+      tags:
+      - Import & export
+      summary: Start an upload in parts (admins; for multi-GB imports)
+      operationId: post_uploads
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                filename: *id001
+                size:
+                  type: integer
+      responses:
+        '201':
+          description: '{id, filename, size, partSize, parts (parts received: the next to send), received, complete}'
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /uploads/{id}:
+    get:
+      tags:
+      - Import & export
+      summary: How far an upload got
+      operationId: get_uploads_id
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: '{id, filename, size, partSize, parts (parts received: the next to send), received, complete}'
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+    delete:
+      tags:
+      - Import & export
+      summary: Discard an upload
+      operationId: delete_uploads_id
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '204':
+          description: Deleted
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /uploads/{id}/parts/{n}:
+    put:
+      tags:
+      - Import & export
+      summary: Part n (from 0) of an upload, raw bytes; parts come in order, every part has partSize bytes except the last; a part sent again is acknowledged
+      operationId: put_uploads_id_parts_n
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      - name: n
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/octet-stream:
+            schema:
+              type: string
+              format: binary
+      responses:
+        '200':
+          description: '{id, filename, size, partSize, parts (parts received: the next to send), received, complete}'
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /uploads/{id}/analyze-confluence:
+    post:
+      tags:
+      - Import & export
+      summary: Dry run of an uploaded Confluence export (the upload stays for the import)
+      operationId: post_uploads_id_analyze_confluence
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      responses:
+        '200':
+          description: Analysis report
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+  /uploads/{id}/import-confluence:
+    post:
+      tags:
+      - Import & export
+      summary: Import an uploaded Confluence export (uses the upload up)
+      operationId: post_uploads_id_import_confluence
+      parameters:
+      - name: id
+        in: path
+        required: true
+        schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                options:
+                  type: object
+                  description: spaceKey, skipHistory, skipDrafts, skipTrash, update, overwriteLocalChanges
+      responses:
+        '202':
+          description: 'Queued: {jobId}'
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /jobs:
     get:
       tags:

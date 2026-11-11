@@ -167,6 +167,9 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
 - CI flake (`semantic_retrieval_with_embeddings`, 2 of 3 runs): the tantivy reader only reloads when its 500 ms
   file watch notices a commit; on CI the whole test ran in 1.2 s, so keyword search still saw an empty index. The
   indexer now reloads the reader right after each commit (searches see a saved page at once).
+- Uploads in parts (`routes/uploads.rs`, migration 0056): 8 MB parts in file storage, in order, idempotent resend,
+  resumable (localStorage remembers file → upload); Confluence dry run and import read the same upload. Tested with
+  a synthetic two-part export and in Chromium (stop mid-part, continue, reload + same file = no parts resent).
 
 ## Security review 4 (independent review agent, 2026-11-10 ~03:40 UTC: link previews, banner, switches, decision log, branding) — status
 No critical or high findings. All five fixed in `9f0b9a9`:
