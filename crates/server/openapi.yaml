@@ -4394,6 +4394,12 @@ paths:
         in: path
         required: true
         schema: *id001
+      - name: w
+        in: query
+        required: false
+        description: 'a JPEG, PNG or WebP scaled down to this width: 640, 960, 1280 or 1920 (JPEG stays JPEG, the others become lossless WebP); the original when it is not wider'
+        schema:
+          type: integer
       responses:
         '200':
           description: OK

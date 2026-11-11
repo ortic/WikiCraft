@@ -1,5 +1,5 @@
 import { t } from '../i18n'
-import { Suspense, lazy, useEffect, useRef, useState } from 'react'
+import { Suspense, lazy, useEffect, useLayoutEffect, useRef, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { NodeViewWrapper, type ReactNodeViewProps } from '@tiptap/react'
 import { AlignCenter, AlignLeft, AlignRight, Captions, Download, ExternalLink, Maximize2, PenTool, Trash2, Type, WrapText, X, ZoomIn, Square } from 'lucide-react'
@@ -50,6 +50,22 @@ export function Lightbox({ src, alt, caption, onClose }: { src: string; alt: str
   )
 }
 
+/** Widths the server makes smaller copies of images in (`?w=`, see the server's renditions.rs). */
+const RENDITION_WIDTHS = [640, 960, 1280, 1920]
+
+/**
+ * The address of the smallest copy of an attached image that still fills `space` CSS pixels on
+ * this screen (the server sends the original when it isn't wider), or the original. A plain
+ * `src` rather than `srcset`: with width descriptors, browsers would blow small images up to the
+ * descriptor's width.
+ */
+export function sizedSrc(src: string, space: number): string {
+  if (!/^\/api\/attachments\/[0-9a-f-]{36}\/content$/.test(src)) return src
+  const need = Math.ceil(space * (window.devicePixelRatio || 1))
+  const w = RENDITION_WIDTHS.find((x) => x >= need)
+  return w ? `${src}?w=${w}` : src
+}
+
 /** Image with drag-to-resize, alignment, caption and alt text. */
 export function ImageView({ node, updateAttributes, deleteNode, selected, editor, getPos, extension }: ReactNodeViewProps) {
   const { src, alt, width, align, caption, border } = node.attrs as { src: string; alt: string | null; width: number | null; align: string | null; caption: string | null; border: boolean | null }
@@ -77,6 +93,15 @@ export function ImageView({ node, updateAttributes, deleteNode, selected, editor
     if (typeof pos === 'number') requestAnimationFrame(() => editor.commands.setNodeSelection(pos))
   }
   const shown = dragWidth ?? width
+  // the room the image gets (its set width, else the column it's in), measured before the first
+  // paint so the right copy loads; it only grows, so a narrower moment doesn't load another one
+  const frame = useRef<HTMLSpanElement>(null)
+  const [space, setSpace] = useState<number | null>(null)
+  useLayoutEffect(() => {
+    const column = (frame.current?.closest('td, th, .ProseMirror') as HTMLElement | null)?.clientWidth || 1200
+    const room = width ? Math.min(width, column) : column
+    setSpace((prev) => (prev !== null && room <= prev ? prev : room))
+  }, [width])
 
   const startResize = (e: React.PointerEvent) => {
     e.preventDefault()
@@ -114,10 +139,10 @@ export function ImageView({ node, updateAttributes, deleteNode, selected, editor
 
   return (
     <NodeViewWrapper as="span" className={`image-block align-${align || 'none'}${border ? ' bordered' : ''}${selected ? ' is-selected' : ''}`}>
-      <span className="image-frame" style={{ width: shown ? `${shown}px` : undefined }}>
+      <span ref={frame} className="image-frame" style={{ width: shown ? `${shown}px` : undefined }}>
         <img
           ref={img}
-          src={src}
+          src={space === null ? undefined : sizedSrc(src, space)}
           alt={alt ?? ''}
           draggable={false}
           className={editable ? undefined : 'zoomable'}

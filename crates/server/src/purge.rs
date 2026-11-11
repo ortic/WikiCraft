@@ -69,6 +69,7 @@ async fn collect_blobs(state: &AppState, keys: Vec<String>) {
                 if let Err(e) = state.blobs.delete_blob(&key).await {
                     tracing::warn!(key, "removing an unused file failed: {e:#}");
                 }
+                crate::renditions::forget(state, &key).await;
             }
             Ok(_) => {}
             // referenced again meanwhile (an upload of the same file): keep it

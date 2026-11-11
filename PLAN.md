@@ -311,7 +311,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Resize, align (left/center/right/wrap), caption, alt text `C D`
 - [x] **P1** Lightbox / zoom, image border `C D` — lightbox; border toggle in the image toolbar (also in exports)
 - [x] **P1** Image annotation (arrows, boxes, text) `C`
-- [ ] **P1** Responsive thumbnails & WebP/AVIF renditions generated server-side `C`
+- [x] **P1** Responsive thumbnails & WebP/AVIF renditions generated server-side `C` — `?w=640|960|1280|1920` on attachment URLs: JPEG → JPEG q82, PNG/WebP → lossless WebP, EXIF orientation applied, made on first request (two at a time) and kept in storage (`renditions/…`, removed with the file); the editor measures the room an image gets and asks for the smallest copy that fills it at the screen's pixel ratio (a 2.1 MB screenshot shown in a 708 px column loads as 150 KB). No AVIF (no pure-Rust encoder fast enough); lightbox, exports and downloads use the original
 - [ ] **P2** Gallery block `C X`
 - [ ] **P2** Watermarks on images `C`
 

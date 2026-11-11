@@ -1717,3 +1717,55 @@ async fn backup_and_restore_the_whole_installation() {
     let (st, _) = restored.post(&c, "/pages", json!({"spaceKey": "BAK", "title": "After the restore"})).await;
     assert_eq!(st, 201);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn images_come_in_smaller_copies() {
+    let app = spawn().await;
+    let owner = app.setup().await;
+    let (_, sp) = app.post(&owner, "/spaces", json!({"key": "IMG", "name": "Images"})).await;
+    let home = sp["homePageId"].as_str().unwrap().to_string();
+    let png = |w: u32, h: u32| {
+        let img = image::RgbaImage::from_fn(w, h, |x, y| image::Rgba([(x % 251) as u8, (y % 241) as u8, ((x + y) % 239) as u8, 255]));
+        let mut out = std::io::Cursor::new(Vec::new());
+        img.write_to(&mut out, image::ImageFormat::Png).unwrap();
+        out.into_inner()
+    };
+    let upload = |name: &'static str, data: Vec<u8>| {
+        let (app, owner, home) = (&app, &owner, &home);
+        async move {
+            let form = reqwest::multipart::Form::new().part("file", reqwest::multipart::Part::bytes(data).file_name(name));
+            let v: Value = owner.post(app.url(&format!("/pages/{home}/attachments"))).multipart(form).send().await.unwrap().json().await.unwrap();
+            v[0]["id"].as_str().unwrap().to_string()
+        }
+    };
+    let wide = upload("diagram.png", png(2400, 600)).await;
+    let small = upload("icon.png", png(200, 200)).await;
+    let fetch = |id: String, q: &'static str| {
+        let (app, owner) = (&app, &owner);
+        async move {
+            let r = owner.get(app.url(&format!("/attachments/{id}/content{q}"))).send().await.unwrap();
+            let status = r.status().as_u16();
+            let mime = r.headers().get("content-type").map(|v| v.to_str().unwrap().to_string()).unwrap_or_default();
+            (status, mime, r.bytes().await.unwrap())
+        }
+    };
+    let (st, mime, body) = fetch(wide.clone(), "?w=640").await;
+    assert_eq!((st, mime.as_str()), (200, "image/webp"));
+    let img = image::load_from_memory(&body).unwrap();
+    assert_eq!((img.width(), img.height()), (640, 160));
+    // made once, then served from storage
+    let (_, _, again) = fetch(wide.clone(), "?w=640").await;
+    assert_eq!(again, body);
+    let (_, mime, body) = fetch(wide.clone(), "?w=1920").await;
+    assert_eq!(mime, "image/webp");
+    assert_eq!(image::load_from_memory(&body).unwrap().width(), 1920);
+    // narrow images, other widths and no width: the original
+    for (id, q) in [(small.clone(), "?w=640"), (wide.clone(), "?w=500"), (wide.clone(), "")] {
+        let (st, mime, body) = fetch(id, q).await;
+        assert_eq!((st, mime.as_str()), (200, "image/png"), "{q}");
+        assert_eq!(image::guess_format(&body).unwrap(), image::ImageFormat::Png);
+    }
+    // same access rules as the original
+    let anon = common::client();
+    assert_eq!(anon.get(app.url(&format!("/attachments/{wide}/content?w=640"))).send().await.unwrap().status(), 401);
+}

@@ -162,6 +162,8 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   a repeatable-read transaction) and the stored files; restore into an empty database runs the backup's migrations,
   loads without foreign keys (spaces ⇄ pages cycle), re-adds them, resets sequences, upgrades. Tested end to end
   (restored copy served by a second app: login, pages, attachment bytes, comments, former addresses, search).
+- Image renditions (`crate::renditions`): `?w=` copies cached in storage; the client picks the width from the measured
+  column × devicePixelRatio and uses a plain `src` (a `srcset` with width descriptors would blow small images up).
 
 ## Security review 4 (independent review agent, 2026-11-10 ~03:40 UTC: link previews, banner, switches, decision log, branding) — status
 No critical or high findings. All five fixed in `9f0b9a9`:

@@ -139,6 +139,17 @@ impl BlobStore {
         Ok(())
     }
 
+    /// Reads a non-content-addressed object (image renditions).
+    pub async fn get_key(&self, key: &str) -> anyhow::Result<Bytes> {
+        Ok(self.store.get(&Path::from(key)).await?.bytes().await?)
+    }
+
+    /// Stores a non-content-addressed object (image renditions).
+    pub async fn put_key(&self, key: &str, data: Bytes) -> anyhow::Result<()> {
+        self.store.put(&Path::from(key), PutPayload::from_bytes(data)).await?;
+        Ok(())
+    }
+
     /// Removes a non-content-addressed object (export archives, uploads).
     pub async fn delete_key(&self, key: &str) -> anyhow::Result<()> {
         self.store.delete(&Path::from(key)).await?;

@@ -28,6 +28,7 @@ pub mod mfa;
 pub mod paths;
 pub mod pdf;
 pub mod purge;
+pub mod renditions;
 pub mod retrieval;
 pub mod routes;
 pub mod schema_upgrade;

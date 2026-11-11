@@ -1,10 +1,10 @@
 use axum::Json;
 use axum::body::Body;
-use axum::extract::{Multipart, Path, State};
+use axum::extract::{Multipart, Path, Query, State};
 use axum::http::{StatusCode, header};
 use axum::response::{IntoResponse, Response};
 use bytes::Bytes;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::app::{AppState, new_id};
@@ -405,7 +405,14 @@ pub async fn upload_comment_image(
     Ok((StatusCode::CREATED, Json(serde_json::json!({ "id": id, "filename": name, "url": format!("/api/attachments/{id}/content") }))))
 }
 
-pub async fn download(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path(id): Path<Uuid>) -> ApiResult<Response> {
+#[derive(Deserialize)]
+pub struct ContentQuery {
+    /// an image scaled down to this width (one of [`crate::renditions::WIDTHS`]); the original
+    /// when it isn't wider or isn't a JPEG, PNG or WebP
+    w: Option<u32>,
+}
+
+pub async fn download(State(state): State<AppState>, MaybeUser(user): MaybeUser, Path(id): Path<Uuid>, Query(q): Query<ContentQuery>) -> ApiResult<Response> {
     let row: Option<(Uuid, String, String, Option<String>, i64)> =
         sqlx::query_as("SELECT page_id, filename, media_type, blob_key, size FROM attachments WHERE id = $1 AND deleted_at IS NULL")
             .bind(id)
@@ -414,6 +421,24 @@ pub async fn download(State(state): State<AppState>, MaybeUser(user): MaybeUser,
     let (page_id, filename, media_type, key, size) = row.ok_or(ApiError::NotFound("attachment"))?;
     let p = Principal::load(&state, user).await?;
     require_page(&state, &p, page_id, Need::View).await?;
+    if let (Some(w), Some(k)) = (q.w, key.as_deref()) {
+        match crate::renditions::get(&state, k, &media_type, w).await {
+            Ok(Some((bytes, mime))) => {
+                return Ok((
+                    [
+                        (header::CONTENT_TYPE, mime.to_string()),
+                        (header::CONTENT_DISPOSITION, format!("inline; filename*=UTF-8''{}", urlencode(&filename))),
+                        (header::CACHE_CONTROL, "private, max-age=3600".into()),
+                        (header::CONTENT_SECURITY_POLICY, "default-src 'none'; sandbox".into()),
+                    ],
+                    bytes,
+                )
+                    .into_response());
+            }
+            Ok(None) => {}
+            Err(e) => tracing::warn!(%id, "image rendition failed: {e:#}"),
+        }
+    }
     serve(&state, filename, media_type, key, size).await
 }
 
