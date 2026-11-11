@@ -43,6 +43,7 @@ tower = "0.5.3"
 tower-http = { version = "0.7.1", features = ["fs", "trace", "compression-gzip", "limit", "set-header", "timeout", "request-id", "util", "catch-panic", "propagate-header"] }
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", features = ["env-filter", "json"] }
+unicode-normalization = "0.1.26"
 uuid = { version = "1.29.2", features = ["v7", "v4", "serde"] }
 wikicraft-confluence = { version = "0.1.0", path = "../confluence" }
 wikicraft-doc-model = { version = "0.1.0", path = "../doc-model" }

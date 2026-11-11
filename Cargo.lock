@@ -7817,6 +7817,7 @@ dependencies = [
  "typst-assets",
  "typst-layout",
  "typst-pdf",
+ "unicode-normalization",
  "uuid",
  "wikicraft-confluence",
  "wikicraft-doc-model",

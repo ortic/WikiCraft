@@ -128,6 +128,10 @@ pub struct SpacePlan {
     pub watchers: Vec<String>,
     /// user keys of people who marked the space as favourite
     pub favourited_by: Vec<String>,
+    /// a personal space (`~username`, or `~accountid` on Cloud)
+    pub personal: bool,
+    /// user key of a personal space's owner (its creator), when the export names one
+    pub personal_owner: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -633,6 +637,8 @@ impl<'e> Planner<'e> {
                 permissions: ex.space_permissions.iter().filter(|p| p.space_id == s.id).cloned().collect(),
                 watchers: space_watchers,
                 favourited_by: space_favourites,
+                personal: s.is_personal(),
+                personal_owner: s.creator.clone().filter(|_| s.is_personal()),
             });
         }
 

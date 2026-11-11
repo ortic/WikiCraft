@@ -11,7 +11,8 @@ It works the same for Confluence Server, Data Center and Cloud exports.
 
 | Confluence | WikiCraft | Notes |
 |---|---|---|
-| Spaces (key, name, description, home page) | Spaces | the key can be changed on import (`--space-key`) |
+| Spaces (key, name, description, home page) | Spaces | the key can be changed on import (`--space-key`); keys WikiCraft can't use are cleaned up, and a key that's taken gets a number |
+| Personal spaces (`~username`, `~accountid` on Cloud) | Personal spaces | owned by the same person, with WikiCraft's `~NAME` keys (from their e-mail address, else the space name); someone who already has a personal space here gets the imported one as an ordinary space. Old `/display/~user/…` links keep working |
 | Page tree and sibling order | Page tree | orphans go to the space root and are reported; pages without a position sort alphabetically, as in Confluence |
 | Blog posts | Blog | |
 | Page history | Versions | with the original authors and dates; skip with `--skip-history` |

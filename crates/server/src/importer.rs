@@ -331,6 +331,29 @@ fn denied_for_confluence(role: Role, perms: &[&str], knows_archive: bool) -> Vec
     clean_denied(role, &denied)
 }
 
+/// The WikiCraft key for a Confluence space: its own key when that's a valid one. Personal
+/// spaces (`~username`, `~accountid` on Cloud) get WikiCraft's personal keys, `~` + the owner's
+/// e-mail name or else the space's name (Confluence names it after the owner).
+fn import_space_key(key: &str, name: &str, personal: bool, owner_email: Option<&str>) -> String {
+    // accents folded ("Müller" → MULLER), anything else non-ASCII left out
+    let alnum = |s: &str, n: usize| {
+        use unicode_normalization::UnicodeNormalization;
+        s.nfd().filter(char::is_ascii_alphanumeric).take(n).collect::<String>().to_uppercase()
+    };
+    if personal {
+        let base = [owner_email.and_then(|e| e.split('@').next()).unwrap_or_default(), name, key]
+            .into_iter()
+            .map(|s| alnum(s, 24))
+            .find(|b| !b.is_empty())
+            .unwrap_or_else(|| "ME".into());
+        return format!("~{base}");
+    }
+    crate::routes::spaces::validate_key(key).unwrap_or_else(|_| {
+        let k: String = key.chars().filter(|c| c.is_ascii_alphanumeric() || *c == '_' || *c == '-').take(32).collect::<String>().to_uppercase();
+        if k.is_empty() { "IMPORT".into() } else { k }
+    })
+}
+
 #[cfg(test)]
 mod permission_tests {
     use super::*;
@@ -448,6 +471,9 @@ async fn import(state: &AppState, job: Uuid, ws: Uuid, actor: Uuid, path: &Path,
                 referenced.insert(u.clone());
             }
         }
+        if let Some(u) = &s.personal_owner {
+            referenced.insert(u.clone());
+        }
     }
     for key in referenced {
         if users.contains_key(&key) {
@@ -497,16 +523,31 @@ async fn import(state: &AppState, job: Uuid, ws: Uuid, actor: Uuid, path: &Path,
             }
         }
     }
+    // keys picked for this import's other spaces count as taken: none of them exists yet
+    let mut picked: std::collections::HashSet<String> = std::collections::HashSet::new();
     for s in &plan.spaces {
         if let Some((_, key)) = earlier.get(&s.source_id) {
             space_keys.insert(s.key.clone(), key.clone());
+            picked.insert(key.to_lowercase());
             continue;
         }
-        let wanted = if plan.spaces.len() == 1 { opts.space_key.clone().unwrap_or_else(|| s.key.clone()) } else { s.key.clone() };
-        let mut key = crate::routes::spaces::validate_key(&wanted).unwrap_or_else(|_| "IMPORT".into());
-        let base = key.clone();
+        let base = match opts.space_key.as_deref().filter(|_| plan.spaces.len() == 1) {
+            Some(wanted) => crate::routes::spaces::validate_key(wanted).unwrap_or_else(|_| "IMPORT".into()),
+            None => {
+                let owner_email: Option<String> = match s.personal_owner.as_ref().and_then(|k| users.get(k)) {
+                    Some(id) => sqlx::query_scalar("SELECT email FROM users WHERE id = $1").bind(id).fetch_one(&state.db).await?,
+                    None => None,
+                };
+                import_space_key(&s.key, &s.name, s.personal, owner_email.as_deref())
+            }
+        };
+        let mut key = base.clone();
         let mut n = 2;
-        while sqlx::query_scalar::<_, bool>("SELECT EXISTS (SELECT 1 FROM spaces WHERE workspace_id = $1 AND lower(key) = lower($2))")
+        while picked.contains(&key.to_lowercase())
+            || sqlx::query_scalar::<_, bool>(
+                "SELECT EXISTS (SELECT 1 FROM spaces WHERE workspace_id = $1 AND lower(key) = lower($2))
+                     OR EXISTS (SELECT 1 FROM space_key_aliases WHERE workspace_id = $1 AND lower(key) = lower($2))",
+            )
             .bind(ws)
             .bind(&key)
             .fetch_one(&state.db)
@@ -515,6 +556,7 @@ async fn import(state: &AppState, job: Uuid, ws: Uuid, actor: Uuid, path: &Path,
             key = format!("{base}{n}");
             n += 1;
         }
+        picked.insert(key.to_lowercase());
         space_keys.insert(s.key.clone(), key.clone());
         new_spaces.push((s.source_id.clone(), Uuid::nil()));
     }
@@ -613,6 +655,19 @@ async fn import(state: &AppState, job: Uuid, ws: Uuid, actor: Uuid, path: &Path,
                     .bind(actor)
                     .execute(&state.db)
                     .await?;
+                // a personal space becomes its owner's personal space here (one per person: an
+                // owner who already has one keeps it and this stays an ordinary space)
+                if let Some(owner) = s.personal_owner.as_ref().and_then(|k| users.get(k)) {
+                    let r = sqlx::query(
+                        "UPDATE spaces SET personal_owner_id = $2, owner_id = $2, icon = COALESCE(icon, 'star:amber')
+                          WHERE id = $1 AND NOT EXISTS (SELECT 1 FROM spaces WHERE personal_owner_id = $2)",
+                    )
+                    .bind(space.id)
+                    .bind(owner)
+                    .execute(&state.db)
+                    .await?;
+                    count("personalSpaces", r.rows_affected() as i64);
+                }
                 sqlx::query("INSERT INTO import_mappings (workspace_id, source, source_type, source_id, target_id, job_id) VALUES ($1, 'confluence', 'space', $2, $3, $4) ON CONFLICT (workspace_id, source, source_type, source_id) DO UPDATE SET target_id = EXCLUDED.target_id")
                 .bind(ws)
                 .bind(&s.source_id)
@@ -1492,6 +1547,17 @@ pub fn analyze(path: &Path) -> anyhow::Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn space_keys_for_imported_spaces() {
+        assert_eq!(import_space_key("DOCS", "Docs", false, None), "DOCS");
+        assert_eq!(import_space_key("team.docs", "Team", false, None), "TEAMDOCS");
+        assert_eq!(import_space_key("...", "Team", false, None), "IMPORT");
+        assert_eq!(import_space_key("~0000aaaabbbbccccddddeeeeffff000011112222", "Jane Doe", true, Some("jane.d@acme.test")), "~JANED");
+        assert_eq!(import_space_key("~123456789", "Zoë Müller", true, None), "~ZOEMULLER");
+        assert_eq!(import_space_key("~jdoe", "", true, None), "~JDOE");
+        assert_eq!(import_space_key("~", "", true, None), "~ME");
+    }
 
     #[test]
     fn decodes_placeholder_components() {

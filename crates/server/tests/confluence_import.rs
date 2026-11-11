@@ -635,3 +635,67 @@ async fn space_permissions_from_confluence() {
     assert_eq!(b["role"], "editor");
     assert_eq!(b["denied"], json!(["blog.add", "blog.delete", "comment.delete", "restrict", "delete.own"]), "what bob didn't have in Confluence");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn personal_spaces_from_confluence() {
+    let app = common::spawn().await;
+    let c = app.setup().await;
+    let (bob, bob_id) = app.user(&c, "bob@acme.test", "member").await;
+    let page = |title: &'static str, space: &'static str| -> Vec<(&'static str, &'static str)> {
+        vec![("title", title), ("contentStatus", "current"), ("space", space), ("version", "1")]
+    };
+    // Cloud personal space keys are `~` + account id: not valid WikiCraft keys, and several of
+    // them in one export used to collapse onto the same fallback key (import failed)
+    let objects: Vec<(&str, &str, Vec<(&str, &str)>)> = vec![
+        ("ConfluenceUserImpl", "u-bob", vec![("name", "bob"), ("email", "bob@acme.test")]),
+        ("ConfluenceUserImpl", "u-carol", vec![("name", "carol")]),
+        (
+            "Space",
+            "1",
+            vec![
+                ("key", "~0000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"),
+                ("name", "Bob Builder"),
+                ("spaceType", "personal"),
+                ("creator", "@ConfluenceUserImpl:u-bob"),
+            ],
+        ),
+        ("Space", "2", vec![("key", "~123456789"), ("name", "Carol Example"), ("spaceType", "personal"), ("creator", "@ConfluenceUserImpl:u-carol")]),
+        ("Space", "3", vec![("key", "~0000bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"), ("name", "Bob"), ("spaceType", "personal")]),
+        ("Space", "4", vec![("key", "TEAM"), ("name", "Team"), ("spaceType", "global"), ("creator", "@ConfluenceUserImpl:u-bob")]),
+        ("Page", "10", page("Bob's notes", "@Space:1")),
+        ("Page", "20", page("Carol's notes", "@Space:2")),
+        ("Page", "30", page("Unowned notes", "@Space:3")),
+        ("Page", "40", page("Project home", "@Space:4")),
+    ];
+    let refs: Vec<(&str, &str, &[(&str, &str)])> = objects.iter().map(|(c, i, p)| (*c, *i, p.as_slice())).collect();
+    let result = import(&app, &c, entities_zip(&refs), json!({})).await;
+    let key_of = |original: &str| -> String {
+        result["spaces"].as_array().unwrap().iter().find(|s| s["originalKey"] == original).unwrap_or_else(|| panic!("{original}: {result}"))["key"]
+            .as_str()
+            .unwrap()
+            .to_string()
+    };
+    // personal spaces get WikiCraft's `~NAME` keys (owner's e-mail, else the space name), unique
+    assert_eq!(key_of("~0000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"), "~BOB");
+    assert_eq!(key_of("~123456789"), "~CAROLEXAMPLE");
+    assert_eq!(key_of("~0000bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb"), "~BOB2");
+    assert_eq!(key_of("TEAM"), "TEAM");
+    // and belong to their Confluence owner
+    let (_, mine) = app.get(&bob, "/me/space").await;
+    assert_eq!(mine["key"], "~BOB");
+    let owners: Vec<(String, Option<String>, Option<String>)> =
+        sqlx::query_as("SELECT s.key, s.personal_owner_id::text, s.owner_id::text FROM spaces s WHERE s.source_ref LIKE 'confluence:space:%' ORDER BY s.key")
+            .fetch_all(&app.state.db)
+            .await
+            .unwrap();
+    let carol: String = sqlx::query_scalar("SELECT id::text FROM users WHERE external_ref = 'confluence:u-carol'").fetch_one(&app.state.db).await.unwrap();
+    let owner = |k: &str| owners.iter().find(|o| o.0 == k).cloned().unwrap();
+    assert_eq!(owner("~BOB").1.as_deref(), Some(bob_id.as_str()));
+    assert_eq!(owner("~BOB").2.as_deref(), Some(bob_id.as_str()));
+    assert_eq!(owner("~CAROLEXAMPLE").1.as_deref(), Some(carol.as_str()));
+    assert_eq!(owner("~BOB2").1, None, "no owner in the export");
+    assert_eq!(owner("TEAM").1, None, "a global space isn't personal");
+    assert_eq!(result["created"]["personalSpaces"], 2, "{result}");
+    let (s, _) = app.get(&bob, "/spaces/~BOB").await;
+    assert_eq!(s, 200);
+}

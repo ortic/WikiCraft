@@ -136,6 +136,13 @@ pub struct Space {
     pub status: Option<String>,
 }
 
+impl Space {
+    /// A personal space: typed so, or keyed `~username` (`~accountid` on Cloud).
+    pub fn is_personal(&self) -> bool {
+        self.space_type.as_deref().is_some_and(|t| t.eq_ignore_ascii_case("personal")) || self.key.starts_with('~')
+    }
+}
+
 #[derive(Debug, Clone, Serialize)]
 pub struct Content {
     pub id: String,

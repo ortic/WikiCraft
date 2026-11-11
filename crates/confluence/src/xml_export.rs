@@ -46,6 +46,8 @@ struct Pending {
     labellings: Vec<(String, String, Option<String>)>,     // (label id, content id, owner)
     perm_sets: HashMap<String, (String, RestrictionKind)>, // set id → (content id, kind)
     perms: Vec<(String, Option<String>, Option<String>)>,  // (set id, user key, group)
+    // Crowd users: (username, display name, e-mail); they can come before the Confluence users
+    crowd_users: Vec<(String, Option<String>, Option<String>)>,
 }
 
 pub fn read<R: Read>(input: R, export: &mut Export) -> Result<(), crate::Error> {
@@ -238,11 +240,7 @@ fn dispatch(o: RawObject, export: &mut Export, pending: &mut Pending) {
         "InternalUser" | "User" => {
             // Crowd user (full-site exports): username → display name / email
             if let Some(name) = o.get("name") {
-                let entry = export.users.values_mut().find(|u| u.username.as_deref() == Some(name.as_str()));
-                if let Some(u) = entry {
-                    u.display_name = o.get("displayName").or(u.display_name.take());
-                    u.email = o.get("emailAddress").or(u.email.take());
-                }
+                pending.crowd_users.push((name, o.get("displayName"), o.get("emailAddress")));
             }
         }
         "ContentProperty" => {
@@ -311,6 +309,13 @@ fn dispatch(o: RawObject, export: &mut Export, pending: &mut Pending) {
 }
 
 fn resolve_pending(p: Pending, export: &mut Export) {
+    let by_username: HashMap<String, String> = export.users.values().filter_map(|u| Some((u.username.as_deref()?.to_lowercase(), u.key.clone()))).collect();
+    for (name, display_name, email) in p.crowd_users {
+        if let Some(u) = by_username.get(&name.to_lowercase()).and_then(|k| export.users.get_mut(k)) {
+            u.display_name = display_name.or(u.display_name.take());
+            u.email = email.or(u.email.take());
+        }
+    }
     // content properties are linked from the owner's `contentProperties` collection
     for c in export.contents.values() {
         for pid in &c.property_ids {
@@ -365,5 +370,32 @@ pub fn index_attachments(names: &[String], export: &mut Export) {
         .collect();
     for (id, version, path) in found {
         export.attachment_files.entry(id).or_default().entry(version).or_insert(path);
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn crowd_users_before_confluence_users_still_name_them() {
+        // Cloud backups list some Crowd users ahead of the Confluence users they belong to
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?><hibernate-generic>
+<object class="InternalUser" package="com.atlassian.crowd.model.user"><id name="id">1</id>
+<property name="name"><![CDATA[jane@example.test]]></property><property name="displayName"><![CDATA[Jane Doe]]></property>
+<property name="emailAddress"><![CDATA[jane@example.test]]></property></object>
+<object class="ConfluenceUserImpl" package="com.atlassian.confluence.user"><id name="key"><![CDATA[k1]]></id>
+<property name="name"><![CDATA[Jane@Example.test]]></property></object>
+<object class="ConfluenceUserImpl" package="com.atlassian.confluence.user"><id name="key"><![CDATA[k2]]></id>
+<property name="name"><![CDATA[sam]]></property></object>
+<object class="InternalUser" package="com.atlassian.crowd.model.user"><id name="id">2</id>
+<property name="name"><![CDATA[sam]]></property><property name="displayName"><![CDATA[Sam Smith]]></property></object>
+</hibernate-generic>"#;
+        let mut export = Export::default();
+        read(xml.as_bytes(), &mut export).unwrap();
+        assert_eq!(export.users["k1"].display_name.as_deref(), Some("Jane Doe"));
+        assert_eq!(export.users["k1"].email.as_deref(), Some("jane@example.test"));
+        assert_eq!(export.users["k2"].display_name.as_deref(), Some("Sam Smith"));
+        assert_eq!(export.users["k2"].email, None);
     }
 }
