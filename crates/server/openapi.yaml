@@ -4441,6 +4441,66 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /cql:
+    get:
+      tags:
+      - Discovery
+      summary: 'Pages matching a CQL query (Confluence''s query language) that the caller may see, in the query''s order (`order
+        by`, default last modified first). Fields: space, space.title, title, text, label, type, creator, contributor, mention,
+        favourite, watcher, created, lastModified, id, parent, ancestor, status, property[Name]; 400 with a message for queries
+        it can''t read'
+      operationId: get_cql
+      parameters:
+      - name: cql
+        in: query
+        required: false
+        description: the query, e.g. space = ENG and label = runbook order by title
+        schema: *id001
+      - name: space
+        in: query
+        required: false
+        description: space key for currentSpace()
+        schema: *id001
+      - name: limit
+        in: query
+        required: false
+        description: max results (default 50, at most 500)
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: object
+                  properties:
+                    id: *id002
+                    title: *id001
+                    kind: *id001
+                    spaceKey: *id001
+                    spaceName: *id001
+                    createdAt: *id004
+                    updatedAt: *id004
+                    updatedByName:
+                      type:
+                      - string
+                      - 'null'
+                    labels:
+                      type: array
+                      items: *id001
+                    excerpt: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+      security:
+      - {}
+      - session: []
+      - token: []
   /search:
     get:
       tags:

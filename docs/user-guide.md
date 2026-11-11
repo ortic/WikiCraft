@@ -13,6 +13,15 @@ Mac) in the app for the keyboard shortcuts.
 - **Search** (`Ctrl K` / `Cmd K` jumps straight to a page or runs an action: create a page or
   folder, open the trash, dark mode …; start with `>` for actions only) finds pages, blog posts
   and comments; filter by space, type, label, contributor and date, and save searches you repeat.
+- **Query** (Search → *Query*) finds pages with Confluence's query language (CQL), e.g.
+  `space = ENG and label in (runbook, on-call) and lastModified > now("-30d") order by title`.
+  Fields: `space`, `space.title`, `title`, `text`, `label`, `type` (page, blogpost, folder),
+  `creator`, `contributor`, `mention`, `favourite`, `watcher`, `created`, `lastModified`, `id`,
+  `parent`, `ancestor`, `status` and `property[Name]`; operators `=` `!=` `~` (contains, `*` and
+  `?` wildcards) `!~` `<` `<=` `>` `>=` `in (…)` `not in (…)` with `and`, `or`, `not` and
+  parentheses; functions `currentUser()`, `currentSpace()`, `now("-7d")`, `startOfDay()`,
+  `startOfWeek("-1")`, `startOfMonth()`, `startOfYear()` and `endOf…()` (dates in UTC). Content
+  by label blocks imported from Confluence run their CQL the same way.
 - **Star** pages and spaces you use often: they come first in the sidebar and the space
   directory.
 - **Folders** group pages without content of their own; create one with the folder icon in the

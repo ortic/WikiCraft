@@ -317,3 +317,103 @@ async fn task_reports_filter_by_assignee_and_due_date() {
     let (_, r) = app.get(&owner, "/reports/tasks?spaces=PLAN&assignees=ff8080817b").await;
     assert_eq!(texts(&r), vec!["Book venue", "Order food"]);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn cql_queries() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (ann, ann_id) = app.user(&owner, "ann@acme.test", "member").await;
+    let (_, me) = app.get(&owner, "/me").await;
+    let owner_id = me["user"]["id"].as_str().unwrap().to_string();
+    let (_, eng) = app.post(&owner, "/spaces", json!({"key": "ENG", "name": "Engineering"})).await;
+    app.post(&owner, "/spaces", json!({"key": "OPS", "name": "Operations"})).await;
+    let eng_home = eng["homePageId"].as_str().unwrap().to_string();
+    let mk = |c: &reqwest::Client, body: Value| {
+        let c = c.clone();
+        let app = &app;
+        async move {
+            let (st, p) = app.post(&c, "/pages", body).await;
+            assert_eq!(st, 201, "{p}");
+            p["id"].as_str().unwrap().to_string()
+        }
+    };
+    let runbook =
+        mk(&owner, json!({"spaceKey": "ENG", "parentId": eng_home, "title": "Database runbook", "markdown": "Restart the kumquat service first."})).await;
+    let deep = mk(&owner, json!({"spaceKey": "ENG", "parentId": runbook, "title": "Failover steps", "markdown": "Promote the replica."})).await;
+    let annpage = mk(&ann, json!({"spaceKey": "ENG", "title": "Ann's notes"})).await;
+    let mention = json!({"type": "doc", "content": [{"type": "paragraph", "content": [
+        {"type": "text", "text": "Ping "}, {"type": "mention", "attrs": {"id": owner_id, "label": "Owner"}}, {"type": "text", "text": " about it."}
+    ]}]});
+    assert_eq!(app.put(&ann, &format!("/pages/{annpage}/content"), json!({ "content": mention })).await.0, 200);
+    mk(&owner, json!({"spaceKey": "ENG", "title": "Release blog", "kind": "blog"})).await;
+    let ops = mk(&owner, json!({"spaceKey": "OPS", "title": "On-call rota", "markdown": "Weekly rotation."})).await;
+    let secret = mk(&owner, json!({"spaceKey": "OPS", "title": "Secret runbook", "markdown": "kumquat password"})).await;
+    for (id, labels) in [(&runbook, vec!["runbook", "db"]), (&deep, vec!["runbook"]), (&ops, vec!["on-call"]), (&secret, vec!["runbook"])] {
+        assert_eq!(app.put(&owner, &format!("/pages/{id}/labels"), json!({ "labels": labels })).await.0, 200);
+    }
+    app.put(&owner, &format!("/pages/{secret}/restrictions"), json!({"restrictions": [{"kind": "view", "subjectType": "user", "subjectId": owner_id}]})).await;
+    app.put(
+        &owner,
+        &format!("/pages/{ops}/properties"),
+        json!({"properties": [{"key": "Status", "type": "select", "value": "Active"}, {"key": "Effort", "type": "number", "value": "8"}]}),
+    )
+    .await;
+    app.put(&ann, &format!("/pages/{runbook}/favorite"), json!({})).await;
+    sqlx::query("UPDATE pages SET updated_at = now() - interval '90 days' WHERE id = $1")
+        .bind(uuid::Uuid::parse_str(&ops).unwrap())
+        .execute(&app.state.db)
+        .await
+        .unwrap();
+
+    let q = |c: reqwest::Client, cql: &str| {
+        let url = format!("/cql?cql={}&space=ENG", urlencode(cql));
+        let app = &app;
+        async move {
+            let (st, v) = app.get(&c, &url).await;
+            assert_eq!(st, 200, "{v}");
+            let mut t = titles(&v);
+            t.sort();
+            t
+        }
+    };
+    let s = |v: &[&str]| v.iter().map(|x| x.to_string()).collect::<Vec<_>>();
+    // labels, spaces, permissions: ann never sees the restricted page
+    assert_eq!(q(ann.clone(), "label = runbook").await, s(&["Database runbook", "Failover steps"]));
+    assert_eq!(q(owner.clone(), "label = runbook").await, s(&["Database runbook", "Failover steps", "Secret runbook"]));
+    assert_eq!(q(ann.clone(), "label in (runbook, on-call) and space = OPS").await, s(&["On-call rota"]));
+    assert_eq!(q(ann.clone(), "label = runbook and not label = db").await, s(&["Failover steps"]));
+    assert_eq!(q(ann.clone(), "space = currentSpace() and type = blogpost").await, s(&["Release blog"]));
+    // text, title wildcards, people, mentions, favourites, ancestors, properties, dates
+    assert_eq!(q(ann.clone(), "text ~ kumquat").await, s(&["Database runbook"]));
+    assert_eq!(q(ann.clone(), "title ~ \"*runbook\"").await, s(&["Database runbook"]));
+    assert_eq!(q(ann.clone(), "creator = currentUser()").await, s(&["Ann's notes"]));
+    assert_eq!(q(ann.clone(), "creator = \"ann@acme.test\" or contributor = Ann").await, s(&["Ann's notes"]));
+    assert_eq!(q(ann.clone(), &format!("mention = {owner_id}")).await, s(&["Ann's notes"]));
+    assert_eq!(q(ann.clone(), "favourite = currentUser()").await, s(&["Database runbook"]));
+    assert_eq!(q(ann.clone(), &format!("ancestor = {runbook}")).await, s(&["Failover steps"]));
+    assert_eq!(q(ann.clone(), &format!("parent = {eng_home} and id != {annpage}")).await, s(&["Database runbook"]));
+    assert_eq!(q(ann.clone(), "property[Status] = active and property[Effort] >= 5").await, s(&["On-call rota"]));
+    assert_eq!(q(ann.clone(), "space = OPS and lastModified < now(\"-30d\")").await, s(&["On-call rota"]));
+    assert!(!q(ann.clone(), "lastModified >= startOfDay()").await.contains(&"On-call rota".to_string()));
+    // order by
+    let (_, v) = app.get(&ann, &format!("/cql?cql={}", urlencode("space = ENG and type = page order by title desc"))).await;
+    assert_eq!(titles(&v)[..2], s(&["Failover steps", "Engineering"])[..], "{v}");
+    // values are never SQL
+    assert!(q(ann.clone(), "title = \"x' OR 1=1 --\"").await.is_empty());
+    // mistakes come back as 400 with a message
+    let (st, e) = app.get(&ann, &format!("/cql?cql={}", urlencode("colour = red"))).await;
+    assert_eq!(st, 400);
+    assert!(e["message"].as_str().unwrap_or_default().contains("unknown field"), "{e}");
+    // anonymous callers of a private wiki get nothing
+    let (_, v) = app.get(&common::client(), &format!("/cql?cql={}", urlencode("label = runbook"))).await;
+    assert!(v.as_array().map(|a| a.is_empty()).unwrap_or(true), "{v}");
+
+    // the content-by-label report runs CQL; an unreadable query falls back to its labels
+    let (_, v) = app.get(&ann, &format!("/reports/pages?cql={}&space=ENG&sort=title", urlencode("label = runbook and ancestor = currentSpace()"))).await;
+    assert!(v.as_array().is_some(), "{v}");
+    let (_, v) = app.get(&ann, &format!("/reports/pages?cql={}&space=ENG&sort=title", urlencode(&format!("label = runbook and ancestor = {runbook}")))).await;
+    assert_eq!(titles(&v), s(&["Failover steps"]));
+    let (_, v) = app.get(&ann, &format!("/reports/pages?cql={}&labels=db&sort=title", urlencode("label = db and macro = whatever"))).await;
+    assert_eq!(titles(&v), s(&["Database runbook"]));
+    let _ = ann_id;
+}

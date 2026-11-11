@@ -72,10 +72,15 @@ function PageList({ params, page, mode }: { params: Params; page: Page | undefin
   const spaces = spec.spaces.length ? spec.spaces : mode === 'recent' && !(params.spaces ?? '').includes('@all') && page ? [page.spaceKey] : []
   const max = Number(params.max ?? params.maxResults ?? (mode === 'recent' ? 15 : 20)) || 20
   const sort = mode === 'recent' ? 'updated' : params.sort === 'title' || !params.sort ? 'title' : params.sort === 'creation' ? 'created' : 'updated'
-  const enabled = mode === 'recent' || spec.labels.length > 0
+  // a CQL query is run as such on the server; its labels and spaces are the fallback
+  const cql = (params.cql ?? '').trim()
+  const enabled = mode === 'recent' || spec.labels.length > 0 || !!cql
   const q = useQuery({
-    queryKey: ['report-pages', mode, spec.labels, spaces, spec.all, sort, max],
-    queryFn: () => api.get<ReportPage[]>(`/reports/pages?${qs({ labels: spec.labels.join(','), spaces: spaces.join(','), operator: spec.all ? 'all' : undefined, sort, max })}`),
+    queryKey: ['report-pages', mode, spec.labels, spaces, spec.all, sort, max, cql],
+    queryFn: () =>
+      api.get<ReportPage[]>(
+        `/reports/pages?${qs({ labels: spec.labels.join(','), spaces: spaces.join(','), operator: spec.all ? 'all' : undefined, sort, max, cql: cql || undefined, space: page?.spaceKey })}`,
+      ),
     enabled,
   })
   let rows = (q.data ?? []).filter((r) => r.id !== page?.id || mode === 'recent')
@@ -87,7 +92,7 @@ function PageList({ params, page, mode }: { params: Params; page: Page | undefin
       <Header
         icon={mode === 'recent' ? <Clock size={13} /> : <Tag size={13} />}
         title={mode === 'recent' ? 'Recently updated' : 'Content by label'}
-        detail={[spec.labels.length ? `labels: ${spec.labels.join(spec.all ? ' and ' : ', ')}` : '', spaces.length ? `in ${spaces.join(', ')}` : ''].filter(Boolean).join(' ')}
+        detail={cql ? cql : [spec.labels.length ? `labels: ${spec.labels.join(spec.all ? ' and ' : ', ')}` : '', spaces.length ? `in ${spaces.join(', ')}` : ''].filter(Boolean).join(' ')}
       />
       {!enabled ? (
         <div className="faint small">No labels in this macro.</div>

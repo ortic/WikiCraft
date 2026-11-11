@@ -156,6 +156,7 @@ pub fn router(state: AppState) -> Router {
         .route("/attachments/{id}/versions/{version}/restore", post(attachments::restore_version))
         // discovery
         .route("/search", get(search::search))
+        .route("/cql", get(search::cql))
         .route("/recent", get(search::recent))
         .route("/favorites", get(search::favorites))
         .route("/popular", get(search::popular))

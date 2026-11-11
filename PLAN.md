@@ -438,7 +438,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** Attachment content search (PDF, DOCX, XLSX, PPTX, TXT, CSV, ODT) `C D X`
 - [~] **P1** Highlighted snippets, typo tolerance, stemming per language, CJK tokenization `C X` (snippets only)
 - [x] **P1** Search within a space (scoped) and within a page (Ctrl+F style) `C`
-- [ ] **P1** Query language (CQL-like: `space = ENG AND label = runbook AND lastModified > now("-30d")`) for macros/API `C`
+- [x] **P1** Query language (CQL-like: `space = ENG AND label = runbook AND lastModified > now("-30d")`) for macros/API `C` — `GET /api/cql`, Search → Query, the MCP tool `query_pages` and contentbylabel blocks (an imported query with unknown fields falls back to its labels/spaces): space, title, text, label, type, creator, contributor, mention, favourite, watcher, created, lastModified, id/parent/ancestor (also imported Confluence ids), status, property[Name]; = != ~ !~ < <= > >= in / not in, and/or/not, order by; currentUser(), currentSpace(), now(), startOf/endOf Day/Week/Month/Year. Compiled to parameterised SQL with a 10 s statement timeout, then filtered by permissions. No attachments/comments as result types yet
 - [x] **P1** Saved searches `X`
 - [x] **P1** Incremental indexing via the job queue; full reindex CLI `X`
 - [ ] **P2** Semantic / hybrid search (BM25 + vectors, reciprocal rank fusion) `C D`

@@ -9,6 +9,7 @@ pub mod blobs;
 pub mod cluster;
 pub mod collab;
 pub mod config;
+pub mod cql;
 pub mod docx;
 pub mod docx_import;
 pub mod error;

@@ -51,7 +51,7 @@ It works the same for Confluence Server, Data Center and Cloud exports.
 | view-file, viewpdf, viewdoc, … | File block with preview |
 | layouts and sections / columns | Columns |
 | decision lists, `decisionreport` | Decisions and a live decision log |
-| contentbylabel, recently-updated, detailssummary (page properties report), tasks-report-macro, attachments | Live report blocks, evaluated for each reader's permissions |
+| contentbylabel, recently-updated, detailssummary (page properties report), tasks-report-macro, attachments | Live report blocks, evaluated for each reader's permissions; a CQL query in contentbylabel runs as CQL (Search → *Query* takes the same language), and one using fields WikiCraft doesn't know falls back to its labels and spaces |
 | details (page properties) | Kept, and read by the properties report |
 | mermaid, plantuml | Code block: Mermaid is drawn as a diagram in the browser, PlantUML stays as source |
 | html | the HTML as a code block (never executed) |

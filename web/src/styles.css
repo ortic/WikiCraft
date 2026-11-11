@@ -917,3 +917,10 @@ button.page-prop-key-btn:hover, button.page-prop-key-btn:focus-visible { backgro
 .tableWrapper[data-numbered] tr:has(> td) > :first-child::before, table[data-numbered] tr:has(> td) > :first-child::before {
   content: counter(wc-row); position: absolute; left: 0.6em; top: 0.55em; font-size: 12px; color: var(--text-faint); font-variant-numeric: tabular-nums; user-select: none;
 }
+
+/* Search → Query (CQL) */
+.cql-form { max-width: 820px; }
+.cql-input { font-family: var(--mono); font-size: 13px; min-height: 72px; height: auto; resize: vertical; line-height: 1.5; padding: 8px 10px; }
+.cql-help { margin-top: 10px; color: var(--text-soft); }
+.cql-help summary { cursor: pointer; color: var(--text-soft); }
+.cql-help p { margin: 6px 0; }

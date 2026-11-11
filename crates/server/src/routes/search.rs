@@ -412,3 +412,17 @@ pub async fn suggest_labels(State(state): State<AppState>, MaybeUser(user): Mayb
     out.sort_by(|a, b| b.1.cmp(&a.1).then_with(|| a.0.cmp(&b.0)));
     Ok(Json(out.into_iter().take(10).map(|(name, count)| json!({"name": name, "count": count})).collect()))
 }
+
+#[derive(Deserialize)]
+pub struct CqlQuery {
+    pub cql: String,
+    /// the space `currentSpace()` refers to
+    pub space: Option<String>,
+    pub limit: Option<usize>,
+}
+
+/// `GET /api/cql?cql=&space=&limit=`: pages matching a CQL query that the caller may see.
+pub async fn cql(State(state): State<AppState>, MaybeUser(user): MaybeUser, Query(q): Query<CqlQuery>) -> ApiResult<Json<Vec<crate::cql::CqlPage>>> {
+    let p = Principal::load(&state, user).await?;
+    Ok(Json(crate::cql::search(&state, &p, &q.cql, q.space.as_deref(), q.limit.unwrap_or(50).clamp(1, 500)).await?))
+}

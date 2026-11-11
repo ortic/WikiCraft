@@ -1,8 +1,8 @@
 import { useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { BookmarkPlus, FileText, Sparkles, X } from 'lucide-react'
-import { api, type SearchHit, type Space } from '../api'
+import { BookmarkPlus, Braces, FileText, Sparkles, X } from 'lucide-react'
+import { api, formatDate, type SearchHit, type Space } from '../api'
 import { Spinner, useMe } from '../ui'
 
 interface Answer {
@@ -46,8 +46,84 @@ function AnswerCard({ state }: { state: { loading: boolean; error?: string; data
   )
 }
 
+interface CqlPage {
+  id: string
+  title: string
+  kind: string
+  spaceKey: string
+  spaceName: string
+  updatedAt: string
+  updatedByName: string | null
+  labels: string[]
+  excerpt: string
+}
+
+const CQL_EXAMPLE = 'space = ENG and label = runbook and lastModified > now("-30d") order by title'
+
+/** Search with a query (Confluence's CQL): fields, operators and functions, results in its order. */
+function CqlSearch({ initial, onExit, onRun }: { initial: string; onExit: () => void; onRun: (cql: string) => void }) {
+  const [input, setInput] = useState(initial)
+  const results = useQuery({
+    queryKey: ['cql', initial],
+    queryFn: () => api.get<CqlPage[]>(`/cql?cql=${encodeURIComponent(initial)}&limit=200`),
+    enabled: !!initial.trim(),
+    retry: false,
+  })
+  const error = results.error instanceof Error ? results.error.message : null
+  return (
+    <div className="content-pad">
+      <form className="cql-form" onSubmit={(e) => { e.preventDefault(); onRun(input.trim()) }}>
+        <label className="field" style={{ marginBottom: 6 }}>
+          <span className="row" style={{ gap: 6 }}><Braces size={15} /> Query</span>
+          <textarea
+            className="input cql-input"
+            rows={3}
+            value={input}
+            spellCheck={false}
+            placeholder={CQL_EXAMPLE}
+            autoFocus
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); onRun(input.trim()) } }}
+          />
+        </label>
+        <div className="row" style={{ gap: 8 }}>
+          <button className="btn btn-primary">Run query</button>
+          <button type="button" className="btn" onClick={onExit}>Back to search</button>
+          <span className="faint small">Ctrl+Enter runs it</span>
+        </div>
+        <details className="cql-help small">
+          <summary>Fields, operators and functions</summary>
+          <p>
+            <b>Fields:</b> space, space.title, title, text, label, type (page, blogpost, folder), creator, contributor, mention, favourite, watcher, created,
+            lastModified, id, parent, ancestor, status, property[Name].
+          </p>
+          <p><b>Operators:</b> = != ~ (contains, * and ? wildcards) !~ &lt; &lt;= &gt; &gt;= in (…) not in (…), combined with and, or, not and parentheses; order by title, created, lastModified or space (asc, desc).</p>
+          <p><b>Functions:</b> currentUser(), now("-7d"), startOfDay(), startOfWeek("-1"), startOfMonth(), startOfYear(), endOfDay() …; dates as YYYY-MM-DD.</p>
+          <p className="faint">Example: <code>{CQL_EXAMPLE}</code></p>
+        </details>
+      </form>
+      <div style={{ marginTop: 16 }}>
+        {results.isLoading && <Spinner />}
+        {error && <div className="error-text" role="alert">{error}</div>}
+        {results.data && <div className="faint small" style={{ marginBottom: 8 }}>{results.data.length} results</div>}
+        {results.data?.map((r) => (
+          <Link key={r.id} to={`/pages/${r.id}`} className="result" style={{ marginBottom: 4 }}>
+            <div className="r-title">{r.title}</div>
+            <div className="faint small">
+              {r.spaceName}{r.kind === 'blog' ? ' · blog post' : ''} · updated {formatDate(r.updatedAt)}{r.updatedByName ? ` by ${r.updatedByName}` : ''}
+              {r.labels.length > 0 && <> · {r.labels.join(', ')}</>}
+            </div>
+            {r.excerpt && <div className="r-snippet">{r.excerpt}</div>}
+          </Link>
+        ))}
+      </div>
+    </div>
+  )
+}
+
 export default function SearchPage() {
   const [params, setParams] = useSearchParams()
+  const cql = params.get('cql')
   const q = params.get('q') ?? ''
   const space = params.get('space') ?? ''
   const kind = params.get('kind') ?? ''
@@ -96,8 +172,11 @@ export default function SearchPage() {
   const results = useQuery({
     queryKey: ['search-page', filters.toString()],
     queryFn: () => api.get<SearchHit[]>(`/search?${filters.toString()}`),
-    enabled: !!q,
+    enabled: !!q && cql === null,
   })
+  if (cql !== null) {
+    return <CqlSearch key={cql} initial={cql} onExit={() => setParams(new URLSearchParams(q ? { q } : {}))} onRun={(c) => setParams(new URLSearchParams({ cql: c }))} />
+  }
   return (
     <div className="content-pad">
       <form
@@ -146,6 +225,9 @@ export default function SearchPage() {
             <input type="checkbox" checked={mine} onChange={(e) => setParam('mine', e.target.checked ? '1' : '')} /> Pages I worked on
           </label>
         )}
+        <button type="button" className="btn btn-sm" onClick={() => setParams(new URLSearchParams({ cql: '' }))} title="Search with a query language: fields, operators and functions">
+          <Braces size={14} /> Query
+        </button>
         {me.data?.user && q && (
           <button type="button" className="btn btn-sm" onClick={saveSearch} title="Keep this search and its filters">
             <BookmarkPlus size={14} /> Save search

@@ -101,6 +101,18 @@ pub struct CommentArgs {
 }
 
 #[derive(Deserialize, JsonSchema)]
+pub struct QueryArgs {
+    /// A CQL query, e.g. `space = ENG and label = runbook and lastModified > now("-30d") order by title`.
+    /// Fields: space, space.title, title, text, label, type (page, blogpost, folder), creator,
+    /// contributor, mention, favourite, watcher, created, lastModified, id, parent, ancestor,
+    /// status, property[Name]; operators = != ~ !~ < <= > >= in, not in; and/or/not; functions
+    /// currentUser(), now("-7d"), startOfWeek(), startOfMonth("-1").
+    pub cql: String,
+    /// Max results (default 25, at most 100)
+    pub limit: Option<usize>,
+}
+
+#[derive(Deserialize, JsonSchema)]
 pub struct RecentArgs {
     /// Max results (default 20)
     pub limit: Option<usize>,
@@ -198,6 +210,27 @@ impl WikiMcp {
                     .collect();
                 ok_json(json!(list))
             }
+            Err(e) => api_err(e),
+        }
+    }
+
+    #[tool(
+        description = "Find pages with a structured CQL query (space, label, type, author, dates, properties, ancestors…), Confluence's query language. Returns page ids, titles, spaces, labels and last update."
+    )]
+    async fn query_pages(&self, Extension(parts): Extension<axum::http::request::Parts>, Parameters(a): Parameters<QueryArgs>) -> ToolResult {
+        let user = match self.user(&parts).await {
+            Ok(u) => u,
+            Err(e) => return api_err(e),
+        };
+        let p = match crate::authz::Principal::load(&self.state, Some(user.0)).await {
+            Ok(p) => p,
+            Err(e) => return api_err(e),
+        };
+        match crate::cql::search(&self.state, &p, &a.cql, None, a.limit.unwrap_or(25).clamp(1, 100)).await {
+            Ok(rows) => ok_json(json!(rows
+                .iter()
+                .map(|r| json!({"pageId": r.id, "title": r.title, "space": r.space_key, "labels": r.labels, "updatedAt": r.updated_at, "url": self.url(&r.id.to_string())}))
+                .collect::<Vec<_>>())),
             Err(e) => api_err(e),
         }
     }

@@ -43,6 +43,10 @@ pub struct ReportQuery {
     due_from: Option<String>,
     #[serde(rename = "dueTo")]
     due_to: Option<String>,
+    /// a CQL query (pages reports): replaces labels and spaces when it can be read
+    cql: Option<String>,
+    /// the space of the page holding the report (`currentSpace()` in `cql`)
+    space: Option<String>,
 }
 
 fn parse_day(s: &Option<String>) -> ApiResult<Option<chrono::NaiveDate>> {
@@ -118,8 +122,14 @@ pub struct ReportPage {
 /// Candidate pages (label / space filters in SQL), then permission filtering.
 async fn pages(state: &AppState, p: &Principal, q: &ReportQuery, require_labels: bool, max: i64, with_content: bool) -> ApiResult<Vec<ReportPage>> {
     let ws = workspace_of(state, p).await?;
-    let labels = q.labels();
-    if require_labels && labels.is_empty() {
+    // a query that reads as CQL decides alone; one that doesn't (an imported macro using parts
+    // WikiCraft doesn't know) falls back to the labels and spaces taken from it
+    let cql_ids: Option<Vec<Uuid>> = match q.cql.as_deref().map(str::trim).filter(|c| !c.is_empty()).map(crate::cql::parse) {
+        Some(Ok(parsed)) => Some(crate::cql::run(state, p, &parsed, q.space.as_deref(), 2000).await?.into_iter().map(|r| r.id).collect()),
+        _ => None,
+    };
+    let (labels, spaces) = if cql_ids.is_some() { (vec![], vec![]) } else { (q.labels(), q.spaces()) };
+    if require_labels && labels.is_empty() && cql_ids.is_none() {
         return Ok(vec![]);
     }
     // only spaces the caller can see are queried at all (anonymous visitors of a private wiki
@@ -129,7 +139,6 @@ async fn pages(state: &AppState, p: &Principal, q: &ReportQuery, require_labels:
         return Ok(vec![]);
     }
     let space_ids: Vec<Uuid> = visible_sp.iter().map(|(s, _)| s.id).collect();
-    let spaces = q.spaces();
     let order = match q.sort.as_deref() {
         Some("title") => "lower(p.title)",
         Some("created") | Some("creation") => "p.created_at DESC",
@@ -145,6 +154,7 @@ async fn pages(state: &AppState, p: &Principal, q: &ReportQuery, require_labels:
            AND (cardinality($3::text[]) = 0 OR (
                 CASE WHEN $4 THEN (SELECT count(DISTINCT l.name) FROM labels l WHERE l.page_id = p.id AND l.name = ANY($3)) = cardinality($3)
                      ELSE EXISTS (SELECT 1 FROM labels l WHERE l.page_id = p.id AND l.name = ANY($3)) END))
+           AND ($7::uuid[] IS NULL OR p.id = ANY($7))
          ORDER BY {order} LIMIT 2000"
     )))
     .bind(ws)
@@ -153,6 +163,7 @@ async fn pages(state: &AppState, p: &Principal, q: &ReportQuery, require_labels:
     .bind(q.all_labels())
     .bind(&space_ids)
     .bind(with_content)
+    .bind(&cql_ids)
     .fetch_all(&state.db)
     .await?;
     let pairs: Vec<(Uuid, Uuid)> = rows.iter().map(|r| (r.id, r.space_id)).collect();
@@ -512,7 +523,8 @@ pub async fn snapshot(
             let recent = name == "recently-updated";
             let spaces =
                 if spaces.is_empty() && recent && !get("spaces").unwrap_or_default().contains("@all") { vec![space_key.to_uppercase()] } else { spaces };
-            if !recent && labels.is_empty() {
+            let cql = get("cql").filter(|c| !c.trim().is_empty());
+            if !recent && labels.is_empty() && cql.is_none() {
                 return Ok(None);
             }
             let sort = if recent {
@@ -530,6 +542,8 @@ pub async fn snapshot(
                 operator: all.then(|| "all".into()),
                 sort: Some(sort.into()),
                 max: Some(num(&["max", "maxResults"], if recent { 15 } else { 20 })),
+                cql: cql.clone(),
+                space: Some(space_key.to_string()),
                 ..Default::default()
             };
             let mut rows: Vec<ReportPage> = pages(state, p, &q, false, q.max(20), false).await?.into_iter().filter(|r| recent || r.id != page_id).collect();
@@ -541,7 +555,13 @@ pub async fn snapshot(
                 header.push("Labels".into());
             }
             Snapshot {
-                title: if recent { "Recently updated".into() } else { format!("Pages labelled {}", labels.join(if all { " and " } else { ", " })) },
+                title: if recent {
+                    "Recently updated".into()
+                } else if labels.is_empty() {
+                    "Pages".into()
+                } else {
+                    format!("Pages labelled {}", labels.join(if all { " and " } else { ", " }))
+                },
                 header,
                 rows: rows
                     .into_iter()
