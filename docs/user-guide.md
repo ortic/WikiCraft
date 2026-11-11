@@ -13,6 +13,10 @@ Mac) in the app for the keyboard shortcuts.
 - **Search** (`Ctrl K` / `Cmd K` jumps straight to a page or runs an action: create a page or
   folder, open the trash, dark mode …; start with `>` for actions only) finds pages, blog posts
   and comments; filter by space, type, label, contributor and date, and save searches you repeat.
+  It matches other forms of a word in the workspace's language (*Seiten* finds *Seite*), ignores
+  accents (*cafe* finds *Café*), forgives typos in words the wiki doesn't contain, finds Chinese,
+  Japanese and Korean text, and completes the last word as you type. `"quotes"` search a phrase,
+  `OR` either word, `-word` leaves pages with it out.
 - **Query** (Search → *Query*) finds pages with Confluence's query language (CQL), e.g.
   `space = ENG and label in (runbook, on-call) and lastModified > now("-30d") order by title`.
   Fields: `space`, `space.title`, `title`, `text`, `label`, `type` (page, blogpost, folder),

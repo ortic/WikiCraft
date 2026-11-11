@@ -92,7 +92,7 @@ pub async fn system(State(state): State<AppState>, CurrentUser(user): CurrentUse
             "idleConnections": state.db.num_idle(),
         },
         "jobs": { "queued": queued, "running": running, "failedLastDay": failed_day },
-        "search": { "backend": state.search.backend_name(), "indexed": indexed, "pages": pages },
+        "search": { "backend": state.search.backend_name(), "indexed": indexed, "pages": pages, "language": state.search.language(), "rebuilding": state.search.rebuilding() },
         "retrieval": retrieval,
         "mail": { "enabled": state.mailer.enabled() },
         "virusScan": { "enabled": state.config.clamav.as_deref().is_some_and(|c| !c.trim().is_empty()), "failOpen": state.config.clamav_fail_open },

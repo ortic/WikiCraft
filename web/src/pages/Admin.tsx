@@ -269,7 +269,7 @@ interface SystemState {
   cluster: boolean
   database: { version: string; sizeBytes: number; schema: number | null; connections: number; idleConnections: number }
   jobs: { queued: number; running: number; failedLastDay: number }
-  search: { backend: string; indexed: number | null; pages: number }
+  search: { backend: string; indexed: number | null; pages: number; language: string | null; rebuilding: boolean }
   retrieval?: {
     passages: number
     pages: number
@@ -308,7 +308,10 @@ function SystemInfo() {
     [tr('Version'), `WikiCraft ${s.version}`],
     [tr('Database'), tr('PostgreSQL {version} · {value} · schema {value2} · {value3} of {connections} connections busy', { version: s.database.version, value: formatBytes(s.database.sizeBytes), value2: s.database.schema ?? '?', value3: s.database.connections - s.database.idleConnections, connections: s.database.connections })],
     [tr('Background jobs'), `${s.jobs.queued} queued · ${s.jobs.running} running${s.jobs.failedLastDay ? ' ' + tr('· {failedLastDay} failed in the last day', { failedLastDay: s.jobs.failedLastDay }) + '' : ''}`],
-    [tr('Search'), `${s.search.backend} · ${s.search.indexed ?? '?'} of ${s.search.pages} pages indexed${behind ? ' ' + tr('(catching up, or rebuild the index)') + '' : ''}`],
+    [
+      tr('Search'),
+      `${s.search.backend}${s.search.language ? ' · ' + (s.search.language === 'none' ? tr('no word forms') : tr('word forms: {language}', { language: languageName(s.search.language) })) : ''} · ${s.search.indexed ?? '?'} of ${s.search.pages} pages indexed${s.search.rebuilding ? ' ' + tr('(rebuilding)') : behind ? ' ' + tr('(catching up, or rebuild the index)') + '' : ''}`,
+    ],
     [tr('Retrieval (AI)'), retrievalSummary(s.retrieval)],
     ['E-mail', s.mail.enabled ? 'configured' : tr('off (WIKICRAFT_SMTP_URL not set)')],
     [tr('File storage'), s.storage.backend],
@@ -1286,4 +1289,13 @@ function MarkdownImport() {
       )}
     </div>
   )
+}
+
+/** `de` → `German` (in the reader's language). */
+function languageName(code: string): string {
+  try {
+    return new Intl.DisplayNames([document.documentElement.lang || 'en'], { type: 'language' }).of(code) ?? code
+  } catch {
+    return code
+  }
 }

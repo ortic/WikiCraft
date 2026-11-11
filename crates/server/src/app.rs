@@ -47,7 +47,7 @@ impl AppState {
             sqlx::postgres::PgPoolOptions::new().max_connections(20).acquire_timeout(std::time::Duration::from_secs(10)).connect(&config.database_url).await?;
         sqlx::migrate!("./migrations").run(&db).await?;
         let blobs = BlobStore::new(&config).await?;
-        let search = SearchIndex::open(&config, db.clone())?;
+        let search = SearchIndex::open(&config, db.clone()).await?;
         let providers = crate::sso::load(&config)?;
         let mailer = crate::mail::Mailer::new(&config)?;
         let relay = match config.cluster.as_str() {

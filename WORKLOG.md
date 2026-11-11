@@ -154,6 +154,10 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   to it (before the editor mounts, so the collaboration socket opens once); `/resolve`, Confluence `/display` links
   and the link graph share the resolution. Found on the way: the drag handle and table menu only rendered after an
   unrelated re-render once the editor turned editable (the e2e journey caught it): editability is now React state.
+- Search quality (tantivy): CJK bigram tokenizer, ASCII folding, stemmed title/body fields in the workspace language,
+  typo tolerance for unknown words, prefix on the last word; `wikicraft-index.json` marks a complete index (format +
+  language), so an index built differently (old installs, language change) is rebuilt in the background. Before, a
+  recreated index stayed empty until someone pressed "Rebuild index".
 
 ## Security review 4 (independent review agent, 2026-11-10 ~03:40 UTC: link previews, banner, switches, decision log, branding) — status
 No critical or high findings. All five fixed in `9f0b9a9`:

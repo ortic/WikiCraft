@@ -103,6 +103,10 @@ pub async fn rename(State(state): State<AppState>, CurrentUser(admin): CurrentUs
     }
     if !changed.is_empty() {
         sqlx::query("UPDATE workspaces SET settings = settings || $2 WHERE id = $1").bind(ws).bind(Value::Object(changed.clone())).execute(&state.db).await?;
+        // search stems words in the workspace's language
+        if let Some(l) = changed.get("defaultLanguage").and_then(Value::as_str) {
+            state.search.workspace_language_changed(l);
+        }
         audit::log(&state, ws, Some(admin.id), "workspace.settings", None, None, Value::Object(changed)).await;
     }
     let mut out = look(&state, ws).await?;

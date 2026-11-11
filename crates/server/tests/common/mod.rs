@@ -80,6 +80,7 @@ pub async fn spawn_with(tweak: impl FnOnce(&mut Config)) -> TestApp {
         disable_password_login: false,
         log_format: "text".into(),
         search: "tantivy".into(),
+        search_language: "auto".into(),
         cluster: "none".into(),
         metrics_token: None,
         smtp_url: None,

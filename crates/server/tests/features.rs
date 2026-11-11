@@ -1595,3 +1595,62 @@ async fn readable_addresses_survive_renames_and_moves() {
     let broken: Vec<&str> = r["brokenLinks"].as_array().unwrap().iter().map(|b| b["label"].as_str().unwrap()).collect();
     assert_eq!(broken, ["nothing"], "{r}");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn search_matches_word_forms_typos_accents_and_cjk() {
+    let app = spawn().await;
+    let owner = app.setup().await;
+    app.post(&owner, "/spaces", json!({"key": "SRCH", "name": "Search"})).await;
+    for (title, md) in [
+        ("Deploying the gateway", "How we roll out releases to production."),
+        ("Kubernetes upgrade", "Steps for the cluster."),
+        ("Café menu", "Croissants and crème brûlée."),
+        ("日本語の文書", "東京オフィスの手順"),
+        ("Seitenübersicht", "Alle Seiten des Bereichs auf einen Blick."),
+    ] {
+        app.post(&owner, "/pages", json!({"spaceKey": "SRCH", "title": title, "markdown": md})).await;
+    }
+    let hits = |q: &'static str| {
+        let (app, owner) = (&app, &owner);
+        async move {
+            let (_, r) = app.get(owner, &format!("/search?q={}", urlencode(q))).await;
+            r.as_array().unwrap().iter().map(|h| h["title"].as_str().unwrap().to_string()).collect::<Vec<_>>()
+        }
+    };
+    // all five indexed (they may land in different batches)
+    app.eventually(|| async {
+        let mut all = true;
+        for q in ["cluster", "croissants", "東京", "Blick", "production"] {
+            all &= hits(q).await.len() == 1;
+        }
+        all.then_some(())
+    })
+    .await;
+    // word forms (English: the workspace has no other language yet)
+    assert_eq!(hits("deployment").await, ["Deploying the gateway"]);
+    assert_eq!(hits("release").await, ["Deploying the gateway"]);
+    // typos in words the wiki doesn't contain, accents, the start of a word
+    assert_eq!(hits("kubernetis").await, ["Kubernetes upgrade"]);
+    assert_eq!(hits("upgarde kubernetes").await, ["Kubernetes upgrade"]);
+    assert_eq!(hits("cafe creme").await, ["Café menu"]);
+    assert_eq!(hits("kuber").await, ["Kubernetes upgrade"]);
+    // a correctly spelled word doesn't drag in look-alikes
+    assert_eq!(hits("steps").await, ["Kubernetes upgrade"]);
+    // Chinese / Japanese text has no spaces between words
+    assert_eq!(hits("日本語").await, ["日本語の文書"]);
+    assert_eq!(hits("東京").await, ["日本語の文書"]);
+    assert_eq!(hits("文書 日本").await, ["日本語の文書"]);
+    // query syntax still works
+    assert_eq!(hits("\"crème brûlée\"").await, ["Café menu"]);
+    assert_eq!(hits("cluster OR croissants").await.len(), 2);
+
+    // German as the workspace language: the index follows it (rebuilt in the background)
+    assert_eq!(app.put(&owner, "/admin/workspace", json!({"defaultLanguage": "de"})).await.0, 200);
+    app.eventually(|| async { (hits("Seite").await == ["Seitenübersicht"]).then_some(()) }).await;
+    assert_eq!(hits("Bereich").await, ["Seitenübersicht"]);
+    assert_eq!(hits("cluster").await, ["Kubernetes upgrade"], "everything is back in the index");
+}
+
+fn urlencode(s: &str) -> String {
+    s.bytes().map(|b| if b.is_ascii_alphanumeric() { (b as char).to_string() } else { format!("%{b:02X}") }).collect()
+}

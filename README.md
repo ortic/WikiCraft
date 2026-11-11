@@ -173,6 +173,7 @@ All settings are flags or environment variables:
 | `WIKICRAFT_S3_BUCKET` / `WIKICRAFT_S3_ENDPOINT` | — | store attachments and uploads in S3/MinIO/R2/Ceph |
 | `WIKICRAFT_S3_REGION` / `WIKICRAFT_S3_ACCESS_KEY_ID` / `WIKICRAFT_S3_SECRET_ACCESS_KEY` | `AWS_*` env | S3 credentials |
 | `WIKICRAFT_SEARCH` | `tantivy` | `tantivy` (embedded) or `postgres` (shared, for several replicas) |
+| `WIKICRAFT_SEARCH_LANGUAGE` | `auto` | language whose word forms search matches (`auto`: the workspace's default language; `en`, `de`, `fr`, `es`, `it`, `nl`, `pt`, … or `none`); tantivy only |
 | `WIKICRAFT_CLUSTER` | `none` | `postgres` to run several replicas (live-edit relay) |
 | `WIKICRAFT_LOG_FORMAT` | `text` | `json` for structured logs |
 | `WIKICRAFT_METRICS_TOKEN` | — | bearer token for `/api/metrics` |

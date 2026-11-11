@@ -130,6 +130,11 @@ pub struct Config {
     #[arg(long, env = "WIKICRAFT_SEARCH", default_value = "tantivy")]
     pub search: String,
 
+    /// Language whose word forms search matches (`Seiten` finds `Seite`): `auto` (the workspace's
+    /// default interface language, else English), a code such as `de`, or `none`. tantivy only.
+    #[arg(long, env = "WIKICRAFT_SEARCH_LANGUAGE", default_value = "auto")]
+    pub search_language: String,
+
     /// Log format: `text` (human readable) or `json` (one JSON object per line, for log shippers).
     #[arg(long, env = "WIKICRAFT_LOG_FORMAT", default_value = "text")]
     pub log_format: String,
