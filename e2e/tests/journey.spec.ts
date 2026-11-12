@@ -583,6 +583,48 @@ test('a table gets numbered rows from its toolbar', async ({ browser }) => {
   await ctx.close()
 })
 
+test('a reader sorts a table by a column; the header stays in view', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState })
+  const page = await ctx.newPage()
+  await page.goto('/')
+  const reader = { email: 'rosa@e2e.test', password: 'reader-pass-1' }
+  const id = await page.evaluate(async (reader) => {
+    const json = { 'content-type': 'application/json', 'x-wikicraft': '1' }
+    await fetch('/api/users', { method: 'POST', headers: json, body: JSON.stringify({ ...reader, name: 'Rosa Reader', role: 'member' }) })
+    const cell = (t: string, kind = 'tableCell') => ({ type: kind, content: [{ type: 'paragraph', content: [{ type: 'text', text: t }] }] })
+    const rows = [{ type: 'tableRow', content: [cell('Office', 'tableHeader'), cell('People', 'tableHeader')] }]
+    const data: [string, string][] = [['Bern', '40'], ['Aarau', '9'], ['Chur', '120'], ...Array.from({ length: 30 }, (_, i) => [`Zone ${i + 10}`, String(200 + i)] as [string, string])]
+    for (const [o, n] of data) rows.push({ type: 'tableRow', content: [cell(o), cell(n)] })
+    const r = await fetch('/api/pages', { method: 'POST', headers: json, body: JSON.stringify({ spaceKey: 'PRODUCT', title: 'Offices', content: { type: 'doc', content: [{ type: 'table', content: rows }] } }) })
+    const pid = (await r.json()).id as string
+    // only the owner edits this page: everyone else reads it
+    const me = await (await fetch('/api/me')).json()
+    await fetch(`/api/pages/${pid}/restrictions`, { method: 'PUT', headers: json, body: JSON.stringify({ restrictions: [{ kind: 'edit', subjectType: 'user', subjectId: me.user.id }] }) })
+    return pid
+  }, reader)
+  await ctx.close()
+
+  const p = await login(browser, reader)
+  await p.goto(`/pages/${id}`)
+  await expect(p.locator('.ProseMirror[contenteditable="false"] .tableWrapper[data-sortable]')).toBeVisible({ timeout: 20_000 })
+  const column = (i: number) => p.locator('.tableWrapper > table:visible tbody tr td:nth-child(' + (i + 1) + ')')
+  await p.locator('th', { hasText: 'People' }).click()
+  await expect(column(1).first()).toHaveText('9')
+  await expect(p.locator('.table-sorted-copy th', { hasText: 'People' })).toHaveAttribute('aria-sort', 'ascending')
+  await p.locator('.table-sorted-copy th', { hasText: 'People' }).click()
+  await expect(column(1).first()).toHaveText('229')
+  await p.locator('.table-sorted-copy th', { hasText: 'Office' }).click()
+  await expect(column(0).first()).toHaveText('Aarau')
+  // the page itself didn't change
+  const stored = await p.evaluate(async (pid) => JSON.stringify((await (await fetch(`/api/pages/${pid}`)).json()).content), id)
+  expect(stored.indexOf('Bern')).toBeLessThan(stored.indexOf('Aarau'))
+  // scrolled to the end of the table, its header row is still in view below the page header
+  await column(0).last().scrollIntoViewIfNeeded()
+  const gap = await p.evaluate(() => document.querySelector('.table-sorted-copy th')!.getBoundingClientRect().top - document.querySelector('.page-header')!.getBoundingClientRect().bottom)
+  expect(Math.abs(gap)).toBeLessThan(2)
+  await p.context().close()
+})
+
 test('blocks changed since your last visit are highlighted', async ({ browser }) => {
   const ctx = await browser.newContext({ storageState: ownerState })
   const page = await ctx.newPage()

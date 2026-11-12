@@ -17,6 +17,7 @@ import Subscript from '@tiptap/extension-subscript'
 import Superscript from '@tiptap/extension-superscript'
 import { common, createLowlight } from 'lowlight'
 import type { Node as PMNode } from '@tiptap/pm/model'
+import type { EditorView } from '@tiptap/pm/view'
 import { Indent } from './Indent'
 import { AttachmentNode, Anchor, Callout, ChildPages, Column, Columns, CommentMark, DateNode, DecisionItem, DecisionList, Embed, Emoticon, Excerpt, Include, InstructionalText, Issue, Macro, Status, Toc } from './nodes'
 import { CodeBlock } from './CodeBlock'
@@ -26,11 +27,51 @@ import { Drawing } from './Drawing'
 const lowlight = createLowlight(common)
 
 /** Table width (Confluence's `data-layout`): normal, `wide` or `full-width`, shown on the wrapper. */
+const collator = new Intl.Collator(undefined, { numeric: true, sensitivity: 'base' })
+
+/** A cell's value for sorting: numbers (also `1,250.50`, `12 %`, `-3`) as numbers, else text. */
+function sortKey(cell: Element | undefined): number | string {
+  const text = (cell?.textContent ?? '').trim()
+  const num = text.replace(/[\s,'’]/g, '').replace(/%$/, '')
+  return num !== '' && /^[-+]?\d*\.?\d+$/.test(num) ? Number(num) : text
+}
+
+function compare(a: number | string, b: number | string): number {
+  if (typeof a === 'number' && typeof b === 'number') return a - b
+  if (a === '' || b === '') return a === '' ? (b === '' ? 0 : 1) : -1 // empty cells last
+  return collator.compare(String(a), String(b))
+}
+
+/**
+ * Table width (Confluence's `data-layout`) and row numbers on the wrapper; for readers, sorting by
+ * a column (a sorted copy is shown, the page stays as it is); a header row that stays in view
+ * while scrolling through a long table, when the table fits the page.
+ */
 class LayoutTableView extends TableView {
+  private view: EditorView
+  private sorted: { col: number; dir: 1 | -1 } | null = null
+  private copy: HTMLTableElement | null = null
+  private fits: ResizeObserver | null = null
+
   constructor(...args: ConstructorParameters<typeof TableView>) {
     super(...args)
+    this.view = args[2] as EditorView
     this.sync(args[0])
+    // sticky headers need the wrapper not to scroll sideways: only when the table fits
+    if (typeof ResizeObserver !== 'undefined') {
+      this.fits = new ResizeObserver(() => {
+        const fit = this.table.scrollWidth <= this.dom.clientWidth + 1
+        if (fit) this.dom.dataset.fits = 'true'
+        else delete this.dom.dataset.fits
+      })
+      this.fits.observe(this.dom)
+      this.fits.observe(this.table)
+    }
+    this.table.addEventListener('click', (e) => this.onHeaderClick(e))
+    // the rows are rendered after the view is made
+    requestAnimationFrame(() => this.markHeader())
   }
+
   /** width and row numbers live on the wrapper (the table element is the view's own) */
   private sync(node: PMNode) {
     const layout = node.attrs.layout as string | null
@@ -39,10 +80,82 @@ class LayoutTableView extends TableView {
     if (node.attrs.numbered) this.dom.dataset.numbered = 'true'
     else delete this.dom.dataset.numbered
   }
+
+  /** Readers sort by a column of the header row: ascending, descending, then as written. */
+  private sortable(): boolean {
+    return !this.view.editable && this.hasSortableShape()
+  }
+
+  /** A header row on top, two or more rows below it, no merged cells. */
+  private hasSortableShape(): boolean {
+    const rows = Array.from(this.contentDOM.children) as HTMLTableRowElement[]
+    const head = rows[0]
+    if (!head || !Array.from(head.cells).every((c) => c.tagName === 'TH')) return false
+    const body = rows.slice(1)
+    // merged cells would fall apart when rows move
+    return body.length >= 2 && body.every((r) => Array.from(r.cells).every((c) => c.colSpan === 1 && c.rowSpan === 1))
+  }
+
+  private onHeaderClick(e: MouseEvent) {
+    const th = (e.target as HTMLElement).closest('th')
+    if (!th || (e.target as HTMLElement).closest('a, button, input') || !this.sortable()) return
+    const row = th.parentElement as HTMLTableRowElement
+    const head = this.copy ? this.copy.tBodies[0]?.rows[0] : this.contentDOM.children[0]
+    if (row !== head) return
+    const col = th.cellIndex
+    this.sorted = this.sorted?.col !== col ? { col, dir: 1 } : this.sorted.dir === 1 ? { col, dir: -1 } : null
+    this.render()
+  }
+
+  private render() {
+    this.copy?.remove()
+    this.copy = null
+    if (!this.sorted || !this.sortable()) {
+      this.sorted = null
+      delete this.dom.dataset.sorted
+      this.markHeader()
+      return
+    }
+    const { col, dir } = this.sorted
+    const copy = this.table.cloneNode(true) as HTMLTableElement
+    copy.classList.add('table-sorted-copy')
+    copy.removeAttribute('contenteditable')
+    const tbody = copy.tBodies[0]
+    const rows = Array.from(tbody.rows)
+    const body = rows.slice(1)
+    body.sort((a, b) => dir * compare(sortKey(a.cells[col]), sortKey(b.cells[col])))
+    for (const r of body) tbody.appendChild(r)
+    copy.addEventListener('click', (e) => this.onHeaderClick(e))
+    this.markHeader(copy)
+    this.copy = copy
+    this.dom.appendChild(copy)
+    this.dom.dataset.sorted = 'true'
+  }
+
+  /**
+   * The sort cue on the wrapper (shown in read-only editors only, see styles.css) and
+   * `aria-sort` on the sorted copy's column. The table's own cells are the editor's: changing
+   * them would count as an edit.
+   */
+  private markHeader(copy?: HTMLTableElement) {
+    if (this.hasSortableShape()) this.dom.dataset.sortable = 'true'
+    else delete this.dom.dataset.sortable
+    const head = copy?.tBodies[0]?.rows[0]
+    if (head && this.sorted) head.cells[this.sorted.col]?.setAttribute('aria-sort', this.sorted.dir === 1 ? 'ascending' : 'descending')
+  }
+
   update(node: PMNode) {
     if (!super.update(node)) return false
     this.sync(node)
+    // the rows change after this returns: sort the new ones then (only while sorted: editors
+    // never are, and their tables shouldn't do work on every keystroke)
+    if (this.sorted) requestAnimationFrame(() => this.render())
+    else requestAnimationFrame(() => this.markHeader())
     return true
+  }
+
+  destroy() {
+    this.fits?.disconnect()
   }
 }
 

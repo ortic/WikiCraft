@@ -80,7 +80,9 @@ flowcharts, architecture and network diagrams. Readers see a picture of it; edit
 change it. Diagrams imported from Confluence's draw.io app stay editable.
 
 Tables have a toolbar for rows, columns, header rows, merged cells, cell colours, sorting and the
-width (normal, wide, full). Images can be resized, aligned, captioned, annotated and opened full
+width (normal, wide, full). People who only read a page sort a table by clicking a header cell
+(again for the reverse order, a third time for the order as written); the page stays as it is.
+The header row of a long table stays in view while you scroll through it. Images can be resized, aligned, captioned, annotated and opened full
 size.
 
 ### Page properties
