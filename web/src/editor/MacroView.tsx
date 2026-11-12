@@ -6,7 +6,7 @@ import { t as tr } from '../i18n'
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
-import { CheckSquare, CircleDot, Clock, Download, ExternalLink, FilePlus2, FileText, ListTree, Milestone, Paperclip, Puzzle, Search, SlidersHorizontal, Table2, Tag } from 'lucide-react'
+import { CalendarRange, CheckSquare, CircleDot, Clock, Download, ExternalLink, FilePlus2, FileText, ListTree, Milestone, Paperclip, Puzzle, Search, SlidersHorizontal, Table2, Tag } from 'lucide-react'
 import TemplatePicker from '../components/TemplatePicker'
 import { useToast } from '../ui'
 import { api, formatBytes, formatDate, formatDateOnly, type Attachment, type Page, type PageProperty } from '../api'
@@ -25,7 +25,7 @@ interface ReportPage {
   labels: string[]
 }
 
-export const LIVE_MACROS = new Set(['contentbylabel', 'recently-updated', 'detailssummary', 'content-report-table', 'tasks-report-macro', 'decisionreport', 'attachments', 'pagetree', 'livesearch', 'create-from-template', 'jira', 'jiraissues'])
+export const LIVE_MACROS = new Set(['contentbylabel', 'recently-updated', 'detailssummary', 'content-report-table', 'tasks-report-macro', 'decisionreport', 'attachments', 'pagetree', 'livesearch', 'create-from-template', 'jira', 'jiraissues', 'roadmap'])
 
 const csv = (s: string | undefined) => (s ?? '').split(',').map((x) => x.trim().replace(/^["']|["']$/g, '')).filter(Boolean)
 
@@ -599,6 +599,113 @@ function JiraIssues({ params, onParams }: { params: Params; onParams?: (p: Param
   )
 }
 
+interface RoadmapBar {
+  title?: string
+  description?: string
+  startDate: string
+  duration: number
+  rowIndex?: number
+  pageLink?: { id?: string | number; title?: string }
+}
+interface RoadmapData {
+  title?: string
+  timeline?: { startDate?: string; endDate?: string; displayOption?: string }
+  lanes?: { title?: string; color?: { lane?: string; bar?: string; text?: string }; bars?: RoadmapBar[] }[]
+  markers?: { title?: string; markerDate: string }[]
+}
+
+/** Confluence keeps the roadmap as URL-encoded JSON in `source`. */
+export function parseRoadmap(source: string | undefined): RoadmapData | null {
+  if (!source?.trim()) return null
+  try {
+    const data = JSON.parse(decodeURIComponent(source.trim())) as RoadmapData
+    return data && typeof data === 'object' && Array.isArray(data.lanes) ? data : null
+  } catch {
+    return null
+  }
+}
+
+/** "2018-07-16 00:00:00" (Confluence's format) as a date. */
+function roadmapDate(s: string | undefined): Date | null {
+  if (!s) return null
+  const d = new Date(s.trim().replace(' ', 'T'))
+  return isNaN(d.getTime()) ? null : d
+}
+
+const hex = (c: string | undefined, fallback: string) => (c && /^#[0-9a-f]{3,8}$/i.test(c) ? c : fallback)
+/** width of a month on the timeline */
+const MONTH_PX = 96
+const ROW_PX = 30
+/** room for the lane's name above its bars */
+const LANE_TOP = 22
+
+/** The Roadmap Planner: lanes of bars over months, with milestones (read-only). */
+function Roadmap({ params }: { params: Params }) {
+  const data = parseRoadmap(params.source)
+  if (!data) return <Header icon={<CalendarRange size={13} />} title={tr('Roadmap')} detail={tr('the roadmap’s data couldn’t be read')} />
+  const bars = (data.lanes ?? []).flatMap((l) => l.bars ?? [])
+  const dates = [roadmapDate(data.timeline?.startDate), ...bars.map((b) => roadmapDate(b.startDate))].filter((d): d is Date => !!d)
+  const start = new Date(Math.min(...dates.map((d) => d.getTime())))
+  const first = new Date(start.getFullYear(), start.getMonth(), 1)
+  // fractional months since the first month shown
+  const months = (d: Date) => (d.getFullYear() - first.getFullYear()) * 12 + d.getMonth() - first.getMonth() + (d.getDate() - 1) / new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate()
+  const weeks = data.timeline?.displayOption === 'WEEK'
+  // bars' durations are months (weeks on a week timeline)
+  const length = (b: RoadmapBar) => Math.max(0.1, Number(b.duration) || 1) / (weeks ? 4.345 : 1)
+  const end = roadmapDate(data.timeline?.endDate)
+  const span = Math.min(120, Math.max(3, Math.ceil(Math.max(end ? months(end) : 0, ...bars.map((b) => { const d = roadmapDate(b.startDate); return d ? months(d) + length(b) : 0 })))))
+  const fmt = new Intl.DateTimeFormat(undefined, { month: 'short', year: 'numeric' })
+  const monthLabel = new Intl.DateTimeFormat(undefined, { month: 'short' })
+  const title = data.title ?? (params.title ? decodeURIComponent(params.title) : tr('Roadmap'))
+  return (
+    <>
+      <Header icon={<CalendarRange size={13} />} title={title} />
+      <div className="roadmap" style={{ ['--month' as string]: `${MONTH_PX}px` }}>
+        <div className="roadmap-grid" style={{ width: span * MONTH_PX }}>
+          <div className="roadmap-months">
+            {Array.from({ length: span }, (_, i) => {
+              const m = new Date(first.getFullYear(), first.getMonth() + i, 1)
+              return <div key={i} className="roadmap-month">{m.getMonth() === 0 || i === 0 ? fmt.format(m) : monthLabel.format(m)}</div>
+            })}
+          </div>
+          {(data.lanes ?? []).map((lane, li) => {
+            const rows = Math.max(1, ...(lane.bars ?? []).map((b) => (b.rowIndex ?? 0) + 1))
+            const laneColor = hex(lane.color?.lane, '#94a3b8')
+            return (
+              <div key={li} className="roadmap-lane" style={{ height: LANE_TOP + rows * ROW_PX + 6, borderInlineStartColor: laneColor }}>
+                <div className="roadmap-lane-title" style={{ background: laneColor, color: hex(lane.color?.text, '#ffffff') }}>{lane.title}</div>
+                {(lane.bars ?? []).map((b, bi) => {
+                  const d = roadmapDate(b.startDate)
+                  if (!d) return null
+                  const until = new Date(d)
+                  until.setDate(until.getDate() + Math.round(length(b) * 30.44))
+                  const label = `${b.title ?? ''}: ${fmt.format(d)} – ${fmt.format(until)}`
+                  const style = { left: months(d) * MONTH_PX, width: Math.max(18, length(b) * MONTH_PX - 3), top: LANE_TOP + (b.rowIndex ?? 0) * ROW_PX, background: hex(lane.color?.bar, '#cbd5e1'), color: hex(lane.color?.text, '#1f2937') }
+                  const content = <span className="roadmap-bar-title">{b.title}</span>
+                  const id = b.pageLink?.id
+                  return id ? (
+                    <a key={bi} className="roadmap-bar" style={style} title={[label, b.description].filter(Boolean).join('\n')} aria-label={label} href={`/pages/viewpage.action?pageId=${encodeURIComponent(String(id))}`}>{content}</a>
+                  ) : (
+                    <div key={bi} className="roadmap-bar" style={style} title={[label, b.description].filter(Boolean).join('\n')} aria-label={label} role="img">{content}</div>
+                  )
+                })}
+              </div>
+            )
+          })}
+          {(data.markers ?? []).map((m, i) => {
+            const d = roadmapDate(m.markerDate)
+            return d ? (
+              <div key={i} className="roadmap-marker" style={{ left: months(d) * MONTH_PX }} title={`${m.title ?? ''} · ${new Intl.DateTimeFormat(undefined, { dateStyle: 'medium' }).format(d)}`}>
+                <span>{m.title}</span>
+              </div>
+            ) : null
+          })}
+        </div>
+      </div>
+    </>
+  )
+}
+
 /** Live view for a supported macro; `null` for macros without one. */
 export function LiveMacro({ name, params, pageId, onParams }: { name: string; params: Params; pageId: string; onParams?: (p: Params) => void }) {
   const page = useQuery({ queryKey: ['page', pageId], queryFn: () => api.get<Page>(`/pages/${pageId}`), enabled: !!pageId, staleTime: 60_000 })
@@ -625,6 +732,8 @@ export function LiveMacro({ name, params, pageId, onParams }: { name: string; pa
     case 'jira':
     case 'jiraissues':
       return <JiraIssues params={params} onParams={onParams} />
+    case 'roadmap':
+      return <Roadmap params={params} />
     default:
       return (
         <div className="block-label">

@@ -55,7 +55,7 @@ input_file: crates/confluence/tests/golden/macros.xml
     ],
     "jira": [
       1,
-      "partial"
+      "native"
     ],
     "mathblock": [
       1,

@@ -44,6 +44,7 @@ It works the same for Confluence Server, Data Center and Cloud exports.
 | expand | Expand block |
 | toc, toc-zone | Table of contents (levels, include/exclude, numbering, flat style) |
 | children, pagetree, pagetreesearch | Child pages list (live; sort, reverse, first N, heading style; a search box for pagetreesearch) |
+| roadmap (Roadmap Planner) | A read-only timeline: lanes, bars (linked pages open) and milestones |
 | livesearch | Search box (limited to the space / label it names) |
 | create-from-template | A button that creates a page below the current one (Confluence's blueprints map to the built-in templates) |
 | include, excerpt, excerpt-include | Included page (live, read-only) / excerpt block with name and *hidden*; excerpt-include by name, `nopanel` kept |

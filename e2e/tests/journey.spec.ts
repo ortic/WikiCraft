@@ -701,6 +701,38 @@ test('a reader sorts a table by a column; the header stays in view', async ({ br
   await p.context().close()
 })
 
+test('an imported Roadmap Planner shows its lanes, bars and milestones', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState })
+  const page = await ctx.newPage()
+  await page.goto('/')
+  const id = await page.evaluate(async () => {
+    const data = {
+      title: 'Release plan',
+      timeline: { startDate: '2027-01-04 00:00:00', endDate: '2027-07-01 00:00:00', displayOption: 'MONTH' },
+      lanes: [
+        { title: 'Web', color: { lane: '#f6c342', bar: '#fadb8e', text: '#594300' }, bars: [{ title: 'Search', startDate: '2027-01-01 00:00:00', duration: 2, rowIndex: 0 }, { title: 'Export', startDate: '2027-02-01 00:00:00', duration: 1.5, rowIndex: 1 }] },
+        { title: 'Mobile', color: { lane: '#3b7fc4', bar: '#6c9fd3', text: '#ffffff' }, bars: [{ title: 'iOS', startDate: '2027-03-01 00:00:00', duration: 3, rowIndex: 0 }] },
+      ],
+      markers: [{ title: 'Launch', markerDate: '2027-05-15 00:00:00' }],
+    }
+    // as Confluence stores it: URL-encoded JSON in `source`
+    const macro = { type: 'macro', attrs: { name: 'roadmap', params: { timeline: 'true', source: encodeURIComponent(JSON.stringify(data)) } } }
+    const r = await fetch('/api/pages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-wikicraft': '1' }, body: JSON.stringify({ spaceKey: 'PRODUCT', title: 'Release roadmap', content: { type: 'doc', content: [macro] } }) })
+    return (await r.json()).id as string
+  })
+  await page.goto(`/pages/${id}`)
+  const roadmap = page.locator('.live-macro[data-macro="roadmap"]')
+  await expect(roadmap.locator('.roadmap-bar')).toHaveCount(3, { timeout: 20_000 })
+  await expect(roadmap).toContainText('Release plan')
+  await expect(roadmap.locator('.roadmap-lane-title')).toHaveText(['Web', 'Mobile'])
+  await expect(roadmap.locator('.roadmap-marker')).toContainText('Launch')
+  // bars sit where their dates are: "Export" starts a month after "Search", one row lower
+  const [search, exp] = [await roadmap.locator('.roadmap-bar', { hasText: 'Search' }).boundingBox(), await roadmap.locator('.roadmap-bar', { hasText: 'Export' }).boundingBox()]
+  expect(exp!.x - search!.x).toBeGreaterThan(80)
+  expect(exp!.y).toBeGreaterThan(search!.y)
+  await ctx.close()
+})
+
 test('blocks changed since your last visit are highlighted', async ({ browser }) => {
   const ctx = await browser.newContext({ storageState: ownerState })
   const page = await ctx.newPage()

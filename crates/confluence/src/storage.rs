@@ -1139,9 +1139,10 @@ impl Conv<'_> {
                 if url.is_empty() { vec![] } else { vec![Node::new(nodes::EMBED).attr("url", url)] }
             }
             "jira" | "jiraissues" => {
-                self.stats.macro_seen(&name, Support::Partial);
                 let key = param("key");
                 let jql = param("jqlQuery");
+                // single issues become chips, queries live tables (with Jira connected); charts stay placeholders
+                self.stats.macro_seen(&name, if key.is_some() || jql.is_some() { Support::Native } else { Support::Partial });
                 let server = param("server").unwrap_or_else(|| "Jira".into());
                 match (key, jql) {
                     // a chip with the issue's summary and status when the wiki is connected to Jira
@@ -1150,6 +1151,12 @@ impl Conv<'_> {
                     (None, Some(q)) => vec![placeholder_macro(&name, el, vec![Node::paragraph(vec![Node::text(format!("{server} query: {q}"))])])],
                     _ => vec![placeholder_macro(&name, el, vec![])],
                 }
+            }
+            // the Roadmap Planner keeps its lanes, bars and milestones in `source` (URL-encoded
+            // JSON); the editor draws them as a timeline
+            "roadmap" => {
+                self.stats.macro_seen(&name, Support::Native);
+                vec![placeholder_macro(&name, el, vec![])]
             }
             "unmigrated-wiki-markup" | "unmigrated-inline-wiki-markup" => {
                 self.stats.macro_seen(&name, Support::Partial);

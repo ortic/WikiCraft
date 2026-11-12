@@ -320,6 +320,18 @@ table.list tr:hover td { background: var(--bg-soft); }
 code.jql { display: block; white-space: pre-wrap; word-break: break-word; margin: 2px 0 6px; }
 .macro-table .jira-summary { color: var(--text); }
 .jira-table-wrap { overflow-x: auto; }
+/* the Roadmap Planner: months across, lanes of bars down, milestones as lines */
+.roadmap { overflow-x: auto; margin-top: 8px; padding-bottom: 4px; }
+.roadmap-grid { position: relative; min-width: 100%; background-image: repeating-linear-gradient(to right, transparent 0, transparent calc(var(--month) - 1px), var(--border) calc(var(--month) - 1px), var(--border) var(--month)); }
+.roadmap-months { display: flex; height: 26px; border-bottom: 1px solid var(--border); background: var(--bg); }
+.roadmap-month { flex: none; width: var(--month); font-size: 11.5px; color: var(--text-faint); padding: 5px 6px; white-space: nowrap; }
+.roadmap-lane { position: relative; border-bottom: 1px solid var(--border); border-inline-start: 4px solid; }
+.roadmap-lane-title { position: sticky; left: 0; z-index: 2; display: inline-block; font-size: 11px; font-weight: 600; padding: 1px 6px; border-radius: 0 0 4px 0; max-width: 160px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.roadmap-bar { position: absolute; height: 24px; border-radius: 4px; padding: 0 8px; display: flex; align-items: center; font-size: 12.5px; overflow: hidden; text-decoration: none; box-shadow: inset 0 0 0 1px rgb(0 0 0 / .08); }
+.roadmap-bar-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+a.roadmap-bar:hover { box-shadow: inset 0 0 0 2px rgb(0 0 0 / .25); }
+.roadmap-marker { position: absolute; top: 0; bottom: 0; border-inline-start: 2px dashed var(--danger, #d14343); pointer-events: auto; z-index: 1; }
+.roadmap-marker span { position: absolute; top: 4px; left: 4px; font-size: 11px; font-weight: 600; color: var(--danger, #d14343); background: var(--bg); padding: 0 3px; white-space: nowrap; }
 .macro-table.jira-table { table-layout: auto; width: 100%; }
 .macro-table.jira-table th, .macro-table.jira-table td { white-space: nowrap; }
 .macro-table.jira-table td.jira-summary-cell { white-space: normal; min-width: 14em; }
