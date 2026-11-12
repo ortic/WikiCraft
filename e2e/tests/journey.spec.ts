@@ -4,7 +4,7 @@
 
 import { createHmac } from 'node:crypto'
 import AxeBuilder from '@axe-core/playwright'
-import { expect, test, type Browser, type BrowserContext, type Page } from '@playwright/test'
+import { expect, firefox, test, type Browser, type BrowserContext, type Page } from '@playwright/test'
 
 const OWNER = { name: 'Olivia Owner', email: 'olivia@e2e.test', password: 'correct horse battery' }
 const MEMBER = { name: 'Max Member', email: 'max@e2e.test', password: 'password-123' }
@@ -16,7 +16,8 @@ let pageUrl = ''
 let pageId = ''
 
 async function login(browser: Browser, who: { email: string; password: string }) {
-  const ctx = await browser.newContext()
+  // (a browser launched by a test, like Firefox below, doesn't get the configured address)
+  const ctx = await browser.newContext({ baseURL: test.info().project.use.baseURL })
   const p = await ctx.newPage()
   await p.goto('/login')
   await p.locator('input[autocomplete=username]').fill(who.email)
@@ -159,6 +160,81 @@ test('two people edit the same page live', async ({ browser }) => {
   await expect(ownerEditor).toContainText('Max too.', { timeout: 15_000 })
   await ownerCtx.close()
   await member.context().close()
+})
+
+test('Chromium and Firefox edit one paragraph at once, and offline edits merge', async ({ browser }) => {
+  const ownerCtx = await browser.newContext({ storageState: ownerState })
+  const owner = await ownerCtx.newPage()
+  await owner.goto('/')
+  const colleague = { email: 'fiona@e2e.test', password: 'firefox-pass-1' }
+  const id = await owner.evaluate(async (who) => {
+    const json = { 'content-type': 'application/json', 'x-wikicraft': '1' }
+    await fetch('/api/users', { method: 'POST', headers: json, body: JSON.stringify({ ...who, name: 'Fiona Firefox', role: 'member' }) })
+    const r = await fetch('/api/pages', { method: 'POST', headers: json, body: JSON.stringify({ spaceKey: 'PRODUCT', title: 'Standup', markdown: 'Agenda:\n\nNotes:' }) })
+    return (await r.json()).id as string
+  }, colleague)
+  const ff = await firefox.launch()
+  const fiona = await login(ff, colleague)
+  // Fiona's connection for live editing goes through the test, which can cut it
+  let offline = false
+  const sockets: { close: () => Promise<void> }[] = []
+  await fiona.routeWebSocket(/\/collab$/, (ws) => {
+    if (offline) return void ws.close()
+    ws.connectToServer()
+    sockets.push(ws)
+  })
+  await owner.goto(`/pages/${id}`)
+  await fiona.goto(`/pages/${id}`)
+  const a = owner.locator('.ProseMirror[contenteditable="true"]')
+  const b = fiona.locator('.ProseMirror[contenteditable="true"]')
+  await expect(a).toBeVisible({ timeout: 20_000 })
+  await expect(b).toBeVisible({ timeout: 20_000 })
+  // the document's text, without the other person's caret and name label
+  const text = (e: typeof a) =>
+    e.evaluate((el) => {
+      const copy = el.cloneNode(true) as HTMLElement
+      copy.querySelectorAll('[class*="collaboration-carets"]').forEach((c) => c.remove())
+      return (copy.textContent ?? '').replace(/\s+/g, ' ').trim()
+    })
+  const same = () => expect.poll(async () => (await text(a)) === (await text(b)), { timeout: 15_000 }).toBe(true)
+
+  // both type in the same paragraph at the same time, one at its start, one at its end
+  await a.getByText('Agenda:').click()
+  await owner.keyboard.press('Home')
+  await b.getByText('Agenda:').click()
+  await fiona.keyboard.press('End')
+  await Promise.all([owner.keyboard.type('Daily ', { delay: 25 }), fiona.keyboard.type(' beta two', { delay: 25 })])
+  await same()
+  expect(await text(a)).toContain('Daily Agenda: beta two')
+  // at the very same spot the letters may interleave, but none is lost and both see the same
+  await Promise.all([owner.keyboard.press('End'), fiona.keyboard.press('End')])
+  await Promise.all([owner.keyboard.type(' xyz', { delay: 25 }), fiona.keyboard.type(' qrs', { delay: 25 })])
+  await same()
+  const tail = (await text(a)).split('beta two')[1].split('Notes:')[0]
+  expect([...tail.replace(/\s/g, '')].sort().join('')).toBe('qrsxyz')
+
+  // Fiona loses the connection and keeps writing; the owner writes too; both arrive
+  offline = true
+  await Promise.all(sockets.splice(0).map((s) => s.close()))
+  await b.getByText('Notes:').click()
+  await fiona.keyboard.press('End')
+  await fiona.keyboard.type(' written offline')
+  await a.getByText('Notes:').click()
+  await owner.keyboard.press('Home')
+  await owner.keyboard.type('Owner: ')
+  await expect.poll(() => text(a)).toContain('Owner: Notes:')
+  expect(await text(a)).not.toContain('written offline')
+  offline = false
+  await expect.poll(() => text(a), { timeout: 30_000 }).toContain('Notes: written offline')
+  await expect.poll(() => text(b), { timeout: 30_000 }).toContain('Owner: Notes:')
+  await same()
+  // and the server kept the merged page
+  await expect
+    .poll(async () => owner.evaluate(async (pid) => JSON.stringify((await (await fetch(`/api/pages/${pid}`)).json()).content), id), { timeout: 20_000 })
+    .toMatch(/Owner: .*Notes:.*written offline/)
+  await fiona.context().close()
+  await ff.close()
+  await ownerCtx.close()
 })
 
 test('comments and search', async ({ browser }) => {

@@ -83,7 +83,7 @@ jobs:
       - name: Build server
         run: cargo build --release -p wikicraft
       - name: Browser tests
-        run: cd e2e && npm ci && npx playwright install --with-deps chromium && npx playwright test
+        run: cd e2e && npm ci && npx playwright install --with-deps chromium firefox && npx playwright test
       - uses: actions/upload-artifact@v4
         if: failure()
         with:
