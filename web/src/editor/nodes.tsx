@@ -7,7 +7,7 @@ import { Mark, Node, mergeAttributes } from '@tiptap/core'
 import { EditorContent, NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type ReactNodeViewProps } from '@tiptap/react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { FileText, Paperclip, ListTree, Hash, Puzzle, Link2, Download, Settings2, Code2, Scissors } from 'lucide-react'
+import { FileText, Paperclip, ListTree, Hash, Puzzle, Link2, Download, Settings2, Code2, Scissors, CircleDot, CircleCheck, GitPullRequest } from 'lucide-react'
 import { api, formatDateOnly, type Page, type PmNode } from '../api'
 import { Spinner } from '../ui'
 import { Emoticon as EmoticonIcon, LineIcon, SYMBOL_COLORS, SymbolPicker, parseSymbol } from '../icons'
@@ -795,6 +795,106 @@ export const Excerpt = Node.create({
     return ReactNodeViewRenderer(ExcerptView)
   },
 })
+
+interface IssueInfo {
+  tracker: 'github' | 'gitlab' | 'jira'
+  key: string
+  url: string | null
+  title: string | null
+  kind: string | null
+  status: string | null
+  color: string | null
+  error?: string
+}
+
+/** An issue in GitHub, GitLab or Jira: key, title and live status. */
+function IssueView({ node, editor }: ReactNodeViewProps) {
+  const key = (node.attrs.key as string) || ''
+  const ref = (node.attrs.url as string | null) || key
+  const q = useQuery({
+    queryKey: ['issue', ref],
+    queryFn: () => api.get<IssueInfo>(`/unfurl/issue?ref=${encodeURIComponent(ref)}`),
+    enabled: !!ref,
+    staleTime: 5 * 60_000,
+    retry: false,
+  })
+  const info = q.data
+  const href = info?.url ?? (node.attrs.url as string | null)
+  const closed = info?.color === 'purple' || info?.color === 'red' || (info?.tracker === 'jira' && info?.color === 'green')
+  const Icon = info?.kind === 'pull request' || info?.kind === 'merge request' ? GitPullRequest : closed ? CircleCheck : CircleDot
+  const label = (
+    <>
+      <Icon size={13} aria-hidden />
+      <span className="issue-key">{info?.key ?? key}</span>
+      {info?.title && <span className="issue-title">{info.title}</span>}
+      {info?.status && <span className="status-lozenge" data-color={info.color ?? 'grey'}>{info.status}</span>}
+    </>
+  )
+  const tip = [info?.kind, info?.title, info?.status].filter(Boolean).join(' · ') || key
+  // while editing a click selects the chip; Ctrl/Cmd+click opens it (like links)
+  const onClick = (e: React.MouseEvent) => {
+    if (editor.isEditable && !(e.metaKey || e.ctrlKey)) e.preventDefault()
+  }
+  return (
+    <NodeViewWrapper as="span" className="issue-chip" title={tip}>
+      {href ? <a className="issue-link" href={href} target="_blank" rel="noopener noreferrer" onClick={onClick}>{label}</a> : <span>{label}</span>}
+    </NodeViewWrapper>
+  )
+}
+
+/** Inline link to an issue (`tracker`, `key`, `url`); Confluence's Jira macro becomes one. */
+export const Issue = Node.create({
+  name: 'issue',
+  group: 'inline',
+  inline: true,
+  atom: true,
+  selectable: true,
+  addAttributes() {
+    return { tracker: { default: null }, key: { default: '' }, url: { default: null } }
+  },
+  parseHTML() {
+    return [{ tag: 'span[data-type="issue"]' }]
+  },
+  renderHTML({ HTMLAttributes, node }) {
+    return ['span', mergeAttributes(HTMLAttributes, { 'data-type': 'issue' }), node.attrs.key as string]
+  },
+  renderText({ node }) {
+    return (node.attrs.key as string) || ''
+  },
+  addNodeView() {
+    return ReactNodeViewRenderer(IssueView)
+  },
+})
+
+/**
+ * What an issue link looks like: the tracker and the key it shows before the lookup answers.
+ * `pasted`: only unmistakable addresses (github.com, GitLab's `/-/issues/`, Jira's `/browse/`),
+ * not every site with an `/issues/` path.
+ */
+export function issueRef(text: string, pasted = false): { tracker: string; key: string; url: string | null } | null {
+  const s = text.trim()
+  if (/^[A-Z][A-Z0-9_]{1,29}-\d{1,9}$/.test(s)) return pasted ? null : { tracker: 'jira', key: s, url: null }
+  let u: URL
+  try {
+    u = new URL(s)
+  } catch {
+    return null
+  }
+  if (!/^https?:$/.test(u.protocol)) return null
+  const parts = u.pathname.split('/').filter(Boolean)
+  const gh = parts.length >= 4 && ['issues', 'pull', 'pulls'].includes(parts[2]) && /^\d+$/.test(parts[3])
+  if (gh && u.hostname === 'github.com') return { tracker: 'github', key: `${parts[0]}/${parts[1]}#${parts[3]}`, url: s }
+  const dash = parts.indexOf('-')
+  if (dash >= 2 && ['issues', 'merge_requests', 'work_items'].includes(parts[dash + 1]) && /^\d+$/.test(parts[dash + 2] ?? '')) {
+    const mr = parts[dash + 1] === 'merge_requests'
+    return { tracker: 'gitlab', key: `${parts.slice(0, dash).join('/')}${mr ? '!' : '#'}${parts[dash + 2]}`, url: s }
+  }
+  const browse = parts.indexOf('browse')
+  if (browse >= 0 && /^[A-Z][A-Z0-9_]{1,29}-\d{1,9}$/.test(parts[browse + 1] ?? '')) return { tracker: 'jira', key: parts[browse + 1], url: s }
+  // GitHub Enterprise and other hosts: the server decides whether it knows them
+  if (gh && !pasted) return { tracker: 'github', key: `${parts[0]}/${parts[1]}#${parts[3]}`, url: s }
+  return null
+}
 
 export const Anchor = Node.create({
   name: 'anchor',

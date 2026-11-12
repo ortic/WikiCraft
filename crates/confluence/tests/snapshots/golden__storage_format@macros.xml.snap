@@ -412,13 +412,11 @@ input_file: crates/confluence/tests/golden/macros.xml
       "type": "paragraph",
       "content": [
         {
-          "type": "text",
-          "text": "OPS-42",
-          "marks": [
-            {
-              "type": "code"
-            }
-          ]
+          "type": "issue",
+          "attrs": {
+            "key": "OPS-42",
+            "tracker": "jira"
+          }
         }
       ]
     },
@@ -754,7 +752,7 @@ kept body
 </div>
 <div class="include" data-page-id="">Included page: Other Page</div>
 <p>
-<code>OPS-42</code>
+<span class="issue">OPS-42</span>
 </p>
 <pre>
 <code class="language-mermaid">graph TD; A--&gt;B</code>

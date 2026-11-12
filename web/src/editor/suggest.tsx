@@ -6,11 +6,12 @@ import { ReactRenderer } from '@tiptap/react'
 import Suggestion, { type SuggestionOptions, type SuggestionProps, type SuggestionKeyDownProps } from '@tiptap/suggestion'
 import { PluginKey } from '@tiptap/pm/state'
 import { EMOTICONS, Emoticon } from '../icons'
+import { issueRef } from './nodes'
 import { forwardRef, useEffect, useImperativeHandle, useState, type ReactNode } from 'react'
 import {
   Heading1, Heading2, Heading3, List, ListOrdered, ListChecks, Table2, Quote, Code2, Minus, Table, Info, AlertTriangle, CheckCircle2, XCircle, ChevronRight,
   UserRound, Hash, ListTree, CalendarDays, Tag, Sigma, Image as ImageIcon, Link2, Columns2, Paperclip, StickyNote, FileText, FilePlus2, PenTool, Workflow, Columns3, PanelLeft, PanelRight, Search,
-  MessageSquareDashed, Milestone, FileInput, Scissors,
+  MessageSquareDashed, Milestone, FileInput, Scissors, CircleDot,
 } from 'lucide-react'
 import { api } from '../api'
 import { headingIds } from './HeadingIds'
@@ -170,6 +171,19 @@ export function slashItems(onImage: (editor: Editor) => void, onAttachment: (edi
     { group: t('Macros'), title: t('Child pages'), icon: ic(ListTree), keywords: t('children tree'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'childPages', attrs: { depth: 1 } }, { type: 'paragraph' }]).run() },
     { group: t('Macros'), title: t('Include page'), description: t('Another page’s content, always up to date'), icon: ic(FileInput), keywords: t('transclude embed reuse excerpt snippet'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'include' }, { type: 'paragraph' }]).run() },
     { group: t('Macros'), title: t('Excerpt'), description: t('Mark text other pages can include'), icon: ic(Scissors), keywords: t('summary snippet reuse include'), command: (e, r) => e.chain().focus().deleteRange(r).wrapIn('excerpt').run() },
+    {
+      group: t('Macros'),
+      title: t('Issue'),
+      description: t('GitHub, GitLab or Jira, with its status'),
+      icon: ic(CircleDot),
+      keywords: t('jira github gitlab ticket bug pull request merge request'),
+      command: (e, r) => {
+        const text = window.prompt(t('Issue address, or a Jira key like OPS-42'))
+        e.chain().focus().deleteRange(r).run()
+        const ref = text ? issueRef(text) : null
+        if (ref) e.chain().focus().insertContent([{ type: 'issue', attrs: ref }, { type: 'text', text: ' ' }]).run()
+      },
+    },
     { group: t('Macros'), title: t('Status'), icon: ic(Tag), keywords: t('lozenge label'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'status', attrs: { text: t('IN PROGRESS'), color: 'blue' } }).run() },
     { group: t('Macros'), title: t('Decision'), description: t('Record a decision (shows up in decision logs)'), icon: ic(Milestone), keywords: t('decided adr choice'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'decisionList', content: [{ type: 'decisionItem', attrs: { state: 'DECIDED' }, content: [{ type: 'paragraph' }] }] }).run() },
     { group: t('Macros'), title: t('Decision log'), description: t('Decisions recorded in this space'), icon: ic(Milestone), keywords: t('decisions report decisionreport'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'macro', attrs: { name: 'decisionreport', params: {} } }, { type: 'paragraph' }]).run() },

@@ -12,6 +12,7 @@ pub mod comments;
 pub mod exports;
 pub mod imports;
 pub mod inspect;
+pub mod issues;
 pub mod legacy;
 pub mod likes;
 pub mod links;
@@ -179,6 +180,7 @@ pub fn router(state: AppState) -> Router {
         .route("/markdown", post(pages::markdown_to_doc))
         .route("/unfurl", get(unfurl::unfurl))
         .route("/unfurl/gist", get(unfurl::gist))
+        .route("/unfurl/issue", get(issues::issue))
         .route("/labels", get(search::suggest_labels))
         .route("/labels/{name}", get(search::by_label))
         .route("/labels/{name}/attachments", get(attachments::by_label))

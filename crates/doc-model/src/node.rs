@@ -84,6 +84,9 @@ pub mod nodes {
     /// `name` (optional, for several per page), `hidden` (shown only where it's included)
     pub const EXCERPT: &str = "excerpt";
     pub const ANCHOR: &str = "anchor";
+    /// Inline link to an issue in a tracker: `tracker` (github | gitlab | jira), `key` (`OPS-42`,
+    /// `owner/repo#12`), `url` (when known); title and status are looked up when shown
+    pub const ISSUE: &str = "issue";
     pub const COLUMNS: &str = "columns";
     pub const COLUMN: &str = "column";
     pub const DECISION_LIST: &str = "decisionList";
@@ -145,6 +148,7 @@ pub fn is_inline(kind: &str) -> bool {
             | nodes::EMOTICON
             | nodes::MATH_INLINE
             | nodes::ANCHOR
+            | nodes::ISSUE
             | nodes::PLACEHOLDER
     ) || kind == nodes::IMAGE // images are inline in our schema (Tiptap `inline: true`)
 }

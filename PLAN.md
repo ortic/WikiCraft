@@ -340,7 +340,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** `decisionreport` → decisions report block — "Decision log" block (live, permission-filtered, Word export evaluates it); `/decision` and `/decision log` slash commands
 - [x] **P1** `create-from-template` → "create from template" button block — button block creating a page below the current one; Confluence blueprints map to built-in templates, others open the Create dialog; also `/create-page button`
 - [x] **P1** `content-report-table` / blueprint index pages → query table block
-- [~] **P1** `jira` / `jiraissues` / Jira chart → issue tracker embed (Jira, GitHub, GitLab, Linear) (issue key kept as text; no live embed)
+- [~] **P1** `jira` / `jiraissues` / Jira chart → issue tracker embed (Jira, GitHub, GitLab, Linear) (single issues → live issue chips; JQL tables and charts stay placeholders)
 - [~] **P1** `unmigrated-wiki-markup` → convert wiki markup; keep the original as a fallback (converted; original not kept)
 - [x] **P1** `section` / `column` (legacy layouts) → layout block
 - [ ] **P2** `blog-posts`, `contributors`, `contributors-summary`, `profile`, `userlister`, `popular-labels`, `related-labels`, `listlabels`, `navmap`, `index`, `spaces`, `space-details`, `favpages`, `gallery`, `chart`, `roadmap`, `team-calendar`, `html` (admin opt-in, sanitized)
@@ -560,7 +560,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 
 ### 4.20 Integrations
 - [ ] **P1** Smart links / unfurling via oEmbed + OpenGraph, with provider plugins `C D O` — partial: OpenGraph / `<title>` link cards (no oEmbed providers yet)
-- [ ] **P1** Issue trackers: Jira (issue macro, create issue from selection, issue status lozenge), GitHub, GitLab, Linear `C`
+- [~] **P1** Issue trackers: Jira (issue macro, create issue from selection, issue status lozenge), GitHub, GitLab, Linear `C` (issue chips with title and live status for Jira (Cloud / DC), GitHub (+ Enterprise) issues and pull requests, GitLab issues and merge requests: `/issue`, paste, Confluence `jira` macro; server-side lookup with admin-configured tokens, 10 min cache; no Linear, no JQL tables, no creating issues from a selection)
 - [ ] **P1** Slack / Microsoft Teams / Mattermost: link unfurl, notifications, search from chat `C O`
 - [~] **P1** Diagrams: draw.io, Excalidraw, Mermaid, PlantUML (server-side, sandboxed) `D X` (Mermaid client-side only)
 - [x] **P1** Embeds: Figma, Miro, Loom, Google Drive/Docs/Sheets, Airtable, Typeform, YouTube, Vimeo `D C` — see §4.4 (plus GitHub gists and CodePen)

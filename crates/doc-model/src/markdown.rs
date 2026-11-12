@@ -742,6 +742,13 @@ fn inline_md(content: &[Node]) -> String {
             nodes::MENTION => s.push_str(&format!("@{}", n.attr_str("label").or(n.attr_str("id")).unwrap_or("user"))),
             nodes::STATUS => s.push_str(&format!("`{}`", n.attr_str("text").unwrap_or("").to_uppercase())),
             nodes::DATE => s.push_str(n.attr_str("date").unwrap_or("")),
+            nodes::ISSUE => {
+                let key = n.attr_str("key").unwrap_or("issue");
+                match n.attr_str("url").filter(|u| u.starts_with("https://") || u.starts_with("http://")) {
+                    Some(u) => s.push_str(&format!("[{}]({u})", md_escape(key))),
+                    None => s.push_str(&format!("`{key}`")),
+                }
+            }
             nodes::EMOTICON => s.push_str(crate::icons::emoticon_shortcut(n.attr_str("name").unwrap_or(""))),
             nodes::MATH_INLINE if n.attr_bool("display") == Some(true) => s.push_str(&format!("$${}$$", n.attr_str("latex").unwrap_or(""))),
             nodes::MATH_INLINE => s.push_str(&format!("${}$", n.attr_str("latex").unwrap_or(""))),

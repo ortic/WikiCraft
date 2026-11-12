@@ -26,7 +26,7 @@ const MAX_REDIRECTS: usize = 3;
 static RECENT: LazyLock<Mutex<HashMap<Uuid, VecDeque<Instant>>>> = LazyLock::new(Default::default);
 
 /// 60 previews per person per 10 minutes (per replica)
-fn allow(user: Uuid) -> bool {
+pub(crate) fn allow(user: Uuid) -> bool {
     let mut m = RECENT.lock().unwrap_or_else(|e| e.into_inner());
     let q = m.entry(user).or_default();
     let now = Instant::now();
@@ -86,13 +86,26 @@ pub async fn unfurl(State(state): State<AppState>, CurrentUser(user): CurrentUse
 }
 
 async fn fetch(state: &AppState, url: openidconnect::url::Url) -> anyhow::Result<String> {
-    fetch_as(state, url, "text/html,application/xhtml+xml", |t| t.contains("text/html") || t.contains("xhtml")).await
+    fetch_as(state, url, "text/html,application/xhtml+xml", |t| t.contains("text/html") || t.contains("xhtml"), &Extra::default()).await
+}
+
+/// More for a request: headers (credentials for a tracker the admin configured) and whether
+/// that host may be a private address. Requests with either don't follow redirects to another host.
+#[derive(Default)]
+pub(crate) struct Extra {
+    pub headers: Vec<(&'static str, String)>,
+    pub private_host: Option<String>,
 }
 
 /// Fetches `url` with the protections above, accepting the content types `ok` allows.
-async fn fetch_as(state: &AppState, mut url: openidconnect::url::Url, accept: &str, ok: fn(&str) -> bool) -> anyhow::Result<String> {
+pub(crate) async fn fetch_as(state: &AppState, mut url: openidconnect::url::Url, accept: &str, ok: fn(&str) -> bool, extra: &Extra) -> anyhow::Result<String> {
+    let first_host = url.host_str().unwrap_or_default().to_string();
+    let pinned = !extra.headers.is_empty() || extra.private_host.is_some();
     for _ in 0..=MAX_REDIRECTS {
-        let addr = resolve(&url, state.config.unfurl_allow_private).await?;
+        // credentials and private addresses stay with the host they were configured for
+        anyhow::ensure!(!pinned || url.host_str() == Some(first_host.as_str()), "redirect to another host");
+        let private = state.config.unfurl_allow_private || extra.private_host.as_deref().is_some_and(|h| url.host_str() == Some(h));
+        let addr = resolve(&url, private).await?;
         let client = openidconnect::reqwest::Client::builder()
             .redirect(openidconnect::reqwest::redirect::Policy::none())
             .no_proxy()
@@ -100,7 +113,11 @@ async fn fetch_as(state: &AppState, mut url: openidconnect::url::Url, accept: &s
             .user_agent("WikiCraft-LinkPreview/1")
             .resolve(url.host_str().unwrap_or_default(), addr)
             .build()?;
-        let mut resp = client.get(url.as_str()).header("accept", accept).send().await?;
+        let mut req = client.get(url.as_str()).header("accept", accept);
+        for (k, v) in &extra.headers {
+            req = req.header(*k, v);
+        }
+        let mut resp = req.send().await?;
         let status = resp.status();
         if status.is_redirection() {
             let loc = resp.headers().get("location").and_then(|v| v.to_str().ok()).ok_or_else(|| anyhow::anyhow!("redirect without a location"))?;
@@ -163,7 +180,7 @@ pub async fn gist(State(state): State<AppState>, CurrentUser(user): CurrentUser,
         return Err(ApiError::bad("too many link previews; try again in a few minutes"));
     }
     let api = validate_url(&format!("https://api.github.com/gists/{id}")).map_err(|e| ApiError::bad(format!("{e}")))?;
-    let data = match fetch_as(&state, api, "application/vnd.github+json", |t| t.contains("json")).await {
+    let data = match fetch_as(&state, api, "application/vnd.github+json", |t| t.contains("json"), &Extra::default()).await {
         Ok(body) => match serde_json::from_str::<Value>(&body) {
             Ok(g) => {
                 let files: Vec<Value> = g["files"]

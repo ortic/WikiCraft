@@ -1144,6 +1144,8 @@ impl Conv<'_> {
                 let jql = param("jqlQuery");
                 let server = param("server").unwrap_or_else(|| "Jira".into());
                 match (key, jql) {
+                    // a chip with the issue's summary and status when the wiki is connected to Jira
+                    (Some(k), _) if is_jira_key(k.trim()) => vec![Node::new(nodes::ISSUE).attr("tracker", "jira").attr("key", k.trim().to_string())],
                     (Some(k), _) => vec![Node::text_marked(k.to_string(), add_mark(marks, Mark::new(marks::CODE)))],
                     (None, Some(q)) => vec![placeholder_macro(&name, el, vec![Node::paragraph(vec![Node::text(format!("{server} query: {q}"))])])],
                     _ => vec![placeholder_macro(&name, el, vec![])],
@@ -1239,6 +1241,16 @@ fn details(summary: String, content: Vec<Node>) -> Node {
 }
 
 /// An inert macro node preserving name, parameters and plain body for later mapping.
+/// `OPS-42`: a Jira project key and an issue number.
+fn is_jira_key(s: &str) -> bool {
+    let Some((project, number)) = s.split_once('-') else { return false };
+    project.len() >= 2
+        && project.starts_with(|c: char| c.is_ascii_uppercase())
+        && project.bytes().all(|b| b.is_ascii_uppercase() || b.is_ascii_digit() || b == b'_')
+        && !number.is_empty()
+        && number.bytes().all(|b| b.is_ascii_digit())
+}
+
 fn placeholder_macro(name: &str, el: &Element, content: Vec<Node>) -> Node {
     let mut params = Map::new();
     for (k, v) in el.macro_params() {

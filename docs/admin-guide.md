@@ -259,6 +259,24 @@ servers, run draw.io yourself (for example the `jgraph/drawio` container behind 
 set its https address under *Admin → Overview → draw.io diagrams*. An empty address turns
 diagram editing off; existing diagrams stay visible as pictures.
 
+## Issue trackers (Jira, GitHub, GitLab)
+
+Issue chips (`/issue`, a pasted issue address, Confluence's Jira macro) show an issue's title and
+status, looked up by the server and cached for ten minutes. Public GitHub and gitlab.com issues
+work without setup. For the rest:
+
+| Variable | Purpose |
+|---|---|
+| `WIKICRAFT_JIRA_URL` | Jira's address, e.g. `https://acme.atlassian.net` or an internal Data Center host |
+| `WIKICRAFT_JIRA_USER` + `WIKICRAFT_JIRA_TOKEN` | Jira Cloud: an account's e-mail and API token |
+| `WIKICRAFT_JIRA_TOKEN` alone | Jira Data Center: a personal access token |
+| `WIKICRAFT_GITHUB_URL`, `WIKICRAFT_GITHUB_TOKEN` | GitHub Enterprise Server's address; a token for private repositories |
+| `WIKICRAFT_GITLAB_URL`, `WIKICRAFT_GITLAB_TOKEN` | a self-managed GitLab; a `read_api` token for private projects |
+
+The configured hosts may be on the internal network (other link previews may not). Every member
+sees what the configured account sees of an issue they link (key, title, status), so use a
+read-only account limited to what all members may know. Guests and visitors can't look issues up.
+
 ## PDF export and fonts
 
 PDF exports are typeset on the server (no browser or extra service needed). Noto Sans is built in

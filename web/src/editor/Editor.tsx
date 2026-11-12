@@ -17,6 +17,7 @@ import { Bold, Italic, Underline, Strikethrough, Code, Link as LinkIcon, Link2, 
 import type { Node as PMNode } from '@tiptap/pm/model'
 import { api, initials, userColor, type Attachment, type User } from '../api'
 import { contentExtensions } from './extensions'
+import { issueRef } from './nodes'
 import { EmoticonSuggest, PageLinkSuggest, SlashCommand, mentionSuggestion, slashItems } from './suggest'
 import { TableMenu } from './TableMenu'
 import { FindBar, FindReplace, findKey } from './FindReplace'
@@ -148,6 +149,13 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
           const ed = editorRef.current
           const text = event.clipboardData?.getData('text/plain') ?? ''
           const html = event.clipboardData?.getData('text/html') ?? ''
+          // a single issue address: an issue chip with its title and status
+          const issue = ed && !ed.isActive('codeBlock') && !/\s/.test(text.trim()) ? issueRef(text, true) : null
+          if (ed && issue) {
+            event.preventDefault()
+            ed.chain().focus().insertContent([{ type: 'issue', attrs: issue }, { type: 'text', text: ' ' }]).run()
+            return true
+          }
           // cells from a spreadsheet without HTML on the clipboard: a table (first row as header)
           const rows = ed && !hasRichHtml(html) && !ed.isActive('codeBlock') && !ed.isActive('table') ? tsvRows(text) : null
           if (ed && rows) {

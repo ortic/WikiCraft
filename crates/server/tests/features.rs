@@ -470,6 +470,96 @@ async fn link_previews() {
     assert!(r["title"].is_null() && r["error"] == "preview unavailable", "{r}");
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn issue_links_from_jira_github_and_gitlab() {
+    use axum::http::HeaderMap;
+    use std::sync::atomic::{AtomicUsize, Ordering};
+    static JIRA_CALLS: AtomicUsize = AtomicUsize::new(0);
+    // one fake server plays an internal Jira, a GitHub Enterprise Server and a self-hosted GitLab;
+    // each answers only with the credentials configured for it
+    let auth = |h: &HeaderMap, name: &str, want: &str| h.get(name).and_then(|v| v.to_str().ok()) == Some(want);
+    let site = axum::Router::new()
+        .route(
+            "/rest/api/2/issue/{key}",
+            axum::routing::get(move |h: HeaderMap, axum::extract::Path(key): axum::extract::Path<String>| async move {
+                JIRA_CALLS.fetch_add(1, Ordering::SeqCst);
+                if !auth(&h, "authorization", "Bearer jira-pat") {
+                    return (axum::http::StatusCode::UNAUTHORIZED, axum::Json(json!({}))).into_response();
+                }
+                axum::Json(json!({"key": key, "fields": {"summary": "Rotate the  certificates", "status": {"name": "In Review", "statusCategory": {"key": "indeterminate"}}, "issuetype": {"name": "Task"}}})).into_response()
+            }),
+        )
+        .route(
+            "/api/v3/repos/acme/web/issues/7",
+            axum::routing::get(move |h: HeaderMap| async move {
+                if !auth(&h, "authorization", "Bearer gh-token") {
+                    return axum::http::StatusCode::NOT_FOUND.into_response();
+                }
+                axum::Json(json!({"title": "Dark mode", "state": "closed", "pull_request": {"merged_at": "2026-11-01T10:00:00Z"}})).into_response()
+            }),
+        )
+        .route(
+            "/api/v4/projects/{id}/issues/3",
+            axum::routing::get(move |h: HeaderMap, axum::extract::Path(id): axum::extract::Path<String>| async move {
+                if !auth(&h, "private-token", "gl-token") || id != "ops/infra" {
+                    return axum::http::StatusCode::NOT_FOUND.into_response();
+                }
+                axum::Json(json!({"title": "Upgrade runners", "state": "opened"})).into_response()
+            }),
+        );
+    use axum::response::IntoResponse;
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let base = format!("http://{}", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, site).await.unwrap() });
+
+    // previews of private addresses are off: the configured trackers still work
+    let b = base.clone();
+    let app = common::spawn_with(move |c| {
+        c.unfurl_allow_private = false;
+        c.jira_url = Some(format!("{b}/"));
+        c.jira_token = Some("jira-pat".into());
+        c.github_url = b.clone();
+        c.github_token = Some("gh-token".into());
+        c.gitlab_url = b.clone();
+        c.gitlab_token = Some("gl-token".into());
+    })
+    .await;
+    let owner = app.setup().await;
+    let (st, r) = app.get(&owner, "/unfurl/issue?ref=OPS-42").await;
+    assert_eq!(st, 200, "{r}");
+    assert_eq!(
+        (r["tracker"].as_str(), r["title"].as_str(), r["status"].as_str(), r["color"].as_str(), r["kind"].as_str()),
+        (Some("jira"), Some("Rotate the certificates"), Some("In Review"), Some("blue"), Some("Task"))
+    );
+    assert_eq!(r["url"], format!("{base}/browse/OPS-42"));
+    // cached: the second look doesn't ask Jira again
+    app.get(&owner, &format!("/unfurl/issue?ref={base}/browse/OPS-42")).await;
+    assert_eq!(JIRA_CALLS.load(Ordering::SeqCst), 1);
+
+    let (_, r) = app.get(&owner, &format!("/unfurl/issue?ref={base}/acme/web/pull/7")).await;
+    assert_eq!((r["key"].as_str(), r["status"].as_str(), r["color"].as_str()), (Some("acme/web#7"), Some("Merged"), Some("purple")), "{r}");
+    let (_, r) = app.get(&owner, &format!("/unfurl/issue?ref={base}/ops/infra/-/issues/3")).await;
+    assert_eq!((r["key"].as_str(), r["title"].as_str(), r["status"].as_str()), (Some("ops/infra#3"), Some("Upgrade runners"), Some("Open")), "{r}");
+    assert_eq!(r["url"], format!("{base}/ops/infra/-/issues/3"));
+
+    // a tracker that doesn't know the issue: the key alone, without the reason
+    let (st, r) = app.get(&owner, &format!("/unfurl/issue?ref={base}/ops/infra/-/issues/4")).await;
+    assert_eq!((st, r["title"].clone(), r["error"].as_str()), (200, Value::Null, Some("issue unavailable")));
+    // anything else isn't an issue address
+    assert_eq!(app.get(&owner, "/unfurl/issue?ref=https://example.com/a/b/issues/1").await.0, 400);
+    assert_eq!(app.get(&owner, "/unfurl/issue?ref=ops-42").await.0, 400);
+    // guests and visitors can't look issues up (the tokens see more than they may)
+    let (guest, _) = app.user(&owner, "gus@acme.test", "guest").await;
+    assert_eq!(app.get(&guest, "/unfurl/issue?ref=OPS-42").await.0, 403);
+    assert_ne!(app.get(&common::client(), "/unfurl/issue?ref=OPS-42").await.0, 200);
+
+    // without Jira configured a key stays a key
+    let plain = common::spawn().await;
+    let o = plain.setup().await;
+    let (st, r) = plain.get(&o, "/unfurl/issue?ref=OPS-42").await;
+    assert_eq!((st, r["key"].as_str(), r["url"].clone(), r["error"].as_str()), (200, Some("OPS-42"), Value::Null, Some("Jira isn't connected")));
+}
+
 #[tokio::test]
 async fn announcement_banner() {
     let app = common::spawn().await;

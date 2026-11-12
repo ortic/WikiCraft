@@ -5450,6 +5450,68 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /unfurl/issue:
+    get:
+      tags:
+      - Pages
+      summary: An issue's key, title and state (GitHub issue or pull request, GitLab issue or merge request, Jira issue) for
+        issue chips; members only, cached ten minutes. Jira needs WIKICRAFT_JIRA_URL; tokens (admin-configured) decide what
+        members see
+      operationId: get_unfurl_issue
+      parameters:
+      - name: ref
+        in: query
+        required: true
+        description: issue address or Jira key (OPS-42)
+        schema: *id001
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  tracker:
+                    enum:
+                    - github
+                    - gitlab
+                    - jira
+                  key: *id001
+                  url:
+                    type:
+                    - string
+                    - 'null'
+                  title:
+                    type:
+                    - string
+                    - 'null'
+                  kind:
+                    type:
+                    - string
+                    - 'null'
+                  status:
+                    type:
+                    - string
+                    - 'null'
+                  color:
+                    type:
+                    - string
+                    - 'null'
+                    enum:
+                    - green
+                    - blue
+                    - purple
+                    - red
+                    - grey
+                    - null
+                  error: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /labels:
     get:
       tags:

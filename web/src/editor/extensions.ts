@@ -18,7 +18,7 @@ import Superscript from '@tiptap/extension-superscript'
 import { common, createLowlight } from 'lowlight'
 import type { Node as PMNode } from '@tiptap/pm/model'
 import { Indent } from './Indent'
-import { AttachmentNode, Anchor, Callout, ChildPages, Column, Columns, CommentMark, DateNode, DecisionItem, DecisionList, Embed, Emoticon, Excerpt, Include, InstructionalText, Macro, Status, Toc } from './nodes'
+import { AttachmentNode, Anchor, Callout, ChildPages, Column, Columns, CommentMark, DateNode, DecisionItem, DecisionList, Embed, Emoticon, Excerpt, Include, InstructionalText, Issue, Macro, Status, Toc } from './nodes'
 import { CodeBlock } from './CodeBlock'
 import { ImageView } from './ImageView'
 import { Drawing } from './Drawing'
@@ -141,6 +141,7 @@ export function contentExtensions(pageId: string, opts: { mention?: Partial<Ment
     Include.configure({ chain }),
     Excerpt,
     Anchor,
+    Issue,
     Columns,
     Column,
     DecisionList,

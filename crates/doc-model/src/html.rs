@@ -226,6 +226,17 @@ impl Renderer<'_> {
                 let d = n.attr_str("date").unwrap_or("");
                 let _ = write!(self.out, "<time datetime=\"{0}\">{0}</time>", escape(d));
             }
+            nodes::ISSUE => {
+                let key = escape(n.attr_str("key").unwrap_or("issue"));
+                match n.attr_str("url").and_then(safe_url) {
+                    Some(u) => {
+                        let _ = write!(self.out, "<a class=\"issue\" href=\"{}\" rel=\"noopener noreferrer\">{key}</a>", escape(u));
+                    }
+                    None => {
+                        let _ = write!(self.out, "<span class=\"issue\">{key}</span>");
+                    }
+                }
+            }
             nodes::EMOTICON => {
                 if let Some(svg) = n.attr_str("name").and_then(crate::icons::emoticon_svg) {
                     self.out.push_str(&svg);

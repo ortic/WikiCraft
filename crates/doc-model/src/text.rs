@@ -17,6 +17,7 @@ pub fn inline_text(n: &Node) -> String {
             }
             nodes::STATUS => s.push_str(n.attr_str("text").unwrap_or("")),
             nodes::DATE => s.push_str(n.attr_str("date").unwrap_or("")),
+            nodes::ISSUE => s.push_str(n.attr_str("key").unwrap_or("")),
             _ => {}
         }
         for c in &n.content {

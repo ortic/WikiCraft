@@ -89,6 +89,39 @@ pub struct Config {
     #[arg(long, env = "WIKICRAFT_UNFURL_ALLOW_PRIVATE", default_value_t = false)]
     pub unfurl_allow_private: bool,
 
+    /// Jira for issue links (`OPS-42` with status and summary), e.g. `https://acme.atlassian.net`
+    /// or an internal Data Center address (private addresses are fine for this host).
+    #[arg(long, env = "WIKICRAFT_JIRA_URL")]
+    pub jira_url: Option<String>,
+
+    /// Jira Cloud: the account's e-mail (with an API token in WIKICRAFT_JIRA_TOKEN, basic auth).
+    /// Unset with a token: the token is a Data Center personal access token (bearer).
+    #[arg(long, env = "WIKICRAFT_JIRA_USER")]
+    pub jira_user: Option<String>,
+
+    /// Jira API token or personal access token. Every member of the wiki sees what this account
+    /// sees of an issue they link (key, summary, status), so use a read-only account.
+    #[arg(long, env = "WIKICRAFT_JIRA_TOKEN", hide_env_values = true)]
+    pub jira_token: Option<String>,
+
+    /// GitHub for issue and pull request links; another address for GitHub Enterprise Server
+    /// (its API is `<url>/api/v3`; private addresses are fine for that host).
+    #[arg(long, env = "WIKICRAFT_GITHUB_URL", default_value = "https://github.com")]
+    pub github_url: String,
+
+    /// GitHub token for private repositories and a higher rate limit (members then see the
+    /// titles and states of the issues they link in repositories the token can read).
+    #[arg(long, env = "WIKICRAFT_GITHUB_TOKEN", hide_env_values = true)]
+    pub github_token: Option<String>,
+
+    /// GitLab for issue and merge request links (gitlab.com always works for public projects).
+    #[arg(long, env = "WIKICRAFT_GITLAB_URL", default_value = "https://gitlab.com")]
+    pub gitlab_url: String,
+
+    /// GitLab token (read_api) for private projects on WIKICRAFT_GITLAB_URL.
+    #[arg(long, env = "WIKICRAFT_GITLAB_TOKEN", hide_env_values = true)]
+    pub gitlab_token: Option<String>,
+
     /// Sender of e-mails.
     #[arg(long, env = "WIKICRAFT_MAIL_FROM", default_value = "WikiCraft <wikicraft@localhost>")]
     pub mail_from: String,

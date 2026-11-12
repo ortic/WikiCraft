@@ -550,6 +550,13 @@ impl Renderer<'_> {
                     t(&label)
                 )
             }
+            nodes::ISSUE => {
+                let key = t(n.attr_str("key").unwrap_or("issue"));
+                match n.attr_str("url").filter(|u| u.starts_with("https://") || u.starts_with("http://")) {
+                    Some(u) => self.link(u, key),
+                    None => format!("#raw({});", lit(n.attr_str("key").unwrap_or("issue"))),
+                }
+            }
             nodes::DATE => {
                 let d = n.attr_str("date").unwrap_or("");
                 let shown = chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").map(|d| d.format("%-d %b %Y").to_string()).unwrap_or_else(|_| d.to_string());

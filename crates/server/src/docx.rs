@@ -956,6 +956,15 @@ impl Renderer<'_> {
                 let shown = chrono::NaiveDate::parse_from_str(d, "%Y-%m-%d").map(|d| d.format("%-d %b %Y").to_string()).unwrap_or_else(|_| d.to_string());
                 p.add_run(Run::new().add_text(format!("\u{00A0}{shown}\u{00A0}")).shading(Shading::new().fill("F1F5F9")))
             }
+            nodes::ISSUE => {
+                let key = n.attr_str("key").unwrap_or("issue").to_string();
+                match n.attr_str("url").and_then(|u| self.url(u)) {
+                    Some(url) => {
+                        p.add_hyperlink(Hyperlink::new(url, HyperlinkType::External).add_run(Run::new().add_text(key).color(LINK_COLOR).underline("single")))
+                    }
+                    None => p.add_run(Run::new().add_text(key).fonts(mono())),
+                }
+            }
             nodes::EMOTICON => {
                 let name = n.attr_str("name").unwrap_or("");
                 let key = format!("emoticon:{name}");

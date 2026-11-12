@@ -58,7 +58,7 @@ It works the same for Confluence Server, Data Center and Cloud exports.
 | html | the HTML as a code block (never executed) |
 | math / LaTeX macros | Math (KaTeX) |
 | widget, iframe | Embed (YouTube, Loom, Figma, Miro, Google Docs, …) or a link card |
-| jira | the issue key as text (no live Jira embed yet) |
+| jira | an issue chip with summary and status (with `WIKICRAFT_JIRA_URL`; otherwise the key); JQL tables stay a placeholder |
 | unmigrated-wiki-markup | converted to normal content |
 | emoticons | WikiCraft's own icon set |
 | anything else | a *macro* block that keeps the macro's name, parameters and body, so nothing is lost and you can find it later |
