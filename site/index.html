@@ -1,0 +1,543 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>WikiCraft: the open-source wiki for your team</title>
+<meta name="description" content="WikiCraft is a self-hosted team wiki with real-time co-editing, fast search, granular permissions, SSO and an API built for AI assistants. One Rust binary plus PostgreSQL. MIT or Apache-2.0.">
+<meta property="og:title" content="WikiCraft: the open-source wiki for your team">
+<meta property="og:description" content="Self-hosted team wiki with real-time co-editing, fast search, granular permissions and SSO. One Rust binary plus PostgreSQL.">
+<meta property="og:type" content="website">
+<meta property="og:image" content="https://ortic.github.io/WikiCraft/img/page.png">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#4f46e5">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="preload" href="fonts/inter-latin-wght.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true">
+  <symbol id="i-users" viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c0-3.6 2.9-6 6.5-6s6.5 2.4 6.5 6"/><path d="M16 4.6a3.5 3.5 0 0 1 0 6.8M18 14.3c2.1.7 3.5 2.8 3.5 5.7"/></symbol>
+  <symbol id="i-pen" viewBox="0 0 24 24"><path d="M4 20h4L19 9a2.8 2.8 0 0 0-4-4L4 16v4z"/><path d="M13.5 6.5l4 4"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="M20 20l-3.5-3.5"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M12 3l8 3v6c0 4.5-3.4 8.3-8 9-4.6-.7-8-4.5-8-9V6l8-3z"/><path d="M8.5 12l2.5 2.5 4.5-5"/></symbol>
+  <symbol id="i-import" viewBox="0 0 24 24"><path d="M12 3v11M7.5 9.5L12 14l4.5-4.5"/><path d="M4 15v3a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-3"/></symbol>
+  <symbol id="i-nodes" viewBox="0 0 24 24"><circle cx="6" cy="6" r="2.5"/><circle cx="18" cy="6" r="2.5"/><circle cx="12" cy="18" r="2.5"/><path d="M8.5 6h7M7.2 8.2l3.6 7.6M16.8 8.2l-3.6 7.6"/></symbol>
+  <symbol id="i-server" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="7" rx="2"/><rect x="3.5" y="13" width="17" height="7" rx="2"/><path d="M7.5 7.5h.01M7.5 16.5h.01"/></symbol>
+  <symbol id="i-globe" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c2.5 2.7 3.8 5.7 3.8 9s-1.3 6.3-3.8 9c-2.5-2.7-3.8-5.7-3.8-9S9.5 5.7 12 3z"/></symbol>
+  <symbol id="i-history" viewBox="0 0 24 24"><path d="M3.5 12a8.5 8.5 0 1 0 2.5-6"/><path d="M3.5 4v4.5H8"/><path d="M12 7.5V12l3 2"/></symbol>
+  <symbol id="i-chat" viewBox="0 0 24 24"><path d="M5 4h14a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2h-7l-5 4v-4H5a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2z"/><path d="M8 9.5h8M8 12.5h5"/></symbol>
+  <symbol id="i-table" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="17" height="15" rx="2"/><path d="M3.5 9.5h17M3.5 14.5h17M9.5 9.5v10"/></symbol>
+  <symbol id="i-timeline" viewBox="0 0 24 24"><rect x="3.5" y="4.5" width="10" height="3.5" rx="1.75"/><rect x="8.5" y="10.25" width="12" height="3.5" rx="1.75"/><rect x="5.5" y="16" width="8" height="3.5" rx="1.75"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M5 12.5l4.5 4.5L19 7.5"/></symbol>
+  <symbol id="i-copy" viewBox="0 0 24 24"><rect x="8.5" y="8.5" width="12" height="12" rx="2"/><path d="M15.5 8.5v-3a2 2 0 0 0-2-2h-8a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h3"/></symbol>
+  <symbol id="i-arrow" viewBox="0 0 24 24"><path d="M5 12h14M13 6l6 6-6 6"/></symbol>
+  <symbol id="i-book" viewBox="0 0 24 24"><path d="M5 4h11a3 3 0 0 1 3 3v13H8a3 3 0 0 1-3-3V4z"/><path d="M5 17a3 3 0 0 1 3-3h11"/></symbol>
+  <symbol id="i-terminal" viewBox="0 0 24 24"><rect x="3" y="4.5" width="18" height="15" rx="2"/><path d="M7 9.5l3 2.5-3 2.5M12.5 15h4.5"/></symbol>
+  <symbol id="i-box" viewBox="0 0 24 24"><path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z"/><path d="M4 7.5l8 4.5 8-4.5M12 12v9"/></symbol>
+  <symbol id="i-layers" viewBox="0 0 24 24"><path d="M12 3l9 5-9 5-9-5 9-5z"/><path d="M3 13l9 5 9-5"/></symbol>
+  <symbol id="i-phone" viewBox="0 0 24 24"><rect x="6.5" y="2.5" width="11" height="19" rx="2.5"/><path d="M11 18.5h2"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="4.5" y="10.5" width="15" height="10" rx="2"/><path d="M8 10.5v-3a4 4 0 0 1 8 0v3"/></symbol>
+  <symbol id="i-bolt" viewBox="0 0 24 24"><path d="M13 3L5 13.5h6L10 21l8-10.5h-6L13 3z"/></symbol>
+  <symbol id="i-pulse" viewBox="0 0 24 24"><path d="M3 12h4l2.5-6 5 12 2.5-6h4"/></symbol>
+  <symbol id="i-archive" viewBox="0 0 24 24"><rect x="3.5" y="4" width="17" height="5" rx="1.5"/><path d="M5 9v9a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V9M10 13h4"/></symbol>
+  <symbol id="i-heart" viewBox="0 0 24 24"><path d="M12 20s-7.5-4.6-7.5-10A4.5 4.5 0 0 1 12 7a4.5 4.5 0 0 1 7.5 3c0 5.4-7.5 10-7.5 10z"/></symbol>
+  <symbol id="i-plug" viewBox="0 0 24 24"><path d="M9 3v4M15 3v4M6.5 7h11v4a5.5 5.5 0 0 1-11 0V7z"/><path d="M12 16.5V21"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M6 6l12 12M18 6L6 18"/></symbol>
+  <symbol id="i-github" viewBox="0 0 16 16"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8z"/></symbol>
+</svg>
+
+<a class="skip" href="#main">Skip to content</a>
+
+<header class="top" id="top">
+  <div class="wrap">
+    <a class="brand" href="#top"><img src="favicon.svg" alt="" width="28" height="28">WikiCraft</a>
+    <nav aria-label="Main">
+      <a href="#features">Features</a>
+      <a href="#start">Get started</a>
+      <a href="#deploy">Deployment</a>
+      <a href="#developers">Developers</a>
+      <a href="#docs">Docs</a>
+      <a class="btn btn-ghost btn-sm" href="https://github.com/ortic/WikiCraft"><svg class="icon fill"><use href="#i-github"/></svg>GitHub</a>
+    </nav>
+  </div>
+</header>
+
+<main id="main">
+
+<!-- ================= hero ================= -->
+<section class="hero" aria-labelledby="hero-title">
+  <div class="wrap">
+    <div class="hero-text">
+      <span class="eyebrow">Open source &middot; self-hosted &middot; MIT or Apache-2.0</span>
+      <h1 id="hero-title">The wiki your team <span class="grad">writes together</span></h1>
+      <p class="lead">WikiCraft is a self-hosted team wiki with a real-time editor, fast search and fine-grained permissions. It's one Rust binary plus PostgreSQL, and runs on a laptop, a VM or Kubernetes.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="#start">Get started <svg class="icon"><use href="#i-arrow"/></svg></a>
+        <a class="btn btn-ghost" href="https://github.com/ortic/WikiCraft"><svg class="icon fill"><use href="#i-github"/></svg>View on GitHub</a>
+      </div>
+      <ul class="facts">
+        <li><svg class="icon"><use href="#i-check"/></svg>Single binary, web app built in</li>
+        <li><svg class="icon"><use href="#i-check"/></svg>SSO, LDAP and SAML</li>
+        <li><svg class="icon"><use href="#i-check"/></svg>English, Deutsch, Français</li>
+      </ul>
+    </div>
+    <div class="hero-shot">
+      <figure class="shot">
+        <button type="button" data-zoom="img/page.png" data-caption="A runbook: page properties, status, a callout, tasks with assignees and due dates, and a table.">
+          <img src="img/page.png" width="1440" height="900" alt="A runbook page in WikiCraft with a page tree, page properties, a status label, an info callout, a task list with assignees and due dates, and an escalation table" fetchpriority="high">
+        </button>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ================= highlights ================= -->
+<section class="alt" aria-labelledby="why-title">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">Why WikiCraft</div>
+      <h2 id="why-title">Everything a team wiki needs, on your own servers</h2>
+      <p>Built for teams that want their documentation in-house, without giving up a modern editor or the features they rely on every day.</p>
+    </div>
+    <div class="cards">
+      <div class="card">
+        <span class="badge-icon"><svg class="icon"><use href="#i-users"/></svg></span>
+        <h3>Live co-editing</h3>
+        <p>Everyone types in the same page at once and sees each other's cursors. No locks, no lost changes, no "someone else is editing".</p>
+      </div>
+      <div class="card">
+        <span class="badge-icon"><svg class="icon"><use href="#i-import"/></svg></span>
+        <h3>Bring your content</h3>
+        <p>Import complete wiki exports with history, attachments, comments and permissions, or Markdown, Obsidian, Notion, HTML and Word. Links into the old wiki keep working.</p>
+      </div>
+      <div class="card">
+        <span class="badge-icon"><svg class="icon"><use href="#i-server"/></svg></span>
+        <h3>Yours to run</h3>
+        <p>One binary with the web app inside. Start on a single server, scale out to several replicas when you need to. Backups, metrics and health checks included.</p>
+      </div>
+      <div class="card">
+        <span class="badge-icon"><svg class="icon"><use href="#i-nodes"/></svg></span>
+        <h3>Ready for AI</h3>
+        <p>A built-in MCP server and a retrieval API let assistants search, cite and write pages, always with the permissions of the person asking.</p>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= features ================= -->
+<section id="features" aria-labelledby="features-title">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">Features</div>
+      <h2 id="features-title">A closer look</h2>
+      <p>Screenshots from a fresh installation. Click any of them to see it full size.</p>
+    </div>
+
+    <div class="feature">
+      <div class="feature-text">
+        <div class="kicker"><svg class="icon"><use href="#i-users"/></svg>Collaboration</div>
+        <h3>Write together, live</h3>
+        <p>Open a page and start typing. Colleagues in the same page show up with their name and cursor, and their changes appear as they type.</p>
+        <ul class="checks">
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Real-time co-editing</b> on a CRDT, so simultaneous changes merge without conflicts</span></li>
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Private drafts</b> until you publish, scheduled publishing and minor changes that don't notify watchers</span></li>
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Templates and blueprints</b> with variables, and a default template per space or page tree</span></li>
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Paste anything</b>: Markdown turns into formatting, spreadsheet cells into tables, images upload on paste or drop</span></li>
+        </ul>
+      </div>
+      <figure class="shot">
+        <button type="button" data-zoom="img/collab.png" data-caption="Ben is editing the same page: his cursor and name show up live.">
+          <img src="img/collab.png" width="1020" height="600" loading="lazy" alt="An onboarding page with a task list; another person's cursor with the name label Ben Ortiz appears where he is typing">
+        </button>
+      </figure>
+    </div>
+
+    <div class="feature flip">
+      <div class="feature-text">
+        <div class="kicker"><svg class="icon"><use href="#i-pen"/></svg>Editor</div>
+        <h3>Every block you need, one slash away</h3>
+        <p>Type <code>/</code> to insert anything, from headings and tables to diagrams, live reports and embeds. Formatting stays at hand in a fixed toolbar.</p>
+        <ul class="checks">
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Tables</b> with merged cells, colours, sorting and sticky headers; <b>tasks</b> with assignees, due dates and reminders</span></li>
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Callouts, expand blocks, columns</b>, text colours and highlights, code with syntax highlighting, math</span></li>
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Diagrams</b>: draw.io and Excalidraw drawings stored in the page, Mermaid, image annotation</span></li>
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Embeds</b> (YouTube, Vimeo, Loom, Figma, Miro, Google Docs), link previews, includes and excerpts, links to any block</span></li>
+        </ul>
+      </div>
+      <figure class="shot">
+        <button type="button" data-zoom="img/editor.png" data-caption="Typing / opens the block menu.">
+          <img src="img/editor.png" width="880" height="650" loading="lazy" alt="The editor with the slash menu open, listing headings, lists, task list and quote">
+        </button>
+      </figure>
+    </div>
+
+    <div class="feature">
+      <div class="feature-text">
+        <div class="kicker"><svg class="icon"><use href="#i-chat"/></svg>Comments</div>
+        <h3>Discuss right where the text is</h3>
+        <p>Select a sentence and comment on it, or start a thread under the page. Mention people to pull them in; resolve the thread when it's settled.</p>
+        <ul class="checks">
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Inline and page comments</b> with replies, images, likes, resolve and reopen</span></li>
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>@mentions</b> and <b>watches</b> on pages, page trees or whole spaces</span></li>
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Notifications</b> in the app and as e-mail digests, plus a personal "My tasks" list</span></li>
+        </ul>
+      </div>
+      <figure class="shot">
+        <button type="button" data-zoom="img/comments.png" data-caption="An inline comment on a sentence, next to a page thread with replies.">
+          <img src="img/comments.png" width="1150" height="800" loading="lazy" alt="A spec page with a highlighted sentence and the comments panel showing a thread with replies and an inline comment">
+        </button>
+      </figure>
+    </div>
+
+    <div class="feature flip">
+      <div class="feature-text">
+        <div class="kicker"><svg class="icon"><use href="#i-table"/></svg>Structure</div>
+        <h3>Reports that keep themselves up to date</h3>
+        <p>Give pages typed properties like owner, tier or review date. A properties report collects them into a table that updates whenever a page changes.</p>
+        <ul class="checks">
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Page properties</b>: text, number, date, person, select, link and page fields</span></li>
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Live reports</b>: pages by label, recently updated, open tasks, decisions</span></li>
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Spaces</b> with page trees, folders, a blog with Atom feeds, labels, archive and trash</span></li>
+        </ul>
+      </div>
+      <figure class="shot">
+        <button type="button" data-zoom="img/report.png" data-caption="A properties report listing every runbook with its owner, tier and last drill.">
+          <img src="img/report.png" width="880" height="500" loading="lazy" alt="A page properties report table listing runbooks with their owner, service tier and last drill date">
+        </button>
+      </figure>
+    </div>
+
+    <div class="feature">
+      <div class="feature-text">
+        <div class="kicker"><svg class="icon"><use href="#i-timeline"/></svg>Planning</div>
+        <h3>Plans that live next to the docs</h3>
+        <p>Timelines, live issue tables and decisions sit in the same page as the reasoning behind them. Shown here in the dark theme.</p>
+        <ul class="checks">
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Roadmaps</b> brought over from your old wiki become timelines with lanes, bars and milestones</span></li>
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Issue chips</b> from Jira, GitHub and GitLab, and live tables from Jira queries</span></li>
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Status labels, dates and decisions</b> inline in the text, with reports across spaces</span></li>
+        </ul>
+      </div>
+      <figure class="shot">
+        <button type="button" data-zoom="img/roadmap-dark.png" data-caption="A roadmap timeline in the dark theme.">
+          <img src="img/roadmap-dark.png" width="880" height="700" loading="lazy" alt="A roadmap page in the dark theme with a timeline of three lanes, bars per project and a launch milestone">
+        </button>
+      </figure>
+    </div>
+
+    <div class="feature flip">
+      <div class="feature-text">
+        <div class="kicker"><svg class="icon"><use href="#i-history"/></svg>History</div>
+        <h3>Every change, accounted for</h3>
+        <p>WikiCraft keeps every version. Compare any two word by word, inline or side by side, and restore an older one in a click.</p>
+        <ul class="checks">
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Version history</b> with word-level comparison and restore</span></li>
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>"Changed since your last visit"</b> highlights on pages you come back to</span></li>
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Audit log</b> for admins, and who viewed a page</span></li>
+        </ul>
+      </div>
+      <figure class="shot">
+        <button type="button" data-zoom="img/history.png" data-caption="Two versions compared word by word.">
+          <img src="img/history.png" width="1110" height="560" loading="lazy" alt="The history of a pricing page comparing version 2 with version 1, with changed words struck through and added lines in green">
+        </button>
+      </figure>
+    </div>
+
+    <div class="feature">
+      <div class="feature-text">
+        <div class="kicker"><svg class="icon"><use href="#i-search"/></svg>Search</div>
+        <h3>Find it in seconds</h3>
+        <p>Full-text search with snippets covers pages, blog posts and the text inside attached files. It forgives typos and understands word forms in your language.</p>
+        <ul class="checks">
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Inside attachments</b>: PDF, Office documents and text files</span></li>
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Filters and saved searches</b>, plus browser search integration</span></li>
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>A query language</b> for precise lists: <code>space = ENG and label = runbook and lastModified &gt; now("-30d")</code></span></li>
+        </ul>
+      </div>
+      <figure class="shot">
+        <button type="button" data-zoom="img/search.png" data-caption="Search results with snippets and filters.">
+          <img src="img/search.png" width="1110" height="600" loading="lazy" alt="Search results for runbook with snippets, a space filter, type and date filters, a query button and saved searches">
+        </button>
+      </figure>
+    </div>
+
+    <div class="feature flip narrow-shot">
+      <div class="feature-text">
+        <div class="kicker"><svg class="icon"><use href="#i-phone"/></svg>Everywhere</div>
+        <h3>On every screen, for everyone</h3>
+        <p>The same app works on phones and tablets. Light, dark and high-contrast themes, and an interface checked against WCAG 2.2 AA.</p>
+        <ul class="checks">
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Mobile layout</b> for reading and quick edits on the go</span></li>
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>English, German and French</b>, with a per-person language and workspace default</span></li>
+          <li><svg class="icon"><use href="#i-check"/></svg><span><b>Your look</b>: workspace name, logo, accent colour per workspace and per space</span></li>
+        </ul>
+      </div>
+      <figure class="shot">
+        <button type="button" data-zoom="img/mobile.png" data-caption="The runbook on a phone.">
+          <img src="img/mobile.png" width="390" height="844" loading="lazy" alt="The runbook page on a phone-sized screen">
+        </button>
+      </figure>
+    </div>
+  </div>
+</section>
+
+<!-- ================= everything ================= -->
+<section class="alt" aria-labelledby="all-title">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">And much more</div>
+      <h2 id="all-title">The complete toolbox</h2>
+      <p>WikiCraft covers the long tail that teams depend on once the wiki becomes the place where work is written down.</p>
+    </div>
+    <div class="grid3">
+      <div class="group">
+        <h3><svg class="icon"><use href="#i-lock"/></svg>Permissions</h3>
+        <ul>
+          <li>Workspace roles and space roles per user, group or the space default</li>
+          <li>Granular rights: add or delete pages, blog posts, comments and files; export; archive</li>
+          <li>Page view and edit restrictions, inherited down the tree</li>
+          <li>"Inspect permissions" and access requests</li>
+          <li>Guests, public spaces and share links with expiry and password</li>
+        </ul>
+      </div>
+      <div class="group">
+        <h3><svg class="icon"><use href="#i-shield"/></svg>Sign-in and security</h3>
+        <ul>
+          <li>OpenID Connect: Microsoft Entra ID, Google, GitLab, Okta, Keycloak, Authentik and more</li>
+          <li>GitHub, LDAP / Active Directory and SAML 2.0, several at once, with group sync</li>
+          <li>Two-factor authentication (TOTP), optionally required</li>
+          <li>Audit log, expiring read-only or read/write API tokens</li>
+          <li>Virus scanning with ClamAV, strict CSP and HSTS</li>
+        </ul>
+      </div>
+      <div class="group">
+        <h3><svg class="icon"><use href="#i-import"/></svg>Moving in and out</h3>
+        <ul>
+          <li>Full wiki exports (XML and cloud formats) with history, comments, restrictions, authors and 50+ macros, plus a dry-run report</li>
+          <li>Update imports bring later changes across; old URLs redirect to the imported pages</li>
+          <li>Markdown and Obsidian vaults, Notion (databases become page properties), HTML and Word</li>
+          <li>Export pages as PDF (typeset, with cover and contents), Word, Markdown or HTML</li>
+          <li>Whole spaces as a static site, a Markdown tree or a restorable backup</li>
+        </ul>
+      </div>
+      <div class="group">
+        <h3><svg class="icon"><use href="#i-plug"/></svg>Integrations</h3>
+        <ul>
+          <li>REST API with an OpenAPI 3.1 description</li>
+          <li>Webhooks, signed with HMAC; ready-made formats for Slack, Mattermost, Microsoft Teams and Google Chat</li>
+          <li>Issue chips and live tables from Jira, GitHub and GitLab</li>
+          <li>Embeds and link previews for the tools your team already uses</li>
+        </ul>
+      </div>
+      <div class="group">
+        <h3><svg class="icon"><use href="#i-nodes"/></svg>AI</h3>
+        <ul>
+          <li>Built-in MCP server: assistants search, query, read and write pages with the user's permissions</li>
+          <li>Retrieval API for RAG: passages cut along headings, hybrid keyword and semantic ranking, a link to the exact block</li>
+          <li>Semantic ranking with any OpenAI-compatible embeddings API, local models included</li>
+          <li>Optional "Ask the wiki" answers with citations</li>
+        </ul>
+      </div>
+      <div class="group">
+        <h3><svg class="icon"><use href="#i-users"/></svg>People and administration</h3>
+        <ul>
+          <li>Profiles with photos, a people directory, following colleagues' activity</li>
+          <li>Invitations, groups, deactivation, merging imported authors into real accounts</li>
+          <li>Announcement banner, feature switches, attachment limits and blocked file types</li>
+          <li>Usage overview, space directory and categories</li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= get started ================= -->
+<section id="start" aria-labelledby="start-title">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">Get started</div>
+      <h2 id="start-title">Running in five minutes</h2>
+      <p>All you need is Docker. WikiCraft and PostgreSQL start together; the first visit opens a setup wizard that creates your workspace and admin account.</p>
+    </div>
+    <div class="start">
+      <div>
+        <div class="tabs" role="tablist" aria-label="Ways to install">
+          <button role="tab" id="tab-docker" aria-controls="panel-docker" aria-selected="true"><svg class="icon"><use href="#i-box"/></svg>Docker Compose</button>
+          <button role="tab" id="tab-source" aria-controls="panel-source" aria-selected="false" tabindex="-1"><svg class="icon"><use href="#i-terminal"/></svg>From source</button>
+          <button role="tab" id="tab-k8s" aria-controls="panel-k8s" aria-selected="false" tabindex="-1"><svg class="icon"><use href="#i-layers"/></svg>Kubernetes</button>
+        </div>
+
+        <div class="panel" role="tabpanel" id="panel-docker" aria-labelledby="tab-docker">
+          <div class="code"><button class="copy" type="button" aria-label="Copy commands"><svg class="icon"><use href="#i-copy"/></svg></button><pre><code>git clone https://github.com/ortic/WikiCraft.git
+cd WikiCraft
+export WIKICRAFT_DB_PASSWORD=$(openssl rand -hex 16)
+docker compose up -d   <span class="c"># builds the image on first start</span></code></pre></div>
+          <p>Then open <a href="http://localhost:8787">http://localhost:8787</a>. The compose file starts PostgreSQL 17 with pgvector and keeps data in two volumes. Without <code>WIKICRAFT_DB_PASSWORD</code> the database password is <code>change-me</code>.</p>
+        </div>
+
+        <div class="panel" role="tabpanel" id="panel-source" aria-labelledby="tab-source" hidden>
+          <p>Needs Rust 1.94 or newer, Node 20.19+ or 22.12+ and PostgreSQL 15 or newer. Release builds embed the web app, so the result is a single file you can copy anywhere.</p>
+          <div class="code"><button class="copy" type="button" aria-label="Copy commands"><svg class="icon"><use href="#i-copy"/></svg></button><pre><code>git clone https://github.com/ortic/WikiCraft.git
+cd WikiCraft
+(cd web &amp;&amp; npm ci &amp;&amp; npm run build)
+cargo build --release -p wikicraft
+
+export WIKICRAFT_DATABASE_URL=postgres://wikicraft:secret@localhost:5432/wikicraft
+export WIKICRAFT_BIND=0.0.0.0:8787
+./target/release/wikicraft serve   <span class="c"># migrations run on startup</span></code></pre></div>
+        </div>
+
+        <div class="panel" role="tabpanel" id="panel-k8s" aria-labelledby="tab-k8s" hidden>
+          <p>The manifests in <code>deploy/kubernetes</code> run several replicas: attachments in S3-compatible storage, search and live editing shared through PostgreSQL, no sticky sessions. Build the image and push it to your registry first.</p>
+          <div class="code"><button class="copy" type="button" aria-label="Copy commands"><svg class="icon"><use href="#i-copy"/></svg></button><pre><code>docker build -t registry.example.com/wikicraft:latest .
+docker push registry.example.com/wikicraft:latest
+
+cd deploy/kubernetes
+cp secret.example.yaml secret.yaml
+<span class="c"># edit secret.yaml, configmap.yaml, ingress.yaml and the</span>
+<span class="c"># image in kustomization.yaml, then:</span>
+kubectl apply -k .</code></pre></div>
+        </div>
+      </div>
+
+      <div>
+        <h3>After the first start</h3>
+        <ol class="steps">
+          <li><div><b>Put it behind HTTPS</b><span>Set <code>WIKICRAFT_BASE_URL</code> to your address and <code>WIKICRAFT_SECURE_COOKIES=true</code>.</span></div></li>
+          <li><div><b>Connect sign-in</b><span>Add OIDC, GitHub, LDAP or SAML providers in <code>WIKICRAFT_AUTH_PROVIDERS</code>.</span></div></li>
+          <li><div><b>Turn on e-mail</b><span><code>WIKICRAFT_SMTP_URL</code> enables notifications, digests and password resets.</span></div></li>
+          <li><div><b>Bring your content</b><span>Admin &rarr; Import takes wiki exports, Markdown, Notion, HTML and Word files.</span></div></li>
+          <li><div><b>Schedule backups</b><span><code>wikicraft backup wikicraft.zip</code> saves the database and files in one archive.</span></div></li>
+        </ol>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= deployment ================= -->
+<section id="deploy" class="alt" aria-labelledby="deploy-title">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">Deployment</div>
+      <h2 id="deploy-title">Small team or whole company</h2>
+      <p>WikiCraft is a stateless binary. Run one instance with local storage, or several behind a load balancer. The same build does both.</p>
+    </div>
+    <div class="table-wrap">
+      <table>
+        <thead><tr><th scope="col"></th><th scope="col">Single instance</th><th scope="col">Scaled (several replicas)</th></tr></thead>
+        <tbody>
+          <tr><th scope="row">Start with</th><td><code>docker compose up -d</code></td><td><code>deploy/kubernetes</code> or the scaled compose file</td></tr>
+          <tr><th scope="row">Database</th><td>PostgreSQL</td><td>PostgreSQL (managed or HA recommended)</td></tr>
+          <tr><th scope="row">Attachments</th><td>Local volume</td><td>S3-compatible storage (S3, MinIO, R2, Ceph)</td></tr>
+          <tr><th scope="row">Search</th><td>Embedded index</td><td>Shared index in PostgreSQL</td></tr>
+          <tr><th scope="row">Live editing</th><td>In-process</td><td>Replicas relay edits through PostgreSQL, no sticky sessions</td></tr>
+          <tr><th scope="row">Background jobs</th><td colspan="2">PostgreSQL queue; any replica picks up work, crashed jobs are detected</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="ops">
+      <div><b><svg class="icon"><use href="#i-pulse"/></svg>Observable</b><p>Prometheus metrics, JSON logs with request ids, liveness and readiness probes.</p></div>
+      <div><b><svg class="icon"><use href="#i-bolt"/></svg>Safe upgrades</b><p>Migrations run on startup under a lock, so rolling updates with several pods just work.</p></div>
+      <div><b><svg class="icon"><use href="#i-archive"/></svg>Backups</b><p>One command for database and files; restore into an empty database to move servers.</p></div>
+      <div><b><svg class="icon"><use href="#i-lock"/></svg>Hardened</b><p>The container runs as non-root and works with a read-only root file system. Strict CSP and HSTS.</p></div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= developers ================= -->
+<section id="developers" aria-labelledby="dev-title">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">For developers</div>
+      <h2 id="dev-title">Built to be built on</h2>
+      <p>Everything in the interface is in the API. Personal tokens can be read-only, and every call goes through the same permission checks as the app.</p>
+    </div>
+    <div class="dev">
+      <div class="card">
+        <div>
+        <h3><svg class="icon"><use href="#i-terminal"/></svg>REST API</h3>
+        <p>Versioned under <code>/api/v1</code>, described in OpenAPI 3.1 at <code>/api/openapi.yaml</code>. Write pages as ProseMirror JSON or plain Markdown.</p>
+        </div>
+        <div class="code"><pre><code>curl -X PUT https://wiki.example.com/api/v1/pages/$ID/content \
+  -H "Authorization: Bearer wct_…" \
+  -H "Content-Type: application/json" \
+  -d '{"markdown": "# Release notes\n\nShipped today."}'</code></pre></div>
+      </div>
+      <div class="card">
+        <div>
+        <h3><svg class="icon"><use href="#i-nodes"/></svg>AI assistants (MCP)</h3>
+        <p>Point any MCP client at your wiki. Assistants search, query, read and write pages with the token owner's permissions.</p>
+        </div>
+        <div class="code"><pre><code>claude mcp add --transport http wikicraft \
+  https://wiki.example.com/api/mcp \
+  --header "Authorization: Bearer wct_…"</code></pre></div>
+      </div>
+      <div class="card">
+        <div>
+        <h3><svg class="icon"><use href="#i-search"/></svg>Retrieval for RAG</h3>
+        <p>Ask a question, get the passages that answer it, each linked to the exact block, filtered by what the caller may read.</p>
+        </div>
+        <div class="code"><pre><code>curl -H "Authorization: Bearer wct_…" \
+  "https://wiki.example.com/api/retrieve?q=rotate+VPN+certificates&amp;limit=5"</code></pre></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= docs ================= -->
+<section id="docs" class="alt" aria-labelledby="docs-title">
+  <div class="wrap">
+    <div class="section-head">
+      <div class="kicker">Documentation</div>
+      <h2 id="docs-title">Read on</h2>
+    </div>
+    <div class="docs">
+      <a class="doc" href="https://github.com/ortic/WikiCraft/blob/master/docs/user-guide.md"><span class="badge-icon"><svg class="icon"><use href="#i-book"/></svg></span><div><b>User guide</b><span>Reading, writing, collaborating and sharing.</span></div></a>
+      <a class="doc" href="https://github.com/ortic/WikiCraft/blob/master/docs/admin-guide.md"><span class="badge-icon"><svg class="icon"><use href="#i-server"/></svg></span><div><b>Admin guide</b><span>Installing, sign-in, permissions, e-mail, backups, upgrades and monitoring.</span></div></a>
+      <a class="doc" href="https://github.com/ortic/WikiCraft/blob/master/docs/migrating-from-confluence.md"><span class="badge-icon"><svg class="icon"><use href="#i-import"/></svg></span><div><b>Migration guide</b><span>Exporting your old wiki, the dry run, importing and what maps to what.</span></div></a>
+      <a class="doc" href="https://github.com/ortic/WikiCraft#configuration"><span class="badge-icon"><svg class="icon"><use href="#i-terminal"/></svg></span><div><b>Configuration</b><span>Every setting, the command line, sign-in providers and the API.</span></div></a>
+      <a class="doc" href="https://github.com/ortic/WikiCraft/blob/master/docs/translating.md"><span class="badge-icon"><svg class="icon"><use href="#i-globe"/></svg></span><div><b>Translating</b><span>How the interface texts are organised and how to add a language.</span></div></a>
+      <a class="doc" href="https://github.com/ortic/WikiCraft"><span class="badge-icon"><svg class="icon fill"><use href="#i-github"/></svg></span><div><b>Source code</b><span>Issues, pull requests and the roadmap on GitHub.</span></div></a>
+    </div>
+  </div>
+</section>
+
+<!-- ================= final ================= -->
+<section class="final" aria-labelledby="final-title">
+  <div class="wrap">
+    <div class="box">
+      <h2 id="final-title">Give your team a wiki they'll enjoy</h2>
+      <p>Free and open source under MIT or Apache-2.0. Run it on your own hardware, keep your data where it belongs.</p>
+      <div class="cta">
+        <a class="btn btn-primary" href="#start">Get started <svg class="icon"><use href="#i-arrow"/></svg></a>
+        <a class="btn btn-ghost" href="https://github.com/ortic/WikiCraft"><svg class="icon fill"><use href="#i-github"/></svg>Star on GitHub</a>
+      </div>
+    </div>
+  </div>
+</section>
+
+</main>
+
+<footer>
+  <div class="wrap">
+    <span>&copy; The WikiCraft contributors &middot; MIT or Apache-2.0</span>
+    <nav aria-label="Footer">
+      <a href="https://github.com/ortic/WikiCraft">GitHub</a>
+      <a href="https://github.com/ortic/WikiCraft/blob/master/docs/README.md">Documentation</a>
+      <a href="https://github.com/ortic/WikiCraft/blob/master/THIRD-PARTY-LICENSES.md">Third-party licenses</a>
+      <a href="https://github.com/ortic/WikiCraft/issues">Report an issue</a>
+    </nav>
+  </div>
+</footer>
+
+<dialog class="lightbox" id="lightbox" aria-label="Screenshot">
+  <button class="close" type="button" aria-label="Close"><svg class="icon"><use href="#i-x"/></svg></button>
+  <img alt="">
+  <p></p>
+</dialog>
+
+<script src="site.js" defer></script>
+</body>
+</html>

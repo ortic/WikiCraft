@@ -4,6 +4,8 @@ A self-hosted team wiki with a **Rust backend**, a real-time editor and first-cl
 migration**. Built for teams that need a new home when Confluence Data Center reaches its end of
 life (2029-03-28).
 
+**Website:** <https://ortic.github.io/WikiCraft/>: features, screenshots and how to get started.
+
 ![A runbook page in WikiCraft: page tree, status, page properties, callout, tasks and a table](docs/screenshots/page.png)
 
 ## Features
