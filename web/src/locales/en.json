@@ -15,6 +15,10 @@
   "one": "{count} file uploaded",
   "other": "{count} files uploaded"
  },
+ "{count} issues": {
+  "one": "{count} issue",
+  "other": "{count} issues"
+ },
  "{count} pages": {
   "one": "{count} page",
   "other": "{count} pages"

@@ -184,6 +184,18 @@ export function slashItems(onImage: (editor: Editor) => void, onAttachment: (edi
         if (ref) e.chain().focus().insertContent([{ type: 'issue', attrs: ref }, { type: 'text', text: ' ' }]).run()
       },
     },
+    {
+      group: t('Macros'),
+      title: t('Jira issues'),
+      description: t('A live table of the issues a JQL query finds'),
+      icon: ic(CircleDot),
+      keywords: t('jira jql issues table query'),
+      command: (e, r) => {
+        const jql = window.prompt(t('Jira query (JQL)'), 'project = ABC AND resolution = Unresolved ORDER BY priority DESC')
+        e.chain().focus().deleteRange(r).run()
+        if (jql?.trim()) e.chain().focus().insertContent([{ type: 'macro', attrs: { name: 'jira', params: { jqlQuery: jql.trim(), columns: 'key,summary,type,assignee,priority,status', maximumIssues: '20' } } }, { type: 'paragraph' }]).run()
+      },
+    },
     { group: t('Macros'), title: t('Status'), icon: ic(Tag), keywords: t('lozenge label'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'status', attrs: { text: t('IN PROGRESS'), color: 'blue' } }).run() },
     { group: t('Macros'), title: t('Decision'), description: t('Record a decision (shows up in decision logs)'), icon: ic(Milestone), keywords: t('decided adr choice'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent({ type: 'decisionList', content: [{ type: 'decisionItem', attrs: { state: 'DECIDED' }, content: [{ type: 'paragraph' }] }] }).run() },
     { group: t('Macros'), title: t('Decision log'), description: t('Decisions recorded in this space'), icon: ic(Milestone), keywords: t('decisions report decisionreport'), command: (e, r) => e.chain().focus().deleteRange(r).insertContent([{ type: 'macro', attrs: { name: 'decisionreport', params: {} } }, { type: 'paragraph' }]).run() },

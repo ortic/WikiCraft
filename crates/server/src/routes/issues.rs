@@ -163,6 +163,21 @@ fn base(url: &str) -> String {
     url.trim().trim_end_matches('/').to_string()
 }
 
+const NOT_CONNECTED: &str = "Jira isn't connected";
+
+/// The configured Jira's address and what a request to it carries (credentials, and that it
+/// may be a private host).
+fn jira_connection(cfg: &Config) -> Option<(String, Extra)> {
+    let jira = cfg.jira_url.as_deref().map(base)?;
+    let mut extra = Extra { private_host: host_of(&jira), ..Default::default() };
+    match (&cfg.jira_user, &cfg.jira_token) {
+        (Some(u), Some(t)) => extra.headers.push(("authorization", format!("Basic {}", base64::engine::general_purpose::STANDARD.encode(format!("{u}:{t}"))))),
+        (None, Some(t)) => extra.headers.push(("authorization", format!("Bearer {t}"))),
+        _ => {}
+    }
+    Some((jira, extra))
+}
+
 /// `GET /api/unfurl/issue?ref=<address or Jira key>` → `{tracker, key, url, title, kind, status,
 /// color}`; `error` instead of title and status when the tracker didn't answer (or, for Jira,
 /// isn't configured).
@@ -205,19 +220,11 @@ pub async fn issue(State(state): State<AppState>, CurrentUser(user): CurrentUser
             (format!("{web}/api/v4/projects/{id}/{kind}/{number}"), format!("{web}/{project}/-/{kind}/{number}"), extra, "application/json")
         }
         IssueRef::Jira { key } => {
-            let Some(jira) = cfg.jira_url.as_deref().map(base) else {
+            let Some((jira, extra)) = jira_connection(cfg) else {
                 return Ok(Json(
-                    json!({"tracker": "jira", "key": key, "url": null, "title": null, "kind": null, "status": null, "color": null, "error": "Jira isn't connected"}),
+                    json!({"tracker": "jira", "key": key, "url": null, "title": null, "kind": null, "status": null, "color": null, "error": NOT_CONNECTED}),
                 ));
             };
-            let mut extra = Extra { private_host: host_of(&jira), ..Default::default() };
-            match (&cfg.jira_user, &cfg.jira_token) {
-                (Some(u), Some(t)) => {
-                    extra.headers.push(("authorization", format!("Basic {}", base64::engine::general_purpose::STANDARD.encode(format!("{u}:{t}")))))
-                }
-                (None, Some(t)) => extra.headers.push(("authorization", format!("Bearer {t}"))),
-                _ => {}
-            }
             (format!("{jira}/rest/api/2/issue/{key}?fields=summary,status,issuetype"), format!("{jira}/browse/{key}"), extra, "application/json")
         }
     };
@@ -284,6 +291,143 @@ pub async fn issue(State(state): State<AppState>, CurrentUser(user): CurrentUser
     Ok(Json(data))
 }
 
+/// Confluence's Jira macro columns, as Jira fields (`key` comes with every issue).
+fn jira_field(column: &str) -> Option<String> {
+    let c = column.trim().to_ascii_lowercase();
+    let f = match c.as_str() {
+        "key" | "" => return None,
+        "type" | "issuetype" => "issuetype",
+        "due" | "duedate" => "duedate",
+        "resolved" | "resolutiondate" => "resolutiondate",
+        "fixversion" | "fixversions" => "fixVersions",
+        "version" | "versions" | "affectsversions" => "versions",
+        "component" | "components" => "components",
+        other if other.len() <= 64 && other.bytes().all(|b| b.is_ascii_alphanumeric() || b == b'_') => other,
+        _ => return None,
+    };
+    Some(f.to_string())
+}
+
+/// A field's value as text: names of people, statuses, versions …; lists joined.
+fn display(v: &Value) -> Value {
+    match v {
+        Value::Null => Value::Null,
+        Value::String(s) => Value::String(s.chars().take(300).collect()),
+        Value::Number(_) | Value::Bool(_) => Value::String(v.to_string()),
+        Value::Array(a) => {
+            let parts: Vec<String> = a.iter().take(20).filter_map(|x| display(x).as_str().map(String::from)).collect();
+            if parts.is_empty() { Value::Null } else { Value::String(parts.join(", ")) }
+        }
+        Value::Object(o) => ["displayName", "name", "value", "key"]
+            .iter()
+            .find_map(|k| o.get(*k).and_then(Value::as_str))
+            .map(|s| Value::String(s.chars().take(300).collect()))
+            .unwrap_or(Value::Null),
+    }
+}
+
+#[derive(Deserialize)]
+pub struct JiraSearchQuery {
+    jql: String,
+    #[serde(default)]
+    columns: Option<String>,
+    #[serde(default)]
+    max: Option<u32>,
+}
+
+/// Columns of Confluence's Jira issues macro when it doesn't name any.
+const DEFAULT_COLUMNS: &str = "key,summary,type,created,updated,due,assignee,reporter,priority,status,resolution";
+/// issues per table at most
+const MAX_ISSUES: u32 = 100;
+
+/// `GET /api/unfurl/jira-search?jql=&columns=&max=` → `{searchUrl, columns, issues: [{key, url,
+/// cells, statusColor}], more}`: the issues a JQL query finds in the connected Jira (Confluence's
+/// Jira issues macro), as the configured account sees them; members only, cached five minutes.
+pub async fn jira_search(State(state): State<AppState>, CurrentUser(user): CurrentUser, Query(q): Query<JiraSearchQuery>) -> ApiResult<Json<Value>> {
+    if user.role == "guest" {
+        return Err(ApiError::Denied("guests can't look up issues".into()));
+    }
+    let jql = q.jql.trim();
+    if jql.is_empty() || jql.len() > 4000 {
+        return Err(ApiError::bad("a JQL query of up to 4000 characters"));
+    }
+    let columns: Vec<String> = {
+        let raw = q.columns.as_deref().map(str::trim).filter(|c| !c.is_empty()).unwrap_or(DEFAULT_COLUMNS);
+        let mut cols: Vec<String> = raw.split(',').map(|c| c.trim().to_ascii_lowercase()).filter(|c| !c.is_empty()).take(20).collect();
+        if !cols.iter().any(|c| c == "key") {
+            cols.insert(0, "key".into());
+        }
+        cols
+    };
+    let max = q.max.unwrap_or(20).clamp(1, MAX_ISSUES);
+    let Some((jira, extra)) = jira_connection(&state.config) else {
+        return Ok(Json(json!({"columns": columns, "issues": [], "searchUrl": null, "more": false, "error": NOT_CONNECTED})));
+    };
+    let mut search = Url::parse(&format!("{jira}/issues/")).map_err(|e| ApiError::Internal(e.into()))?;
+    search.query_pairs_mut().append_pair("jql", jql);
+    let cache_key = format!("jira-search:{max}:{}:{jql}", columns.join(","));
+    let cached: Option<Value> = sqlx::query_scalar("SELECT data FROM link_previews WHERE url = $1 AND fetched_at > now() - interval '5 minutes'")
+        .bind(&cache_key)
+        .fetch_optional(&state.db)
+        .await?;
+    if let Some(data) = cached {
+        return Ok(Json(data));
+    }
+    if !allow(user.id) {
+        return Err(ApiError::bad("too many link previews; try again in a few minutes"));
+    }
+    let mut fields: Vec<String> = columns.iter().filter_map(|c| jira_field(c)).collect();
+    if !fields.iter().any(|f| f == "status") {
+        fields.push("status".into());
+    }
+    // Jira Cloud searches at /rest/api/3/search/jql (its old search is gone); Data Center at /rest/api/2/search
+    let cloud = host_of(&jira).is_some_and(|h| h.ends_with(".atlassian.net"));
+    let path = if cloud { "/rest/api/3/search/jql" } else { "/rest/api/2/search" };
+    let mut api = Url::parse(&format!("{jira}{path}")).map_err(|e| ApiError::Internal(e.into()))?;
+    api.query_pairs_mut().append_pair("jql", jql).append_pair("fields", &fields.join(",")).append_pair("maxResults", &max.to_string());
+    let fetched = fetch_as(&state, api, "application/json", |t| t.contains("json"), &extra).await.and_then(|b| Ok(serde_json::from_str::<Value>(&b)?));
+    let data = match fetched {
+        Ok(v) if v["issues"].is_array() => {
+            let issues: Vec<Value> = v["issues"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .take(max as usize)
+                .map(|i| {
+                    let key = i["key"].as_str().unwrap_or("").to_string();
+                    let f = &i["fields"];
+                    let mut cells = serde_json::Map::new();
+                    for c in &columns {
+                        if let Some(field) = jira_field(c) {
+                            cells.insert(c.clone(), display(&f[field.as_str()]));
+                        }
+                    }
+                    json!({
+                        "key": key,
+                        "url": format!("{jira}/browse/{key}"),
+                        "cells": cells,
+                        "statusColor": jira_color(f["status"]["statusCategory"]["key"].as_str()),
+                    })
+                })
+                .collect();
+            let more = v["total"].as_u64().is_some_and(|t| t > issues.len() as u64) || v["nextPageToken"].is_string() || v["isLast"] == false;
+            json!({"columns": columns, "issues": issues, "searchUrl": search.as_str(), "more": more, "total": v["total"]})
+        }
+        other => {
+            if let Err(e) = &other {
+                tracing::debug!("Jira search failed: {e:#}");
+            }
+            json!({"columns": columns, "issues": [], "searchUrl": search.as_str(), "more": false, "error": "Jira didn't answer this query"})
+        }
+    };
+    sqlx::query("INSERT INTO link_previews (url, data, fetched_at) VALUES ($1, $2, now()) ON CONFLICT (url) DO UPDATE SET data = $2, fetched_at = now()")
+        .bind(&cache_key)
+        .bind(&data)
+        .execute(&state.db)
+        .await?;
+    Ok(Json(data))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -325,6 +469,19 @@ mod tests {
         }
         assert_eq!(parse_ref(&c, "https://github.com/a/b/issues/1").unwrap().key(), "a/b#1");
         assert_eq!(parse_ref(&c, "https://gitlab.com/g/p/-/merge_requests/3").unwrap().key(), "g/p!3");
+    }
+
+    #[test]
+    fn jira_columns_and_values() {
+        assert_eq!(jira_field("type").as_deref(), Some("issuetype"));
+        assert_eq!(jira_field("Due").as_deref(), Some("duedate"));
+        assert_eq!(jira_field("customfield_10020").as_deref(), Some("customfield_10020"));
+        assert_eq!(jira_field("key"), None);
+        assert_eq!(jira_field("a,b"), None);
+        assert_eq!(display(&json!({"displayName": "Ada", "name": "ada"})), json!("Ada"));
+        assert_eq!(display(&json!([{"name": "1.0"}, {"name": "1.1"}])), json!("1.0, 1.1"));
+        assert_eq!(display(&json!(3)), json!("3"));
+        assert_eq!(display(&json!(null)), Value::Null);
     }
 
     #[test]

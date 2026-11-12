@@ -262,7 +262,9 @@ diagram editing off; existing diagrams stay visible as pictures.
 ## Issue trackers (Jira, GitHub, GitLab)
 
 Issue chips (`/issue`, a pasted issue address, Confluence's Jira macro) show an issue's title and
-status, looked up by the server and cached for ten minutes. Public GitHub and gitlab.com issues
+status, looked up by the server and cached for ten minutes. With Jira connected, *Jira issues*
+tables (`/jira issues`, and every imported Jira issues macro) run their JQL query there and show
+the columns the macro names, cached for five minutes. Public GitHub and gitlab.com issues
 work without setup. For the rest:
 
 | Variable | Purpose |

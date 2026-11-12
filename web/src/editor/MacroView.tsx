@@ -6,10 +6,10 @@ import { t as tr } from '../i18n'
 import { useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Link, useNavigate } from 'react-router-dom'
-import { CheckSquare, Clock, Download, FilePlus2, FileText, ListTree, Milestone, Paperclip, Puzzle, Search, SlidersHorizontal, Table2, Tag } from 'lucide-react'
+import { CheckSquare, CircleDot, Clock, Download, ExternalLink, FilePlus2, FileText, ListTree, Milestone, Paperclip, Puzzle, Search, SlidersHorizontal, Table2, Tag } from 'lucide-react'
 import TemplatePicker from '../components/TemplatePicker'
 import { useToast } from '../ui'
-import { api, formatBytes, formatDate, type Attachment, type Page, type PageProperty } from '../api'
+import { api, formatBytes, formatDate, formatDateOnly, type Attachment, type Page, type PageProperty } from '../api'
 import { PropertyValue } from '../components/PageProperties'
 
 type Params = Record<string, string>
@@ -25,7 +25,7 @@ interface ReportPage {
   labels: string[]
 }
 
-export const LIVE_MACROS = new Set(['contentbylabel', 'recently-updated', 'detailssummary', 'content-report-table', 'tasks-report-macro', 'decisionreport', 'attachments', 'pagetree', 'livesearch', 'create-from-template'])
+export const LIVE_MACROS = new Set(['contentbylabel', 'recently-updated', 'detailssummary', 'content-report-table', 'tasks-report-macro', 'decisionreport', 'attachments', 'pagetree', 'livesearch', 'create-from-template', 'jira', 'jiraissues'])
 
 const csv = (s: string | undefined) => (s ?? '').split(',').map((x) => x.trim().replace(/^["']|["']$/g, '')).filter(Boolean)
 
@@ -503,6 +503,102 @@ function CreateFromTemplate({ params, page }: { params: Params; page?: Page }) {
   )
 }
 
+interface JiraResult {
+  columns: string[]
+  issues: { key: string; url: string; cells: Record<string, string | null>; statusColor: string }[]
+  searchUrl: string | null
+  more: boolean
+  total?: number | null
+  error?: string
+}
+
+const JIRA_COLUMN_LABELS: Record<string, string> = {
+  key: tr('Key'),
+  summary: tr('Summary'),
+  type: tr('Type'),
+  issuetype: tr('Type'),
+  created: tr('Created'),
+  updated: tr('Updated'),
+  due: tr('Due'),
+  duedate: tr('Due'),
+  assignee: tr('Assignee'),
+  reporter: tr('Reporter'),
+  priority: tr('Priority'),
+  status: tr('Status'),
+  resolution: tr('Resolution'),
+}
+const JIRA_DATES = new Set(['created', 'updated', 'due', 'duedate', 'resolved', 'resolutiondate'])
+
+/** Confluence's Jira issues macro: the issues a JQL query finds, from the connected Jira. */
+function JiraIssues({ params, onParams }: { params: Params; onParams?: (p: Params) => void }) {
+  const jql = (params.jqlQuery ?? params.jql ?? '').trim()
+  const max = Number(params.maximumIssues ?? 20) || 20
+  const q = useQuery({
+    queryKey: ['jira-search', jql, params.columns ?? '', max],
+    queryFn: () => api.get<JiraResult>(`/unfurl/jira-search?${qs({ jql, columns: params.columns, max })}`),
+    enabled: !!jql,
+    staleTime: 5 * 60_000,
+    retry: false,
+  })
+  const edit = () => {
+    const next = window.prompt(tr('Jira query (JQL)'), jql)
+    if (next !== null && next.trim()) onParams?.({ ...params, jqlQuery: next.trim() })
+  }
+  const d = q.data
+  const columns = d?.columns ?? []
+  return (
+    <>
+      <div className="block-label row">
+        <CircleDot size={13} /> {tr('Jira issues')}
+        {d?.searchUrl && (
+          <a className="faint" style={{ textTransform: 'none', fontWeight: 400, marginInlineStart: 'auto' }} href={d.searchUrl} target="_blank" rel="noopener noreferrer">
+            {tr('Open in Jira')} <ExternalLink size={11} />
+          </a>
+        )}
+        {onParams && <button type="button" className="btn btn-ghost btn-sm" style={d?.searchUrl ? undefined : { marginInlineStart: 'auto' }} onClick={edit}>{tr('Edit query')}</button>}
+      </div>
+      {!jql ? (
+        <div className="faint small">{tr('No query yet.')}</div>
+      ) : q.isLoading ? (
+        <div className="spinner" />
+      ) : d?.error || q.error ? (
+        <div className="faint small">
+          <code className="jql">{jql}</code>
+          <div>{d?.error === "Jira isn't connected" ? tr('Jira isn’t connected to this wiki, so the query can’t run here. An administrator connects it (WIKICRAFT_JIRA_URL).') : tr('Jira didn’t answer this query.')}</div>
+        </div>
+      ) : (d?.issues.length ?? 0) === 0 ? (
+        <div className="faint small">{tr('No issues match this query.')}</div>
+      ) : params.count === 'true' ? (
+        <div>{d?.searchUrl ? <a href={d.searchUrl} target="_blank" rel="noopener noreferrer">{tr('{count} issues', { count: d?.total ?? d?.issues.length ?? 0 })}</a> : tr('{count} issues', { count: d?.total ?? d?.issues.length ?? 0 })}</div>
+      ) : (
+        <>
+          <div className="macro-table-wrap jira-table-wrap">
+            <table className="macro-table jira-table">
+              <thead>
+                <tr>{columns.map((c) => <th key={c}>{JIRA_COLUMN_LABELS[c] ?? c}</th>)}</tr>
+              </thead>
+              <tbody>
+                {d!.issues.map((i) => (
+                  <tr key={i.key}>
+                    {columns.map((c) => {
+                      if (c === 'key') return <td key={c} style={{ whiteSpace: 'nowrap' }}><a href={i.url} target="_blank" rel="noopener noreferrer">{i.key}</a></td>
+                      const v = i.cells[c]
+                      if (c === 'status' && v) return <td key={c}><span className="status-lozenge" data-color={i.statusColor}>{v}</span></td>
+                      if (c === 'summary') return <td key={c} className="jira-summary-cell"><a href={i.url} target="_blank" rel="noopener noreferrer" className="jira-summary">{v}</a></td>
+                      return <td key={c} className={JIRA_DATES.has(c) ? 'faint' : undefined}>{v ? (JIRA_DATES.has(c) ? formatDateOnly(v) : v) : ''}</td>
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {d!.more && <div className="faint small" style={{ marginTop: 6 }}>{tr('Showing the first {count}.', { count: d!.issues.length })}</div>}
+        </>
+      )}
+    </>
+  )
+}
+
 /** Live view for a supported macro; `null` for macros without one. */
 export function LiveMacro({ name, params, pageId, onParams }: { name: string; params: Params; pageId: string; onParams?: (p: Params) => void }) {
   const page = useQuery({ queryKey: ['page', pageId], queryFn: () => api.get<Page>(`/pages/${pageId}`), enabled: !!pageId, staleTime: 60_000 })
@@ -526,6 +622,9 @@ export function LiveMacro({ name, params, pageId, onParams }: { name: string; pa
       return <LiveSearch params={params} page={page.data} />
     case 'create-from-template':
       return <CreateFromTemplate params={params} page={page.data} />
+    case 'jira':
+    case 'jiraissues':
+      return <JiraIssues params={params} onParams={onParams} />
     default:
       return (
         <div className="block-label">

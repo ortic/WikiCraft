@@ -490,6 +490,22 @@ async fn issue_links_from_jira_github_and_gitlab() {
             }),
         )
         .route(
+            "/rest/api/2/search",
+            axum::routing::get(move |h: HeaderMap, axum::extract::Query(q): axum::extract::Query<std::collections::HashMap<String, String>>| async move {
+                if !auth(&h, "authorization", "Bearer jira-pat") {
+                    return (axum::http::StatusCode::UNAUTHORIZED, axum::Json(json!({}))).into_response();
+                }
+                // the macro's columns arrive as Jira fields
+                assert_eq!(q.get("fields").map(String::as_str), Some("summary,issuetype,assignee,status,duedate"));
+                assert_eq!(q.get("maxResults").map(String::as_str), Some("2"));
+                axum::Json(json!({"total": 3, "issues": [
+                    {"key": "OR-1", "fields": {"summary": "Push change", "issuetype": {"name": "Story"}, "assignee": {"displayName": "Ada Admin"}, "status": {"name": "Done", "statusCategory": {"key": "done"}}, "duedate": "2026-12-01"}},
+                    {"key": "OR-2", "fields": {"summary": "Pull change", "issuetype": {"name": "Bug"}, "assignee": null, "status": {"name": "In Progress", "statusCategory": {"key": "indeterminate"}}, "duedate": null}}
+                ]}))
+                .into_response()
+            }),
+        )
+        .route(
             "/api/v3/repos/acme/web/issues/7",
             axum::routing::get(move |h: HeaderMap| async move {
                 if !auth(&h, "authorization", "Bearer gh-token") {
@@ -542,6 +558,19 @@ async fn issue_links_from_jira_github_and_gitlab() {
     assert_eq!((r["key"].as_str(), r["title"].as_str(), r["status"].as_str()), (Some("ops/infra#3"), Some("Upgrade runners"), Some("Open")), "{r}");
     assert_eq!(r["url"], format!("{base}/ops/infra/-/issues/3"));
 
+    // a JQL query (Confluence's Jira issues macro) with its columns
+    let jql = "project = \"OR\" AND resolution = Unresolved ORDER BY priority DESC";
+    let url = format!("/unfurl/jira-search?jql={}&columns=key,summary,type,assignee,status,due&max=2", urlencode(jql));
+    let (st, r) = app.get(&owner, &url).await;
+    assert_eq!(st, 200, "{r}");
+    assert_eq!(r["columns"], json!(["key", "summary", "type", "assignee", "status", "due"]));
+    assert_eq!(r["issues"][0]["cells"], json!({"summary": "Push change", "type": "Story", "assignee": "Ada Admin", "status": "Done", "due": "2026-12-01"}));
+    assert_eq!((r["issues"][0]["statusColor"].as_str(), r["issues"][1]["statusColor"].as_str()), (Some("green"), Some("blue")));
+    assert_eq!(r["issues"][1]["url"], format!("{base}/browse/OR-2"));
+    assert_eq!(r["more"], true, "3 found, 2 shown");
+    assert!(r["searchUrl"].as_str().unwrap().starts_with(&format!("{base}/issues/?jql=project")));
+    assert_eq!(app.get(&owner, "/unfurl/jira-search?jql=").await.0, 400);
+
     // a tracker that doesn't know the issue: the key alone, without the reason
     let (st, r) = app.get(&owner, &format!("/unfurl/issue?ref={base}/ops/infra/-/issues/4")).await;
     assert_eq!((st, r["title"].clone(), r["error"].as_str()), (200, Value::Null, Some("issue unavailable")));
@@ -551,6 +580,7 @@ async fn issue_links_from_jira_github_and_gitlab() {
     // guests and visitors can't look issues up (the tokens see more than they may)
     let (guest, _) = app.user(&owner, "gus@acme.test", "guest").await;
     assert_eq!(app.get(&guest, "/unfurl/issue?ref=OPS-42").await.0, 403);
+    assert_eq!(app.get(&guest, &url).await.0, 403);
     assert_ne!(app.get(&common::client(), "/unfurl/issue?ref=OPS-42").await.0, 200);
 
     // without Jira configured a key stays a key
@@ -558,6 +588,8 @@ async fn issue_links_from_jira_github_and_gitlab() {
     let o = plain.setup().await;
     let (st, r) = plain.get(&o, "/unfurl/issue?ref=OPS-42").await;
     assert_eq!((st, r["key"].as_str(), r["url"].clone(), r["error"].as_str()), (200, Some("OPS-42"), Value::Null, Some("Jira isn't connected")));
+    let (st, r) = plain.get(&o, "/unfurl/jira-search?jql=project%20%3D%20OR").await;
+    assert_eq!((st, r["error"].as_str(), r["issues"].as_array().map(Vec::len)), (200, Some("Jira isn't connected"), Some(0)));
 }
 
 #[tokio::test]

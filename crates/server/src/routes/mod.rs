@@ -181,6 +181,7 @@ pub fn router(state: AppState) -> Router {
         .route("/unfurl", get(unfurl::unfurl))
         .route("/unfurl/gist", get(unfurl::gist))
         .route("/unfurl/issue", get(issues::issue))
+        .route("/unfurl/jira-search", get(issues::jira_search))
         .route("/labels", get(search::suggest_labels))
         .route("/labels/{name}", get(search::by_label))
         .route("/labels/{name}/attachments", get(attachments::by_label))

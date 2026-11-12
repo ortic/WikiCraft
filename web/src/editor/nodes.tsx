@@ -981,10 +981,14 @@ export const DecisionItem = Node.create({
 function MacroView({ node, extension, editor, updateAttributes }: ReactNodeViewProps) {
   const params = (node.attrs.params as Record<string, string> | null) ?? {}
   const name = node.attrs.name as string
+  // pages turn editable after their first sync: follow that
+  const editable = useEditable(editor)
   if (LIVE_MACROS.has(name)) {
     return (
       <NodeViewWrapper className="block-card live-macro" contentEditable={false} data-macro={name}>
-        <LiveMacro name={name} params={params} pageId={extension.options.pageId as string} onParams={editor.isEditable ? (p) => updateAttributes({ params: p }) : undefined} />
+        <LiveMacro name={name} params={params} pageId={extension.options.pageId as string} onParams={editable ? (p) => updateAttributes({ params: p }) : undefined} />
+        {/* an imported macro's fallback text stays in the page, behind the live view */}
+        {node.content.size > 0 && <NodeViewContent style={{ display: 'none' }} />}
       </NodeViewWrapper>
     )
   }

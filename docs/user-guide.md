@@ -54,7 +54,8 @@ jump to where they are.
   files, embeds and link previews, table of contents, child pages, columns, status, dates, math,
   decisions and a decision log, task reports.
 - **Issue** chips (`/issue`, or paste an issue address) show a GitHub or GitLab issue or pull
-  request, or a Jira issue (`OPS-42`), with its title and current status.
+  request, or a Jira issue (`OPS-42`), with its title and current status. **Jira issues**
+  (`/jira`) shows the issues a JQL query finds as a table that stays up to date.
 - **Include page** shows another page's content inside this one, always the current version, or
   only its **excerpt**: wrap the text other pages should reuse with `/excerpt` (give excerpts
   names when a page has several; *Only where it's included* hides one on its own page). Readers

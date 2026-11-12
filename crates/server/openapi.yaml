@@ -5512,6 +5512,65 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+  /unfurl/jira-search:
+    get:
+      tags:
+      - Pages
+      summary: Issues a JQL query finds in the connected Jira (Confluence's Jira issues macro), as the configured account
+        sees them; members only, cached five minutes
+      operationId: get_unfurl_jira_search
+      parameters:
+      - name: jql
+        in: query
+        required: true
+        schema: *id001
+      - name: columns
+        in: query
+        required: false
+        description: Confluence's column list (key,summary,type,created,updated,due,assignee,reporter,priority,status,resolution
+          or field ids)
+        schema: *id001
+      - name: max
+        in: query
+        required: false
+        description: issues at most (1-100, default 20)
+        schema: *id005
+      responses:
+        '200':
+          description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  columns:
+                    type: array
+                    items: *id001
+                  issues:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        key: *id001
+                        url: *id001
+                        cells: *id006
+                        statusColor: *id001
+                  searchUrl:
+                    type:
+                    - string
+                    - 'null'
+                  more: *id003
+                  total:
+                    type:
+                    - integer
+                    - 'null'
+                  error: *id001
+        4XX:
+          description: Error
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
   /labels:
     get:
       tags:
