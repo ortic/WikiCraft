@@ -1621,10 +1621,12 @@ pub async fn export(State(state): State<AppState>, MaybeUser(user): MaybeUser, P
     let format = q.format.as_deref().unwrap_or("md");
     audit::log(&state, ws, p.user_id(), "page.exported", Some("page"), Some(id), json!({"format": format, "tree": q.tree.unwrap_or(false)})).await;
     let (title, content): (String, Value) = sqlx::query_as("SELECT title, content FROM pages WHERE id = $1").bind(id).fetch_one(&state.db).await?;
-    let doc = match state.rooms.get(id) {
+    let mut doc = match state.rooms.get(id) {
         Some(r) => r.snapshot(),
         None => Node::from_json(&content)?,
     };
+    // included pages show their content, as far as this reader may see it
+    crate::includes::expand(&state, &p, id, &mut doc).await;
     let safe_name: String = title.chars().map(|c| if c.is_alphanumeric() || c == '-' || c == '_' { c } else { '_' }).collect();
     if q.format.as_deref() == Some("pdf") {
         let opts = PdfExport { tree: q.tree.unwrap_or(false), toc: q.toc.unwrap_or(false), cover: q.cover.unwrap_or(false) };
@@ -1802,10 +1804,11 @@ async fn export_pages(state: &AppState, p: &Principal, id: Uuid, title: String, 
             if require_page(state, p, cid, Need::View).await.is_err() {
                 continue;
             }
-            let cdoc = match state.rooms.get(cid) {
+            let mut cdoc = match state.rooms.get(cid) {
                 Some(r) => r.snapshot(),
                 None => Node::from_json(&content).unwrap_or_else(|_| Node::empty_doc()),
             };
+            crate::includes::expand(state, p, cid, &mut cdoc).await;
             pages.push(docx_page(state, p, cid, ctitle, cdoc, &mut budget).await?);
         }
     }

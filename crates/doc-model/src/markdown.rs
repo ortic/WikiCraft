@@ -528,6 +528,7 @@ impl MdWriter {
             }
             nodes::TOC => self.line(prefix, "<!-- table of contents -->"),
             nodes::CHILD_PAGES => self.line(prefix, "<!-- child pages -->"),
+            nodes::INCLUDE if !n.content.is_empty() => self.blocks(&n.content, prefix),
             nodes::INCLUDE => {
                 let title = n.attr_str("title").unwrap_or("page").replace("--", "–");
                 self.line(prefix, &format!("<!-- included page: {title} -->"));

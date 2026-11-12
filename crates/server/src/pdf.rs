@@ -383,6 +383,8 @@ impl Renderer<'_> {
                 let items: Vec<String> = children.iter().map(|(title, url)| format!("[{}]", self.link(url, t(title)))).collect();
                 format!("#list(tight: true, {});", items.join(", "))
             }
+            nodes::INCLUDE if !n.content.is_empty() => self.blocks(&n.content, ctx),
+            nodes::EXCERPT if n.attr_bool("hidden") == Some(true) => String::new(),
             nodes::INCLUDE => {
                 let title = n.attr_str("title").unwrap_or("page");
                 let link = match n.attr_str("pageId").and_then(|id| id.parse::<Uuid>().ok()) {

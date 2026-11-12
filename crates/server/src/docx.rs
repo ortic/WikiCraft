@@ -686,6 +686,11 @@ impl Renderer<'_> {
                     out.push(Block::P(Box::new(p.add_hyperlink(link.add_run(Run::new().add_text(title).color(LINK_COLOR).underline("single"))))));
                 }
             }
+            nodes::INCLUDE if !n.content.is_empty() => {
+                let blocks = self.blocks(&n.content, ctx);
+                out.extend(blocks);
+            }
+            nodes::EXCERPT if n.attr_bool("hidden") == Some(true) => {}
             nodes::INCLUDE => {
                 let title = n.attr_str("title").unwrap_or("page").to_string();
                 let mut p = Self::indented(Paragraph::new(), ctx).add_run(Run::new().add_text("Included page: ").italic().color(MUTED));

@@ -621,3 +621,69 @@ async fn pdf_export_of_a_page_tree() {
     // a page tree needs a signed-in reader
     assert_eq!(common::client().get(app.url(&format!("/pages/{root}/export?format=pdf&tree=true"))).send().await.unwrap().status(), 401);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn exports_show_included_pages_the_reader_may_open() {
+    let app = common::spawn().await;
+    let owner = app.setup().await;
+    let (member, _) = app.user(&owner, "inc@acme.test", "member").await;
+    app.post(&owner, "/spaces", json!({"key": "INC", "name": "Includes", "defaultRole": "editor"})).await;
+    let para = |t: &str| json!({"type": "paragraph", "content": [{"type": "text", "text": t}]});
+    let page = |title: &'static str, content: Value| {
+        let (app, owner) = (&app, &owner);
+        async move {
+            let (st, p) = app.post(owner, "/pages", json!({"spaceKey": "INC", "title": title, "content": {"type": "doc", "content": content}})).await;
+            assert_eq!(st, 201, "{p}");
+            p["id"].as_str().unwrap().to_string()
+        }
+    };
+    let shared = page(
+        "Shared steps",
+        json!([
+            para("Shared body text."),
+            {"type": "excerpt", "content": [para("The shared excerpt.")]},
+            {"type": "excerpt", "attrs": {"name": "prices", "hidden": true}, "content": [para("Hidden prices.")]}
+        ]),
+    )
+    .await;
+    let secret = page("Secret plans", json!([para("Classified quince.")])).await;
+    let (_, me) = app.get(&owner, "/me").await;
+    let owner_id = me["user"]["id"].as_str().unwrap().to_string();
+    app.put(&owner, &format!("/pages/{secret}/restrictions"), json!({"restrictions": [{"kind": "view", "subjectType": "user", "subjectId": owner_id}]})).await;
+    let host = page("Host", json!([para("Host text.")])).await;
+    let include = |id: &str, title: &str, excerpt: Value| json!({"type": "include", "attrs": {"pageId": id, "title": title, "excerpt": excerpt}});
+    let content = json!({"type": "doc", "content": [
+        para("Host text."),
+        include(&shared, "Shared steps", Value::Null),
+        include(&shared, "Shared steps", json!("prices")),
+        include(&secret, "Secret plans", Value::Null),
+        include(&host, "Host", Value::Null)
+    ]});
+    assert_eq!(app.put(&owner, &format!("/pages/{host}/content"), json!({"content": content})).await.0, 200);
+
+    let export = |c: &reqwest::Client, format: &str| {
+        let (c, url) = (c.clone(), app.url(&format!("/pages/{host}/export?format={format}")));
+        async move {
+            let r = c.get(url).send().await.unwrap();
+            assert_eq!(r.status(), 200);
+            r.bytes().await.unwrap().to_vec()
+        }
+    };
+    let md = String::from_utf8(export(&member, "md").await).unwrap();
+    assert!(md.contains("Shared body text.") && md.contains("The shared excerpt."), "{md}");
+    // the hidden excerpt shows where it's included by name, never in the whole-page include
+    assert_eq!(md.matches("Hidden prices.").count(), 1, "{md}");
+    // a page the reader can't open stays a reference; the page itself isn't included in itself
+    assert!(!md.contains("Classified quince."), "{md}");
+    assert!(md.contains("<!-- included page: Secret plans -->"), "{md}");
+    assert_eq!(md.matches("Host text.").count(), 1, "{md}");
+    let html = String::from_utf8(export(&owner, "html").await).unwrap();
+    assert!(html.contains("Classified quince.") && html.contains("Shared body text."), "the owner sees the restricted page");
+    let mut z = zip::ZipArchive::new(std::io::Cursor::new(export(&member, "docx").await)).unwrap();
+    let xml = entry(&mut z, "word/document.xml");
+    assert!(xml.contains("The shared excerpt.") && !xml.contains("Classified quince."));
+    assert!(export(&member, "pdf").await.starts_with(b"%PDF"));
+    // the shared page's own export leaves out its hidden excerpt
+    let r = member.get(app.url(&format!("/pages/{shared}/export?format=md"))).send().await.unwrap();
+    assert!(!r.text().await.unwrap().contains("Hidden prices."));
+}

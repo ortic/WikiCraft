@@ -271,6 +271,12 @@ impl Renderer<'_> {
                 }
             }
             nodes::CHILD_PAGES => self.out.push_str("<div class=\"child-pages\" data-type=\"childPages\"></div>"),
+            // filled in for an export: the included content itself
+            nodes::INCLUDE if !n.content.is_empty() => {
+                let _ = write!(self.out, "<div class=\"include\" data-page-id=\"{}\">", escape(n.attr_str("pageId").unwrap_or("")));
+                self.children(&n.content);
+                self.out.push_str("</div>");
+            }
             nodes::INCLUDE => {
                 let title = n.attr_str("title").unwrap_or("page");
                 let _ = write!(

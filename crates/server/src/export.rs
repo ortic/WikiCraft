@@ -256,10 +256,14 @@ pub async fn run_export(state: &AppState, job_id: Uuid, actor: Uuid, input: &Val
     // live documents are newer than the stored content
     let mut pages: Vec<Page> = Vec::with_capacity(rows.len());
     for row in rows {
-        let doc = match state.rooms.get(row.id) {
+        let mut doc = match state.rooms.get(row.id) {
             Some(room) => room.snapshot(),
             None => Node::from_json(&row.content).unwrap_or_else(|_| Node::empty_doc()),
         };
+        // readable exports show included pages; a backup keeps the includes as they are
+        if format != Format::Backup {
+            crate::includes::expand(state, &p, row.id, &mut doc).await;
+        }
         let labels = labels.remove(&row.id).unwrap_or_default();
         let props = props.remove(&row.id).unwrap_or_default();
         pages.push(Page { row, doc, labels, props, path: String::new() });

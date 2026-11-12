@@ -19,6 +19,7 @@ pub mod export;
 pub mod extract;
 pub mod html_import;
 pub mod importer;
+pub mod includes;
 pub mod jobs;
 pub mod links;
 pub mod mail;
