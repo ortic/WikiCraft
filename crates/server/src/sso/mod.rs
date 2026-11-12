@@ -327,6 +327,8 @@ pub async fn list(State(state): State<AppState>) -> Json<Value> {
         .collect();
     Json(json!({
         "passwordLogin": !state.config.disable_password_login,
+        // signing in with a passkey alone (as the second step they work either way)
+        "passkeyLogin": !state.config.disable_password_login,
         "passwordReset": !state.config.disable_password_login && state.mailer.enabled(),
         "providers": providers,
     }))

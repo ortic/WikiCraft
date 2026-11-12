@@ -248,5 +248,6 @@ assistants that work with the wiki on your behalf).
 **Passkeys** sign you in with your device's fingerprint, face or PIN (or a security key):
 *Sign in with a passkey* on the sign-in page needs no password, and after a password the passkey
 can be the second step instead of a code. A passkey only works on this wiki, so it can't be
-phished. Add one under *Passkeys* (right after signing in, or with your password); passkeys
-synced by your password manager or phone show *Synced*.
+phished. Add or remove one under *Passkeys* (right after signing in, or with your password);
+passkeys synced by your password manager or phone show *Synced*. Sign-in methods can only be
+changed in the browser, never with an API token.

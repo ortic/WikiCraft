@@ -9,10 +9,13 @@
 use std::collections::HashMap;
 
 use axum::extract::{Path, Query, State};
+use axum::http::Uri;
 use axum::response::Redirect;
 use uuid::Uuid;
 
 use crate::app::AppState;
+use crate::auth::MaybeUser;
+use crate::authz::Principal;
 use crate::error::ApiResult;
 
 pub use wikicraft_confluence::urls::decode_tiny;
@@ -21,7 +24,22 @@ async fn workspace(state: &AppState) -> Option<Uuid> {
     sqlx::query_scalar("SELECT id FROM workspaces ORDER BY created_at LIMIT 1").fetch_optional(&state.db).await.ok().flatten()
 }
 
-async fn by_source_id(state: &AppState, id: &str) -> ApiResult<Redirect> {
+/// Where a redirect for an old address goes when no page the caller may open matches: the sign-in
+/// (then back here) for visitors, the "doesn't exist" page for people signed in. Visitors learn
+/// nothing about pages they can't see, signed-in people nothing about restricted ones.
+fn not_found(p: &Principal, original: &Uri, missing: String) -> Redirect {
+    if p.user_id().is_none() {
+        let back = original.path_and_query().map(|pq| pq.as_str()).unwrap_or("/");
+        return Redirect::to(&format!("/login?next={}", urlencode(back)));
+    }
+    Redirect::to(&missing)
+}
+
+async fn viewable(state: &AppState, p: &Principal, id: Uuid) -> bool {
+    crate::authz::page_access(state, p, id).await.is_ok_and(|(a, _)| a.view)
+}
+
+async fn by_source_id(state: &AppState, p: &Principal, original: &Uri, id: &str) -> ApiResult<Redirect> {
     let ws = workspace(state).await;
     let target: Option<Uuid> = sqlx::query_scalar(
         "SELECT target_id FROM import_mappings WHERE workspace_id = $1 AND source = 'confluence' AND source_type = 'page' AND source_id = $2",
@@ -31,12 +49,12 @@ async fn by_source_id(state: &AppState, id: &str) -> ApiResult<Redirect> {
     .fetch_optional(&state.db)
     .await?;
     Ok(match target {
-        Some(t) => Redirect::to(&format!("/pages/{t}")),
-        None => Redirect::to(&format!("/missing?source=confluence%3A{}", urlencode(id))),
+        Some(t) if viewable(state, p, t).await => Redirect::to(&format!("/pages/{t}")),
+        _ => not_found(p, original, format!("/missing?source=confluence%3A{}", urlencode(id))),
     })
 }
 
-async fn by_title(state: &AppState, space: &str, title: &str) -> ApiResult<Redirect> {
+async fn by_title(state: &AppState, p: &Principal, original: &Uri, space: &str, title: &str) -> ApiResult<Redirect> {
     let ws = workspace(state).await;
     // the space may have been imported under a different key
     let space_id: Option<Uuid> = sqlx::query_scalar(
@@ -53,13 +71,13 @@ async fn by_title(state: &AppState, space: &str, title: &str) -> ApiResult<Redir
         (None, None) => None,
     };
     let page: Option<Uuid> = match space_id {
-        // pages renamed or moved since keep their old addresses
-        Some(sid) => crate::paths::resolve(&state.db, sid, title).await?,
+        // pages renamed or moved since keep their old addresses; the first one the caller may open
+        Some(sid) => crate::paths::resolve_for(state, p, sid, title).await?,
         None => None,
     };
     Ok(match page {
-        Some(p) => Redirect::to(&format!("/pages/{p}")),
-        None => Redirect::to(&format!("/missing?space={}&title={}", urlencode(space), urlencode(title))),
+        Some(id) => Redirect::to(&format!("/pages/{id}")),
+        None => not_found(p, original, format!("/missing?space={}&title={}", urlencode(space), urlencode(title))),
     })
 }
 
@@ -72,8 +90,9 @@ fn plus_decode(s: &str) -> String {
     s.replace('+', " ")
 }
 
-pub async fn display(State(state): State<AppState>, Path((space, title)): Path<(String, String)>) -> ApiResult<Redirect> {
-    by_title(&state, &space, &plus_decode(&title)).await
+pub async fn display(State(state): State<AppState>, MaybeUser(user): MaybeUser, uri: Uri, Path((space, title)): Path<(String, String)>) -> ApiResult<Redirect> {
+    let p = Principal::load(&state, user).await?;
+    by_title(&state, &p, &uri, &space, &plus_decode(&title)).await
 }
 
 pub async fn display_space(State(state): State<AppState>, Path(space): Path<String>) -> ApiResult<Redirect> {
@@ -88,26 +107,34 @@ pub async fn display_space(State(state): State<AppState>, Path(space): Path<Stri
     Ok(Redirect::to(&format!("/spaces/{}", urlencode(&key.unwrap_or(space)))))
 }
 
-pub async fn viewpage(State(state): State<AppState>, Query(q): Query<HashMap<String, String>>) -> ApiResult<Redirect> {
+pub async fn viewpage(State(state): State<AppState>, MaybeUser(user): MaybeUser, uri: Uri, Query(q): Query<HashMap<String, String>>) -> ApiResult<Redirect> {
+    let p = Principal::load(&state, user).await?;
     if let Some(id) = q.get("pageId") {
-        return by_source_id(&state, id).await;
+        return by_source_id(&state, &p, &uri, id).await;
     }
     match (q.get("spaceKey"), q.get("title")) {
-        (Some(s), Some(t)) => by_title(&state, s, t).await,
+        (Some(s), Some(t)) => by_title(&state, &p, &uri, s, t).await,
         _ => Ok(Redirect::to("/")),
     }
 }
 
-pub async fn cloud_page(State(state): State<AppState>, Path(params): Path<HashMap<String, String>>) -> ApiResult<Redirect> {
+pub async fn cloud_page(
+    State(state): State<AppState>,
+    MaybeUser(user): MaybeUser,
+    uri: Uri,
+    Path(params): Path<HashMap<String, String>>,
+) -> ApiResult<Redirect> {
+    let p = Principal::load(&state, user).await?;
     match params.get("id") {
-        Some(id) => by_source_id(&state, id).await,
+        Some(id) => by_source_id(&state, &p, &uri, id).await,
         None => Ok(Redirect::to("/")),
     }
 }
 
-pub async fn tiny(State(state): State<AppState>, Path(tiny): Path<String>) -> ApiResult<Redirect> {
+pub async fn tiny(State(state): State<AppState>, MaybeUser(user): MaybeUser, uri: Uri, Path(tiny): Path<String>) -> ApiResult<Redirect> {
+    let p = Principal::load(&state, user).await?;
     match decode_tiny(&tiny) {
-        Some(id) => by_source_id(&state, &id.to_string()).await,
+        Some(id) => by_source_id(&state, &p, &uri, &id.to_string()).await,
         None => Ok(Redirect::to("/")),
     }
 }

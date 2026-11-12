@@ -14,6 +14,10 @@
 use sqlx::PgPool;
 use uuid::Uuid;
 
+use crate::app::AppState;
+use crate::authz::Principal;
+use crate::error::ApiResult;
+
 /// The space with this key, or that had it before a rename (`wc_space_by_key()`).
 pub async fn space_by_key(db: &PgPool, workspace: Uuid, key: &str) -> sqlx::Result<Option<Uuid>> {
     sqlx::query_scalar("SELECT wc_space_by_key($1, $2)").bind(workspace).bind(key).fetch_one(db).await
@@ -23,6 +27,18 @@ pub async fn space_by_key(db: &PgPool, workspace: Uuid, key: &str) -> sqlx::Resu
 /// else the oldest with that slug, else the page that last had that address (`wc_resolve()`).
 pub async fn resolve(db: &PgPool, space: Uuid, name: &str) -> sqlx::Result<Option<Uuid>> {
     sqlx::query_scalar("SELECT wc_resolve($1, $2)").bind(space).bind(name).fetch_one(db).await
+}
+
+/// The first page a name leads to in a space that `p` may open (`wc_resolve_candidates()`): a
+/// page they can't see neither shows up nor hides one they can.
+pub async fn resolve_for(state: &AppState, p: &Principal, space: Uuid, name: &str) -> ApiResult<Option<Uuid>> {
+    let ids: Vec<Uuid> = sqlx::query_scalar("SELECT wc_resolve_candidates($1, $2)").bind(space).bind(name).fetch_all(&state.db).await?;
+    for id in ids {
+        if crate::authz::page_access(state, p, id).await.is_ok_and(|(a, _)| a.view) {
+            return Ok(Some(id));
+        }
+    }
+    Ok(None)
 }
 
 /// The slug of the page's readable address, if it has one (a title with letters or digits, the

@@ -192,11 +192,43 @@ pub async fn import_confluence(
     Json(req): Json<ImportRequest>,
 ) -> ApiResult<(StatusCode, Json<Value>)> {
     require_admin(&user)?;
-    let up = load(&state, &user, id).await?;
-    let path = assemble(&state, &up).await?;
-    let job = crate::routes::imports::start_confluence_import(&state, &user, path, req.options.unwrap_or_default()).await?;
-    discard(&state, up.id, up.parts).await;
-    Ok((StatusCode::ACCEPTED, Json(json!({ "jobId": job }))))
+    let up = claim(&state, &user, id).await?;
+    let started = async {
+        let path = assemble(&state, &up).await?;
+        crate::routes::imports::start_confluence_import(&state, &user, path, req.options.unwrap_or_default()).await
+    }
+    .await;
+    match started {
+        Ok(job) => {
+            discard(&state, up.id, up.parts).await;
+            Ok((StatusCode::ACCEPTED, Json(json!({ "jobId": job }))))
+        }
+        Err(e) => {
+            // the upload can be imported again
+            let _ = sqlx::query("UPDATE uploads SET importing = false WHERE id = $1").bind(id).execute(&state.db).await;
+            Err(e)
+        }
+    }
+}
+
+/// Takes a finished upload for one import: a second request for the same upload (a double click,
+/// two tabs) gets a conflict instead of starting the import twice.
+async fn claim(state: &AppState, user: &User, id: Uuid) -> ApiResult<UploadState> {
+    let claimed = sqlx::query_as::<_, UploadState>(sqlx::AssertSqlSafe(format!(
+        "UPDATE uploads SET importing = true, updated_at = now() WHERE id = $1 AND created_by = $2 AND NOT importing AND received = size RETURNING {STATE_COLUMNS}"
+    )))
+    .bind(id)
+    .bind(user.id)
+    .fetch_optional(&state.db)
+    .await?;
+    if let Some(up) = claimed {
+        return Ok(up);
+    }
+    let up = load(state, user, id).await?;
+    if !up.complete {
+        return Err(ApiError::Conflict(format!("the upload isn't finished: {} of {} bytes", up.received, up.size)));
+    }
+    Err(ApiError::Conflict("this upload is being imported already".into()))
 }
 
 /// Removes uploads nobody touched for a day (housekeeping); returns how many.

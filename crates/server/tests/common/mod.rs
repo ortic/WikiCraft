@@ -168,6 +168,19 @@ impl TestApp {
         (c, id)
     }
 
+    /// A client that doesn't follow redirects (to see where old addresses lead), signed in as
+    /// `email` unless that's `None`.
+    pub async fn no_redirects(&self, login: Option<(&str, &str)>) -> reqwest::Client {
+        let mut h = HeaderMap::new();
+        h.insert("x-wikicraft", HeaderValue::from_static("1"));
+        let c = reqwest::Client::builder().cookie_store(true).redirect(reqwest::redirect::Policy::none()).default_headers(h).build().unwrap();
+        if let Some((email, password)) = login {
+            let r = c.post(self.url("/auth/login")).json(&json!({"email": email, "password": password})).send().await.unwrap();
+            assert_eq!(r.status(), 200);
+        }
+        c
+    }
+
     pub async fn get(&self, c: &reqwest::Client, path: &str) -> (u16, Value) {
         let r = c.get(self.url(path)).send().await.unwrap();
         let s = r.status().as_u16();

@@ -312,9 +312,10 @@ pub async fn resolve(State(state): State<AppState>, MaybeUser(user): MaybeUser, 
             .fetch_optional(&state.db)
             .await?
     } else if let (Some(space), Some(name)) = (&q.space, q.title.as_ref().or(q.slug.as_ref())) {
-        // exact title, then slug, then an address the page had before a rename or move
+        // exact title, then slug, then an address the page had before a rename or move; the
+        // first of those the caller may open
         match crate::paths::space_by_key(&state.db, ws, space).await? {
-            Some(sid) => crate::paths::resolve(&state.db, sid, name).await?,
+            Some(sid) => crate::paths::resolve_for(&state, &p, sid, name).await?,
             None => None,
         }
     } else {

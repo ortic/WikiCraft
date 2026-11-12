@@ -78,7 +78,21 @@ pub async fn backlinks(State(state): State<AppState>, MaybeUser(user): MaybeUser
     Ok(Json(Backlinks { pages }))
 }
 
-#[derive(Serialize, sqlx::FromRow)]
+#[derive(sqlx::FromRow)]
+struct LinkRow {
+    page_id: Uuid,
+    page_title: String,
+    block_id: Option<String>,
+    label: String,
+    via: String,
+    missing_space: Option<String>,
+    missing_title: Option<String>,
+    missing_source: Option<String>,
+    target_id: Option<Uuid>,
+    resolved: Option<Uuid>,
+}
+
+#[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct BrokenLink {
     page_id: Uuid,
@@ -129,30 +143,57 @@ pub async fn report(State(state): State<AppState>, MaybeUser(user): MaybeUser, P
     let pairs: Vec<(Uuid, Option<Uuid>)> = sqlx::query_as("SELECT id, parent_id FROM pages WHERE space_id = $1").bind(space.id).fetch_all(&state.db).await?;
     let visible = visible_page_ids(&state, &p, space.id, role, &pairs).await?;
 
-    let broken: Vec<BrokenLink> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
-        "SELECT * FROM (
-            SELECT l.source_id AS page_id, src.title AS page_title, l.block_id, l.label, l.kind AS via,
-                   l.missing_space, l.missing_title, l.missing_source, l.ord,
-                   CASE
-                     WHEN l.target_id IS NOT NULL THEN
-                       CASE WHEN NOT EXISTS (SELECT 1 FROM pages t WHERE t.id = l.target_id) THEN 'deleted'
-                            WHEN EXISTS (SELECT 1 FROM pages t WHERE t.id = l.target_id AND t.deleted_at IS NOT NULL) THEN 'trashed' END
-                     WHEN l.missing_title IS NOT NULL THEN
-                       CASE WHEN wc_resolve(wc_space_by_key($2, l.missing_space), l.missing_title) IS NULL THEN 'missing' END
-                     ELSE
-                       CASE WHEN NOT EXISTS (SELECT 1 FROM pages t WHERE t.deleted_at IS NULL AND t.space_id IN (SELECT id FROM spaces WHERE workspace_id = $2) AND ({SOURCE_LEADS_TO_T}))
-                            THEN 'notImported' END
-                   END AS problem
-            FROM page_links l JOIN pages src ON src.id = l.source_id
-            WHERE src.space_id = $1 AND src.deleted_at IS NULL AND l.kind <> 'children'
-         ) b WHERE problem IS NOT NULL
-         ORDER BY lower(page_title), page_id, ord"
-    )))
+    // links that may lead nowhere, with the page each one leads to now (if any)
+    let rows: Vec<LinkRow> = sqlx::query_as(
+        "SELECT l.source_id AS page_id, src.title AS page_title, l.block_id, l.label, l.kind AS via,
+                l.missing_space, l.missing_title, l.missing_source, l.target_id,
+                CASE WHEN l.target_id IS NOT NULL THEN l.target_id
+                     WHEN l.missing_title IS NOT NULL THEN wc_resolve(wc_space_by_key($2, l.missing_space), l.missing_title)
+                     ELSE (SELECT m.target_id FROM import_mappings m JOIN pages t ON t.id = m.target_id AND t.deleted_at IS NULL
+                           WHERE m.workspace_id = $2 AND m.source_type = 'page' AND m.source || ':' || m.source_id = l.missing_source LIMIT 1)
+                END AS resolved
+         FROM page_links l JOIN pages src ON src.id = l.source_id
+         WHERE src.space_id = $1 AND src.deleted_at IS NULL AND l.kind <> 'children'
+           AND (l.target_id IS NULL OR NOT EXISTS (SELECT 1 FROM pages t WHERE t.id = l.target_id AND t.deleted_at IS NULL))
+         ORDER BY lower(src.title), l.source_id, l.ord",
+    )
     .bind(space.id)
     .bind(space.workspace_id)
     .fetch_all(&state.db)
     .await?;
-    let mut broken_links: Vec<BrokenLink> = broken.into_iter().filter(|b| visible.contains(&b.page_id)).collect();
+    let rows: Vec<LinkRow> = rows.into_iter().filter(|r| visible.contains(&r.page_id)).collect();
+    // what the reader may see of the pages the links lead to: a page they can't open (or a space
+    // they don't know) is reported like one that doesn't exist, so the report reveals nothing
+    let ids: Vec<Uuid> = rows.iter().filter_map(|r| r.resolved).collect();
+    let targets: Vec<(Uuid, Uuid)> = sqlx::query_as("SELECT id, space_id FROM pages WHERE id = ANY($1)").bind(&ids).fetch_all(&state.db).await?;
+    let spaces = visible_spaces(&state, &p).await?;
+    let seen = filter_visible(&state, &p, &spaces, &targets).await?;
+    let exists: HashSet<Uuid> = targets.iter().map(|(id, _)| *id).collect();
+    let mut broken_links: Vec<BrokenLink> = rows
+        .into_iter()
+        .filter_map(|r| {
+            let problem = match (r.target_id, r.resolved) {
+                // the link names the page by id: deleted for good, or in the trash
+                (Some(t), _) if !exists.contains(&t) => "deleted",
+                (Some(t), _) if seen.contains(&t) => "trashed",
+                (Some(_), _) => return None,
+                (None, Some(t)) if seen.contains(&t) => return None,
+                (None, _) if r.missing_title.is_some() => "missing",
+                (None, _) => "notImported",
+            };
+            Some(BrokenLink {
+                page_id: r.page_id,
+                page_title: r.page_title,
+                block_id: r.block_id,
+                label: r.label,
+                via: r.via,
+                problem: problem.to_string(),
+                missing_space: r.missing_space,
+                missing_title: r.missing_title,
+                missing_source: r.missing_source,
+            })
+        })
+        .collect();
 
     let orphans: Vec<OrphanPage> = sqlx::query_as(sqlx::AssertSqlSafe(format!(
         "SELECT t.id, t.title, t.icon, t.parent_id, par.title AS parent_title, t.updated_at

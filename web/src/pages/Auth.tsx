@@ -80,7 +80,7 @@ export function Login() {
   const [email, setEmail] = useState('')
   const [password, setPassword] = useState('')
   const [error, setError] = useState<string | null>(() => new URLSearchParams(location.search).get('error'))
-  const info = useQuery({ queryKey: ['auth-providers'], queryFn: () => api.get<{ passwordLogin: boolean; passwordReset: boolean; providers: Provider[] }>('/auth/providers') })
+  const info = useQuery({ queryKey: ['auth-providers'], queryFn: () => api.get<{ passwordLogin: boolean; passkeyLogin?: boolean; passwordReset: boolean; providers: Provider[] }>('/auth/providers') })
   const signup = useQuery({ queryKey: ['signup-info'], queryFn: () => api.get<{ enabled: boolean; domains: string[] }>('/auth/signup') })
   const next = new URLSearchParams(location.search).get('next') ?? '/'
   const [busy, setBusy] = useState(false)
@@ -225,7 +225,7 @@ export function Login() {
         {showForm && (
           <button className="btn btn-primary" style={wide} disabled={busy}>{t('Log in')}</button>
         )}
-        {passkeysSupported() && (
+        {passkeysSupported() && info.data?.passkeyLogin && (
           <button type="button" className="btn" style={{ ...wide, marginTop: 10 }} disabled={busy} onClick={passkeyLogin}><Fingerprint size={16} />{' '}{t('Sign in with a passkey')}</button>
         )}
         {signup.data?.enabled && (

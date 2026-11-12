@@ -177,6 +177,25 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
 - Embeds: Airtable, Typeform, Google Drive files, CodePen; GitHub gists through `/api/unfurl/gist` (GitHub API via the
   preview fetcher, shown as code). File downloads answer single byte ranges; attachment blocks play video and audio.
 
+## Security review 5 (2026-11-11/12: readable addresses, link graph, uploads in parts, passkeys) — status
+No authorization bypass on page content. Fixed (with regression tests in `security.rs`, `mfa.rs`, `confluence_import.rs`):
+1. [x] MED old Confluence addresses (`/display`, `viewpage.action`, `/x/` tiny links, Cloud `/wiki/spaces/…/pages/ID`)
+   and `GET /api/resolve` told restricted pages apart from missing ones, and a restricted page with the same title
+   hid the page the reader may open → `wc_resolve_candidates()` + `paths::resolve_for`: the first page the caller
+   may open; visitors go to the sign-in page (then back), signed-in people to "doesn't exist" either way
+2. [x] MED link report: a link by name to a restricted page wasn't listed as broken (an existence oracle for any
+   title) → judged per reader: a page they can't open counts as missing
+3. [x] MED API tokens could add or remove passkeys and start TOTP enrolment → `SessionUser` (browser sessions only)
+4. [x] MED passkey removal and TOTP setup next to a passkey needed only a session → recent sign-in (15 min) or the
+   password (`auth::confirm_recent`, wrong passwords rate-limited per person); the recent-session check now also
+   requires the session to be the person's own
+5. [x] MED with `WIKICRAFT_DISABLE_PASSWORD_LOGIN` a passkey alone still signed in (people removed in the IdP kept
+   access) → passkeys only as the second step then; `/auth/providers` says `passkeyLogin`
+6. [x] LOW drafts' former addresses resolved (`page_paths`) → drafts have no address at all
+7. [x] LOW two requests for the same upload both started an import → `uploads.importing` claimed atomically (409)
+8. [x] LOW unbounded passkeys per person (20 max) and RSA keys of any size (2048–8192 bits); `auth_states` pruned
+   by an index on `expires_at`
+
 ## Security review 4 (independent review agent, 2026-11-10 ~03:40 UTC: link previews, banner, switches, decision log, branding) — status
 No critical or high findings. All five fixed in `9f0b9a9`:
 1. Medium (only with `WIKICRAFT_WEBHOOK_ALLOW_PRIVATE=true`): link previews shared the webhook private-network flag → own

@@ -153,7 +153,8 @@ pub fn key_algorithm(cose: &[u8]) -> anyhow::Result<i64> {
         }
         RS256 => {
             anyhow::ensure!(cose_int(map, 1) == Some(3), "RS256 key that isn't RSA");
-            anyhow::ensure!(cose_bytes(map, -1)?.len() >= 256, "RSA key shorter than 2048 bits");
+            let n = cose_bytes(map, -1)?.len();
+            anyhow::ensure!((256..=1024).contains(&n), "RSA key of {} bits (2048 to 8192 work)", n * 8);
             cose_bytes(map, -2)?;
         }
         other => anyhow::bail!("unsupported key algorithm {other}"),

@@ -53,8 +53,25 @@ function RecoveryCodes({ codes, onClose }: { codes: string[]; onClose: () => voi
   )
 }
 
-function EnableDialog({ onDone, onClose }: { onDone: (codes: string[]) => void; onClose: () => void }) {
-  const setup = useQuery({ queryKey: ['mfa-setup'], queryFn: () => api.post<{ secret: string; uri: string; qrSvg: string }>('/me/mfa/setup'), staleTime: Infinity, gcTime: 0 })
+/**
+ * Runs a change to the sign-in methods. Signed in a while ago, the server wants the password
+ * first: asks for it and tries again. Undefined when the person cancels.
+ */
+async function withPassword<T>(call: (password?: string) => Promise<T>, hasPassword: boolean, question: string, noPassword: string): Promise<T | undefined> {
+  try {
+    return await call()
+  } catch (e) {
+    if (!(e instanceof ApiError && e.status === 403)) throw e
+    if (!hasPassword) throw new Error(noPassword)
+    const password = window.prompt(question)
+    if (!password) return undefined
+    return await call(password)
+  }
+}
+
+type Setup = { secret: string; uri: string; qrSvg: string }
+
+function EnableDialog({ setup, onDone, onClose }: { setup: Setup; onDone: (codes: string[]) => void; onClose: () => void }) {
   const [code, setCode] = useState('')
   const [error, setError] = useState<string | null>(null)
   const confirm = async () => {
@@ -68,22 +85,18 @@ function EnableDialog({ onDone, onClose }: { onDone: (codes: string[]) => void; 
   }
   return (
     <Modal title={t('Set up two-factor authentication')} onClose={onClose} footer={<><button className="btn" onClick={onClose}>{t('Cancel')}</button><button className="btn btn-primary" disabled={code.replace(/\D/g, '').length !== 6} onClick={confirm}>{t('Turn on')}</button></>}>
-      {!setup.data ? (
-        <Spinner />
-      ) : (
-        <div className="mfa-setup">
-          <div className="mfa-qr" dangerouslySetInnerHTML={{ __html: setup.data.qrSvg }} />
-          <div>
-            <ol className="small" style={{ paddingLeft: 18, marginTop: 0 }}>
-              <li>{t('Scan the code with an authenticator app (1Password, Google Authenticator, Microsoft Authenticator, Authy, …).')}</li>
-              <li>{t('Or enter this key by hand:')}{' '}<code style={{ wordBreak: 'break-all' }}>{setup.data.secret.replace(/(.{4})/g, '$1 ').trim()}</code></li>
-              <li>{t('Type the 6-digit code the app shows:')}</li>
-            </ol>
-            <input className="input otp-input" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="123 456" autoFocus onKeyDown={(e) => e.key === 'Enter' && confirm()} />
-            {error && <p className="error-text">{error}</p>}
-          </div>
+      <div className="mfa-setup">
+        <div className="mfa-qr" dangerouslySetInnerHTML={{ __html: setup.qrSvg }} />
+        <div>
+          <ol className="small" style={{ paddingLeft: 18, marginTop: 0 }}>
+            <li>{t('Scan the code with an authenticator app (1Password, Google Authenticator, Microsoft Authenticator, Authy, …).')}</li>
+            <li>{t('Or enter this key by hand:')}{' '}<code style={{ wordBreak: 'break-all' }}>{setup.secret.replace(/(.{4})/g, '$1 ').trim()}</code></li>
+            <li>{t('Type the 6-digit code the app shows:')}</li>
+          </ol>
+          <input className="input otp-input" inputMode="numeric" autoComplete="one-time-code" value={code} onChange={(e) => setCode(e.target.value)} placeholder="123 456" autoFocus onKeyDown={(e) => e.key === 'Enter' && confirm()} />
+          {error && <p className="error-text">{error}</p>}
         </div>
-      )}
+      </div>
     </Modal>
   )
 }
@@ -104,20 +117,13 @@ function Passkeys({ hasPassword }: { hasPassword: boolean }) {
     setBusy(true)
     try {
       type Options = { token: string; publicKey: Record<string, unknown> }
-      let options: Options
-      try {
-        options = await api.post<Options>('/me/passkeys/options', {})
-      } catch (e) {
-        // signed in a while ago: confirm with the password first
-        if (!(e instanceof ApiError && e.status === 403)) throw e
-        if (!hasPassword) {
-          toast(t('Sign out and in again, then add the passkey'))
-          return
-        }
-        const password = window.prompt(t('Enter your password to add a passkey'))
-        if (!password) return
-        options = await api.post<Options>('/me/passkeys/options', { password })
-      }
+      const options = await withPassword(
+        (password) => api.post<Options>('/me/passkeys/options', password ? { password } : {}),
+        hasPassword,
+        t('Enter your password to add a passkey'),
+        t('Sign out and in again, then add the passkey'),
+      )
+      if (!options) return
       const credential = await createPasskey(options.publicKey)
       await api.post('/me/passkeys', { token: options.token, name: device(navigator.userAgent), credential })
       toast(t('Passkey added'))
@@ -136,9 +142,19 @@ function Passkeys({ hasPassword }: { hasPassword: boolean }) {
   }
   const remove = async (p: Passkey) => {
     if (!window.confirm(t('Remove the passkey “{name}”? You can’t sign in with it any more.', { name: p.name }))) return
-    await api.del(`/me/passkeys/${p.id}`)
-    toast(t('Passkey removed'))
-    changed()
+    try {
+      const done = await withPassword(
+        (password) => api.del<true>(`/me/passkeys/${p.id}`, password ? { password } : undefined).then(() => true),
+        hasPassword,
+        t('Enter your password to remove the passkey'),
+        t('Sign out and in again, then remove the passkey'),
+      )
+      if (!done) return
+      toast(t('Passkey removed'))
+      changed()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : t('Failed'))
+    }
   }
   return (
     <div className="card" style={{ marginBottom: 16 }}>
@@ -181,7 +197,7 @@ export default function SecuritySettings() {
   const toast = useToast()
   const mfa = useQuery({ queryKey: ['mfa'], queryFn: () => api.get<MfaStatus>('/me/mfa') })
   const sessions = useQuery({ queryKey: ['sessions'], queryFn: () => api.get<Session[]>('/me/sessions') })
-  const [enabling, setEnabling] = useState(false)
+  const [enabling, setEnabling] = useState<Setup | null>(null)
   const [codes, setCodes] = useState<string[] | null>(null)
   const refresh = () => {
     qc.invalidateQueries({ queryKey: ['mfa'] })
@@ -195,6 +211,20 @@ export default function SecuritySettings() {
       await api.post('/me/mfa/disable', m.hasPassword ? { password: secret } : { code: secret })
       toast(t('Two-factor authentication is off'))
       refresh()
+    } catch (e) {
+      toast(e instanceof Error ? e.message : t('Failed'))
+    }
+  }
+  const startSetup = async () => {
+    try {
+      // with a passkey a second factor is on already: adding the app needs a recent sign-in
+      const setup = await withPassword(
+        (password) => api.post<Setup>('/me/mfa/setup', password ? { password } : {}),
+        mfa.data?.hasPassword ?? true,
+        t('Enter your password to set up two-factor authentication'),
+        t('Sign out and in again, then set up two-factor authentication'),
+      )
+      if (setup) setEnabling(setup)
     } catch (e) {
       toast(e instanceof Error ? e.message : t('Failed'))
     }
@@ -228,7 +258,7 @@ export default function SecuritySettings() {
         ) : (
           <>
             <p className="muted" style={{ marginTop: 0 }}>{t('Protect your account with a one-time code from an authenticator app in addition to your password.')}</p>
-            <button className="btn btn-primary" onClick={() => setEnabling(true)}><Smartphone size={15} />{' '}{t('Set up two-factor authentication')}</button>
+            <button className="btn btn-primary" onClick={startSetup}><Smartphone size={15} />{' '}{t('Set up two-factor authentication')}</button>
           </>
         )}
       </div>
@@ -257,7 +287,7 @@ export default function SecuritySettings() {
           </tbody>
         </table>
       </div>
-      {enabling && <EnableDialog onClose={() => setEnabling(false)} onDone={(c) => { setEnabling(false); setCodes(c); refresh() }} />}
+      {enabling && <EnableDialog setup={enabling} onClose={() => setEnabling(null)} onDone={(c) => { setEnabling(null); setCodes(c); refresh() }} />}
       {codes && <RecoveryCodes codes={codes} onClose={() => setCodes(null)} />}
     </>
   )

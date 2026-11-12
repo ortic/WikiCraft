@@ -117,11 +117,7 @@ async fn imports_classic_xml_export() {
     let (_, res) = app.get(&c, &format!("/resolve?source=confluence:{source_id}")).await;
     assert!(res["pageId"].is_string());
     // old Confluence URLs redirect to the imported pages
-    let no_redirect = {
-        let mut h = reqwest::header::HeaderMap::new();
-        h.insert("x-wikicraft", "1".parse().unwrap());
-        reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).default_headers(h).build().unwrap()
-    };
+    let no_redirect = app.no_redirects(Some(("owner@acme.test", "correct horse"))).await;
     let target: String = sqlx::query_scalar("SELECT target_id::text FROM import_mappings WHERE source_type = 'page' AND source_id = $1")
         .bind(&source_id)
         .fetch_one(&app.state.db)
@@ -142,6 +138,12 @@ async fn imports_classic_xml_export() {
     assert_eq!(r.headers()["location"], format!("/pages/{target}").as_str());
     let r = no_redirect.get(format!("{}/display/DV21/v2.1+ModelOp+Center+Documentation+Hub", app.base)).send().await.unwrap();
     assert_eq!(r.headers()["location"], format!("/pages/{home}").as_str());
+    // visitors are asked to sign in (and come back), whether the page exists or not
+    let visitor = app.no_redirects(None).await;
+    for path in [format!("/x/{tiny}"), "/x/AAAAAQ".to_string()] {
+        let r = visitor.get(format!("{}{}", app.base, path)).send().await.unwrap();
+        assert_eq!(r.headers()["location"], format!("/login?next={}", path.replace('/', "%2F")).as_str());
+    }
 
     // search finds imported content
     let hits = app
@@ -761,8 +763,14 @@ async fn import_from_an_upload_in_parts() {
     let (st, report) = app.post(&c, &format!("/uploads/{id}/analyze-confluence"), json!({})).await;
     assert_eq!(st, 200, "{report}");
     assert_eq!(report["spaces"][0]["key"], "UPL");
-    let (st, r) = app.post(&c, &format!("/uploads/{id}/import-confluence"), json!({"options": {"spaceKey": "PARTS"}})).await;
-    assert_eq!(st, 202, "{r}");
+    // a double click: one import starts, the other request is turned away
+    let path = format!("/uploads/{id}/import-confluence");
+    let import = || app.post(&c, &path, json!({"options": {"spaceKey": "PARTS"}}));
+    let (a, b) = tokio::join!(import(), import());
+    let mut statuses = [a.0, b.0];
+    statuses.sort();
+    assert_eq!(statuses, [202, 409], "{} / {}", a.1, b.1);
+    let r = if a.0 == 202 { a.1 } else { b.1 };
     let job = r["jobId"].as_str().unwrap().to_string();
     let result = app
         .eventually(|| async {

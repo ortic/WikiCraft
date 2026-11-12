@@ -145,3 +145,75 @@ async fn search_follows_moves_and_trash() {
     let (_, h): (u16, Value) = app.get(&owner, "/search?q=pineapple").await;
     assert_eq!(h.as_array().unwrap().len(), 1);
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn addresses_and_link_reports_reveal_no_restricted_pages() {
+    let app = spawn().await;
+    let owner = app.setup().await;
+    let (mallory, _) = app.user(&owner, "mallory@acme.test", "member").await;
+    let (_, parent, secret) = space_with_restricted_child(&app, &owner, "SEC").await;
+    // a later page with the restricted one's title (and slug)
+    let (_, twin) = app.post(&owner, "/pages", json!({"spaceKey": "SEC", "parentId": parent, "title": "secret child"})).await;
+    let twin = twin["id"].as_str().unwrap().to_string();
+    let resolve = |c: &reqwest::Client, q: &str| {
+        let (app, c, q) = (&app, c.clone(), q.to_string());
+        async move { app.get(&c, &format!("/resolve?space=SEC&{q}")).await.1["pageId"].clone() }
+    };
+    assert_eq!(resolve(&owner, "title=Secret%20child").await, secret.as_str());
+    assert_eq!(resolve(&mallory, "title=Secret%20child").await, twin.as_str(), "the restricted page neither shows nor hides the other");
+    assert_eq!(resolve(&mallory, "slug=secret-child").await, twin.as_str());
+    let m = app.no_redirects(Some(("mallory@acme.test", "password123"))).await;
+    let visitor = app.no_redirects(None).await;
+    let location = |c: &reqwest::Client, path: &str| {
+        let (c, url) = (c.clone(), format!("{}{}", app.base, path));
+        async move { c.get(url).send().await.unwrap().headers()["location"].to_str().unwrap().to_string() }
+    };
+    assert_eq!(location(&m, "/display/SEC/Secret+child").await, format!("/pages/{twin}"));
+
+    // with the other page gone, the restricted one looks like a page that doesn't exist
+    assert_eq!(app.delete(&owner, &format!("/pages/{twin}")).await, 204);
+    assert_eq!(resolve(&mallory, "title=Secret%20child").await, Value::Null);
+    assert_eq!(location(&m, "/display/SEC/Secret+child").await, "/missing?space=SEC&title=Secret%20child");
+    assert_eq!(location(&m, "/pages/viewpage.action?spaceKey=SEC&title=Secret%20child").await, "/missing?space=SEC&title=Secret%20child");
+    assert_eq!(location(&m, "/display/SEC/No+such+page").await, "/missing?space=SEC&title=No%20such%20page");
+    // visitors are sent to sign in, then back
+    assert_eq!(location(&visitor, "/display/SEC/Secret+child").await, "/login?next=%2Fdisplay%2FSEC%2FSecret%2Bchild");
+    assert_eq!(location(&owner_no_redirects(&app).await, "/display/SEC/Secret+child").await, format!("/pages/{secret}"));
+
+    // drafts have no address, not even the one they had before a rename
+    let (_, draft) = app.post(&owner, "/pages", json!({"spaceKey": "SEC", "title": "Reorg plan", "draft": true})).await;
+    let draft = draft["id"].as_str().unwrap().to_string();
+    assert_eq!(app.patch(&owner, &format!("/pages/{draft}"), json!({"title": "Reorg plan v2"})).await.0, 204);
+    assert_eq!(resolve(&owner, "slug=reorg-plan").await, Value::Null);
+    assert_eq!(resolve(&owner, "slug=reorg-plan-v2").await, Value::Null);
+
+    // the link report treats a link to a page the reader can't open like one to no page at all
+    let (_, index) = app.post(&owner, "/pages", json!({"spaceKey": "SEC", "title": "Index"})).await;
+    let index = index["id"].as_str().unwrap().to_string();
+    let md = "[hidden](/wiki/SEC/secret-child) [nothing](/wiki/SEC/no-such-page) [parent](/wiki/SEC/public-parent)";
+    assert_eq!(app.put(&owner, &format!("/pages/{index}/content"), json!({"markdown": md})).await.0, 200);
+    let broken = |c: &reqwest::Client| {
+        let (app, c) = (&app, c.clone());
+        async move {
+            let (_, r) = app.get(&c, "/spaces/SEC/link-report").await;
+            r["brokenLinks"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|b| format!("{}:{}", b["label"].as_str().unwrap(), b["problem"].as_str().unwrap()))
+                .collect::<Vec<_>>()
+        }
+    };
+    let owner_view = app
+        .eventually(|| async {
+            let b = broken(&owner).await;
+            (!b.is_empty()).then_some(b)
+        })
+        .await;
+    assert_eq!(owner_view, ["nothing:missing"]);
+    assert_eq!(broken(&mallory).await, ["hidden:missing", "nothing:missing"]);
+}
+
+async fn owner_no_redirects(app: &common::TestApp) -> reqwest::Client {
+    app.no_redirects(Some(("owner@acme.test", "correct horse"))).await
+}

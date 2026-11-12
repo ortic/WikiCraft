@@ -293,6 +293,18 @@ async fn passkeys_as_second_step_and_without_a_password() {
     assert_eq!(st, 403, "{err}");
     assert_eq!(app.post(&mia, "/me/passkeys/options", json!({"password": "wrong"})).await.0, 403);
     let mut phone = add_passkey(&app, &mia, true, Some("password123")).await;
+    // … and so does adding an authenticator app next to the passkeys
+    assert_eq!(app.post(&mia, "/me/mfa/setup", json!({})).await.0, 403);
+    assert_eq!(app.post(&mia, "/me/mfa/setup", json!({"password": "password123"})).await.0, 200);
+    // an API token can't touch sign-in methods at all
+    let (_, tok) = app.post(&mia, "/me/tokens", json!({"name": "script"})).await;
+    let bearer = |path: &'static str| {
+        let token = tok["token"].as_str().unwrap().to_string();
+        let url = app.url(path);
+        async move { reqwest::Client::new().post(url).bearer_auth(token).json(&json!({"password": "password123"})).send().await.unwrap().status().as_u16() }
+    };
+    assert_eq!(bearer("/me/passkeys/options").await, 403);
+    assert_eq!(bearer("/me/mfa/setup").await, 403);
 
     // the password is no longer enough: the second step takes the passkey
     let c = client();
@@ -352,10 +364,29 @@ async fn passkeys_as_second_step_and_without_a_password() {
     let (_, list) = app.get(&mia, "/me/passkeys").await;
     let first = list[0]["id"].as_str().unwrap().to_string();
     assert_eq!(app.patch(&mia, &format!("/me/passkeys/{first}"), json!({"name": "Work laptop"})).await.1["name"], "Work laptop");
-    assert_eq!(app.delete(&mia, &format!("/me/passkeys/{first}")).await, 204);
+    // removing one also needs a recent sign-in or the password: a stolen session can't take it away
+    assert_eq!(app.delete(&mia, &format!("/me/passkeys/{first}")).await, 403);
+    let r = mia.delete(app.url(&format!("/me/passkeys/{first}"))).json(&json!({"password": "password123"})).send().await.unwrap();
+    assert_eq!(r.status(), 204);
     assert_eq!(app.delete(&other, &format!("/me/passkeys/{}", list[1]["id"].as_str().unwrap())).await, 404, "not theirs");
     enrol(&app, &owner).await;
     assert_eq!(app.post(&owner, &format!("/users/{mia_id}/reset-mfa"), json!({})).await.0, 204);
     let n: i64 = sqlx::query_scalar("SELECT count(*) FROM passkeys WHERE user_id = $1::uuid").bind(&mia_id).fetch_one(&app.state.db).await.unwrap();
     assert_eq!(n, 0);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn passkeys_alone_dont_sign_in_when_single_sign_on_is_enforced() {
+    let app = common::spawn_with(|c| c.disable_password_login = true).await;
+    let owner = app.setup().await;
+    let mut key = add_passkey(&app, &owner, false, None).await;
+    let (_, providers) = app.get(&client(), "/auth/providers").await;
+    assert_eq!(providers["passkeyLogin"], false);
+    let c = client();
+    assert_eq!(app.post(&c, "/auth/passkey/options", json!({})).await.0, 400);
+    // an answer to options from before the switch doesn't get in either
+    let options = json!({"challenge": wikicraft::webauthn::b64(&[7; 32])});
+    let (st, _) = app.post(&c, "/auth/passkey", json!({"token": "x", "credential": assertion(&mut key, &options, None)})).await;
+    assert_eq!(st, 400);
+    assert_eq!(app.get(&c, "/me").await.1["user"], Value::Null);
 }

@@ -153,7 +153,10 @@ second step also applies after SSO sign-ins. A passkey that verified the person 
 face) signs in without a password and counts as two factors. *Administration → Overview →
 Two-factor authentication* can require it for administrators or for everyone (a passkey fulfils
 it): until they've set it up, those people only see the setup screen. API tokens are separate
-credentials and keep working. *Reset two-factor* on a user removes their code and their passkeys.
+credentials and keep working, but can't change anyone's sign-in methods. *Reset two-factor* on a
+user removes their code and their passkeys. With `WIKICRAFT_DISABLE_PASSWORD_LOGIN` a passkey alone
+doesn't sign in (people removed in the identity provider must lose access); after single sign-on it
+still works as the second step.
 
 Passkeys belong to the host name of `WIKICRAFT_BASE_URL` and need https (or `localhost`): after a
 move to another domain people sign in with their password and add their passkeys again. Browsers

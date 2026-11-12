@@ -1574,7 +1574,7 @@ async fn readable_addresses_survive_renames_and_moves() {
     assert_eq!(app.patch(&owner, "/spaces/PTH", json!({"key": "PATHS"})).await.0, 200);
     assert_eq!(resolve("PTH", "slug=shipping".into()).await, release.as_str());
     // old Confluence addresses by title go through the same lookup
-    let manual = reqwest::Client::builder().redirect(reqwest::redirect::Policy::none()).build().unwrap();
+    let manual = app.no_redirects(Some(("owner@acme.test", "correct horse"))).await;
     let r = manual.get(format!("{}/display/PTH/Runbook", app.base)).send().await.unwrap();
     assert_eq!(r.headers()["location"], format!("/pages/{runbook}").as_str());
 

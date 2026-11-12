@@ -643,7 +643,7 @@ paths:
     post:
       tags:
       - Auth
-      summary: Start a sign-in with a passkey alone (binary values base64url)
+      summary: Start a sign-in with a passkey alone (binary values base64url); off when single sign-on is enforced
       operationId: post_auth_passkey_options
       responses:
         '200':
@@ -721,11 +721,22 @@ paths:
     get:
       tags:
       - Auth
-      summary: Configured sign-in providers (SSO buttons, LDAP)
+      summary: Configured sign-in providers (SSO buttons, LDAP) and whether passwords and passkeys alone sign in
       operationId: get_auth_providers
       responses:
         '200':
           description: OK
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  passwordLogin: *id003
+                  passkeyLogin: *id003
+                  passwordReset: *id003
+                  providers:
+                    type: array
+                    items: *id006
         4XX:
           description: Error
           content:
@@ -1241,7 +1252,7 @@ paths:
       tags:
       - Account
       summary: Create a personal API token (shown once). A read scope allows no changes (GET, Markdown conversion, Ask the
-        wiki; MCP read tools)
+        wiki; MCP read tools); no token can change sign-in methods (passkeys, two-factor)
       operationId: post_me_tokens
       requestBody:
         required: true
@@ -1578,13 +1589,21 @@ paths:
     delete:
       tags:
       - Account
-      summary: Remove a passkey
+      summary: Remove a passkey; needs a sign-in from the last 15 minutes or the password
       operationId: delete_me_passkeys_id
       parameters:
       - name: id
         in: path
         required: true
         schema: *id001
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password: *id001
       responses:
         '204': *id008
         4XX:
@@ -1597,8 +1616,17 @@ paths:
     post:
       tags:
       - Account
-      summary: Start TOTP enrolment (secret, otpauth URI, QR SVG)
+      summary: Start TOTP enrolment (secret, otpauth URI, QR SVG); with a passkey already, needs a sign-in from the last 15
+        minutes or the password
       operationId: post_me_mfa_setup
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                password: *id001
       responses:
         '200':
           description: OK

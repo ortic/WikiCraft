@@ -17,13 +17,13 @@ use uuid::Uuid;
 
 use crate::app::{AppState, new_id};
 use crate::audit;
-use crate::auth::{CurrentUser, create_session, session_token, token_hash, verify_password};
+use crate::auth::{CurrentUser, SessionUser, confirm_recent, create_session};
 use crate::error::{ApiError, ApiResult};
 use crate::webauthn::{self, ALGORITHMS, RelyingParty, b64, unb64};
 
-/// how long after signing in a passkey can be added without the password
-const RECENT_MINUTES: i32 = 15;
 const TIMEOUT_MS: u64 = 300_000;
+/// passkeys per person at most
+const MAX_PASSKEYS: i64 = 20;
 
 fn rp(state: &AppState) -> ApiResult<RelyingParty> {
     RelyingParty::from_base_url(&state.config.base_url).map_err(ApiError::Internal)
@@ -58,29 +58,15 @@ pub struct AddOptionsRequest {
 /// `POST /api/me/passkeys/options {password?}` — what `navigator.credentials.create()` needs.
 pub async fn add_options(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    SessionUser(user): SessionUser,
     headers: HeaderMap,
     Json(req): Json<AddOptionsRequest>,
 ) -> ApiResult<Json<Value>> {
-    // a recent sign-in, or the password
-    let recent: bool = match session_token(&headers) {
-        Some(t) => sqlx::query_scalar("SELECT created_at > now() - make_interval(mins => $2) FROM sessions WHERE token_hash = $1")
-            .bind(token_hash(t))
-            .bind(RECENT_MINUTES)
-            .fetch_optional(&state.db)
-            .await?
-            .unwrap_or(false),
-        None => false,
-    };
-    if !recent {
-        let hash: Option<String> = sqlx::query_scalar("SELECT password_hash FROM users WHERE id = $1").bind(user.id).fetch_one(&state.db).await?;
-        let ok = match (hash, req.password) {
-            (Some(h), Some(p)) if !p.is_empty() => verify_password(p, h).await,
-            _ => false,
-        };
-        if !ok {
-            return Err(ApiError::Denied("confirm with your password (or sign in again) to add a passkey".into()));
-        }
+    // a recent sign-in of this person, or their password
+    confirm_recent(&state, &user, &headers, req.password.as_deref()).await?;
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM passkeys WHERE user_id = $1").bind(user.id).fetch_one(&state.db).await?;
+    if count >= MAX_PASSKEYS {
+        return Err(ApiError::bad(format!("at most {MAX_PASSKEYS} passkeys; remove one first")));
     }
     let rp = rp(&state)?;
     let challenge = webauthn::challenge();
@@ -131,7 +117,7 @@ pub struct AddRequest {
 /// `POST /api/me/passkeys {token, name, credential}` — stores the passkey `navigator.credentials.create()` made.
 pub async fn add(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    SessionUser(user): SessionUser,
     headers: HeaderMap,
     Json(req): Json<AddRequest>,
 ) -> ApiResult<(StatusCode, Json<PasskeyRow>)> {
@@ -178,7 +164,7 @@ pub struct Rename {
 /// `PATCH /api/me/passkeys/{id} {name}`
 pub async fn rename(
     State(state): State<AppState>,
-    CurrentUser(user): CurrentUser,
+    SessionUser(user): SessionUser,
     Path(id): Path<Uuid>,
     Json(req): Json<Rename>,
 ) -> ApiResult<Json<PasskeyRow>> {
@@ -197,8 +183,24 @@ pub async fn rename(
     ))
 }
 
-/// `DELETE /api/me/passkeys/{id}`
-pub async fn delete(State(state): State<AppState>, CurrentUser(user): CurrentUser, Path(id): Path<Uuid>) -> ApiResult<StatusCode> {
+/// An optional password confirming a change to sign-in methods.
+#[derive(Deserialize, Default)]
+pub struct Confirm {
+    #[serde(default)]
+    pub password: Option<String>,
+}
+
+/// `DELETE /api/me/passkeys/{id} {password?}` — needs a recent sign-in or the password (a stolen
+/// session must not take a factor away).
+pub async fn delete(
+    State(state): State<AppState>,
+    SessionUser(user): SessionUser,
+    headers: HeaderMap,
+    Path(id): Path<Uuid>,
+    body: Option<Json<Confirm>>,
+) -> ApiResult<StatusCode> {
+    let password = body.and_then(|Json(c)| c.password);
+    confirm_recent(&state, &user, &headers, password.as_deref()).await?;
     let n = sqlx::query("DELETE FROM passkeys WHERE id = $1 AND user_id = $2").bind(id).bind(user.id).execute(&state.db).await?.rows_affected();
     if n == 0 {
         return Err(ApiError::NotFound("passkey"));
@@ -280,8 +282,19 @@ pub async fn verify(state: &AppState, challenge: &[u8], a: &Assertion, for_user:
     Ok((user, v.user_verified))
 }
 
+/// With single sign-on enforced (`WIKICRAFT_DISABLE_PASSWORD_LOGIN`), a passkey alone doesn't
+/// sign in: people removed in the identity provider must lose access. After an SSO sign-in
+/// passkeys still serve as the second step.
+fn passkey_login_allowed(state: &AppState) -> ApiResult<()> {
+    if state.config.disable_password_login {
+        return Err(ApiError::bad("signing in with a passkey alone is off on this wiki: use single sign-on"));
+    }
+    Ok(())
+}
+
 /// `POST /api/auth/passkey/options` — starts a sign-in without a password.
 pub async fn login_options(State(state): State<AppState>) -> ApiResult<Json<Value>> {
+    passkey_login_allowed(&state)?;
     let challenge = webauthn::challenge();
     let token = crate::sso::put_state(&state, &json!({"passkeyLogin": true, "challenge": b64(&challenge)}), None).await.map_err(ApiError::Internal)?;
     Ok(Json(json!({"token": token, "publicKey": request_options(&state, None, &challenge).await?})))
@@ -295,6 +308,7 @@ pub struct PasskeyLogin {
 
 /// `POST /api/auth/passkey {token, credential}` — signs in with a passkey that verified the person.
 pub async fn login(State(state): State<AppState>, headers: HeaderMap, Json(req): Json<PasskeyLogin>) -> ApiResult<Response> {
+    passkey_login_allowed(&state)?;
     let data = crate::sso::take_state(&state, &req.token, &headers).await.map_err(|e| ApiError::bad(e.to_string()))?;
     if data.get("passkeyLogin").and_then(Value::as_bool) != Some(true) {
         return Err(ApiError::bad("invalid sign-in"));

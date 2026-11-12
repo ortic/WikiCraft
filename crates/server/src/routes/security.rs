@@ -10,7 +10,7 @@ use uuid::Uuid;
 
 use crate::app::AppState;
 use crate::audit;
-use crate::auth::{CurrentUser, create_session, require_admin, session_token, token_hash, verify_password};
+use crate::auth::{CurrentUser, SessionUser, confirm_recent, create_session, require_admin, session_token, token_hash, verify_password};
 use crate::error::{ApiError, ApiResult};
 use crate::mfa;
 
@@ -72,12 +72,22 @@ pub async fn status(State(state): State<AppState>, CurrentUser(user): CurrentUse
 }
 
 /// `POST /api/me/mfa/setup` — a new pending secret (not active until confirmed with a code).
-pub async fn setup(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Value>> {
+pub async fn setup(
+    State(state): State<AppState>,
+    SessionUser(user): SessionUser,
+    headers: HeaderMap,
+    body: Option<Json<crate::routes::passkeys::Confirm>>,
+) -> ApiResult<Json<Value>> {
     // replacing an active factor needs the password (disable) first: a stolen session alone
     // must not swap in another authenticator
     let totp_on: bool = sqlx::query_scalar("SELECT totp_enabled_at IS NOT NULL FROM users WHERE id = $1").bind(user.id).fetch_one(&state.db).await?;
     if totp_on {
         return Err(ApiError::bad("two-factor authentication is already on; turn it off first"));
+    }
+    // with a passkey a factor is on already: adding another needs a recent sign-in or the password
+    if crate::routes::passkeys::has_passkey(&state, user.id).await? {
+        let password = body.and_then(|Json(c)| c.password);
+        confirm_recent(&state, &user, &headers, password.as_deref()).await?;
     }
     let secret = mfa::new_secret();
     sqlx::query("UPDATE users SET totp_pending = $2 WHERE id = $1").bind(user.id).bind(&secret).execute(&state.db).await?;
@@ -93,7 +103,7 @@ pub struct CodeRequest {
 }
 
 /// `POST /api/me/mfa/enable {code}` — returns the recovery codes (shown once).
-pub async fn enable(State(state): State<AppState>, CurrentUser(user): CurrentUser, Json(req): Json<CodeRequest>) -> ApiResult<Json<Value>> {
+pub async fn enable(State(state): State<AppState>, SessionUser(user): SessionUser, Json(req): Json<CodeRequest>) -> ApiResult<Json<Value>> {
     let pending: Option<String> = sqlx::query_scalar("SELECT totp_pending FROM users WHERE id = $1").bind(user.id).fetch_one(&state.db).await?;
     let pending = pending.ok_or_else(|| ApiError::bad("start the setup first"))?;
     let step =
@@ -118,7 +128,7 @@ pub struct DisableRequest {
 }
 
 /// `POST /api/me/mfa/disable` — needs the password (or, for SSO-only accounts, a code).
-pub async fn disable(State(state): State<AppState>, CurrentUser(user): CurrentUser, Json(req): Json<DisableRequest>) -> ApiResult<StatusCode> {
+pub async fn disable(State(state): State<AppState>, SessionUser(user): SessionUser, Json(req): Json<DisableRequest>) -> ApiResult<StatusCode> {
     let hash: Option<String> = sqlx::query_scalar("SELECT password_hash FROM users WHERE id = $1").bind(user.id).fetch_one(&state.db).await?;
     let ok = match (hash, &req.password, &req.code) {
         (Some(h), Some(pw), _) => verify_password(pw.clone(), h).await,
@@ -134,7 +144,7 @@ pub async fn disable(State(state): State<AppState>, CurrentUser(user): CurrentUs
 }
 
 /// `POST /api/me/mfa/recovery-codes {code}` — replaces the recovery codes.
-pub async fn new_recovery_codes(State(state): State<AppState>, CurrentUser(user): CurrentUser, Json(req): Json<CodeRequest>) -> ApiResult<Json<Value>> {
+pub async fn new_recovery_codes(State(state): State<AppState>, SessionUser(user): SessionUser, Json(req): Json<CodeRequest>) -> ApiResult<Json<Value>> {
     if !mfa::verify(&state, user.id, &req.code).await.map_err(mfa_err)? {
         return Err(ApiError::bad("that code doesn't match"));
     }

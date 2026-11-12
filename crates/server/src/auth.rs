@@ -217,6 +217,64 @@ pub struct MaybeUser(pub Option<User>);
 #[derive(Debug, Clone)]
 pub struct CurrentUser(pub User);
 
+/// The signed-in person through their browser session, not an API token: for managing sign-in
+/// methods (second factors, passkeys), which a leaked token must not be able to change.
+#[derive(Debug, Clone)]
+pub struct SessionUser(pub User);
+
+impl FromRequestParts<AppState> for SessionUser {
+    type Rejection = ApiError;
+
+    async fn from_request_parts(parts: &mut Parts, state: &AppState) -> Result<Self, Self::Rejection> {
+        let CurrentUser(user) = CurrentUser::from_request_parts(parts, state).await?;
+        if parts.extensions.get::<TokenScope>().is_some() {
+            return Err(ApiError::Denied("sign-in methods are managed in the browser, not with an API token".into()));
+        }
+        Ok(SessionUser(user))
+    }
+}
+
+/// How long after signing in sensitive account changes need no password.
+pub const RECENT_SIGN_IN_MINUTES: i32 = 15;
+
+/// For changes to sign-in methods: the request's session must belong to `user` and be younger
+/// than [`RECENT_SIGN_IN_MINUTES`], or `password` must be theirs (wrong passwords count against
+/// a per-user limit).
+pub async fn confirm_recent(state: &AppState, user: &User, headers: &HeaderMap, password: Option<&str>) -> Result<(), ApiError> {
+    if let Some(t) = session_token(headers) {
+        let recent: Option<bool> = sqlx::query_scalar(
+            "SELECT created_at > now() - make_interval(mins => $3) FROM sessions WHERE token_hash = $1 AND user_id = $2 AND expires_at > now()",
+        )
+        .bind(token_hash(t))
+        .bind(user.id)
+        .bind(RECENT_SIGN_IN_MINUTES)
+        .fetch_optional(&state.db)
+        .await?;
+        if recent == Some(true) {
+            return Ok(());
+        }
+    }
+    let Some(password) = password.filter(|p| !p.is_empty()) else {
+        return Err(ApiError::Denied("confirm with your password (or sign in again)".into()));
+    };
+    let key = format!("confirm:{}", user.id);
+    if !login_allowed(state, &key).await {
+        return Err(ApiError::bad("too many wrong passwords, try again in 15 minutes"));
+    }
+    let hash: Option<String> = sqlx::query_scalar("SELECT password_hash FROM users WHERE id = $1").bind(user.id).fetch_one(&state.db).await?;
+    let ok = match hash {
+        Some(h) => verify_password(password.to_string(), h).await,
+        None => false,
+    };
+    if ok {
+        clear_login_failures(state, &key).await;
+        Ok(())
+    } else {
+        record_login_failure(state, &key).await;
+        Err(ApiError::Denied("that password isn't right".into()))
+    }
+}
+
 impl FromRequestParts<AppState> for MaybeUser {
     type Rejection = ApiError;
 
