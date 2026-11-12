@@ -83,6 +83,7 @@ export function TableMenu({ editor }: { editor: Editor }) {
   )
   return (
     <BubbleMenu
+      className="floating-menu"
       editor={editor}
       pluginKey="tableMenu"
       shouldShow={({ editor }) => editor.isEditable && editor.isActive('table')}

@@ -387,8 +387,8 @@ test('text colour from the selection menu and a three-column layout', async ({ b
   await page.keyboard.press('Home')
   await page.keyboard.press('Shift+End')
   await expect.poll(() => page.evaluate(() => String(window.getSelection()))).toBe('Ship the release today')
-  await page.getByRole('button', { name: 'Text colour, highlight, alignment and indentation' }).click()
-  await page.getByRole('button', { name: 'Text colour Red' }).click()
+  await page.locator('.bubble').getByRole('button', { name: 'Text colour, highlight, alignment and indentation' }).click()
+  await page.locator('.bubble').getByRole('button', { name: 'Text colour Red' }).click()
   await expect(editor.locator('span[style*="color"]')).toHaveText('Ship the release today')
   await page.keyboard.press('End')
   // the editor has taken in the collapsed selection once the selection menu is gone
@@ -408,6 +408,38 @@ test('text colour from the selection menu and a three-column layout', async ({ b
   await expect
     .poll(async () => page.evaluate(async (pid) => JSON.stringify((await (await fetch(`/api/pages/${pid}`)).json()).content), id), { timeout: 15_000 })
     .toMatch(/"indent":1\},"content":\[\{"marks":\[[^\]]*\],"text":"Ship the release today"/)
+  await ctx.close()
+})
+
+test('the formatting toolbar sets styles, undoes, and can be hidden', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState })
+  const page = await ctx.newPage()
+  await page.goto('/')
+  const id = await page.evaluate(async () => {
+    const r = await fetch('/api/pages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-wikicraft': '1' }, body: JSON.stringify({ spaceKey: 'PRODUCT', title: 'Toolbar', markdown: 'Launch plan' }) })
+    return (await r.json()).id as string
+  })
+  await page.goto(`/pages/${id}`)
+  const editor = page.locator('.ProseMirror[contenteditable="true"]')
+  await expect(editor).toContainText('Launch plan', { timeout: 20_000 })
+  const toolbar = page.getByRole('toolbar', { name: 'Formatting' })
+  await editor.getByText('Launch plan').click()
+  await toolbar.getByLabel('Paragraph style').selectOption('h2')
+  await expect(editor.locator('h2')).toHaveText('Launch plan')
+  await page.keyboard.press('End')
+  await page.keyboard.press('Shift+Home')
+  await toolbar.getByRole('button', { name: 'Bold (Ctrl+B)' }).click()
+  await expect(editor.locator('h2 strong')).toHaveText('Launch plan')
+  await expect(toolbar.getByRole('button', { name: 'Bold (Ctrl+B)' })).toHaveAttribute('aria-pressed', 'true')
+  await toolbar.getByRole('button', { name: 'Undo (Ctrl+Z)' }).click()
+  await expect(editor.locator('h2, strong')).toHaveCount(0)
+  // hidden for this browser until shown again
+  await toolbar.getByRole('button', { name: 'Hide the toolbar' }).click()
+  await page.reload()
+  await expect(page.getByRole('button', { name: 'Show the formatting toolbar' })).toBeVisible({ timeout: 20_000 })
+  await expect(toolbar).toHaveCount(0)
+  await page.getByRole('button', { name: 'Show the formatting toolbar' }).click()
+  await expect(toolbar).toBeVisible()
   await ctx.close()
 })
 

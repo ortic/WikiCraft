@@ -246,7 +246,7 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P0** Copy/paste from Word, Google Docs, web pages, Excel/Sheets (to tables), Markdown text, images from clipboard `C D O`
 - [x] **P0** Drag & drop blocks (block handles), drag & drop files/images `C D O N`
 - [x] **P0** Keyboard shortcuts + shortcut help dialog `C D O`
-- [~] **P1** Floating formatting toolbar + fixed toolbar option `C D` (bubble menu only)
+- [x] **P1** Floating formatting toolbar + fixed toolbar option `C D` (selection menu plus a fixed toolbar while editing: undo/redo, paragraph style, marks, colour/alignment, lists, link, table, image, Insert = the `/` menu; sticks under the page header; can be hidden per browser; not shown on phones)
 - [x] **P1** Find & replace in page `C`
 - [x] **P1** Word count / reading time `C`
 - [x] **P1** Autosave + offline-tolerant editing (queue updates while disconnected) `C D`

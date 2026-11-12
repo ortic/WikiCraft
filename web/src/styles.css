@@ -345,6 +345,18 @@ table.list tr:hover td { background: var(--bg-soft); }
 @media (max-width: 600px) { .find-bar { inset-inline-end: 16px; inset-inline-start: 16px; top: 56px; } .find-bar .input { width: 100%; flex: 1; } }
 .find-match { background: rgba(250, 204, 21, .35); border-radius: 2px; }
 .find-match.find-current { background: rgba(249, 115, 22, .55); box-shadow: 0 0 0 1px rgba(249, 115, 22, .8); }
+.editor-toolbar { position: sticky; top: var(--page-header-h, 47px); z-index: 4; display: flex; flex-wrap: wrap; align-items: center; gap: 2px; margin: 0 0 12px; padding: 4px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: 0 1px 2px rgba(0, 0, 0, .04); }
+.editor-toolbar .icon-btn { width: 28px; height: 28px; }
+.editor-toolbar .icon-btn:disabled { opacity: .4; cursor: default; }
+.editor-toolbar .sep { width: 1px; height: 18px; background: var(--border); margin: 0 3px; }
+.editor-toolbar .toolbar-style { width: auto; height: 28px; padding: 0 6px; }
+.editor-toolbar .toolbar-insert { gap: 4px; }
+.editor-toolbar .spacer { flex: 1; }
+.editor-toolbar-show { position: sticky; top: var(--page-header-h, 47px); z-index: 4; display: flex; justify-content: flex-end; height: 0; }
+.editor-toolbar-show .icon-btn { margin-top: -34px; }
+@media (max-width: 640px) { .editor-toolbar, .editor-toolbar-show { display: none; } }
+/* selection and table menus float above the sticky toolbar and page header */
+.floating-menu { z-index: 10; }
 .bubble { display: flex; align-items: center; gap: 2px; padding: 3px; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; box-shadow: var(--shadow); }
 .bubble .icon-btn { width: 28px; height: 28px; }
 .bubble .sep { width: 1px; height: 18px; background: var(--border); margin: 0 2px; }

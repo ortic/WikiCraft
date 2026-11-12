@@ -63,6 +63,9 @@ jump to where they are.
 - **`@`** mentions a person (they are notified) or, from two letters on, links a page.
 - **`[[`** links a page (or creates it), `[[#` a heading on this page; attachments too.
 - **`:`** followed by a word inserts an emoticon (`:tick`, `:warning`, …).
+- The **toolbar** above the page (while editing) has paragraph styles, formatting, lists, links,
+  tables, images and *Insert* (the same menu as `/`); hide it with the button on its right if you
+  prefer a clean page, and bring it back with the button that stays in its place.
 - Select text for the formatting bar: bold, italic, code, highlight, links, or a comment.
 - Paste Markdown, a table from a spreadsheet or an image: it becomes formatted content.
 - The handle left of a block moves the block; the link icon next to it copies a **link to that

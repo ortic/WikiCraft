@@ -4,6 +4,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { useEditor, EditorContent, type Editor as TEditor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import TextStyleMenu from './TextStyleMenu'
+import EditorToolbar, { setToolbarHidden, toolbarHidden } from './EditorToolbar'
 import DragHandle from '@tiptap/extension-drag-handle-react'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCaret from '@tiptap/extension-collaboration-caret'
@@ -13,7 +14,7 @@ import { Placeholder, CharacterCount } from '@tiptap/extensions'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
 import 'katex/dist/katex.min.css'
-import { Bold, Italic, Underline, Strikethrough, Code, Link as LinkIcon, Link2, Highlighter, MessageSquarePlus, Heading2, List, GripVertical } from 'lucide-react'
+import { Bold, Italic, Underline, Strikethrough, Code, Link as LinkIcon, Link2, Highlighter, MessageSquarePlus, Heading2, List, GripVertical, PanelTopOpen } from 'lucide-react'
 import type { Node as PMNode } from '@tiptap/pm/model'
 import { api, initials, userColor, type Attachment, type User } from '../api'
 import { contentExtensions } from './extensions'
@@ -338,8 +339,24 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
     })
   }
 
+  const [showToolbar, setShowToolbar] = useState(() => !toolbarHidden())
+  const toggleToolbar = (show: boolean) => {
+    setToolbarHidden(!show)
+    setShowToolbar(show)
+  }
+  const onToolbarImage = () => {
+    if (editor) pickFiles('image/*').then((f) => upload(editor, f, true))
+  }
+
   return (
     <div onClick={onClick} ref={container} onMouseMove={onMouseMove} onMouseLeave={() => setHoverBlock(null)} className="editor-root">
+      {editor && isEditable && (showToolbar ? (
+        <EditorToolbar editor={editor} onImage={onToolbarImage} onLink={setLink} onHide={() => toggleToolbar(false)} />
+      ) : (
+        <div className="editor-toolbar-show">
+          <button type="button" className="icon-btn" title={tr('Show the formatting toolbar')} aria-label={tr('Show the formatting toolbar')} onClick={() => toggleToolbar(true)}><PanelTopOpen size={15} /></button>
+        </div>
+      ))}
       {find && editor && <FindBar key={`${find.replace}-${find.initial}`} editor={editor} withReplace={find.replace} initial={find.initial} onClose={() => setFind(null)} />}
       {!synced && (
         <div className="row faint" style={{ padding: '12px 0' }}>
@@ -347,7 +364,7 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
         </div>
       )}
       {editor && (
-        <BubbleMenu editor={editor} shouldShow={({ editor, state }) => !state.selection.empty && !findKey.getState(state)?.query && (editor.isEditable || !!onRequestComment) && !editor.isActive('image') && !(state.selection instanceof CellSelection) && !(state.selection instanceof NodeSelection && state.selection.node.isBlock && state.selection.node.isAtom)}>
+        <BubbleMenu editor={editor} className="floating-menu" shouldShow={({ editor, state }) => !state.selection.empty && !findKey.getState(state)?.query && (editor.isEditable || !!onRequestComment) && !editor.isActive('image') && !(state.selection instanceof CellSelection) && !(state.selection instanceof NodeSelection && state.selection.node.isBlock && state.selection.node.isAtom)}>
           <div className="bubble">
             {isEditable && (
               <>
