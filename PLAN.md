@@ -329,8 +329,8 @@ Status as of 2026-11-09: `[x]` done · `[~]` partial · `[ ]` not started.
 - [x] **P1** `children` (child pages list: depth, sort, reverse, style, first N) → dynamic children block — depth, sort (title / creation / modification), reverse, first N, heading styles
 - [x] **P1** `pagetree` / `pagetreesearch` → dynamic tree block — whole tree; pagetreesearch gets a search box over the tree's titles
 - [~] **P1** `attachments` (list + upload) → attachments block (live list; no upload in the block)
-- [~] **P1** `include` (include page) → transclusion block (plain-text excerpt preview)
-- [~] **P1** `excerpt` / `excerpt-include` → synced block / named excerpt (excerpt inlined; include shows page start)
+- [x] **P1** `include` (include page) → transclusion block (the included page rendered read-only with all blocks and macros, always current, permission-checked; stops at loops and after 4 levels; `/include` with a page picker; exports still show a link)
+- [x] **P1** `excerpt` / `excerpt-include` → named excerpt block (`/excerpt`, optional name, hidden on its own page) + include of the excerpt (by name, else the first; pages without one show their first paragraph); `nopanel` kept
 - [x] **P1** `details` + `detailssummary` (page properties + report) → page properties block + "properties report" query table
 - [x] **P1** `contentbylabel` (incl. CQL parameter) → label query block
 - [x] **P1** `recently-updated` → recent changes block

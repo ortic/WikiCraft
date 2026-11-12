@@ -269,6 +269,9 @@ impl Renderer<'_> {
                     escape(title)
                 );
             }
+            // a hidden excerpt shows only where another page includes it
+            nodes::EXCERPT if n.attr_bool("hidden") == Some(true) => {}
+            nodes::EXCERPT => self.wrap("<div class=\"excerpt\">", n, "</div>"),
             nodes::ANCHOR => {
                 let name = n.attr_str("name").unwrap_or("");
                 let _ = write!(self.out, "<a id=\"{}\"></a>", escape(&slugify(name)));

@@ -1078,14 +1078,35 @@ impl Conv<'_> {
                     Some(p) => {
                         let title = p.attr("ri:content-title").unwrap_or("").to_string();
                         let href = self.resolve_page_ref(&p);
-                        vec![Node::new(nodes::INCLUDE).attr("pageRef", href).attr("title", title).attr("excerpt", name == "excerpt-include")]
+                        // excerpt-include: the excerpt with that name (Cloud's multiple excerpts), else the first
+                        let excerpt = match param("name").filter(|n| !n.trim().is_empty()) {
+                            Some(n) if name == "excerpt-include" => serde_json::Value::from(n.trim()),
+                            _ => serde_json::Value::from(name == "excerpt-include"),
+                        };
+                        let mut n = Node::new(nodes::INCLUDE).attr("pageRef", href).attr("title", title).attr("excerpt", excerpt);
+                        if param("nopanel").is_some_and(|v| v == "true") {
+                            n = n.attr("nopanel", true);
+                        }
+                        vec![n]
                     }
                     None => vec![],
                 }
             }
             "excerpt" => {
                 self.stats.macro_seen(&name, Support::Native);
-                rich.map(|r| self.blocks(&r.children)).unwrap_or_default()
+                let body = rich.map(|r| self.blocks(&r.children)).unwrap_or_default();
+                if body.is_empty() {
+                    vec![]
+                } else {
+                    let mut n = Node::new(nodes::EXCERPT).with_content(body);
+                    if let Some(x) = param("name").map(|x| x.trim().to_string()).filter(|x| !x.is_empty()) {
+                        n = n.attr("name", x);
+                    }
+                    if param("hidden").is_some_and(|v| v == "true") {
+                        n = n.attr("hidden", true);
+                    }
+                    vec![n]
+                }
             }
             "details" => {
                 // page properties: keep the table; the properties report can query it later

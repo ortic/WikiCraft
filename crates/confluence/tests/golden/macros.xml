@@ -14,6 +14,8 @@
 <ac:structured-macro ac:name="children"><ac:parameter ac:name="depth">2</ac:parameter><ac:parameter ac:name="sort">title</ac:parameter></ac:structured-macro>
 <ac:structured-macro ac:name="include"><ac:parameter ac:name=""><ac:link><ri:page ri:content-title="Other Page" /></ac:link></ac:parameter></ac:structured-macro>
 <ac:structured-macro ac:name="excerpt"><ac:rich-text-body><p>The short version.</p></ac:rich-text-body></ac:structured-macro>
+<ac:structured-macro ac:name="excerpt"><ac:parameter ac:name="name">pricing</ac:parameter><ac:parameter ac:name="hidden">true</ac:parameter><ac:rich-text-body><p>Hidden here, shown where included.</p></ac:rich-text-body></ac:structured-macro>
+<ac:structured-macro ac:name="excerpt-include"><ac:parameter ac:name="name">pricing</ac:parameter><ac:parameter ac:name="nopanel">true</ac:parameter><ac:parameter ac:name=""><ac:link><ri:page ri:content-title="Other Page" /></ac:link></ac:parameter></ac:structured-macro>
 <ac:structured-macro ac:name="jira"><ac:parameter ac:name="key">OPS-42</ac:parameter><ac:parameter ac:name="server">Acme Jira</ac:parameter></ac:structured-macro>
 <ac:structured-macro ac:name="mermaid"><ac:plain-text-body><![CDATA[graph TD; A-->B]]></ac:plain-text-body></ac:structured-macro>
 <ac:structured-macro ac:name="html"><ac:plain-text-body><![CDATA[<b>raw</b><script>x()</script>]]></ac:plain-text-body></ac:structured-macro>

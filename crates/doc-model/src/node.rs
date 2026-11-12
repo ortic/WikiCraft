@@ -77,7 +77,12 @@ pub mod nodes {
     pub const EMBED: &str = "embed";
     pub const TOC: &str = "toc";
     pub const CHILD_PAGES: &str = "childPages";
+    /// Another page's content, live (`pageId`), or only its excerpt (`excerpt`: `true` for the
+    /// first one, or an excerpt's `name`); `nopanel` drops the frame around it
     pub const INCLUDE: &str = "include";
+    /// A part of the page that other pages can include on its own (Confluence's `excerpt`):
+    /// `name` (optional, for several per page), `hidden` (shown only where it's included)
+    pub const EXCERPT: &str = "excerpt";
     pub const ANCHOR: &str = "anchor";
     pub const COLUMNS: &str = "columns";
     pub const COLUMN: &str = "column";

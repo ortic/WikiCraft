@@ -1,48 +1,29 @@
 import { t as tr } from '../i18n'
 import { useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { useEditor, EditorContent, ReactNodeViewRenderer, type Editor as TEditor } from '@tiptap/react'
+import { useEditor, EditorContent, type Editor as TEditor } from '@tiptap/react'
 import { BubbleMenu } from '@tiptap/react/menus'
 import TextStyleMenu from './TextStyleMenu'
 import DragHandle from '@tiptap/extension-drag-handle-react'
-import StarterKit from '@tiptap/starter-kit'
 import Collaboration from '@tiptap/extension-collaboration'
 import CollaborationCaret from '@tiptap/extension-collaboration-caret'
-import { TableKit, TableCell, TableHeader, Table, TableView } from '@tiptap/extension-table'
 import { CellSelection } from '@tiptap/pm/tables'
 import { NodeSelection } from '@tiptap/pm/state'
-import { TaskList, TaskItem } from '@tiptap/extension-list'
-import Image, { type ImageOptions } from '@tiptap/extension-image'
 import { Placeholder, CharacterCount } from '@tiptap/extensions'
-import { TextStyle, Color } from '@tiptap/extension-text-style'
-import Highlight from '@tiptap/extension-highlight'
-import { Details, DetailsSummary, DetailsContent } from '@tiptap/extension-details'
-import { Mathematics } from '@tiptap/extension-mathematics'
-import Mention from '@tiptap/extension-mention'
-import TextAlign from '@tiptap/extension-text-align'
-import { Indent } from './Indent'
-import Subscript from '@tiptap/extension-subscript'
-import Superscript from '@tiptap/extension-superscript'
-import { common, createLowlight } from 'lowlight'
 import * as Y from 'yjs'
 import { WebsocketProvider } from 'y-websocket'
 import 'katex/dist/katex.min.css'
 import { Bold, Italic, Underline, Strikethrough, Code, Link as LinkIcon, Link2, Highlighter, MessageSquarePlus, Heading2, List, GripVertical } from 'lucide-react'
 import type { Node as PMNode } from '@tiptap/pm/model'
 import { api, initials, userColor, type Attachment, type User } from '../api'
-import { AttachmentNode, Anchor, Callout, ChildPages, Column, Columns, CommentMark, DateNode, DecisionItem, DecisionList, Embed, Emoticon, Include, InstructionalText, Macro, Status, Toc } from './nodes'
+import { contentExtensions } from './extensions'
 import { EmoticonSuggest, PageLinkSuggest, SlashCommand, mentionSuggestion, slashItems } from './suggest'
-import { CodeBlock } from './CodeBlock'
-import { ImageView } from './ImageView'
 import { TableMenu } from './TableMenu'
 import { FindBar, FindReplace, findKey } from './FindReplace'
 import { HeadingIds } from './HeadingIds'
-import { Drawing } from './Drawing'
 import { BLOCK_ID_ATTR, BlockIds, blockAt, blockHash, revealAnchor } from './BlockIds'
 import { ChangeHighlights, setChangeHighlights } from './ChangeHighlights'
 import { useToast } from '../ui'
-
-const lowlight = createLowlight(common)
 
 /** Plain text that is probably Markdown: block syntax on some line, or inline emphasis/links. */
 export function looksLikeMarkdown(text: string): boolean {
@@ -77,80 +58,6 @@ function tsvTable(rows: string[][]) {
 function hasRichHtml(html: string): boolean {
   return /<(h[1-6]|ul|ol|li|table|p|strong|b|em|i|a|pre|blockquote|img)\b/i.test(html)
 }
-
-/** Table width (Confluence's `data-layout`): normal, `wide` or `full-width`, shown on the wrapper. */
-class LayoutTableView extends TableView {
-  constructor(...args: ConstructorParameters<typeof TableView>) {
-    super(...args)
-    this.sync(args[0])
-  }
-  /** width and row numbers live on the wrapper (the table element is the view's own) */
-  private sync(node: PMNode) {
-    const layout = node.attrs.layout as string | null
-    if (layout && layout !== 'default') this.dom.dataset.layout = layout
-    else delete this.dom.dataset.layout
-    if (node.attrs.numbered) this.dom.dataset.numbered = 'true'
-    else delete this.dom.dataset.numbered
-  }
-  update(node: PMNode) {
-    if (!super.update(node)) return false
-    this.sync(node)
-    return true
-  }
-}
-
-const LayoutTable = Table.extend({
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      layout: {
-        default: null,
-        parseHTML: (el: HTMLElement) => el.getAttribute('data-layout'),
-        renderHTML: (attrs: Record<string, unknown>) => (attrs.layout ? { 'data-layout': attrs.layout } : {}),
-      },
-      /** a number in front of every row with data cells */
-      numbered: {
-        default: null,
-        parseHTML: (el: HTMLElement) => (el.getAttribute('data-numbered') === 'true' || el.getAttribute('data-number-column') === 'true' ? true : null),
-        renderHTML: (attrs: Record<string, unknown>) => (attrs.numbered ? { 'data-numbered': 'true' } : {}),
-      },
-    }
-  },
-}).configure({ resizable: true, View: LayoutTableView })
-
-const withBackground = <T extends typeof TableCell>(ext: T) =>
-  ext.extend({
-    addAttributes() {
-      return {
-        ...this.parent?.(),
-        background: {
-          default: null,
-          parseHTML: (el: HTMLElement) => el.style.backgroundColor || el.getAttribute('data-background'),
-          renderHTML: (attrs: Record<string, unknown>) => (attrs.background ? { style: `background-color: ${attrs.background}`, 'data-background': attrs.background } : {}),
-        },
-      }
-    },
-  })
-
-const ImageExt = Image.extend<ImageOptions & { pageId: string }>({
-  addOptions() {
-    // the page, for the annotation tool's uploads
-    return { ...this.parent!(), pageId: '' }
-  },
-  addAttributes() {
-    return {
-      ...this.parent?.(),
-      width: { default: null, renderHTML: (a: Record<string, unknown>) => (a.width ? { width: a.width } : {}) },
-      align: { default: null },
-      caption: { default: null },
-      // a thin frame around screenshots on white backgrounds
-      border: { default: null, renderHTML: (a: Record<string, unknown>) => (a.border ? { 'data-border': 'true' } : {}) },
-    }
-  },
-  addNodeView() {
-    return ReactNodeViewRenderer(ImageView)
-  },
-})
 
 export interface Presence {
   clientId: number
@@ -215,51 +122,13 @@ export default function Editor({ pageId, user, editable, onPresence, onSynced, o
     {
       editable: false,
       extensions: [
-        StarterKit.configure({ undoRedo: false, codeBlock: false, link: { openOnClick: false, autolink: true, HTMLAttributes: { rel: 'noopener noreferrer' } } }),
+        ...contentExtensions(pageId, { mention: { suggestion: mentionSuggestion as never } }),
         Collaboration.configure({ document: ydoc, field: 'default' }),
         CollaborationCaret.configure({ provider, user: me }),
-        CodeBlock.configure({ lowlight }),
-        TableKit.configure({ table: false, tableCell: false, tableHeader: false }),
-        LayoutTable,
-        withBackground(TableCell),
-        withBackground(TableHeader as unknown as typeof TableCell),
-        TaskList,
-        TaskItem.configure({ nested: true }),
-        ImageExt.configure({ inline: true, allowBase64: false, pageId }),
         Placeholder.configure({ placeholder: ({ node }) => (node.type.name === 'heading' ? tr('Heading') : tr('Type \'/\' for commands, \'@\' to mention someone')) }),
         CharacterCount,
-        TextStyle,
-        Color,
-        Highlight.configure({ multicolor: true }),
-        TextAlign.configure({ types: ['heading', 'paragraph'] }),
-        Indent,
-        Subscript,
-        Superscript,
-        Details.configure({ persist: true, HTMLAttributes: { class: 'details' } }),
-        DetailsSummary,
-        DetailsContent,
-        Mathematics,
-        Mention.configure({ HTMLAttributes: { class: 'mention' }, suggestion: mentionSuggestion as never, renderText: ({ node }) => `@${node.attrs.label ?? ''}` }),
-        Callout,
-        Status,
-        InstructionalText,
-        Emoticon,
-        DateNode,
-        AttachmentNode,
-        Embed,
-        Toc,
-        ChildPages.configure({ pageId }),
-        Include,
-        Anchor,
-        Columns,
-        Column,
-        DecisionList,
-        DecisionItem,
-        Macro.configure({ pageId }),
-        Drawing.configure({ pageId }),
         PageLinkSuggest.configure({ pageId }),
         EmoticonSuggest,
-        CommentMark,
         FindReplace,
         HeadingIds,
         BlockIds,

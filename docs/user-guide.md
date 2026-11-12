@@ -53,6 +53,10 @@ jump to where they are.
   note, success, warning, error), expand blocks, code, Mermaid diagrams, drawings, images,
   files, embeds and link previews, table of contents, child pages, columns, status, dates, math,
   decisions and a decision log, task reports.
+- **Include page** shows another page's content inside this one, always the current version, or
+  only its **excerpt**: wrap the text other pages should reuse with `/excerpt` (give excerpts
+  names when a page has several; *Only where it's included* hides one on its own page). Readers
+  see what they may open: a page they can't open shows "Page not available".
 - Markdown shortcuts work as you type: `#`, `##`, `-`, `1.`, `[]`, `>`, ```` ``` ````, `---`.
 - **`@`** mentions a person (they are notified) or, from two letters on, links a page.
 - **`[[`** links a page (or creates it), `[[#` a heading on this page; attachments too.

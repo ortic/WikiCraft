@@ -46,7 +46,7 @@ It works the same for Confluence Server, Data Center and Cloud exports.
 | children, pagetree, pagetreesearch | Child pages list (live; sort, reverse, first N, heading style; a search box for pagetreesearch) |
 | livesearch | Search box (limited to the space / label it names) |
 | create-from-template | A button that creates a page below the current one (Confluence's blueprints map to the built-in templates) |
-| include, excerpt, excerpt-include | Included page / excerpt |
+| include, excerpt, excerpt-include | Included page (live, read-only) / excerpt block with name and *hidden*; excerpt-include by name, `nopanel` kept |
 | status | Status lozenge |
 | anchor | Anchor (links to `#anchor` keep working) |
 | view-file, viewpdf, viewdoc, … | File block with preview |

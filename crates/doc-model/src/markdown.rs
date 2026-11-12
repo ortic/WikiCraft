@@ -532,6 +532,8 @@ impl MdWriter {
                 let title = n.attr_str("title").unwrap_or("page").replace("--", "–");
                 self.line(prefix, &format!("<!-- included page: {title} -->"));
             }
+            nodes::EXCERPT if n.attr_bool("hidden") == Some(true) => {}
+            nodes::EXCERPT => self.blocks(&n.content, prefix),
             nodes::ATTACHMENT => {
                 let name = n.attr_str("name").unwrap_or("attachment");
                 let href = n.attr_str("href").unwrap_or("");

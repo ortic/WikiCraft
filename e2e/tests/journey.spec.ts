@@ -439,6 +439,44 @@ test('a search box and a create-page button inside a page', async ({ browser }) 
   await ctx.close()
 })
 
+test('a page includes another one, or only its excerpt, and shows its changes', async ({ browser }) => {
+  const ctx = await browser.newContext({ storageState: ownerState })
+  const page = await ctx.newPage()
+  await page.goto('/')
+  const para = (text: string) => ({ type: 'paragraph', content: [{ type: 'text', text }] })
+  const create = (title: string, content: unknown) =>
+    page.evaluate(async ([title, content]) => {
+      const r = await fetch('/api/pages', { method: 'POST', headers: { 'content-type': 'application/json', 'x-wikicraft': '1' }, body: JSON.stringify({ spaceKey: 'PRODUCT', title, ...(content ? { content } : { blank: true }) }) })
+      return (await r.json()).id as string
+    }, [title, content] as const)
+  const checklist = (step: string) => ({ type: 'doc', content: [para('Before anything else:'), { type: 'excerpt', content: [para(step)] }, para('Then tag the release.')] })
+  const source = await create('Release checklist', checklist('Freeze the main branch.'))
+  const host = await create('Release day', null)
+  await expect.poll(() => page.evaluate(async () => (await (await fetch('/api/search?q=release%20checklist', { headers: { 'x-wikicraft': '1' } })).json()).length)).toBeGreaterThan(0)
+
+  await page.goto(`/pages/${host}`)
+  const editor = page.locator('.ProseMirror[contenteditable="true"]')
+  await expect(editor).toBeVisible({ timeout: 20_000 })
+  await editor.click()
+  await page.keyboard.type('/include')
+  await page.keyboard.press('Enter')
+  await page.getByLabel('Find the page to include').fill('release checklist')
+  await page.locator('.include-hits button', { hasText: 'Release checklist' }).click()
+  const included = page.locator('.include-block .included-content')
+  await expect(included).toContainText('Then tag the release.')
+  await expect(included).toContainText('Freeze the main branch.')
+  // only the excerpt
+  await page.getByLabel('What to include').selectOption('excerpt')
+  await expect(included).toHaveText('Freeze the main branch.')
+  // the included page changes: the next visit shows the new text
+  await page.evaluate(async ([id, content]) => {
+    await fetch(`/api/pages/${id}/content`, { method: 'PUT', headers: { 'content-type': 'application/json', 'x-wikicraft': '1' }, body: JSON.stringify({ content }) })
+  }, [source, checklist('Freeze main and announce it.')] as const)
+  await page.reload()
+  await expect(page.locator('.include-block .included-content')).toHaveText('Freeze main and announce it.', { timeout: 20_000 })
+  await ctx.close()
+})
+
 test('history compares two versions word by word, inline or side by side', async ({ browser }) => {
   const ctx = await browser.newContext({ storageState: ownerState })
   const page = await ctx.newPage()

@@ -2,18 +2,19 @@
 // so documents imported from Confluence or written via the API load without loss.
 
 import { t as tr } from '../i18n'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Mark, Node, mergeAttributes } from '@tiptap/core'
-import { NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, type ReactNodeViewProps } from '@tiptap/react'
+import { EditorContent, NodeViewContent, NodeViewWrapper, ReactNodeViewRenderer, useEditor, type ReactNodeViewProps } from '@tiptap/react'
 import { useQuery } from '@tanstack/react-query'
 import { Link } from 'react-router-dom'
-import { FileText, Paperclip, ListTree, Hash, Puzzle, Link2, Download, Settings2, Code2 } from 'lucide-react'
+import { FileText, Paperclip, ListTree, Hash, Puzzle, Link2, Download, Settings2, Code2, Scissors } from 'lucide-react'
 import { api, formatDateOnly, type Page, type PmNode } from '../api'
 import { Spinner } from '../ui'
 import { Emoticon as EmoticonIcon, LineIcon, SYMBOL_COLORS, SymbolPicker, parseSymbol } from '../icons'
 import { LIVE_MACROS, LiveMacro } from './MacroView'
 import { useEditable } from './useEditable'
 import { tocEntries, type TocAttrs, type TocEntry } from './toc'
+import { contentExtensions } from './extensions'
 
 const CALLOUT_TYPES = ['info', 'note', 'success', 'warning', 'error']
 
@@ -570,38 +571,170 @@ export const ChildPages = Node.create<{ pageId: string }>({
   },
 })
 
-function plainExcerpt(doc: PmNode, max = 600): string {
-  const parts: string[] = []
+/** How many pages deep includes go (a page including one that includes another …). */
+const MAX_INCLUDE_DEPTH = 4
+
+/** The excerpt to show: the one named `which`, else the first; null when the page has none. */
+function findExcerpt(doc: PmNode, which: true | string): PmNode | null {
+  const all: PmNode[] = []
   const walk = (n: PmNode) => {
-    if (n.text) parts.push(n.text)
-    n.content?.forEach(walk)
-    if (['paragraph', 'heading', 'listItem'].includes(n.type)) parts.push('\n')
+    if (n.type === 'excerpt') all.push(n)
+    else n.content?.forEach(walk)
   }
   walk(doc)
-  const s = parts.join('').replace(/\n{2,}/g, '\n').trim()
-  return s.length > max ? s.slice(0, max) + '…' : s
+  const hit = (typeof which === 'string' && all.find((e) => (e.attrs?.name as string | undefined)?.toLowerCase() === which.toLowerCase())) || all[0]
+  return hit ? { type: 'doc', content: hit.content ?? [] } : null
 }
 
-function IncludeView({ node }: ReactNodeViewProps) {
-  const pageId = node.attrs.pageId as string | null
-  const q = useQuery({ queryKey: ['page', pageId], queryFn: () => api.get<Page>(`/pages/${pageId}`), enabled: !!pageId, retry: false })
+/** The first paragraph with text: what stands in for an excerpt on pages that don't mark one. */
+function firstParagraph(doc: PmNode): PmNode | null {
+  const hasText = (n: PmNode): boolean => !!n.text?.trim() || !!n.content?.some(hasText)
+  const p = doc.content?.find((n) => n.type === 'paragraph' && hasText(n))
+  return p ? { type: 'doc', content: [p] } : null
+}
+
+/** Content shown inside another page: the other page's comments stay on that page. */
+function withoutComments(n: PmNode): PmNode {
+  return { ...n, marks: n.marks?.filter((m) => m.type !== 'comment'), content: n.content?.map(withoutComments) }
+}
+
+/** Another page's content, read-only, with the same blocks and macros as the page itself. */
+function IncludedContent({ pageId, doc, chain }: { pageId: string; doc: PmNode; chain: string[] }) {
+  const json = JSON.stringify(doc)
+  const editor = useEditor(
+    {
+      editable: false,
+      extensions: contentExtensions(pageId, { chain, readOnly: true }),
+      content: JSON.parse(json),
+      enableContentCheck: true,
+      onContentError: () => {},
+      editorProps: { attributes: { class: 'included-content', 'aria-label': tr('Included content') } },
+    },
+    [pageId, chain.join('/')],
+  )
+  useEffect(() => {
+    if (editor && !editor.isDestroyed && JSON.stringify(editor.getJSON()) !== json) editor.commands.setContent(JSON.parse(json), { emitUpdate: false })
+  }, [editor, json])
+  // the page around is an editor too: its drag handle and block links are for its own blocks,
+  // not for the paragraphs of the included page
+  const box = useRef<HTMLDivElement>(null)
+  useEffect(() => {
+    const el = box.current
+    if (!el) return
+    const stop = (e: Event) => e.stopPropagation()
+    el.addEventListener('mousemove', stop)
+    return () => el.removeEventListener('mousemove', stop)
+  }, [])
   return (
-    <NodeViewWrapper className="block-card" contentEditable={false}>
-      <div className="block-label">
-        <FileText size={13} /> {node.attrs.excerpt ? tr('Excerpt from') : tr('Included page')}{' '}
-        {pageId ? <Link to={`/pages/${pageId}`}>{q.data?.title ?? (node.attrs.title as string)}</Link> : <span>{node.attrs.title as string}</span>}
-      </div>
-      {q.data ? <div style={{ whiteSpace: 'pre-wrap' }}>{plainExcerpt(q.data.content)}</div> : q.isError ? <div className="faint small">{tr('Page not available.')}</div> : null}
+    <div ref={box}>
+      <EditorContent editor={editor} />
+    </div>
+  )
+}
+
+interface IncludeHit {
+  pageId: string
+  title: string
+  spaceName: string
+}
+
+/** Choosing the page to include, by title. */
+function IncludePicker({ onPick }: { onPick: (hit: IncludeHit) => void }) {
+  const [q, setQ] = useState('')
+  const term = q.trim()
+  const hits = useQuery({ queryKey: ['include-search', term], queryFn: () => api.get<IncludeHit[]>(`/search?q=${encodeURIComponent(term)}`), enabled: term.length >= 2 })
+  return (
+    <div className="include-picker">
+      <input className="input input-sm" autoFocus placeholder={tr('Find the page to include')} aria-label={tr('Find the page to include')} value={q} onChange={(e) => setQ(e.target.value)} />
+      {(hits.data?.length ?? 0) > 0 && (
+        <ul className="include-hits">
+          {hits.data!.slice(0, 8).map((h) => (
+            <li key={h.pageId}>
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => onPick(h)}>
+                <b>{h.title}</b> <span className="faint small">{h.spaceName}</span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
+function IncludeView({ node, editor, extension, updateAttributes }: ReactNodeViewProps) {
+  const editable = useEditable(editor)
+  const pageId = node.attrs.pageId as string | null
+  const excerpt = node.attrs.excerpt as boolean | string | null
+  const nopanel = !!node.attrs.nopanel
+  // the pages around this content, outermost first (this page last)
+  const chain = (extension.options.chain as string[]) ?? []
+  const looped = !!pageId && (chain.includes(pageId) || chain.length >= MAX_INCLUDE_DEPTH)
+  const [picking, setPicking] = useState(false)
+  const q = useQuery({ queryKey: ['page', pageId], queryFn: () => api.get<Page>(`/pages/${pageId}`), enabled: !!pageId && !looped, retry: false })
+  let body: PmNode | null = null
+  let note: string | null = null
+  if (q.data) {
+    if (excerpt) {
+      body = findExcerpt(q.data.content, excerpt === true || excerpt === 'true' ? true : String(excerpt))
+      if (!body) {
+        body = firstParagraph(q.data.content)
+        if (editable) note = tr('That page marks no excerpt: its first paragraph stands in.')
+      }
+    } else {
+      body = q.data.content
+    }
+  }
+  const title = q.data?.title ?? (node.attrs.title as string)
+  const showLabel = editable || !nopanel
+  return (
+    <NodeViewWrapper className={showLabel ? 'block-card include-block' : 'include-block include-plain'} contentEditable={false}>
+      {showLabel && (
+        <div className="block-label row">
+          <FileText size={13} /> {excerpt ? tr('Excerpt from') : tr('Included page')}{' '}
+          {pageId ? <Link to={`/pages/${pageId}`}>{title}</Link> : <span>{title || tr('(no page chosen)')}</span>}
+          {editable && (
+            <span className="include-tools">
+              {pageId && (
+                <select className="input input-sm" aria-label={tr('What to include')} value={excerpt ? 'excerpt' : 'page'} onChange={(e) => updateAttributes({ excerpt: e.target.value === 'excerpt' ? true : null })}>
+                  <option value="page">{tr('Whole page')}</option>
+                  <option value="excerpt">{tr('Excerpt only')}</option>
+                </select>
+              )}
+              <button type="button" className="btn btn-ghost btn-sm" onClick={() => setPicking((v) => !v)}>{pageId ? tr('Change page') : tr('Choose page')}</button>
+            </span>
+          )}
+        </div>
+      )}
+      {editable && (picking || !pageId) && (
+        <IncludePicker onPick={(h) => { updateAttributes({ pageId: h.pageId, title: h.title, href: null }); setPicking(false) }} />
+      )}
+      {looped ? (
+        <div className="faint small">{tr('This page is already shown above, so it isn’t included again.')}</div>
+      ) : q.isLoading ? (
+        <Spinner />
+      ) : q.isError ? (
+        <div className="faint small">{tr('Page not available.')}</div>
+      ) : body && pageId ? (
+        <>
+          {note && <div className="faint small">{note}</div>}
+          <IncludedContent pageId={pageId} doc={withoutComments(body)} chain={[...chain, pageId]} />
+        </>
+      ) : excerpt && q.data ? (
+        <div className="faint small">{tr('That page has no text to show here yet.')}</div>
+      ) : null}
     </NodeViewWrapper>
   )
 }
 
-export const Include = Node.create({
+export const Include = Node.create<{ chain: string[] }>({
   name: 'include',
   group: 'block',
   atom: true,
+  addOptions() {
+    return { chain: [] }
+  },
   addAttributes() {
-    return { pageId: { default: null }, href: { default: null }, title: { default: '' }, excerpt: { default: null } }
+    return { pageId: { default: null }, href: { default: null }, title: { default: '' }, excerpt: { default: null }, nopanel: { default: null } }
   },
   parseHTML() {
     return [{ tag: 'div[data-type="include"]' }]
@@ -611,6 +744,55 @@ export const Include = Node.create({
   },
   addNodeView() {
     return ReactNodeViewRenderer(IncludeView)
+  },
+})
+
+function ExcerptView({ node, editor, updateAttributes }: ReactNodeViewProps) {
+  const editable = useEditable(editor)
+  const name = (node.attrs.name as string | null) ?? ''
+  const hidden = !!node.attrs.hidden
+  if (!editable) {
+    // readers see the text as part of the page (or not at all when it's only for other pages)
+    return (
+      <NodeViewWrapper className="excerpt-block" style={hidden ? { display: 'none' } : undefined}>
+        <NodeViewContent />
+      </NodeViewWrapper>
+    )
+  }
+  return (
+    <NodeViewWrapper className="excerpt-block excerpt-editing">
+      <div className="block-label row" contentEditable={false}>
+        <Scissors size={13} /> {name ? tr('Excerpt “{name}”', { name }) : tr('Excerpt')}
+        <span className="include-tools">
+          <label className="small row" style={{ gap: 4 }}>
+            <input type="checkbox" checked={hidden} onChange={(e) => updateAttributes({ hidden: e.target.checked || null })} />
+            {tr('Only where it’s included')}
+          </label>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={() => { const n = window.prompt(tr('Name of this excerpt (for pages with more than one)'), name); if (n !== null) updateAttributes({ name: n.trim() || null }) }}>{tr('Name')}</button>
+        </span>
+      </div>
+      <NodeViewContent />
+    </NodeViewWrapper>
+  )
+}
+
+/** A part of the page other pages can include on its own (Confluence's excerpt). */
+export const Excerpt = Node.create({
+  name: 'excerpt',
+  group: 'block',
+  content: 'block+',
+  defining: true,
+  addAttributes() {
+    return { name: { default: null }, hidden: { default: null } }
+  },
+  parseHTML() {
+    return [{ tag: 'div[data-type="excerpt"]' }]
+  },
+  renderHTML({ HTMLAttributes }) {
+    return ['div', mergeAttributes(HTMLAttributes, { 'data-type': 'excerpt' }), 0]
+  },
+  addNodeView() {
+    return ReactNodeViewRenderer(ExcerptView)
   },
 })
 

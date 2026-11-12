@@ -30,6 +30,10 @@ input_file: crates/confluence/tests/golden/macros.xml
       "partial"
     ],
     "excerpt": [
+      2,
+      "native"
+    ],
+    "excerpt-include": [
       1,
       "native"
     ],
@@ -102,8 +106,8 @@ input_file: crates/confluence/tests/golden/macros.xml
       "native"
     ]
   },
-  "page_links": 1,
-  "page_links_resolved": 1
+  "page_links": 2,
+  "page_links_resolved": 2
 }
 
 ## prosemirror
@@ -364,13 +368,45 @@ input_file: crates/confluence/tests/golden/macros.xml
       }
     },
     {
-      "type": "paragraph",
+      "type": "excerpt",
       "content": [
         {
-          "type": "text",
-          "text": "The short version."
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "The short version."
+            }
+          ]
         }
       ]
+    },
+    {
+      "type": "excerpt",
+      "attrs": {
+        "hidden": true,
+        "name": "pricing"
+      },
+      "content": [
+        {
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Hidden here, shown where included."
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "type": "include",
+      "attrs": {
+        "excerpt": "pricing",
+        "nopanel": true,
+        "pageRef": "wcimport:page/200",
+        "title": "Other Page"
+      }
     },
     {
       "type": "paragraph",
@@ -599,6 +635,9 @@ Anchored paragraph.
 
 The short version.
 
+
+<!-- included page: Other Page -->
+
 `OPS-42`
 
 ```mermaid
@@ -710,7 +749,10 @@ kept body
 <div class="child-pages" data-type="childPages">
 </div>
 <div class="include" data-page-id="">Included page: Other Page</div>
+<div class="excerpt">
 <p>The short version.</p>
+</div>
+<div class="include" data-page-id="">Included page: Other Page</div>
 <p>
 <code>OPS-42</code>
 </p>
