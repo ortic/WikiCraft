@@ -46,7 +46,7 @@ life (2029-03-28).
 - REST API with an OpenAPI 3.1 description, webhooks (JSON, Slack / Mattermost, Microsoft Teams, Google Chat)
 - Built-in [MCP](https://modelcontextprotocol.io) server: Claude & co. search, query, read and write pages with the user's permissions
 - Retrieval API for RAG: the passages that best answer a question (sections of pages and attached files, cut along headings), hybrid keyword + semantic ranking, permission-filtered, each with a link to the exact block; semantic part optional with any OpenAI-compatible embeddings API (OpenAI, Ollama, vLLM, Voyage, …) and pgvector
-- *Ask the wiki*: answers from the pages a person can see, with sources (optional, needs an Anthropic API key)
+- *Ask the wiki*: answers from the pages a person can see, with sources (optional: Claude, or any model behind an OpenAI-compatible API, also one running in your own network such as Ollama or vLLM)
 
 **Interface and administration**
 
@@ -196,8 +196,11 @@ All settings are flags or environment variables:
 | `WIKICRAFT_MAIL_FROM` | `WikiCraft <wikicraft@localhost>` | sender address |
 | `WIKICRAFT_WEBHOOK_ALLOW_PRIVATE` | `false` | let webhooks call private / loopback addresses |
 | `WIKICRAFT_UNFURL_ALLOW_PRIVATE` | `false` | let link previews fetch private / loopback addresses (closed intranets only) |
-| `WIKICRAFT_AI_API_KEY` | — | Anthropic API key: turns on *Ask the wiki* (off when unset; nothing leaves the server) |
-| `WIKICRAFT_AI_MODEL` / `WIKICRAFT_AI_BASE_URL` | `claude-opus-5-5` / `https://api.anthropic.com` | model and API endpoint (e.g. a gateway) for *Ask the wiki* |
+| `WIKICRAFT_AI_PROVIDER` | — | the model behind *Ask the wiki*: `anthropic` (Claude) or `openai-compatible` (any server with an OpenAI-compatible chat API: Ollama, vLLM, llama.cpp's server, LM Studio, LocalAI, hosted services). Unset: `anthropic` when a key is set, `openai-compatible` when only a base URL is set, otherwise off (nothing leaves the server) |
+| `WIKICRAFT_AI_API_KEY` | — | API key: required for Anthropic; sent as a bearer token to an OpenAI-compatible server when set (a local model usually needs none) |
+| `WIKICRAFT_AI_MODEL` | `claude-opus-5-5` (Anthropic) | model; required for an OpenAI-compatible server, e.g. `llama3.1` |
+| `WIKICRAFT_AI_BASE_URL` | `https://api.anthropic.com` (Anthropic) | API address: a gateway in front of Anthropic, or the OpenAI-compatible server's `/v1` address, e.g. `http://ollama:11434/v1` |
+| `WIKICRAFT_AI_TIMEOUT_SECS` | `180` | how long an answer may take |
 | `WIKICRAFT_EMBEDDINGS_URL` / `WIKICRAFT_EMBEDDINGS_MODEL` | — | OpenAI-compatible embeddings API and model: turns on semantic retrieval (e.g. `https://api.openai.com/v1` + `text-embedding-3-small`, or Ollama's `http://localhost:11434/v1` + `nomic-embed-text`); needs pgvector ≥ 0.7. Off when unset: keyword retrieval only, nothing leaves the server |
 | `WIKICRAFT_EMBEDDINGS_API_KEY` | — | bearer token for the embeddings API |
 | `WIKICRAFT_EMBEDDINGS_DIMENSIONS` | — | ask for shorter vectors (models that support it, like `text-embedding-3-*`); at most 4000 |
@@ -371,11 +374,36 @@ through the same authorization checks as the UI. Give an assistant that should o
 
 ## Ask the wiki
 
-With `WIKICRAFT_AI_API_KEY` set, the search page offers *Ask the wiki*: the question goes through
-the retrieval above (hybrid when embeddings are configured), the best passages are sent to
-Claude, and the answer comes back with numbered citations linking to the exact sections. Only
+With a model set up, the search page offers *Ask the wiki*: the question goes through the
+retrieval above (hybrid when embeddings are configured), the best passages are sent to the
+model, and the answer comes back with numbered citations linking to the exact sections. Only
 pages the asker can open are ever sent; page text is passed as data, not instructions. Questions
 are rate limited per person (20 per 10 minutes).
+
+The model can be Claude or any model behind an OpenAI-compatible chat API, also one running in
+your own network, so that no page text leaves it:
+
+```sh
+# Claude
+WIKICRAFT_AI_API_KEY=sk-ant-…
+
+# a model in your own network (Ollama, vLLM, llama.cpp's server, LM Studio, LocalAI)
+WIKICRAFT_AI_PROVIDER=openai-compatible
+WIKICRAFT_AI_BASE_URL=http://ollama:11434/v1
+WIKICRAFT_AI_MODEL=llama3.1
+
+# another hosted service with an OpenAI-compatible API
+WIKICRAFT_AI_PROVIDER=openai-compatible
+WIKICRAFT_AI_BASE_URL=https://…/v1
+WIKICRAFT_AI_MODEL=…
+WIKICRAFT_AI_API_KEY=…
+```
+
+Up to 24,000 characters of excerpts go with each question, so give a local model room for them:
+Ollama's default context can be shorter and cuts longer prompts without a word (e.g.
+`OLLAMA_CONTEXT_LENGTH=16384`). Reasoning that some models write before their answer
+(`<think>…</think>`) is left out. *Administration → Overview → System* shows which model answers
+and whether it runs in your own network.
 
 ## License
 

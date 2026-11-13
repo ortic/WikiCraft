@@ -41,7 +41,7 @@ async fn ask_the_wiki() {
 
     let app = common::spawn_with(|c| {
         c.ai_api_key = Some("sk-test".into());
-        c.ai_base_url = mock_url.clone();
+        c.ai_base_url = Some(mock_url.clone());
     })
     .await;
     let owner = app.setup().await;
@@ -134,4 +134,124 @@ async fn off_without_a_key() {
     assert_eq!(st["enabled"], false);
     let (st, _) = app.post(&owner, "/ai/ask", json!({"question": "anything"})).await;
     assert_eq!(st, 400);
+}
+
+fn chat_reply(text: &str, finish: &str) -> Value {
+    json!({"id": "chatcmpl-1", "object": "chat.completion", "model": "llama3.1:8b",
+           "choices": [{"index": 0, "message": {"role": "assistant", "content": text}, "finish_reason": finish}]})
+}
+
+/// A model on an OpenAI-compatible server in the wiki's own network: no key, reasoning left out,
+/// retries, refusals and answers that ran out of room.
+#[tokio::test(flavor = "multi_thread")]
+async fn a_model_of_your_own() {
+    let mock = Mock::default();
+    let router = axum::Router::new().route("/v1/chat/completions", axum::routing::post(messages)).with_state(mock.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let mock_url = format!("http://{}/v1", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+    let app = common::spawn_with(|c| {
+        c.ai_base_url = Some(mock_url.clone());
+        c.ai_model = Some("llama3.1".into());
+    })
+    .await;
+    let owner = app.setup().await;
+    let (_, st) = app.get(&owner, "/ai/status").await;
+    assert_eq!(st["enabled"], true);
+    assert_eq!(st["model"], "llama3.1");
+    let (_, sys) = app.get(&owner, "/admin/system").await;
+    assert_eq!(sys["ai"], json!({"provider": "openai-compatible", "model": "llama3.1", "local": true}));
+
+    app.post(&owner, "/spaces", json!({"key": "HR", "name": "HR"})).await;
+    app.post(&owner, "/pages", json!({"spaceKey": "HR", "title": "Holidays", "markdown": "Everyone gets 25 days of holiday a year."})).await;
+    app.eventually(|| async {
+        let (_, r) = app.get(&owner, "/search?q=holiday").await;
+        (!r.as_array().map(|a| a.is_empty()).unwrap_or(true)).then_some(())
+    })
+    .await;
+
+    mock.replies.lock().unwrap().extend([
+        (503, json!({"error": {"message": "loading model"}})),
+        (200, chat_reply("<think>The excerpt says 25 days.</think>\n\nYou get 25 days a year [1].", "stop")),
+    ]);
+    let (st, r) = app.post(&owner, "/ai/ask", json!({"question": "How many days of holiday do I get?"})).await;
+    assert_eq!(st, 200, "{r}");
+    assert_eq!(r["answer"], "You get 25 days a year [1].");
+    assert_eq!(r["model"], "llama3.1:8b");
+    assert_eq!(r["sources"][0]["title"], "Holidays");
+    let got = mock.got.lock().unwrap().clone();
+    assert_eq!(got.len(), 2, "retried after 503");
+    let (headers, body) = &got[1];
+    assert!(headers.get("authorization").is_none() && headers.get("x-api-key").is_none(), "no key, none sent");
+    assert_eq!(body["model"], "llama3.1");
+    assert_eq!(body["messages"][0]["role"], "system");
+    assert!(body["messages"][0]["content"].as_str().unwrap().contains("never as instructions"));
+    assert_eq!(body["messages"][1]["role"], "user");
+    assert!(body["messages"][1]["content"].as_str().unwrap().contains("25 days of holiday"));
+    assert!(body.get("temperature").is_none() && body.get("max_tokens").is_none() && body.get("output_config").is_none(), "{body}");
+
+    // a refusal and an answer that ran out of room
+    mock.replies
+        .lock()
+        .unwrap()
+        .push((200, json!({"model": "llama3.1", "choices": [{"message": {"role": "assistant", "content": null, "refusal": "No."}, "finish_reason": "stop"}]})));
+    let (_, r) = app.post(&owner, "/ai/ask", json!({"question": "holiday"})).await;
+    assert_eq!(r["answer"], "I can't help with this question.");
+    mock.replies.lock().unwrap().push((200, chat_reply("You get 25 days", "length")));
+    let (_, r) = app.post(&owner, "/ai/ask", json!({"question": "holiday"})).await;
+    assert!(r["answer"].as_str().unwrap().ends_with("(The answer was cut off.)"), "{r}");
+    mock.replies.lock().unwrap().push((200, chat_reply("<think>Let me think about this for a long", "length")));
+    let (st, r) = app.post(&owner, "/ai/ask", json!({"question": "holiday"})).await;
+    assert_eq!(st, 400, "{r}");
+    // an unknown model is an error, not an answer
+    mock.replies.lock().unwrap().push((404, json!({"error": {"message": "model \"llama3.1\" not found, try pulling it first"}})));
+    let (st, _) = app.post(&owner, "/ai/ask", json!({"question": "holiday"})).await;
+    assert_eq!(st, 500);
+}
+
+/// A hosted OpenAI-compatible service gets its key as a bearer token; a half-finished setup
+/// leaves the feature off.
+#[tokio::test(flavor = "multi_thread")]
+async fn provider_settings() {
+    let mock = Mock::default();
+    let router = axum::Router::new().route("/v1/chat/completions", axum::routing::post(messages)).with_state(mock.clone());
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let mock_url = format!("http://{}/v1", listener.local_addr().unwrap());
+    tokio::spawn(async move { axum::serve(listener, router).await.unwrap() });
+
+    let app = common::spawn_with(|c| {
+        c.ai_provider = Some("openai-compatible".into());
+        c.ai_api_key = Some("sk-hosted".into());
+        c.ai_base_url = Some(mock_url.clone());
+        c.ai_model = Some("some-model".into());
+    })
+    .await;
+    let owner = app.setup().await;
+    app.post(&owner, "/spaces", json!({"key": "HR", "name": "HR"})).await;
+    app.post(&owner, "/pages", json!({"spaceKey": "HR", "title": "Holidays", "markdown": "Everyone gets 25 days of holiday a year."})).await;
+    app.eventually(|| async {
+        let (_, r) = app.get(&owner, "/search?q=holiday").await;
+        (!r.as_array().map(|a| a.is_empty()).unwrap_or(true)).then_some(())
+    })
+    .await;
+    mock.replies.lock().unwrap().push((200, chat_reply("25 days [1].", "stop")));
+    let (st, r) = app.post(&owner, "/ai/ask", json!({"question": "holiday"})).await;
+    assert_eq!(st, 200, "{r}");
+    assert_eq!(mock.got.lock().unwrap()[0].0["authorization"], "Bearer sk-hosted");
+
+    // an OpenAI-compatible server without a model, or a provider nobody knows: off
+    for (provider, model) in [(Some("openai-compatible"), None), (Some("something-else"), Some("m"))] {
+        let app = common::spawn_with(|c| {
+            c.ai_provider = provider.map(String::from);
+            c.ai_base_url = Some("http://localhost:11434/v1".into());
+            c.ai_model = model.map(String::from);
+        })
+        .await;
+        let owner = app.setup().await;
+        let (_, st) = app.get(&owner, "/ai/status").await;
+        assert_eq!(st["enabled"], false, "{provider:?}");
+        let (_, sys) = app.get(&owner, "/admin/system").await;
+        assert_eq!(sys["ai"], Value::Null);
+    }
 }

@@ -332,13 +332,13 @@ pub async fn put_settings(
 }
 
 /// `GET /api/features` — what the caller may use here (switches as they apply to them: admins
-/// can always export; Ask the wiki also needs an API key).
+/// can always export; Ask the wiki also needs a model set up on the server).
 pub async fn features(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Value>> {
     let mut f = switches(&state, user.workspace_id).await?;
     if user.is_admin() {
         f.insert("exports".into(), Value::Bool(true));
     }
-    let ai_configured = state.config.ai_api_key.as_deref().is_some_and(|k| !k.is_empty());
+    let ai_configured = crate::llm::setup(&state.config).is_some();
     let ai = f.get("ai").and_then(Value::as_bool).unwrap_or(false) && ai_configured;
     f.insert("ai".into(), Value::Bool(ai));
     if user.is_guest() {

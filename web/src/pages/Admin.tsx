@@ -277,6 +277,8 @@ interface SystemState {
     pagesPending: number
     semantic: { configured: boolean; model?: string; dims?: number | null; embedded?: number; pending?: number; error?: string | null }
   } | null
+  /** the model behind Ask the wiki (null: none set up) */
+  ai?: { provider: 'anthropic' | 'openai-compatible'; model: string; local: boolean } | null
   mail: { enabled: boolean }
   virusScan?: { enabled: boolean; failOpen: boolean }
   storage: { backend: string }
@@ -285,6 +287,15 @@ interface SystemState {
 }
 
 /** Passages for AI applications and, when configured, how far their embedding has come. */
+/** Which model answers Ask the wiki, and whether it runs in the wiki's own network. */
+function aiSummary(a: SystemState['ai']): string {
+  if (!a) return tr('off (no AI model set up: WIKICRAFT_AI_PROVIDER)')
+  if (a.local) return tr('{model}, running in your own network: nothing leaves it', { model: a.model })
+  return a.provider === 'anthropic'
+    ? tr('{model} through the Anthropic API', { model: a.model })
+    : tr('{model} on an OpenAI-compatible service outside your network', { model: a.model })
+}
+
 function retrievalSummary(r: SystemState['retrieval']): React.ReactNode {
   if (!r) return '?'
   const passages = tr('{passages} passages from {pages} pages', { passages: r.passages, pages: r.pages }) + (r.pagesPending ? ' ' + tr('({count} pages waiting)', { count: r.pagesPending }) : '')
@@ -314,6 +325,7 @@ function SystemInfo() {
       `${s.search.backend}${s.search.language ? ' · ' + (s.search.language === 'none' ? tr('no word forms') : tr('word forms: {language}', { language: languageName(s.search.language) })) : ''} · ${s.search.indexed ?? '?'} of ${s.search.pages} pages indexed${s.search.rebuilding ? ' ' + tr('(rebuilding)') : behind ? ' ' + tr('(catching up, or rebuild the index)') + '' : ''}`,
     ],
     [tr('Retrieval (AI)'), retrievalSummary(s.retrieval)],
+    [tr('Ask the wiki'), aiSummary(s.ai)],
     ['E-mail', s.mail.enabled ? 'configured' : tr('off (WIKICRAFT_SMTP_URL not set)')],
     [tr('File storage'), s.storage.backend],
     [tr('Virus scanning'), s.virusScan?.enabled ? `ClamAV${s.virusScan.failOpen ? ' ' + tr('(files pass when it is down)') + '' : ''}` : tr('off (WIKICRAFT_CLAMAV not set)')],
@@ -483,8 +495,8 @@ function WorkspaceSettings() {
         <input type="checkbox" checked={s.exports} onChange={(e) => set('exports', e.target.checked, e.target.checked ? tr('Everyone can export pages and spaces') : tr('Exports are limited to administrators'))} />{tr('Allow exports (Word, Markdown, HTML, PDF and space archives)')}</label>
       <p className="faint small" style={{ margin: '2px 0 12px 24px' }}>{tr('When off, only administrators can export and the export menus are hidden for everyone else. People can still read, copy and print the pages they can see.')}</p>
       <label className="row">
-        <input type="checkbox" checked={s.ai} onChange={(e) => set('ai', e.target.checked, e.target.checked ? tr('Ask the wiki is on') : tr('Ask the wiki is off'))} />{tr('Ask the wiki (questions answered by Claude from the pages a person can see)')}</label>
-      <p className="faint small" style={{ margin: '2px 0 12px 24px' }}>{tr('Also needs an API key on the server (WIKICRAFT_AI_API_KEY). When off, no page content is sent anywhere.')}</p>
+        <input type="checkbox" checked={s.ai} onChange={(e) => set('ai', e.target.checked, e.target.checked ? tr('Ask the wiki is on') : tr('Ask the wiki is off'))} />{tr('Ask the wiki (questions answered by AI from the pages a person can see)')}</label>
+      <p className="faint small" style={{ margin: '2px 0 12px 24px' }}>{tr('Also needs an AI model set up on the server: Claude, or a model of your own (WIKICRAFT_AI_PROVIDER). When off, no page content is sent anywhere.')}</p>
       <label className="row">
         <input type="checkbox" checked={s.personalSpaces} onChange={(e) => set('personalSpaces', e.target.checked, e.target.checked ? tr('People can create personal spaces') : tr('No new personal spaces'))} />{tr('Personal spaces (a private space per person for drafts and notes)')}</label>
       <p className="faint small" style={{ margin: '2px 0 12px 24px' }}>{tr('Turning this off stops new personal spaces; existing ones stay.')}</p>

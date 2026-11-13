@@ -291,9 +291,16 @@ Thai, …) install fonts on the server, e.g. `apt install fonts-noto-cjk` in you
 
 - **MCP server** at `/api/mcp`: AI assistants (Claude and others) search, read and write pages
   with a person's API token and exactly that person's permissions.
-- **Ask the wiki**: set `WIKICRAFT_AI_API_KEY` (Anthropic). Questions are answered from the pages
-  the asker can open, with citations. Without the key nothing leaves your server. A switch under
-  *Sharing and features* turns it off again.
+- **Ask the wiki**: questions are answered from the pages the asker can open, with citations,
+  by the model you set up. For Claude, set `WIKICRAFT_AI_API_KEY` (an Anthropic key). For a model
+  in your own network, so that nothing leaves it, or another service with an OpenAI-compatible
+  API: `WIKICRAFT_AI_PROVIDER=openai-compatible`, `WIKICRAFT_AI_BASE_URL` (e.g.
+  `http://ollama:11434/v1`), `WIKICRAFT_AI_MODEL` (e.g. `llama3.1`) and, if the service needs one,
+  `WIKICRAFT_AI_API_KEY`. Give a local model a context of 16,000 tokens or more
+  (`OLLAMA_CONTEXT_LENGTH=16384` with Ollama): up to 24,000 characters of excerpts go with each
+  question. Admin → Overview → *System* shows which model answers and whether it runs in your own
+  network; the start-up log says why it is off when a setting is missing. Without a model set up
+  nothing leaves your server, and a switch under *Sharing and features* turns it off again.
 - **Retrieval API for other AI applications** (`/api/retrieve`, also the MCP tool `retrieve`):
   the passages that best answer a question, from the pages the caller can open. It works out of
   the box with keyword ranking. For semantic ranking as well, point WikiCraft at an

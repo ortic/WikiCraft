@@ -288,7 +288,7 @@ op("/jobs/{id}/download", "get", "Import & export", "Download an export archive 
 # admin
 op("/admin/audit", "get", "Admin", "Audit log", query=[q("before", "id cursor", num), q("action", "action prefix")])
 op("/admin/stats", "get", "Admin", "Workspace statistics")
-op("/admin/system", "get", "Admin", "System state: version, database (version, size, schema, connections), job queue, search index, retrieval passages and embeddings, mail, file storage, sign-in providers, cluster", res=resp(anyobj))
+op("/admin/system", "get", "Admin", "System state: version, database (version, size, schema, connections), job queue, search index, retrieval passages and embeddings, AI model (provider, model, whether it runs in your own network), mail, file storage, sign-in providers, cluster", res=resp(anyobj))
 op("/admin/reindex", "post", "Admin", "Rebuild the search index")
 op("/admin/spaces", "get", "Admin", "All spaces incl. archived, with size and activity")
 op("/admin/spaces/{key}", "delete", "Admin", "Permanently delete an archived space", req=body(obj({"confirm": {"type": "string", "description": "the space key"}})), res=NO)

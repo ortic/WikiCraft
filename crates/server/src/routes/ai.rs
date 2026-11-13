@@ -1,6 +1,7 @@
 //! "Ask the wiki": answers a question from the pages the asker can see, citing the sections.
 //!
-//! Off unless an Anthropic API key is configured. The passages come from [`crate::retrieval`],
+//! Off until a model is set up ([`crate::llm`]: Claude, or any OpenAI-compatible server, also one
+//! in your own network). The passages come from [`crate::retrieval`],
 //! which only takes them from pages the asker can open, so content a person can't see never
 //! reaches the model on their behalf. Passage text is passed as data inside `<source>` tags;
 //! the system prompt tells the model to treat it as reference material, not instructions.
@@ -22,7 +23,6 @@ use crate::authz::Principal;
 use crate::error::{ApiError, ApiResult};
 use crate::retrieval::{Mode, Options, retrieve};
 
-const API_VERSION: &str = "2026-10-21";
 /// passages and characters of passage text sent per question
 const MAX_PASSAGES: usize = 16;
 const MAX_CONTEXT_CHARS: usize = 24_000;
@@ -48,11 +48,12 @@ fn allow(user: Uuid) -> bool {
 
 /// `GET /api/ai/status`
 pub async fn status(State(state): State<AppState>, MaybeUser(user): MaybeUser) -> ApiResult<Json<Value>> {
-    let mut enabled = state.config.ai_api_key.as_deref().is_some_and(|k| !k.is_empty());
+    let setup = crate::llm::setup(&state.config);
+    let mut enabled = setup.is_some();
     if let Some(u) = &user {
         enabled = enabled && crate::routes::share::switch_on(&state, u.workspace_id, "ai").await?;
     }
-    Ok(Json(json!({ "enabled": enabled, "model": state.config.ai_model })))
+    Ok(Json(json!({ "enabled": enabled, "model": setup.map(|s| s.model) })))
 }
 
 #[derive(Deserialize)]
@@ -77,9 +78,9 @@ fn xml_attr(s: &str) -> String {
 
 /// `POST /api/ai/ask {question, spaceKey?}` → `{answer, answerHtml, sources, model}`
 pub async fn ask(State(state): State<AppState>, CurrentUser(user): CurrentUser, Json(req): Json<AskReq>) -> ApiResult<Json<Value>> {
-    let Some(key) = state.config.ai_api_key.clone().filter(|k| !k.is_empty()) else {
+    if crate::llm::setup(&state.config).is_none() {
         return Err(ApiError::bad("Ask the wiki isn't enabled on this server"));
-    };
+    }
     if !crate::routes::share::switch_on(&state, user.workspace_id, "ai").await? {
         return Err(ApiError::bad("Ask the wiki is turned off on this wiki"));
     }
@@ -124,7 +125,8 @@ pub async fn ask(State(state): State<AppState>, CurrentUser(user): CurrentUser, 
     prompt.push_str("</sources>\n\nQuestion: ");
     prompt.push_str(question);
 
-    let (answer, model) = call_claude(&state, &key, &prompt).await?;
+    // retrieval Q&A: medium effort balances answer quality and latency
+    let crate::llm::Answer { text: answer, model } = crate::llm::answer(&state.config, SYSTEM, &prompt, "medium").await?;
     // [n] citations become links to the passages
     let mut linked = answer.clone();
     for (i, s) in passages.iter().enumerate() {
@@ -145,75 +147,4 @@ pub async fn ask(State(state): State<AppState>, CurrentUser(user): CurrentUser, 
     let cited: Vec<Value> = sources.iter().filter(|s| answer.contains(&format!("[{}]", s["n"]))).cloned().collect();
     let sources = if cited.is_empty() { sources } else { cited };
     Ok(Json(json!({ "answer": answer, "answerHtml": answer_html, "sources": sources, "model": model })))
-}
-
-/// One Messages API call (non-streaming), with retries for rate limits and overload.
-async fn call_claude(state: &AppState, key: &str, prompt: &str) -> ApiResult<(String, String)> {
-    let body = json!({
-        "model": state.config.ai_model,
-        "max_tokens": 16000,
-        "system": SYSTEM,
-        "messages": [{ "role": "user", "content": prompt }],
-        // retrieval Q&A: medium effort balances answer quality and latency
-        "output_config": { "effort": "medium" },
-        // a declined request is re-run on Anthropic's recommended fallback model
-        "fallbacks": "default",
-    });
-    let client = openidconnect::reqwest::Client::builder().timeout(Duration::from_secs(180)).build().map_err(|e| ApiError::Internal(e.into()))?;
-    let url = format!("{}/v1/messages", state.config.ai_base_url.trim_end_matches('/'));
-    let body_bytes = serde_json::to_vec(&body).map_err(|e| ApiError::Internal(e.into()))?;
-    let mut attempt = 0;
-    let resp: Value = loop {
-        attempt += 1;
-        let r = client
-            .post(&url)
-            .header("x-api-key", key)
-            .header("anthropic-version", API_VERSION)
-            .header("anthropic-beta", "server-side-fallback-2026-07-01")
-            .header("content-type", "application/json")
-            .body(body_bytes.clone())
-            .send()
-            .await;
-        let r = match r {
-            Ok(r) => r,
-            Err(e) if attempt < 3 => {
-                tracing::warn!("ask: request failed ({e}), retrying");
-                tokio::time::sleep(Duration::from_millis(800 * attempt)).await;
-                continue;
-            }
-            Err(e) => return Err(ApiError::Internal(anyhow::anyhow!("AI service unreachable: {e}"))),
-        };
-        let status = r.status().as_u16();
-        // 429 (rate limit), 5xx and 529 (overloaded) are worth retrying
-        if (status == 429 || status >= 500) && attempt < 3 {
-            let wait = r.headers().get("retry-after").and_then(|v| v.to_str().ok()).and_then(|v| v.parse::<u64>().ok()).unwrap_or(attempt).min(10);
-            tracing::warn!(status, "ask: AI service busy, retrying in {wait}s");
-            tokio::time::sleep(Duration::from_secs(wait)).await;
-            continue;
-        }
-        let v: Value = r.bytes().await.ok().and_then(|b| serde_json::from_slice(&b).ok()).unwrap_or(Value::Null);
-        if !(200..300).contains(&status) {
-            let msg = v["error"]["message"].as_str().unwrap_or("unknown error");
-            tracing::error!(status, "ask: AI service error: {msg}");
-            return Err(match status {
-                429 | 500..=599 => ApiError::bad("the AI service is busy; try again in a moment"),
-                _ => ApiError::Internal(anyhow::anyhow!("AI service rejected the request (HTTP {status}): {msg}")),
-            });
-        }
-        break v;
-    };
-    let model = resp["model"].as_str().unwrap_or("").to_string();
-    // check the stop reason before reading the content
-    if resp["stop_reason"] == "refusal" {
-        return Ok(("I can't help with this question.".into(), model));
-    }
-    let text: String = resp["content"]
-        .as_array()
-        .map(|blocks| blocks.iter().filter(|b| b["type"] == "text").filter_map(|b| b["text"].as_str()).collect::<Vec<_>>().join(""))
-        .unwrap_or_default();
-    let text = if resp["stop_reason"] == "max_tokens" { format!("{text}\n\n(The answer was cut off.)") } else { text };
-    if text.trim().is_empty() {
-        return Err(ApiError::Internal(anyhow::anyhow!("AI service returned no text")));
-    }
-    Ok((text, model))
 }

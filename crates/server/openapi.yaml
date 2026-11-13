@@ -6725,7 +6725,8 @@ paths:
       tags:
       - Admin
       summary: 'System state: version, database (version, size, schema, connections), job queue, search index, retrieval passages
-        and embeddings, mail, file storage, sign-in providers, cluster'
+        and embeddings, AI model (provider, model, whether it runs in your own network), mail, file storage, sign-in providers,
+        cluster'
       operationId: get_admin_system
       responses:
         '200':

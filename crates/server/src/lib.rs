@@ -22,6 +22,7 @@ pub mod importer;
 pub mod includes;
 pub mod jobs;
 pub mod links;
+pub mod llm;
 pub mod mail;
 pub mod mcp;
 pub mod metrics;

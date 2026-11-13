@@ -180,18 +180,32 @@ pub struct Config {
     #[arg(long, env = "WIKICRAFT_DISABLE_PASSWORD_LOGIN", default_value_t = false)]
     pub disable_password_login: bool,
 
-    /// Anthropic API key: enables "Ask the wiki" (answers from the pages a person can see).
-    /// Unset = the feature is off and no content ever leaves the server.
+    /// Where "Ask the wiki" gets its answers: `anthropic` (Claude) or `openai-compatible` (any
+    /// server with an OpenAI-compatible chat API, also a model in your own network: Ollama, vLLM,
+    /// llama.cpp's server, LM Studio, LocalAI). Unset: `anthropic` when an API key is set, else
+    /// `openai-compatible` when a base URL is set, else the feature is off and no content leaves
+    /// the server.
+    #[arg(long, env = "WIKICRAFT_AI_PROVIDER")]
+    pub ai_provider: Option<String>,
+
+    /// API key for the AI service (Anthropic: required; OpenAI-compatible: sent as a bearer token
+    /// when set, usually not needed for a local model).
     #[arg(long, env = "WIKICRAFT_AI_API_KEY", hide_env_values = true)]
     pub ai_api_key: Option<String>,
 
-    /// Claude model for "Ask the wiki".
-    #[arg(long, env = "WIKICRAFT_AI_MODEL", default_value = "claude-opus-5-5")]
-    pub ai_model: String,
+    /// Model for "Ask the wiki" (Anthropic: `claude-opus-5-5` when unset; OpenAI-compatible:
+    /// required, e.g. `llama3.1`).
+    #[arg(long, env = "WIKICRAFT_AI_MODEL")]
+    pub ai_model: Option<String>,
 
-    /// Base URL of the Anthropic API (a gateway or proxy may sit in between).
-    #[arg(long, env = "WIKICRAFT_AI_BASE_URL", default_value = "https://api.anthropic.com")]
-    pub ai_base_url: String,
+    /// Base URL of the AI API: Anthropic `https://api.anthropic.com` when unset (a gateway or
+    /// proxy may sit in between); OpenAI-compatible: required, e.g. `http://ollama:11434/v1`.
+    #[arg(long, env = "WIKICRAFT_AI_BASE_URL")]
+    pub ai_base_url: Option<String>,
+
+    /// How long an answer may take, in seconds (local models on modest hardware can be slow).
+    #[arg(long, env = "WIKICRAFT_AI_TIMEOUT_SECS", default_value_t = 180)]
+    pub ai_timeout_secs: u64,
 
     /// OpenAI-compatible embeddings API for semantic retrieval, e.g. `https://api.openai.com/v1`
     /// or Ollama's `http://localhost:11434/v1`. Unset = keyword retrieval only, and no page text

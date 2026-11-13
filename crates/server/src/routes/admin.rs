@@ -62,8 +62,8 @@ pub async fn stats(State(state): State<AppState>, CurrentUser(user): CurrentUser
     })))
 }
 
-/// `GET /api/admin/system`: version, database, job queue, search index, mail, storage and
-/// cluster state, for the admin overview.
+/// `GET /api/admin/system`: version, database, job queue, search index, AI model, mail,
+/// storage and cluster state, for the admin overview.
 pub async fn system(State(state): State<AppState>, CurrentUser(user): CurrentUser) -> ApiResult<Json<Value>> {
     require_admin(&user)?;
     let (pg_version, db_size): (String, i64) =
@@ -94,6 +94,7 @@ pub async fn system(State(state): State<AppState>, CurrentUser(user): CurrentUse
         "jobs": { "queued": queued, "running": running, "failedLastDay": failed_day },
         "search": { "backend": state.search.backend_name(), "indexed": indexed, "pages": pages, "language": state.search.language(), "rebuilding": state.search.rebuilding() },
         "retrieval": retrieval,
+        "ai": crate::llm::setup_json(&state.config),
         "mail": { "enabled": state.mailer.enabled() },
         "virusScan": { "enabled": state.config.clamav.as_deref().is_some_and(|c| !c.trim().is_empty()), "failOpen": state.config.clamav_fail_open },
         "storage": { "backend": state.blobs.backend_name() },
