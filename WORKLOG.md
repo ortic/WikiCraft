@@ -189,6 +189,15 @@ mailpit `wc-mailpit` SMTP :11025 / API :18025, SAML build container `wc-samlbuil
   Yjs cursor position with the old offset whenever the paragraph's text changed. Fixed with a Vite transform
   (`web/scripts/fix-y-tiptap.ts`, fails the build if the code changes). Remaining y-tiptap quirk: a remote block type
   change (paragraph → heading) moves the typist's next words into a new paragraph.
+- 2026-11-13: a real Confluence Cloud site backup (`confluence_backup_csv_2026-11-13.zip`, not committed) imported, but
+  every body came out as base64 text: site backups store `bodycontent.body` zstd-compressed + base64 (the XWiki
+  corpus' `csv-site-backup` had the same, its test only checked attachments). Fixed in the CSV reader, plus: account
+  ids from `user_mapping.aaid` (Cloud "usernames" are account ids and no longer become display names), names from
+  personal spaces (`space_owner`), a report warning about unnamed authors, `content_permissions` read fail-closed,
+  `spacerole_assignments` reported. Comparing every converted document with the XML export of the same site (193
+  identical) found an XML-reader bug: `]]]>` (code ending in `]`) is exported as `]] ]>`, which swallowed the rest of
+  the page into the code block. The `]] >` unescape moved from `dom::normalize` (all formats, so it broke code like
+  `a[b[i]] > 0` in CSV and HTML imports) into the XML reader.
 
 ## Security review 5 (2026-11-11/12: readable addresses, link graph, uploads in parts, passkeys) — status
 No authorization bypass on page content. Fixed (with regression tests in `security.rs`, `mfa.rs`, `confluence_import.rs`):

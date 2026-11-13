@@ -748,6 +748,11 @@ attachments, labels, permissions or inline-task file, though the descriptor says
 *Update 2026-11-10:* the XWiki corpus has two complete Cloud CSV exports (`csv-RJTest`, `csv-site-backup`): the
 label, watch, favourite, permission and restriction tables have the column names our reader assumed, and attachment
 files can also be stored as `attachments/<FILESTORE_ID>` (now handled).
+*Update 2026-11-13:* a real Cloud **site backup** (`confluence_backup_csv_<date>.zip`: `metadata.json`, `data/*.csv.gz`,
+`attachments/<FILESTORE_ID>`) imports completely. Its bodies are zstd + base64 (`KLUv/…`), it has no user names or
+e-mail addresses (`user_mapping`: key → account id), and it may carry the newer `content_permissions` /
+`spacerole_assignments` tables (read fail-closed / reported). Converted against an XML export of the same site, all 193
+documents are identical. That comparison also found that the XML export writes `]]]>` as `]] ]>`.
 
 ### 6.3 Importer requirements derived from the run
 - [x] **P0** Auto-detect format from `exportDescriptor.properties` (`exportType`, `exportFormat=csv`, `source=cloud|server`, `buildNumber`) and support **both** XML (`entities.xml`) and Cloud CSV (`*.csv.gz`) — detection uses `exportFormat` plus the file names; `source` / `buildNumber` go into the report

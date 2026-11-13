@@ -7844,6 +7844,7 @@ dependencies = [
  "tracing",
  "wikicraft-doc-model",
  "zip 9.5.0",
+ "zstd",
 ]
 
 [[package]]

@@ -17,6 +17,8 @@ thiserror = "2.0.21"
 tracing = "0.1.44"
 wikicraft-doc-model = { version = "0.1.0", path = "../doc-model" }
 zip = "9.5.0"
+# already built for zip (same features): Cloud site backups store page bodies zstd-compressed
+zstd = { version = "0.14.3", default-features = false }
 
 [dev-dependencies]
 insta = { version = "1.49.0", features = ["glob"] }

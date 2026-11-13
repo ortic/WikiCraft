@@ -5,9 +5,16 @@
 //! test corpus (`tests/xwiki_corpus.rs`): `label`, `content_label`, `notifications`,
 //! `usercontent_relation`, `spacepermissions`, `content_perm_set` / `content_perm`,
 //! `contentproperties`, `user_mapping` use the Confluence database column names read here.
+//!
+//! Site backups (Settings → Backup and restore, Nov 2026: `metadata.json`, `data/*.csv.gz`,
+//! `attachments/<FILESTORE_ID>`) differ: bodies are zstd + base64, there are no user names or
+//! e-mail addresses (`user_mapping` only has account ids), and newer permission tables
+//! (`content_permissions`, `spacerole_assignments`) may appear next to the classic ones.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::io::Read;
+
+use base64::Engine;
 
 use crate::model::*;
 use crate::source::Source;
@@ -48,6 +55,28 @@ fn get(r: &Row, k: &str) -> Option<String> {
 
 fn get_i64(r: &Row, k: &str) -> Option<i64> {
     get(r, k).and_then(|v| v.parse().ok())
+}
+
+/// Uncompressed size above which a compressed body is refused (zip-bomb guard).
+const MAX_BODY_BYTES: u64 = 256 * 1024 * 1024;
+
+/// Cloud site backups store `bodycontent.body` zstd-compressed and base64-encoded (`KLUv/…`, the
+/// zstd magic); space exports store the text as is. Text that only starts like that stays text.
+fn decode_body(body: String) -> Result<String, String> {
+    if !body.starts_with("KLUv/") {
+        return Ok(body);
+    }
+    let engine = base64::engine::GeneralPurpose::new(
+        &base64::alphabet::STANDARD,
+        base64::engine::GeneralPurposeConfig::new().with_decode_padding_mode(base64::engine::DecodePaddingMode::Indifferent),
+    );
+    let Ok(raw) = engine.decode(body.trim()) else { return Ok(body) };
+    let mut out = Vec::new();
+    zstd::stream::read::Decoder::new(raw.as_slice()).and_then(|d| d.take(MAX_BODY_BYTES + 1).read_to_end(&mut out)).map_err(|e| format!("zstd: {e}"))?;
+    if out.len() as u64 > MAX_BODY_BYTES {
+        return Err("larger than 256 MiB".into());
+    }
+    Ok(String::from_utf8(out).unwrap_or_else(|e| String::from_utf8_lossy(e.as_bytes()).into_owned()))
 }
 
 pub fn read(source: &Source, export: &mut Export) -> Result<(), crate::Error> {
@@ -113,17 +142,28 @@ pub fn read(source: &Source, export: &mut Export) -> Result<(), crate::Error> {
     })?;
 
     if let Some(n) = find(source, &names, "bodycontent") {
-        for_each_row(source, &n, |r| {
+        let mut undecodable: Vec<String> = Vec::new();
+        for_each_row(source, &n, |mut r| {
             if let Some(cid) = get(&r, "contentid") {
+                let body = match decode_body(r.remove("body").unwrap_or_default()) {
+                    Ok(b) => b,
+                    Err(e) => {
+                        undecodable.push(format!("{cid} ({e})"));
+                        return;
+                    }
+                };
                 if let Some((owner, name)) = property_rows.get(&cid) {
-                    let value = r.get("body").cloned().unwrap_or_default();
-                    export.properties.entry(owner.clone()).or_default().insert(name.clone(), value);
+                    export.properties.entry(owner.clone()).or_default().insert(name.clone(), body);
                     return;
                 }
-                let body = r.get("body").cloned().unwrap_or_default();
                 export.add_body(Body { content_id: cid, kind: BodyKind::guess(get(&r, "bodytypeid").as_deref(), &body), body });
             }
         })?;
+        if !undecodable.is_empty() {
+            let n = undecodable.len();
+            undecodable.truncate(5);
+            export.read_warnings.push(format!("{n} compressed bodies could not be decompressed and stay empty, e.g. content {}", undecodable.join(", ")));
+        }
     } else {
         export.read_warnings.push("bodycontent.csv not found".into());
     }
@@ -145,9 +185,39 @@ pub fn read(source: &Source, export: &mut Export) -> Result<(), crate::Error> {
         for_each_row(source, &n, |r| {
             if let Some(key) = get(&r, "user_key") {
                 let u = export.users.entry(key.clone()).or_insert_with(|| User { key, ..Default::default() });
-                u.username = get(&r, "username").or(u.username.take());
+                let aaid = get(&r, "aaid");
+                // Cloud has no usernames: the column repeats the account id there
+                let username = get(&r, "username").filter(|n| Some(n) != aaid.as_ref());
+                u.username = username.or(u.username.take());
+                if let Some(a) = aaid {
+                    u.account_id.get_or_insert(a);
+                }
             }
         })?;
+    }
+    // Site backups carry no user names (and no e-mail addresses), but personal spaces are named
+    // after their owners
+    let mut owners: HashMap<String, String> = HashMap::new(); // space id → owner's user key
+    if let Some(n) = find(source, &names, "space_owner") {
+        for_each_row(source, &n, |r| {
+            if get(&r, "ownertype").is_none_or(|t| t.eq_ignore_ascii_case("user"))
+                && let (Some(space), Some(owner)) = (get(&r, "spaceid"), get(&r, "ownerid"))
+            {
+                owners.insert(space, owner);
+            }
+        })?;
+    }
+    for s in export.spaces.iter().filter(|s| s.is_personal() && !s.name.trim().is_empty()) {
+        let Some(owner) = owners.get(&s.id).or(s.creator.as_ref()) else { continue };
+        let u = export.users.entry(owner.clone()).or_insert_with(|| User { key: owner.clone(), ..Default::default() });
+        u.display_name.get_or_insert_with(|| s.name.trim().to_string());
+    }
+    let unnamed = export.users.values().filter(|u| u.display_name.is_none() && u.email.is_none() && u.username.is_none()).count();
+    if unnamed > 0 {
+        export.read_warnings.push(format!(
+            "users without name: {unnamed} of {} imported authors get a placeholder name (site backups have no names or e-mail addresses; people with a personal space are named after it). Merge them into their accounts: Administration → Users → Merge into…",
+            export.users.len()
+        ));
     }
 
     // Content properties (MEDIA_TYPE, FILESIZE, inline comment anchors, ...)
@@ -178,8 +248,13 @@ pub fn read(source: &Source, export: &mut Export) -> Result<(), crate::Error> {
     }
 
     // Space permissions
+    // Cloud group id → name (newer tables name groups by id only)
+    let mut group_names: HashMap<String, String> = HashMap::new();
     if let Some(n) = find(source, &names, "spacepermissions") {
         for_each_row(source, &n, |r| {
+            if let (Some(id), Some(name)) = (get(&r, "externalgroupid"), get(&r, "permgroupname")) {
+                group_names.insert(id, name);
+            }
             if inactive(get(&r, "active").as_deref()) {
                 return;
             }
@@ -207,12 +282,59 @@ pub fn read(source: &Source, export: &mut Export) -> Result<(), crate::Error> {
             }
         })?;
         for_each_row(source, &pn, |r| {
+            if let (Some(id), Some(name)) = (get(&r, "external_group_id"), get(&r, "groupname")) {
+                group_names.insert(id, name);
+            }
             if let Some(set) = get(&r, "cps_id")
                 && let Some((cid, kind)) = sets.get(&set)
             {
                 export.restrictions.push(Restriction { content_id: cid.clone(), kind: *kind, user_key: get(&r, "username"), group: get(&r, "groupname") });
             }
         })?;
+    }
+    // Newer Cloud sites keep page permissions in CONTENT_PERMISSIONS, by principal id. A
+    // restriction must not get lost (the page would open up): entries that can't be told apart
+    // restrict the page to the importing admin, and the report asks to review them.
+    if let Some(n) = find(source, &names, "content_permissions") {
+        let restricted: HashSet<String> = export.restrictions.iter().map(|r| r.content_id.clone()).collect();
+        let (mut taken, mut unclear) = (0usize, 0usize);
+        for_each_row(source, &n, |r| {
+            let Some(cid) = get(&r, "content_id") else { return };
+            if get(&r, "deleted_id").is_some() || restricted.contains(&cid) {
+                return;
+            }
+            let ty = get(&r, "permission_type").unwrap_or_default().to_ascii_lowercase();
+            let kind = if ["edit", "update", "write"].iter().any(|k| ty.contains(k)) { RestrictionKind::Edit } else { RestrictionKind::View };
+            let principal = get(&r, "principal_id");
+            let (user_key, group) = match get(&r, "principal_type").map(|t| t.to_ascii_lowercase()).as_deref() {
+                Some("user") if principal.is_some() => (principal, None),
+                Some("group") if principal.is_some() => (None, principal.map(|g| group_names.get(&g).cloned().unwrap_or(g))),
+                _ => (None, None),
+            };
+            if (user_key.is_none() && group.is_none()) || !["view", "read", "edit", "update", "write"].iter().any(|k| ty.contains(k)) {
+                unclear += 1;
+            }
+            taken += 1;
+            export.restrictions.push(Restriction { content_id: cid, kind, user_key, group });
+        })?;
+        if taken > 0 {
+            export.read_warnings.push(format!(
+                "{taken} page permissions came from content_permissions ({unclear} of unknown kind or subject, restricted to the importing admin): please review the restricted pages"
+            ));
+        }
+    }
+    if let Some(n) = find(source, &names, "spacerole_assignments") {
+        let mut roles = 0;
+        for_each_row(source, &n, |r| {
+            if get(&r, "deleted_id").is_none() && get(&r, "principal_id").is_some() {
+                roles += 1;
+            }
+        })?;
+        if roles > 0 {
+            export
+                .read_warnings
+                .push(format!("{roles} space role assignments are not imported (only classic space permissions): please review the space permissions"));
+        }
     }
 
     // Watches (NOTIFICATIONS: USERNAME holds the user key) and favourites (USERCONTENT_RELATION)
@@ -244,4 +366,104 @@ pub fn read(source: &Source, export: &mut Export) -> Result<(), crate::Error> {
 
     crate::xml_export::index_attachments(&names, export);
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn packed(text: &str) -> String {
+        base64::engine::general_purpose::STANDARD.encode(zstd::stream::encode_all(text.as_bytes(), 3).unwrap())
+    }
+
+    fn site_backup(tables: &[(&str, String)]) -> Export {
+        let dir = tempfile::tempdir().unwrap();
+        std::fs::create_dir(dir.path().join("data")).unwrap();
+        std::fs::write(dir.path().join("metadata.json"), r#"{"transferType":"BACKUP"}"#).unwrap();
+        for (name, csv) in tables {
+            std::fs::write(dir.path().join("data").join(format!("{name}.csv")), csv).unwrap();
+        }
+        crate::read(&Source::open(dir.path()).unwrap()).unwrap()
+    }
+
+    fn tables() -> Vec<(&'static str, String)> {
+        vec![
+            ("spaces", "spaceid,spacename,spacekey,homepage,creator,spacetype,spacestatus\n1,Docs,DOC,10,k1,global,CURRENT\n2,Ada Lovelace,~5570581234,20,k2,personal,CURRENT\n".into()),
+            (
+                "content",
+                "contentid,contenttype,title,version,creator,prevver,content_status,pageid,spaceid,parentid,pluginkey\n10,PAGE,Home,1,k1,,current,,1,,\n11,PAGE,Secret,1,k1,,current,,1,10,\n20,PAGE,Ada's home,1,k2,,current,,2,,\n30,CUSTOM,editor,1,k1,,current,10,1,,com.atlassian.confluence.content.property:content-property\n".into(),
+            ),
+            (
+                "bodycontent",
+                format!(
+                    "bodycontentid,body,contentid,bodytypeid\n100,{},10,2\n101,{},11,2\n102,KLUv/ is how it starts,20,2\n103,{},30,1\n",
+                    packed("<p>Hello <ac:link><ri:user ri:account-id=\"557058:ada\" /></ac:link></p>"),
+                    packed("<p>for few eyes</p>"),
+                    packed("\"v2\""),
+                ),
+            ),
+            ("user_mapping", "user_key,username,lower_username,aaid\nk1,557058:bob,557058:bob,557058:bob\nk2,557058:ada,557058:ada,557058:ada\nk3,addon_bot,addon_bot,5cb4\n".into()),
+            ("space_owner", "id,spaceid,ownerid,ownertype\n1,2,k2,USER\n".into()),
+            ("spacepermissions", "permid,spaceid,permtype,permgroupname,externalgroupid,permusername,permalluserssubject,active\n1,1,VIEWSPACE,team,g-1,,,t\n".into()),
+            (
+                "content_permissions",
+                "permission_id,permission_type,content_id,principal_type,principal_id,deleted_id\n1,VIEW,11,GROUP,g-1,\n2,EDIT,11,USER,557058:bob,\n3,VIEW,10,USER,557058:bob,7\n4,VIEW,20,TEAM,t-9,\n".into(),
+            ),
+        ]
+    }
+
+    #[test]
+    fn site_backup_bodies_are_decompressed() {
+        let ex = site_backup(&tables());
+        let home = ex.body("10").unwrap();
+        assert_eq!(home.kind, BodyKind::Storage);
+        assert!(home.body.starts_with("<p>Hello <ac:link>"), "{}", home.body);
+        assert_eq!(ex.body("11").unwrap().body, "<p>for few eyes</p>");
+        // text that merely starts like a compressed body stays as it is
+        assert_eq!(ex.body("20").unwrap().body, "KLUv/ is how it starts");
+        // content properties are stored as compressed bodies, too
+        assert_eq!(ex.property("10", "editor"), Some("\"v2\""));
+        assert!(ex.read_warnings.iter().all(|w| !w.contains("decompress")), "{:?}", ex.read_warnings);
+    }
+
+    #[test]
+    fn broken_compressed_bodies_are_reported() {
+        let mut t = tables();
+        t[2].1 = "bodycontentid,body,contentid,bodytypeid\n100,KLUv/SAzmQEAQ29u,10,2\n".into();
+        let ex = site_backup(&t);
+        assert!(ex.body("10").is_none(), "no gibberish page");
+        assert!(
+            ex.read_warnings.iter().any(|w| w.contains("1 compressed bodies could not be decompressed") && w.contains("content 10")),
+            "{:?}",
+            ex.read_warnings
+        );
+    }
+
+    #[test]
+    fn site_backup_users_have_account_ids_and_owner_names() {
+        let ex = site_backup(&tables());
+        let bob = &ex.users["k1"];
+        assert_eq!(bob.account_id.as_deref(), Some("557058:bob"));
+        assert_eq!(bob.username, None, "an account id is no username (it would become the name)");
+        assert_eq!(bob.display_name, None);
+        let ada = &ex.users["k2"];
+        assert_eq!(ada.display_name.as_deref(), Some("Ada Lovelace"), "named after her personal space");
+        assert_eq!(ex.users["k3"].username.as_deref(), Some("addon_bot"));
+        assert_eq!(ex.users["k3"].account_id.as_deref(), Some("5cb4"));
+        assert!(ex.read_warnings.iter().any(|w| w.starts_with("users without name: 1 of 3 imported authors get a placeholder name")), "{:?}", ex.read_warnings);
+    }
+
+    #[test]
+    fn content_permissions_become_restrictions() {
+        let ex = site_backup(&tables());
+        let of = |cid: &str| ex.restrictions.iter().filter(|r| r.content_id == cid).map(|r| (r.kind, r.user_key.clone(), r.group.clone())).collect::<Vec<_>>();
+        assert_eq!(
+            of("11"),
+            vec![(RestrictionKind::View, None, Some("team".into())), (RestrictionKind::Edit, Some("557058:bob".into()), None)],
+            "group ids are named through the space permissions"
+        );
+        assert!(of("10").is_empty(), "deleted entries are skipped");
+        assert_eq!(of("20"), vec![(RestrictionKind::View, None, None)], "an unknown subject fails closed");
+        assert!(ex.read_warnings.iter().any(|w| w.contains("3 page permissions came from content_permissions (1 of unknown")), "{:?}", ex.read_warnings);
+    }
 }

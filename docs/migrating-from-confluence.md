@@ -77,8 +77,12 @@ You need a site admin (for a site export) or a space admin (for space exports).
 2. Choose **XML**, *Full export*, and include comments and attachments.
 3. Confluence writes a `.zip` with `entities.xml` and an `attachments/` folder.
 
-**Cloud (CSV):** *Space settings → Export space → CSV* (or the site backup). WikiCraft reads both
-the classic XML and the newer CSV format.
+**Cloud (CSV):** *Space settings → Export space → CSV* for one space, or the site backup
+(*Settings → Backup and restore*, a `confluence_backup_csv_<date>.zip` with `metadata.json`,
+`data/*.csv.gz` and `attachments/`). Upload the zip as it is. WikiCraft reads both the classic XML
+and the newer CSV format. A site backup has no user names or e-mail addresses. People with a
+personal space are named after it, everybody else becomes *Confluence user …* until you merge
+them (see [step 5](#5-people-imported-authors)).
 
 Big exports are fine: a 2,400-page space with history imports in about 20 seconds and 120 MB of
 memory. Keep the zip on the WikiCraft server for very large exports and use the CLI (step 4).
@@ -146,8 +150,8 @@ every author, commenter, assignee or permission holder WikiCraft:
    them.
 
 Placeholders turn into real accounts by themselves when the person signs in with SSO, accepts an
-invitation or is added with the same e-mail address. For the others (no e-mail in the export, or a
-different address), go to *Administration → Users*, tick *Show imported authors without account*
+invitation or is added with the same e-mail address. For the others (no e-mail in the export, as in
+every Cloud site backup, or a different address), go to *Administration → Users*, tick *Show imported authors without account*
 and use **Merge into…** next to the placeholder. Everything the placeholder wrote, owned, liked,
 watched or was granted moves to that person, mentions of them point to the person, and later
 imports map the same Confluence account to them. The API call is

@@ -256,6 +256,15 @@ fn cloud_csv_backups() {
     assert!(versions.iter().all(|v| v.path.is_some()), "every attachment version finds its file");
     assert!(c.plan.report.counts["watches"] > 50);
     assert_eq!(c.plan.spaces[0].favourited_by.len(), 2);
+    // its bodies are zstd + base64: they must come out as storage format, not as that text
+    let bodies: Vec<_> = pages(&c.plan).filter_map(|p| ex.body(&p.source_id)).collect();
+    assert!(bodies.len() > 30);
+    assert!(bodies.iter().all(|b| !b.body.starts_with("KLUv/")), "compressed bodies are decoded");
+    assert!(c.stats.macros.len() > 5 && c.stats.page_links_resolved > 0, "{:?}", c.stats);
+    assert!(ex.read_warnings.iter().all(|w| !w.contains("decompress")), "{:?}", ex.read_warnings);
+    // site backups have account ids instead of usernames
+    assert!(ex.users.values().filter(|u| u.account_id.is_some()).count() > 10);
+    assert!(ex.users.values().all(|u| u.username.as_deref().is_none_or(|n| !n.starts_with("557058:"))));
 }
 
 #[test]
