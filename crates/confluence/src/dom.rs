@@ -75,11 +75,12 @@ impl Element {
 }
 
 /// Makes a storage-format body strict-XML parseable:
-/// 1. undo Confluence's CDATA terminator escape (`]]>` inside CDATA is exported as `]] >`),
-/// 2. replace HTML named entities with numeric character references,
-/// 3. (done by [`parse`]) wrap everything in a root element declaring the namespaces.
+/// 1. replace HTML named entities with numeric character references,
+/// 2. (done by [`parse`]) wrap everything in a root element declaring the namespaces.
+///
+/// (entities.xml's CDATA terminator escape `]] >` is undone by the XML export reader: in other
+/// formats `]] >` is just text, e.g. `a[b[i]] > 0` in a code block.)
 pub fn normalize(body: &str) -> String {
-    let body = body.replace("]] >", "]]>");
     let mut out = String::with_capacity(body.len() + 16);
     let bytes = body.as_bytes();
     let mut i = 0;
@@ -318,15 +319,15 @@ mod tests {
 
     #[test]
     fn normalizes_entities_and_cdata() {
-        // entities.xml escapes every `]]>` of the storage body as `]] >`; a literal `]]>` inside code is
-        // stored by Confluence as `]]]]><![CDATA[>` (standard CDATA split).
-        let body = "<p>a&nbsp;b &mdash; &amp; &unknown;</p><ac:plain-text-body><![CDATA[x ]]]] ><![CDATA[> y &nbsp;]] ></ac:plain-text-body>";
+        // a literal `]]>` inside code is stored by Confluence as `]]]]><![CDATA[>` (standard CDATA
+        // split); `]] >` is plain text here (entities.xml's escape is undone by its reader)
+        let body = "<p>a&nbsp;b &mdash; &amp; &unknown;</p><ac:plain-text-body><![CDATA[x ]]]]><![CDATA[> y &nbsp; a[b[i]] > 0]]></ac:plain-text-body>";
         let (root, mode) = parse(body);
         assert_eq!(mode, ParseMode::Strict);
         let p = root.child("p").unwrap();
         assert_eq!(p.text(), "a\u{a0}b \u{2014} & &unknown;");
         let code = root.child("ac:plain-text-body").unwrap();
-        assert_eq!(code.text(), "x ]]> y &nbsp;");
+        assert_eq!(code.text(), "x ]]> y &nbsp; a[b[i]] > 0");
     }
 
     #[test]

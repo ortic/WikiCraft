@@ -226,7 +226,7 @@ fn dispatch(o: RawObject, export: &mut Export, pending: &mut Pending) {
         }),
         "BodyContent" => {
             if let Some(cid) = o.get("content") {
-                let body = o.props.get("body").cloned().unwrap_or_default();
+                let body = unescape_cdata_ends(o.props.get("body").cloned().unwrap_or_default());
                 export.add_body(Body { content_id: cid, kind: BodyKind::guess(o.get("bodyType").as_deref(), &body), body });
             }
         }
@@ -373,6 +373,17 @@ pub fn index_attachments(names: &[String], export: &mut Export) {
     }
 }
 
+/// entities.xml keeps each body in a CDATA section, which can't contain `]]>`: Confluence writes
+/// the end of a CDATA section inside the body (code macros) as `]] >`, and as `]] ]>` when the
+/// code itself ends with `]` (`]]]>`, seen in a 2026 Cloud export). Other export formats store
+/// the body as is, so this is undone here only.
+fn unescape_cdata_ends(body: String) -> String {
+    if !body.contains("] >") && !body.contains("] ]>") {
+        return body;
+    }
+    body.replace("]] >", "]]>").replace("] ]>", "]]>")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -397,5 +408,20 @@ mod tests {
         assert_eq!(export.users["k1"].email.as_deref(), Some("jane@example.test"));
         assert_eq!(export.users["k2"].display_name.as_deref(), Some("Sam Smith"));
         assert_eq!(export.users["k2"].email, None);
+    }
+
+    #[test]
+    fn escaped_cdata_ends_in_bodies() {
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?><hibernate-generic>
+<object class="BodyContent" package="com.atlassian.confluence.core"><id name="id">1</id>
+<property name="body"><![CDATA[<ac:plain-text-body><![CDATA[echo]] ></ac:plain-text-body><p>a</p><ac:plain-text-body><![CDATA[[1, [2]]] ]></ac:plain-text-body><p>b</p>]]></property>
+<property name="content" class="Page" package="com.atlassian.confluence.pages"><id name="id">10</id></property><property name="bodyType">2</property></object>
+</hibernate-generic>"#;
+        let mut export = Export::default();
+        read(xml.as_bytes(), &mut export).unwrap();
+        assert_eq!(
+            export.body("10").unwrap().body,
+            "<ac:plain-text-body><![CDATA[echo]]></ac:plain-text-body><p>a</p><ac:plain-text-body><![CDATA[[1, [2]]]]></ac:plain-text-body><p>b</p>"
+        );
     }
 }
